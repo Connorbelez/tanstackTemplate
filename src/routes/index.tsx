@@ -7,6 +7,7 @@ import {
 } from "@workos/authkit-tanstack-react-start";
 import { Authenticated, Unauthenticated, useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
+import { Button } from "#/components/ui/button";
 
 export const Route = createFileRoute("/")({
 	component: Home,
@@ -89,15 +90,14 @@ function Content() {
 				is persisted in the Convex cloud database!
 			</p>
 			<p>
-				<button
-					type="button"
+				<Button
 					className="bg-foreground text-background text-sm px-4 py-2 rounded-md"
 					onClick={() => {
 						void addNumber({ value: Math.floor(Math.random() * 10) });
 					}}
 				>
 					Add a random number
-				</button>
+				</Button>
 			</p>
 			<p>
 				Numbers:{" "}
