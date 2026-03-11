@@ -24,10 +24,11 @@ function AggregateDemo() {
 	const removeScore = useMutation(api.demo.aggregate.removeScore);
 
 	const handleAdd = useCallback(async () => {
-		if (!(player.trim() && score)) {
+		const numScore = Number(score);
+		if (!(player.trim() && score && !Number.isNaN(numScore))) {
 			return;
 		}
-		await addScore({ player: player.trim(), score: Number(score) });
+		await addScore({ player: player.trim(), score: numScore });
 		setPlayer("");
 		setScore("");
 	}, [addScore, player, score]);

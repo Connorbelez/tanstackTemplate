@@ -37,11 +37,14 @@ function MigrationsDemo() {
 
 	const handleMigrate = useCallback(async () => {
 		setMigrating(true);
-		await runMigration({});
-		setMigrating(false);
+		try {
+			await runMigration({});
+		} finally {
+			setMigrating(false);
+		}
 	}, [runMigration]);
 
-	const total = data?.total ?? 0;
+	const total = data?.returned ?? 0;
 	const migrated = data?.migrated ?? 0;
 	const progress = total > 0 ? Math.round((migrated / total) * 100) : 0;
 

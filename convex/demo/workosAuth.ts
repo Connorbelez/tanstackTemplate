@@ -68,7 +68,7 @@ export const upsertMembershipFromApi = internalMutation({
 	args: {
 		workosId: v.string(),
 		organizationWorkosId: v.string(),
-		organizationName: v.string(),
+		organizationName: v.optional(v.string()),
 		userWorkosId: v.string(),
 		status: v.string(),
 		roleSlug: v.string(),
@@ -121,6 +121,8 @@ export const syncAllFromWorkosApi = action({
 		let roleCount = 0;
 
 		// 1. Sync all organizations
+		// NOTE: Only fetches first page of results. For accounts with many orgs/roles,
+		// pagination would need to be implemented using WorkOS cursor-based pagination.
 		const orgsResult = await authKit.workos.organizations.listOrganizations();
 		for (const org of orgsResult.data) {
 			await ctx.runMutation(
@@ -163,7 +165,7 @@ export const syncAllFromWorkosApi = action({
 				organizationName: org?.name ?? "Unknown",
 				userWorkosId: m.userId,
 				status: m.status,
-				roleSlug: m.role.slug,
+				roleSlug: m.role?.slug ?? "",
 				roleSlugs: m.roles?.map((r) => r.slug),
 			});
 			membershipCount++;

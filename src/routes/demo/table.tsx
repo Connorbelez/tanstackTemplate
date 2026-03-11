@@ -130,12 +130,12 @@ function TableDemo() {
 	//apply the fuzzy sort if the fullName column is being filtered
 	React.useEffect(() => {
 		if (
-			table.getState().columnFilters[0]?.id === "fullName" &&
+			columnFilters[0]?.id === "fullName" &&
 			table.getState().sorting[0]?.id !== "fullName"
 		) {
 			table.setSorting([{ id: "fullName", desc: false }]);
 		}
-	}, [table.getState, table.setSorting]);
+	}, [columnFilters, table]);
 
 	return (
 		<div className="min-h-screen bg-gray-900 p-6">

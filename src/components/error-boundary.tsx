@@ -114,11 +114,16 @@ function useCopyToClipboard() {
 	const timeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
 	const copy = useCallback((text: string) => {
-		navigator.clipboard.writeText(text).then(() => {
-			setCopied(true);
-			clearTimeout(timeout.current);
-			timeout.current = setTimeout(() => setCopied(false), 2000);
-		});
+		navigator.clipboard
+			.writeText(text)
+			.then(() => {
+				setCopied(true);
+				clearTimeout(timeout.current);
+				timeout.current = setTimeout(() => setCopied(false), 2000);
+			})
+			.catch(() => {
+				// Clipboard unavailable (insecure context, permissions denied, etc.)
+			});
 	}, []);
 
 	useEffect(() => () => clearTimeout(timeout.current), []);

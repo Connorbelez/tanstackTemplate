@@ -20,3 +20,4 @@ todos.json
 .husky/_
 playwright-report
 test-results
+reviews/

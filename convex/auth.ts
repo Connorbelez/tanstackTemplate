@@ -16,8 +16,6 @@ export const authKit = new AuthKit<DataModel>(components.workOSAuthKit, {
 		"organization_membership.created",
 		"organization_membership.updated",
 		"organization_membership.deleted",
-		"organization_membership.added",
-		"organization_membership.removed",
 		"role.created",
 		"role.updated",
 		"role.deleted",
@@ -35,12 +33,11 @@ async function upsertOrganization(
 	data: {
 		id: string;
 		name: string;
-		allowProfilesOutsideOrganization: boolean;
+		allowProfilesOutsideOrganization?: boolean;
 		externalId?: string | null;
 		metadata?: Record<string, string>;
 	}
 ) {
-	console.log("upsertOrganizationData", data);
 	const existing = await ctx.db
 		.query("organizations")
 		.withIndex("workosId", (q) => q.eq("workosId", data.id))
@@ -48,7 +45,8 @@ async function upsertOrganization(
 	const fields = {
 		workosId: data.id,
 		name: data.name,
-		allowProfilesOutsideOrganization: data.allowProfilesOutsideOrganization,
+		allowProfilesOutsideOrganization:
+			data.allowProfilesOutsideOrganization ?? false,
 		externalId: data.externalId ?? undefined,
 		metadata: data.metadata,
 	};
@@ -85,13 +83,18 @@ async function upsertMembership(
 	data: {
 		id: string;
 		organizationId: string;
-		organizationName: string;
 		userId: string;
 		status: string;
 		role: { slug: string };
 		roles?: { slug: string }[];
 	}
 ) {
+	// Look up org name from our organizations table (denormalization)
+	const org = await ctx.db
+		.query("organizations")
+		.withIndex("workosId", (q) => q.eq("workosId", data.organizationId))
+		.unique();
+
 	const existing = await ctx.db
 		.query("organizationMemberships")
 		.withIndex("workosId", (q) => q.eq("workosId", data.id))
@@ -99,7 +102,7 @@ async function upsertMembership(
 	const fields = {
 		workosId: data.id,
 		organizationWorkosId: data.organizationId,
-		organizationName: data.organizationName,
+		organizationName: org?.name,
 		userWorkosId: data.userId,
 		status: data.status,
 		roleSlug: data.role.slug,
@@ -158,6 +161,7 @@ async function deleteRole(ctx: GenericMutationCtx<DataModel>, slug: string) {
 export const { authKitAction } = authKit.actions({
 	userRegistration: async (ctx, action, response) => {
 		const email = action.userData.email;
+		// Demo-only: block Gmail accounts to demonstrate registration denial flow
 		const isBlocked = email.endsWith("@gmail.com");
 		await ctx.db.insert("demo_auth_action_logs", {
 			actionType: "userRegistration",
@@ -239,12 +243,6 @@ export const { authKitEvent } = authKit.events({
 		await upsertMembership(ctx, event.data);
 	},
 	"organization_membership.deleted": async (ctx, event) => {
-		await deleteMembership(ctx, event.data.id);
-	},
-	"organization_membership.added": async (ctx, event) => {
-		await upsertMembership(ctx, event.data);
-	},
-	"organization_membership.removed": async (ctx, event) => {
 		await deleteMembership(ctx, event.data.id);
 	},
 

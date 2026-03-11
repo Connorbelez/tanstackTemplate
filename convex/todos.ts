@@ -1,4 +1,3 @@
-import type { UserIdentity } from "convex/server";
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 
@@ -27,8 +26,6 @@ export const toggle = mutation({
 	args: { id: v.id("todos") },
 	handler: async (ctx, args) => {
 		const todo = await ctx.db.get(args.id);
-		const user: UserIdentity | null = await ctx.auth.getUserIdentity();
-		console.log(user);
 		if (!todo) {
 			throw new Error("Todo not found");
 		}

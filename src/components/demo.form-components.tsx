@@ -64,6 +64,7 @@ export function TextField({
 				{label}
 			</Label>
 			<Input
+				id={label}
 				onBlur={field.handleBlur}
 				onChange={(e) => field.handleChange(e.target.value)}
 				placeholder={placeholder}

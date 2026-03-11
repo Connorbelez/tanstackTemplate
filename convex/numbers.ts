@@ -56,7 +56,6 @@ export const myAction = action({
 	// Validators for arguments.
 	args: {
 		first: v.number(),
-		second: v.string(),
 	},
 
 	// Action implementation.

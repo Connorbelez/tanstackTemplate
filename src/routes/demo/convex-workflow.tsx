@@ -22,10 +22,11 @@ function WorkflowDemo() {
 	const startOrder = useMutation(api.demo.workflow.startOrder);
 
 	const handleStart = useCallback(async () => {
-		if (!amount) {
+		const parsedAmount = Number(amount);
+		if (!amount || Number.isNaN(parsedAmount)) {
 			return;
 		}
-		await startOrder({ amount: Number(amount) });
+		await startOrder({ amount: parsedAmount });
 	}, [startOrder, amount]);
 
 	return (

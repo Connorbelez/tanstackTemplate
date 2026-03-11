@@ -33,7 +33,7 @@ export default defineSchema({
 	organizationMemberships: defineTable({
 		workosId: v.string(),
 		organizationWorkosId: v.string(),
-		organizationName: v.string(),
+		organizationName: v.optional(v.string()),
 		userWorkosId: v.string(),
 		status: v.string(),
 		roleSlug: v.string(),
@@ -65,7 +65,9 @@ export default defineSchema({
 	demo_aggregate_scores: defineTable({
 		player: v.string(),
 		score: v.number(),
-	}).index("by_player", ["player"]),
+	})
+		.index("by_player", ["player"])
+		.index("by_score", ["score"]),
 
 	demo_geospatial_places: defineTable({
 		name: v.string(),

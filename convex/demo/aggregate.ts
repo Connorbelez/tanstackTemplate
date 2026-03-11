@@ -52,6 +52,10 @@ export const getStats = query({
 export const listScores = query({
 	args: {},
 	handler: async (ctx) => {
-		return await ctx.db.query("demo_aggregate_scores").order("desc").take(20);
+		return await ctx.db
+			.query("demo_aggregate_scores")
+			.withIndex("by_score")
+			.order("desc")
+			.take(20);
 	},
 });

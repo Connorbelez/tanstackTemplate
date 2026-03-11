@@ -24,7 +24,8 @@
     "prepare": "husky",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build",
-    "typecheck": "tsgo --noEmit"
+    "typecheck": "tsgo --noEmit",
+    "review": "bash scripts/code-review.sh"
   },
   "dependencies": {
     "@00akshatsinha00/convex-cascading-delete": "0.1.0",

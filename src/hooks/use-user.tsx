@@ -17,9 +17,9 @@ export const useUser = (): UserOrNull => {
 
 		void navigate({
 			to: "/sign-in",
-			search: { redirectTo: location.pathname },
+			search: { redirectTo: location.pathname + location.search },
 		});
-	}, [loading, user, location.pathname, navigate]);
+	}, [loading, user, location.pathname, location.search, navigate]);
 
 	return user;
 };

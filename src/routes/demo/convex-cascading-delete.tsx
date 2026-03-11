@@ -48,7 +48,7 @@ function CascadingDeleteDemo() {
 							</div>
 						)}
 						<Button
-							disabled={counts ? counts.authors > 0 : false}
+							disabled={!counts || counts.authors > 0}
 							onClick={() => seedData()}
 							variant="outline"
 						>

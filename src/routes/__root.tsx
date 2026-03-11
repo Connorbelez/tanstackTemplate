@@ -58,11 +58,13 @@ export const Route = createRootRouteWithContext<{
 		</RootDocument>
 	),
 	notFoundComponent: () => (
-		<AppErrorComponent
-			error={Object.assign(new Error("Page not found"), {
-				name: "NotFoundError",
-			})}
-		/>
+		<RootDocument>
+			<AppErrorComponent
+				error={Object.assign(new Error("Page not found"), {
+					name: "NotFoundError",
+				})}
+			/>
+		</RootDocument>
 	),
 	beforeLoad: async (ctx) => {
 		const { userId, token } = await fetchWorkosAuth();

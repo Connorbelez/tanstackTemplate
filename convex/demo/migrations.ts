@@ -57,8 +57,8 @@ export const listItems = query({
 			.query("demo_migrations_items")
 			.order("asc")
 			.take(100);
-		const total = items.length;
+		const returned = items.length;
 		const migrated = items.filter((i) => i.migrated === true).length;
-		return { items, total, migrated };
+		return { items, returned, migrated };
 	},
 });
