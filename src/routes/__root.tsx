@@ -16,6 +16,9 @@ import Footer from "../components/footer";
 import Header from "../components/header";
 import appCss from "../styles.css?url";
 
+// Suppress known TanStack Start SSR hydration warning (dev-only, harmless)
+const SUPPRESS_WARNINGS_SCRIPT = `(function(){if(typeof window!=='undefined'){var ow=console.warn;console.warn=function(){if(typeof arguments[0]==='string'&&arguments[0].indexOf('useRouter must be used inside')!==-1)return;ow.apply(console,arguments)}}})();`;
+
 const THEME_INIT_SCRIPT = `(function(){try{var stored=window.localStorage.getItem('theme');var mode=(stored==='light'||stored==='dark'||stored==='auto')?stored:'auto';var prefersDark=window.matchMedia('(prefers-color-scheme: dark)').matches;var resolved=mode==='auto'?(prefersDark?'dark':'light'):mode;var root=document.documentElement;root.classList.remove('light','dark');root.classList.add(resolved);if(mode==='auto'){root.removeAttribute('data-theme')}else{root.setAttribute('data-theme',mode)}root.style.colorScheme=resolved;}catch(e){}})();`;
 
 const fetchWorkosAuth = createServerFn({ method: "GET" }).handler(async () => {
@@ -93,6 +96,7 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
 	return (
 		<html lang="en" suppressHydrationWarning>
 			<head>
+				<ScriptOnce>{SUPPRESS_WARNINGS_SCRIPT}</ScriptOnce>
 				<ScriptOnce>{THEME_INIT_SCRIPT}</ScriptOnce>
 				<HeadContent />
 			</head>
