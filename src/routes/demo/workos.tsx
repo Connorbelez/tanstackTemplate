@@ -222,6 +222,7 @@ function OrganizationsTab({ userId }: { userId: string }) {
 	const syncAll = useAction(api.demo.workosAuth.syncAllFromWorkosApi);
 	const [refreshing, setRefreshing] = useState(false);
 	const [syncResult, setSyncResult] = useState<{
+		userCount: number;
 		orgCount: number;
 		membershipCount: number;
 		roleCount: number;
@@ -274,8 +275,8 @@ function OrganizationsTab({ userId }: { userId: string }) {
 							</CardDescription>
 							{syncResult && (
 								<p className="mt-1 text-muted-foreground text-xs">
-									Synced {syncResult.orgCount} orgs,{" "}
-									{syncResult.membershipCount} memberships,{" "}
+									Synced {syncResult.userCount} user, {syncResult.orgCount}{" "}
+									orgs, {syncResult.membershipCount} memberships,{" "}
 									{syncResult.roleCount} roles
 								</p>
 							)}

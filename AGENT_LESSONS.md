@@ -37,3 +37,13 @@ Proposed CLAUDE.md amendments from issues encountered during development. Review
 **Root cause:** Built handler data shapes from assumptions about what fields would be present, rather than cross-referencing the actual event payload structure in the WorkOS Events docs (https://workos.com/docs/events).
 **Proposed amendment:**
 > When writing webhook/event handlers, always verify the exact payload shape against the provider's event documentation. Do NOT assume API object fields will all be present in event payloads — events often carry a subset. For denormalized fields (e.g. org name on membership), look them up from your database. For fields that may be absent, use `v.optional()` in the schema or provide sensible defaults.
+
+---
+
+## Lesson 5: WorkOS event ordering is not guaranteed — `user.updated` can arrive before `user.created`
+**Date:** 2026-03-11
+**Context:** The `user.updated` handler logged a warning and returned when the user didn't exist in the database. In practice, `user.updated` events arrived for users that hadn't been created yet (the `user.created` event was either still queued or was lost). This caused the fluent-convex `authMiddleware` to throw "User not found in database" for authenticated users.
+**Root cause:** Event handlers assumed `user.created` always runs before `user.updated`. WorkOS fires events asynchronously and the Convex workpool processes them without ordering guarantees.
+**Fix:** Changed `user.updated` to upsert (create-if-missing) and schedule `syncUserRelatedData` to backfill orgs/memberships/roles from the WorkOS API.
+**Proposed amendment:**
+> Event handlers that depend on prior events (e.g. `user.updated` assuming `user.created` ran first) MUST be written as upserts, not patches. Webhook delivery order is never guaranteed. Always handle the "entity doesn't exist yet" case by creating it from available event data.

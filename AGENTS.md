@@ -21,6 +21,16 @@
 ## Code Quality
 - `bun check`, `bun typecheck` and `bunx convex codegen` must pass before considering tasks completed.
 - NEVER USE `any` as a type unless you absolutely have to. 
+- Always prefer loose coupling and dependency injection. Everything should be mockable, testable and replaceable. Avoid tight coupling to specific implementations.
+
+## Patterns To Live By
+- DRY: Don't Repeat Yourself. If you find yourself writing the same code more than once, consider abstracting it into a reusable function or module.
+- YAGNI: You Aren't Gonna Need It. Don't add functionality until it's necessary
+- KISS: Keep It Simple Stupid. Avoid unnecessary complexity in your code. If a simpler solution exists, use it.
+- Dependancy Injection: Instead of hardcoding dependencies, inject them into your functions or classes. This makes your code more flexible and easier to test.
+- Strategy Pattern: Define a family of algorithms, encapsulate each one, and make them interchangeable. This allows you to select an algorithm at runtime without changing the client code. 
+- Inversion of Control: Instead of calling functions directly, use callbacks, events, or other mechanisms to allow the flow of control to be determined by the runtime environment. This promotes loose coupling and flexibility in your code.
+
 
 ## Standards & Conventions 
 ### Auth
