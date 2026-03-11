@@ -1,0 +1,283 @@
+import { Badge } from "#/components/ui/badge";
+import { Button } from "#/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "#/components/ui/card";
+import { Input } from "#/components/ui/input";
+import { Label } from "#/components/ui/label";
+import {
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from "#/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "#/components/ui/tabs";
+import type { MortgagePosition } from "./mortgage-card";
+
+export interface MortgageSummary {
+	label: string;
+	mortgageId: string;
+	positions: MortgagePosition[];
+	treasuryBalance: number;
+}
+
+export interface TransferFormState {
+	amount: string;
+	buyer: string;
+	mortgage: string;
+	seller: string;
+}
+
+export interface IssueFormState {
+	amount: string;
+	investor: string;
+	mortgage: string;
+}
+
+export interface RedeemFormState {
+	amount: string;
+	investor: string;
+	mortgage: string;
+}
+
+export interface LedgerActionsProps {
+	issueForm: IssueFormState;
+	loading: boolean;
+	mortgages: MortgageSummary[];
+	onIssue: () => void;
+	onIssueChange: (form: Partial<IssueFormState>) => void;
+	onRedeem: () => void;
+	onRedeemChange: (form: Partial<RedeemFormState>) => void;
+	onTransfer: () => void;
+	onTransferChange: (form: Partial<TransferFormState>) => void;
+	redeemForm: RedeemFormState;
+	transferForm: TransferFormState;
+}
+
+export function LedgerActions({
+	mortgages,
+	loading,
+	transferForm,
+	issueForm,
+	redeemForm,
+	onTransferChange,
+	onIssueChange,
+	onRedeemChange,
+	onTransfer,
+	onIssue,
+	onRedeem,
+}: LedgerActionsProps) {
+	const getPositions = (mortgageId: string) =>
+		mortgages.find((m) => m.mortgageId === mortgageId)?.positions ?? [];
+
+	const isTransferValid =
+		transferForm.mortgage &&
+		transferForm.seller &&
+		transferForm.buyer &&
+		transferForm.amount;
+
+	const isIssueValid =
+		issueForm.mortgage && issueForm.investor && issueForm.amount;
+
+	const isRedeemValid =
+		redeemForm.mortgage && redeemForm.investor && redeemForm.amount;
+
+	return (
+		<Card>
+			<CardHeader>
+				<CardTitle className="text-base">Interactive Actions</CardTitle>
+				<p className="text-muted-foreground text-sm">
+					Execute real ledger mutations. Entries created here are tagged as{" "}
+					<Badge className="text-xs" variant="outline">
+						interactive
+					</Badge>
+				</p>
+			</CardHeader>
+			<CardContent>
+				<Tabs defaultValue="transfer">
+					<TabsList>
+						<TabsTrigger value="transfer">Transfer</TabsTrigger>
+						<TabsTrigger value="issue">Issue</TabsTrigger>
+						<TabsTrigger value="redeem">Redeem</TabsTrigger>
+					</TabsList>
+
+					{/* Transfer Tab */}
+					<TabsContent className="space-y-4 pt-4" value="transfer">
+						<div className="grid gap-3 sm:grid-cols-2">
+							<div>
+								<Label>Mortgage</Label>
+								<Select
+									onValueChange={(v) =>
+										onTransferChange({ mortgage: v, seller: "" })
+									}
+									value={transferForm.mortgage}
+								>
+									<SelectTrigger>
+										<SelectValue placeholder="Select mortgage" />
+									</SelectTrigger>
+									<SelectContent>
+										{mortgages.map((m) => (
+											<SelectItem key={m.mortgageId} value={m.mortgageId}>
+												{m.label}
+											</SelectItem>
+										))}
+									</SelectContent>
+								</Select>
+							</div>
+							<div>
+								<Label>Seller</Label>
+								<Select
+									onValueChange={(v) => onTransferChange({ seller: v })}
+									value={transferForm.seller}
+								>
+									<SelectTrigger>
+										<SelectValue placeholder="Select seller" />
+									</SelectTrigger>
+									<SelectContent>
+										{getPositions(transferForm.mortgage).map((p) => (
+											<SelectItem key={p.investorId} value={p.investorId}>
+												{p.displayName} ({p.balance.toLocaleString()})
+											</SelectItem>
+										))}
+									</SelectContent>
+								</Select>
+							</div>
+							<div>
+								<Label>Buyer Investor ID</Label>
+								<Input
+									onChange={(e) => onTransferChange({ buyer: e.target.value })}
+									placeholder="demo-inv-..."
+									value={transferForm.buyer}
+								/>
+							</div>
+							<div>
+								<Label>Amount (units)</Label>
+								<Input
+									min={1000}
+									onChange={(e) => onTransferChange({ amount: e.target.value })}
+									placeholder="e.g. 1000"
+									type="number"
+									value={transferForm.amount}
+								/>
+							</div>
+						</div>
+						<Button disabled={!isTransferValid || loading} onClick={onTransfer}>
+							Execute Transfer
+						</Button>
+						<p className="text-muted-foreground text-xs">
+							Min position: 1,000 units (10%). Full exit to 0 is allowed.
+						</p>
+					</TabsContent>
+
+					{/* Issue Tab */}
+					<TabsContent className="space-y-4 pt-4" value="issue">
+						<div className="grid gap-3 sm:grid-cols-2">
+							<div>
+								<Label>Mortgage</Label>
+								<Select
+									onValueChange={(v) => onIssueChange({ mortgage: v })}
+									value={issueForm.mortgage}
+								>
+									<SelectTrigger>
+										<SelectValue placeholder="Select mortgage" />
+									</SelectTrigger>
+									<SelectContent>
+										{mortgages
+											.filter((m) => m.treasuryBalance > 0)
+											.map((m) => (
+												<SelectItem key={m.mortgageId} value={m.mortgageId}>
+													{m.label} (treasury:{" "}
+													{m.treasuryBalance.toLocaleString()})
+												</SelectItem>
+											))}
+									</SelectContent>
+								</Select>
+							</div>
+							<div>
+								<Label>Investor ID</Label>
+								<Input
+									onChange={(e) => onIssueChange({ investor: e.target.value })}
+									placeholder="demo-inv-..."
+									value={issueForm.investor}
+								/>
+							</div>
+							<div>
+								<Label>Amount (units)</Label>
+								<Input
+									min={1000}
+									onChange={(e) => onIssueChange({ amount: e.target.value })}
+									placeholder="e.g. 1000"
+									type="number"
+									value={issueForm.amount}
+								/>
+							</div>
+						</div>
+						<Button disabled={!isIssueValid || loading} onClick={onIssue}>
+							Issue Shares
+						</Button>
+					</TabsContent>
+
+					{/* Redeem Tab */}
+					<TabsContent className="space-y-4 pt-4" value="redeem">
+						<div className="grid gap-3 sm:grid-cols-2">
+							<div>
+								<Label>Mortgage</Label>
+								<Select
+									onValueChange={(v) =>
+										onRedeemChange({ mortgage: v, investor: "" })
+									}
+									value={redeemForm.mortgage}
+								>
+									<SelectTrigger>
+										<SelectValue placeholder="Select mortgage" />
+									</SelectTrigger>
+									<SelectContent>
+										{mortgages.map((m) => (
+											<SelectItem key={m.mortgageId} value={m.mortgageId}>
+												{m.label}
+											</SelectItem>
+										))}
+									</SelectContent>
+								</Select>
+							</div>
+							<div>
+								<Label>Investor</Label>
+								<Select
+									onValueChange={(v) => onRedeemChange({ investor: v })}
+									value={redeemForm.investor}
+								>
+									<SelectTrigger>
+										<SelectValue placeholder="Select investor" />
+									</SelectTrigger>
+									<SelectContent>
+										{getPositions(redeemForm.mortgage).map((p) => (
+											<SelectItem key={p.investorId} value={p.investorId}>
+												{p.displayName} ({p.balance.toLocaleString()})
+											</SelectItem>
+										))}
+									</SelectContent>
+								</Select>
+							</div>
+							<div>
+								<Label>Amount (units)</Label>
+								<Input
+									min={1000}
+									onChange={(e) => onRedeemChange({ amount: e.target.value })}
+									placeholder="e.g. 1000"
+									type="number"
+									value={redeemForm.amount}
+								/>
+							</div>
+						</div>
+						<Button
+							disabled={!isRedeemValid || loading}
+							onClick={onRedeem}
+							variant="outline"
+						>
+							Redeem Shares
+						</Button>
+					</TabsContent>
+				</Tabs>
+			</CardContent>
+		</Card>
+	);
+}

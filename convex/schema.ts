@@ -2,8 +2,6 @@ import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 import {
 	draftStateValidator,
-	entityFieldValidator,
-	entitySourceValidator,
 	formatOptionsValidator,
 	pageDimensionValidator,
 	signatoryConfigValidator,
@@ -197,6 +195,70 @@ export default defineSchema({
 	// auditTrail component (convex/components/auditTrail/). The host app's
 	// ctx.db cannot access them — append-only by design, not policy.
 
+	// ── Mortgage Ownership Ledger ────────────────────────────────────
+
+	ledger_accounts: defineTable({
+		type: v.union(
+			v.literal("WORLD"),
+			v.literal("TREASURY"),
+			v.literal("POSITION")
+		),
+		mortgageId: v.optional(v.string()),
+		investorId: v.optional(v.string()),
+		cumulativeDebits: v.int64(),
+		cumulativeCredits: v.int64(),
+		createdAt: v.float64(),
+		metadata: v.optional(v.record(v.string(), v.any())),
+	})
+		.index("by_mortgage", ["mortgageId"])
+		.index("by_investor", ["investorId"])
+		.index("by_mortgage_and_investor", ["mortgageId", "investorId"])
+		.index("by_type_and_mortgage", ["type", "mortgageId"]),
+
+	ledger_journal_entries: defineTable({
+		sequenceNumber: v.int64(),
+		entryType: v.union(
+			v.literal("MORTGAGE_MINTED"),
+			v.literal("SHARES_ISSUED"),
+			v.literal("SHARES_TRANSFERRED"),
+			v.literal("SHARES_REDEEMED"),
+			v.literal("MORTGAGE_BURNED"),
+			v.literal("CORRECTION")
+		),
+		mortgageId: v.string(),
+		effectiveDate: v.string(),
+		timestamp: v.float64(),
+		debitAccountId: v.id("ledger_accounts"),
+		creditAccountId: v.id("ledger_accounts"),
+		amount: v.int64(),
+		idempotencyKey: v.string(),
+		causedBy: v.optional(v.id("ledger_journal_entries")),
+		source: v.object({
+			type: v.union(
+				v.literal("user"),
+				v.literal("system"),
+				v.literal("webhook"),
+				v.literal("cron")
+			),
+			actor: v.optional(v.string()),
+			channel: v.optional(v.string()),
+		}),
+		reason: v.optional(v.string()),
+		metadata: v.optional(v.record(v.string(), v.any())),
+	})
+		.index("by_idempotency", ["idempotencyKey"])
+		.index("by_mortgage_and_time", ["mortgageId", "timestamp"])
+		.index("by_sequence", ["sequenceNumber"])
+		.index("by_debit_account", ["debitAccountId", "timestamp"])
+		.index("by_credit_account", ["creditAccountId", "timestamp"])
+		.index("by_entry_type", ["entryType", "timestamp"]),
+
+	ledger_cursors: defineTable({
+		consumerId: v.string(),
+		lastProcessedSequence: v.int64(),
+		lastProcessedAt: v.float64(),
+	}).index("by_consumer", ["consumerId"]),
+
 	// ── Document Engine ──────────────────────────────────────────────
 
 	documentBasePdfs: defineTable({
@@ -247,16 +309,6 @@ export default defineSchema({
 		publishedBy: v.optional(v.string()),
 		publishedAt: v.number(),
 	}).index("by_template", ["templateId", "version"]),
-
-	dataModelEntities: defineTable({
-		name: v.string(),
-		label: v.string(),
-		source: entitySourceValidator,
-		hidden: v.boolean(),
-		fields: v.array(entityFieldValidator),
-		createdAt: v.number(),
-		updatedAt: v.number(),
-	}).index("by_name", ["name"]),
 
 	documentTemplateGroups: defineTable({
 		name: v.string(),
