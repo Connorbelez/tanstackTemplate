@@ -14,3 +14,6 @@ __unconfig*
 todos.json
 .cta.json
 .tmp.vite.min.ts
+.husky/_
+playwright-report
+test-results

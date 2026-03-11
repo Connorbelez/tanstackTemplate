@@ -38,11 +38,11 @@ export const WithFooter: Story = {
 			</div>
 		),
 		footer: (
-			<div className="flex gap-3 justify-end">
-				<Button variant="secondary" size="medium">
+			<div className="flex justify-end gap-3">
+				<Button size="medium" variant="secondary">
 					Cancel
 				</Button>
-				<Button variant="primary" size="medium">
+				<Button size="medium" variant="primary">
 					Confirm
 				</Button>
 			</div>
@@ -54,35 +54,35 @@ export const Form: Story = {
 	args: {
 		title: "Create Account",
 		children: (
-			<div className="space-y-4 min-w-80">
+			<div className="min-w-80 space-y-4">
 				<div className="flex flex-col gap-2">
-					<label className="text-sm font-medium text-gray-700 dark:text-gray-200">
+					<label className="font-medium text-gray-700 text-sm dark:text-gray-200">
 						Email
 					</label>
 					<input
-						type="email"
+						className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-gray-900 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
 						placeholder="you@example.com"
-						className="px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+						type="email"
 					/>
 				</div>
 				<div className="flex flex-col gap-2">
-					<label className="text-sm font-medium text-gray-700 dark:text-gray-200">
+					<label className="font-medium text-gray-700 text-sm dark:text-gray-200">
 						Password
 					</label>
 					<input
-						type="password"
+						className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-gray-900 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
 						placeholder="••••••••"
-						className="px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+						type="password"
 					/>
 				</div>
 			</div>
 		),
 		footer: (
-			<div className="flex gap-3 justify-end">
-				<Button variant="secondary" size="medium">
+			<div className="flex justify-end gap-3">
+				<Button size="medium" variant="secondary">
 					Cancel
 				</Button>
-				<Button variant="primary" size="medium">
+				<Button size="medium" variant="primary">
 					Create Account
 				</Button>
 			</div>

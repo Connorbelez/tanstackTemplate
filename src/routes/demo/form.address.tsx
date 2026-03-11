@@ -1,12 +1,19 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { useState } from "react";
 
 import { useAppForm } from "#/hooks/demo.form";
+
+const EMAIL_REGEX = /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i;
+const ZIP_CODE_REGEX = /^\d{5}(-\d{4})?$/;
+const PHONE_REGEX = /^(\+\d{1,3})?\s?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}$/;
 
 export const Route = createFileRoute("/demo/form/address")({
 	component: AddressForm,
 });
 
 function AddressForm() {
+	const [submitMessage, setSubmitMessage] = useState<string | null>(null);
+
 	const form = useAppForm({
 		defaultValues: {
 			fullName: "",
@@ -35,27 +42,26 @@ function AddressForm() {
 		},
 		onSubmit: ({ value }) => {
 			console.log(value);
-			// Show success message
-			alert("Form submitted successfully!");
+			setSubmitMessage("Form submitted successfully.");
 		},
 	});
 
 	return (
 		<div
-			className="flex items-center justify-center min-h-screen bg-gradient-to-br from-purple-100 to-blue-100 p-4 text-white"
+			className="flex min-h-screen items-center justify-center bg-gradient-to-br from-purple-100 to-blue-100 p-4 text-white"
 			style={{
 				backgroundImage:
 					"radial-gradient(50% 50% at 5% 40%, #f4a460 0%, #8b4513 70%, #1a0f0a 100%)",
 			}}
 		>
-			<div className="w-full max-w-2xl p-8 rounded-xl backdrop-blur-md bg-black/50 shadow-xl border-8 border-black/10">
+			<div className="w-full max-w-2xl rounded-xl border-8 border-black/10 bg-black/50 p-8 shadow-xl backdrop-blur-md">
 				<form
+					className="space-y-6"
 					onSubmit={(e) => {
 						e.preventDefault();
 						e.stopPropagation();
 						form.handleSubmit();
 					}}
-					className="space-y-6"
 				>
 					<form.AppField name="fullName">
 						{(field) => <field.TextField label="Full Name" />}
@@ -68,7 +74,7 @@ function AddressForm() {
 								if (!value || value.trim().length === 0) {
 									return "Email is required";
 								}
-								if (!/^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i.test(value)) {
+								if (!EMAIL_REGEX.test(value)) {
 									return "Invalid email address";
 								}
 								return undefined;
@@ -92,7 +98,7 @@ function AddressForm() {
 						{(field) => <field.TextField label="Street Address" />}
 					</form.AppField>
 
-					<div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+					<div className="grid grid-cols-1 gap-4 md:grid-cols-3">
 						<form.AppField
 							name="address.city"
 							validators={{
@@ -126,7 +132,7 @@ function AddressForm() {
 									if (!value || value.trim().length === 0) {
 										return "Zip code is required";
 									}
-									if (!/^\d{5}(-\d{4})?$/.test(value)) {
+									if (!ZIP_CODE_REGEX.test(value)) {
 										return "Invalid zip code format";
 									}
 									return undefined;
@@ -151,6 +157,7 @@ function AddressForm() {
 						{(field) => (
 							<field.Select
 								label="Country"
+								placeholder="Select a country"
 								values={[
 									{ label: "United States", value: "US" },
 									{ label: "Canada", value: "CA" },
@@ -160,7 +167,6 @@ function AddressForm() {
 									{ label: "France", value: "FR" },
 									{ label: "Japan", value: "JP" },
 								]}
-								placeholder="Select a country"
 							/>
 						)}
 					</form.AppField>
@@ -172,11 +178,7 @@ function AddressForm() {
 								if (!value || value.trim().length === 0) {
 									return "Phone number is required";
 								}
-								if (
-									!/^(\+\d{1,3})?\s?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}$/.test(
-										value,
-									)
-								) {
+								if (!PHONE_REGEX.test(value)) {
 									return "Invalid phone number format";
 								}
 								return undefined;
@@ -193,6 +195,10 @@ function AddressForm() {
 							<form.SubscribeButton label="Submit" />
 						</form.AppForm>
 					</div>
+
+					{submitMessage ? (
+						<p className="font-medium text-emerald-200">{submitMessage}</p>
+					) : null}
 				</form>
 			</div>
 		</div>

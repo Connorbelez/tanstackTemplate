@@ -2,7 +2,15 @@ import { useStore } from "@tanstack/react-form";
 import { Button } from "#/components/ui/button";
 import { Input } from "#/components/ui/input";
 import { Label } from "#/components/ui/label";
-import * as ShadcnSelect from "#/components/ui/select";
+import {
+	SelectContent,
+	SelectGroup,
+	SelectItem,
+	SelectLabel,
+	SelectTrigger,
+	SelectValue,
+	Select as ShadcnSelect,
+} from "#/components/ui/select";
 import { Slider as ShadcnSlider } from "#/components/ui/slider";
 import { Switch as ShadcnSwitch } from "#/components/ui/switch";
 import { Textarea as ShadcnTextarea } from "#/components/ui/textarea";
@@ -13,7 +21,7 @@ export function SubscribeButton({ label }: { label: string }) {
 	return (
 		<form.Subscribe selector={(state) => state.isSubmitting}>
 			{(isSubmitting) => (
-				<Button type="submit" disabled={isSubmitting}>
+				<Button disabled={isSubmitting} type="submit">
 					{label}
 				</Button>
 			)}
@@ -30,8 +38,8 @@ function ErrorMessages({
 		<>
 			{errors.map((error) => (
 				<div
+					className="mt-1 font-bold text-red-500"
 					key={typeof error === "string" ? error : error.message}
-					className="text-red-500 mt-1 font-bold"
 				>
 					{typeof error === "string" ? error : error.message}
 				</div>
@@ -52,14 +60,14 @@ export function TextField({
 
 	return (
 		<div>
-			<Label htmlFor={label} className="mb-2 text-xl font-bold">
+			<Label className="mb-2 font-bold text-xl" htmlFor={label}>
 				{label}
 			</Label>
 			<Input
-				value={field.state.value}
-				placeholder={placeholder}
 				onBlur={field.handleBlur}
 				onChange={(e) => field.handleChange(e.target.value)}
+				placeholder={placeholder}
+				value={field.state.value}
 			/>
 			{field.state.meta.isTouched && <ErrorMessages errors={errors} />}
 		</div>
@@ -78,15 +86,15 @@ export function TextArea({
 
 	return (
 		<div>
-			<Label htmlFor={label} className="mb-2 text-xl font-bold">
+			<Label className="mb-2 font-bold text-xl" htmlFor={label}>
 				{label}
 			</Label>
 			<ShadcnTextarea
 				id={label}
-				value={field.state.value}
 				onBlur={field.handleBlur}
-				rows={rows}
 				onChange={(e) => field.handleChange(e.target.value)}
+				rows={rows}
+				value={field.state.value}
 			/>
 			{field.state.meta.isTouched && <ErrorMessages errors={errors} />}
 		</div>
@@ -107,29 +115,29 @@ export function Select({
 
 	return (
 		<div>
-			<ShadcnSelect.Select
+			<ShadcnSelect
 				name={field.name}
-				value={field.state.value}
 				onValueChange={(value) => field.handleChange(value)}
+				value={field.state.value}
 			>
-				<ShadcnSelect.SelectTrigger className="w-full">
-					<ShadcnSelect.SelectValue placeholder={placeholder} />
-				</ShadcnSelect.SelectTrigger>
-				<ShadcnSelect.SelectContent className="bg-background text-foreground">
-					<ShadcnSelect.SelectGroup>
-						<ShadcnSelect.SelectLabel>{label}</ShadcnSelect.SelectLabel>
+				<SelectTrigger className="w-full">
+					<SelectValue placeholder={placeholder} />
+				</SelectTrigger>
+				<SelectContent className="bg-background text-foreground">
+					<SelectGroup>
+						<SelectLabel>{label}</SelectLabel>
 						{values.map((value) => (
-							<ShadcnSelect.SelectItem
+							<SelectItem
+								className="text-foreground"
 								key={value.value}
 								value={value.value}
-								className="text-foreground"
 							>
 								{value.label}
-							</ShadcnSelect.SelectItem>
+							</SelectItem>
 						))}
-					</ShadcnSelect.SelectGroup>
-				</ShadcnSelect.SelectContent>
-			</ShadcnSelect.Select>
+					</SelectGroup>
+				</SelectContent>
+			</ShadcnSelect>
 			{field.state.meta.isTouched && <ErrorMessages errors={errors} />}
 		</div>
 	);
@@ -141,14 +149,14 @@ export function Slider({ label }: { label: string }) {
 
 	return (
 		<div>
-			<Label htmlFor={label} className="mb-2 text-xl font-bold">
+			<Label className="mb-2 font-bold text-xl" htmlFor={label}>
 				{label}
 			</Label>
 			<ShadcnSlider
 				id={label}
 				onBlur={field.handleBlur}
-				value={[field.state.value]}
 				onValueChange={(value) => field.handleChange(value[0])}
+				value={[field.state.value]}
 			/>
 			{field.state.meta.isTouched && <ErrorMessages errors={errors} />}
 		</div>
@@ -163,9 +171,9 @@ export function Switch({ label }: { label: string }) {
 		<div>
 			<div className="flex items-center gap-2">
 				<ShadcnSwitch
+					checked={field.state.value}
 					id={label}
 					onBlur={field.handleBlur}
-					checked={field.state.value}
 					onCheckedChange={(checked) => field.handleChange(checked)}
 				/>
 				<Label htmlFor={label}>{label}</Label>

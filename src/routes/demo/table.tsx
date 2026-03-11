@@ -35,7 +35,7 @@ declare module "@tanstack/react-table" {
 }
 
 // Define a custom fuzzy filter function that will apply ranking info to rows (using match-sorter utils)
-const fuzzyFilter: FilterFn<any> = (row, columnId, value, addMeta) => {
+const fuzzyFilter: FilterFn<Person> = (row, columnId, value, addMeta) => {
 	// Rank the item
 	const itemRank = rankItem(row.getValue(columnId), value);
 
@@ -49,15 +49,14 @@ const fuzzyFilter: FilterFn<any> = (row, columnId, value, addMeta) => {
 };
 
 // Define a custom fuzzy sort function that will sort by rank if the row has ranking information
-const fuzzySort: SortingFn<any> = (rowA, rowB, columnId) => {
+const fuzzySort: SortingFn<Person> = (rowA, rowB, columnId) => {
 	let dir = 0;
+	const rowAMeta = rowA.columnFiltersMeta[columnId];
+	const rowBMeta = rowB.columnFiltersMeta[columnId];
 
 	// Only sort by rank if the column has ranking information
-	if (rowA.columnFiltersMeta[columnId]) {
-		dir = compareItems(
-			rowA.columnFiltersMeta[columnId]?.itemRank!,
-			rowB.columnFiltersMeta[columnId]?.itemRank!,
-		);
+	if (rowAMeta?.itemRank && rowBMeta?.itemRank) {
+		dir = compareItems(rowAMeta.itemRank, rowBMeta.itemRank);
 	}
 
 	// Provide an alphanumeric fallback for when the item ranks are equal
@@ -68,11 +67,11 @@ function TableDemo() {
 	const rerender = React.useReducer(() => ({}), {})[1];
 
 	const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>(
-		[],
+		[]
 	);
 	const [globalFilter, setGlobalFilter] = React.useState("");
 
-	const columns = React.useMemo<ColumnDef<Person, any>[]>(
+	const columns = React.useMemo<ColumnDef<Person>[]>(
 		() => [
 			{
 				accessorKey: "id",
@@ -100,10 +99,10 @@ function TableDemo() {
 				sortingFn: fuzzySort, //sort by fuzzy rank (falls back to alphanumeric)
 			},
 		],
-		[],
+		[]
 	);
 
-	const [data, setData] = React.useState<Person[]>(() => makeData(5_000));
+	const [data, setData] = React.useState<Person[]>(() => makeData(5000));
 	const refreshData = () => setData((_old) => makeData(50_000)); //stress test
 
 	const table = useReactTable({
@@ -130,10 +129,11 @@ function TableDemo() {
 
 	//apply the fuzzy sort if the fullName column is being filtered
 	React.useEffect(() => {
-		if (table.getState().columnFilters[0]?.id === "fullName") {
-			if (table.getState().sorting[0]?.id !== "fullName") {
-				table.setSorting([{ id: "fullName", desc: false }]);
-			}
+		if (
+			table.getState().columnFilters[0]?.id === "fullName" &&
+			table.getState().sorting[0]?.id !== "fullName"
+		) {
+			table.setSorting([{ id: "fullName", desc: false }]);
 		}
 	}, [table.getState, table.setSorting]);
 
@@ -141,24 +141,24 @@ function TableDemo() {
 		<div className="min-h-screen bg-gray-900 p-6">
 			<div>
 				<DebouncedInput
-					value={globalFilter ?? ""}
+					className="w-full rounded-lg border border-gray-700 bg-gray-800 p-3 text-white outline-none focus:border-transparent focus:ring-2 focus:ring-blue-500"
 					onChange={(value) => setGlobalFilter(String(value))}
-					className="w-full p-3 bg-gray-800 text-white rounded-lg border border-gray-700 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
 					placeholder="Search all columns..."
+					value={globalFilter ?? ""}
 				/>
 			</div>
 			<div className="h-4" />
 			<div className="overflow-x-auto rounded-lg border border-gray-700">
-				<table className="w-full text-sm text-gray-200">
+				<table className="w-full text-gray-200 text-sm">
 					<thead className="bg-gray-800 text-gray-100">
 						{table.getHeaderGroups().map((headerGroup) => (
 							<tr key={headerGroup.id}>
 								{headerGroup.headers.map((header) => {
 									return (
 										<th
-											key={header.id}
-											colSpan={header.colSpan}
 											className="px-4 py-3 text-left"
+											colSpan={header.colSpan}
+											key={header.id}
 										>
 											{header.isPlaceholder ? null : (
 												<>
@@ -172,7 +172,7 @@ function TableDemo() {
 													>
 														{flexRender(
 															header.column.columnDef.header,
-															header.getContext(),
+															header.getContext()
 														)}
 														{{
 															asc: " 🔼",
@@ -196,15 +196,15 @@ function TableDemo() {
 						{table.getRowModel().rows.map((row) => {
 							return (
 								<tr
+									className="transition-colors hover:bg-gray-800"
 									key={row.id}
-									className="hover:bg-gray-800 transition-colors"
 								>
 									{row.getVisibleCells().map((cell) => {
 										return (
-											<td key={cell.id} className="px-4 py-3">
+											<td className="px-4 py-3" key={cell.id}>
 												{flexRender(
 													cell.column.columnDef.cell,
-													cell.getContext(),
+													cell.getContext()
 												)}
 											</td>
 										);
@@ -218,30 +218,34 @@ function TableDemo() {
 			<div className="h-4" />
 			<div className="flex flex-wrap items-center gap-2 text-gray-200">
 				<button
-					className="px-3 py-1 bg-gray-800 rounded-md hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
-					onClick={() => table.setPageIndex(0)}
+					className="rounded-md bg-gray-800 px-3 py-1 hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-50"
 					disabled={!table.getCanPreviousPage()}
+					onClick={() => table.setPageIndex(0)}
+					type="button"
 				>
 					{"<<"}
 				</button>
 				<button
-					className="px-3 py-1 bg-gray-800 rounded-md hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
-					onClick={() => table.previousPage()}
+					className="rounded-md bg-gray-800 px-3 py-1 hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-50"
 					disabled={!table.getCanPreviousPage()}
+					onClick={() => table.previousPage()}
+					type="button"
 				>
 					{"<"}
 				</button>
 				<button
-					className="px-3 py-1 bg-gray-800 rounded-md hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
-					onClick={() => table.nextPage()}
+					className="rounded-md bg-gray-800 px-3 py-1 hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-50"
 					disabled={!table.getCanNextPage()}
+					onClick={() => table.nextPage()}
+					type="button"
 				>
 					{">"}
 				</button>
 				<button
-					className="px-3 py-1 bg-gray-800 rounded-md hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
-					onClick={() => table.setPageIndex(table.getPageCount() - 1)}
+					className="rounded-md bg-gray-800 px-3 py-1 hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-50"
 					disabled={!table.getCanNextPage()}
+					onClick={() => table.setPageIndex(table.getPageCount() - 1)}
+					type="button"
 				>
 					{">>"}
 				</button>
@@ -255,21 +259,21 @@ function TableDemo() {
 				<span className="flex items-center gap-1">
 					| Go to page:
 					<input
-						type="number"
+						className="w-16 rounded-md border border-gray-700 bg-gray-800 px-2 py-1 outline-none focus:border-transparent focus:ring-2 focus:ring-blue-500"
 						defaultValue={table.getState().pagination.pageIndex + 1}
 						onChange={(e) => {
 							const page = e.target.value ? Number(e.target.value) - 1 : 0;
 							table.setPageIndex(page);
 						}}
-						className="w-16 px-2 py-1 bg-gray-800 rounded-md border border-gray-700 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+						type="number"
 					/>
 				</span>
 				<select
-					value={table.getState().pagination.pageSize}
+					className="rounded-md border border-gray-700 bg-gray-800 px-2 py-1 outline-none focus:border-transparent focus:ring-2 focus:ring-blue-500"
 					onChange={(e) => {
 						table.setPageSize(Number(e.target.value));
 					}}
-					className="px-2 py-1 bg-gray-800 rounded-md border border-gray-700 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+					value={table.getState().pagination.pageSize}
 				>
 					{[10, 20, 30, 40, 50].map((pageSize) => (
 						<option key={pageSize} value={pageSize}>
@@ -283,42 +287,44 @@ function TableDemo() {
 			</div>
 			<div className="mt-4 flex gap-2">
 				<button
+					className="rounded-md bg-blue-600 px-4 py-2 text-white transition-colors hover:bg-blue-700"
 					onClick={() => rerender()}
-					className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+					type="button"
 				>
 					Force Rerender
 				</button>
 				<button
+					className="rounded-md bg-blue-600 px-4 py-2 text-white transition-colors hover:bg-blue-700"
 					onClick={() => refreshData()}
-					className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+					type="button"
 				>
 					Refresh Data
 				</button>
 			</div>
-			<pre className="mt-4 p-4 bg-gray-800 rounded-lg text-gray-300 overflow-auto">
+			<pre className="mt-4 overflow-auto rounded-lg bg-gray-800 p-4 text-gray-300">
 				{JSON.stringify(
 					{
 						columnFilters: table.getState().columnFilters,
 						globalFilter: table.getState().globalFilter,
 					},
 					null,
-					2,
+					2
 				)}
 			</pre>
 		</div>
 	);
 }
 
-function Filter({ column }: { column: Column<any, unknown> }) {
+function Filter({ column }: { column: Column<Person, unknown> }) {
 	const columnFilterValue = column.getFilterValue();
 
 	return (
 		<DebouncedInput
+			className="w-full rounded-md border border-gray-600 bg-gray-700 px-2 py-1 text-white outline-none focus:border-transparent focus:ring-2 focus:ring-blue-500"
+			onChange={(value) => column.setFilterValue(value)}
+			placeholder={"Search..."}
 			type="text"
 			value={(columnFilterValue ?? "") as string}
-			onChange={(value) => column.setFilterValue(value)}
-			placeholder={`Search...`}
-			className="w-full px-2 py-1 bg-gray-700 text-white rounded-md border border-gray-600 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
 		/>
 	);
 }
@@ -351,8 +357,8 @@ function DebouncedInput({
 	return (
 		<input
 			{...props}
-			value={value}
 			onChange={(e) => setValue(e.target.value)}
+			value={value}
 		/>
 	);
 }

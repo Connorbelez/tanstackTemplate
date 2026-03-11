@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import type { FormEvent } from "react";
 import { useState } from "react";
 import { Button } from "#/components/storybook/button";
 import { Dialog } from "#/components/storybook/dialog";
@@ -16,7 +17,9 @@ function StorybookDemo() {
 	const [employmentType, setEmploymentType] = useState("full-time");
 	const [coffeeCups, setCoffeeCups] = useState(3);
 
-	const handleSubmit = () => {};
+	const handleSubmit = (event?: FormEvent<HTMLFormElement>) => {
+		event?.preventDefault();
+	};
 
 	const handleReset = () => {
 		setFirstName("");
@@ -26,63 +29,63 @@ function StorybookDemo() {
 	};
 
 	return (
-		<div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 py-12 px-4">
-			<div className="max-w-2xl mx-auto">
+		<div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 px-4 py-12 dark:from-gray-900 dark:to-gray-800">
+			<div className="mx-auto max-w-2xl">
 				<Dialog
-					title="Employee Information Form"
 					footer={
-						<div className="flex gap-3 justify-end">
-							<Button variant="secondary" size="medium" onClick={handleReset}>
+						<div className="flex justify-end gap-3">
+							<Button onClick={handleReset} size="medium" variant="secondary">
 								Reset
 							</Button>
 							<Button
-								variant="primary"
+								onClick={() => handleSubmit()}
 								size="medium"
 								type="submit"
-								onClick={handleSubmit}
+								variant="primary"
 							>
 								Submit
 							</Button>
 						</div>
 					}
+					title="Employee Information Form"
 				>
-					<form onSubmit={handleSubmit} className="space-y-6">
+					<form className="space-y-6" onSubmit={handleSubmit}>
 						<Input
-							label="First Name"
 							id="firstName"
-							value={firstName}
+							label="First Name"
 							onChange={setFirstName}
 							placeholder="John"
 							required
+							value={firstName}
 						/>
 
 						<Input
-							label="Last Name"
 							id="lastName"
-							value={lastName}
+							label="Last Name"
 							onChange={setLastName}
 							placeholder="Doe"
 							required
+							value={lastName}
 						/>
 
 						<RadioGroup
 							label="Employment Type"
 							name="employmentType"
+							onChange={setEmploymentType}
 							options={[
 								{ value: "full-time", label: "Full Time" },
 								{ value: "part-time", label: "Part Time" },
 							]}
 							value={employmentType}
-							onChange={setEmploymentType}
 						/>
 
 						<Slider
-							label="Coffee Cups Per Day"
 							id="coffeeCups"
-							value={coffeeCups}
-							onChange={setCoffeeCups}
-							min={0}
+							label="Coffee Cups Per Day"
 							max={10}
+							min={0}
+							onChange={setCoffeeCups}
+							value={coffeeCups}
 						/>
 					</form>
 				</Dialog>

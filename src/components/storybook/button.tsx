@@ -1,13 +1,13 @@
 import type React from "react";
 
 export interface ButtonProps {
-	variant?: "primary" | "secondary" | "danger";
-	size?: "small" | "medium" | "large";
 	children: React.ReactNode;
-	onClick?: () => void;
-	disabled?: boolean;
-	type?: "button" | "submit" | "reset";
 	className?: string;
+	disabled?: boolean;
+	onClick?: () => void;
+	size?: "small" | "medium" | "large";
+	type?: "button" | "submit" | "reset";
+	variant?: "primary" | "secondary" | "danger";
 }
 
 export const Button: React.FC<ButtonProps> = ({
@@ -39,10 +39,10 @@ export const Button: React.FC<ButtonProps> = ({
 
 	return (
 		<button
-			type={type}
-			onClick={onClick}
-			disabled={disabled}
 			className={`${baseStyles} ${variantStyles[variant]} ${sizeStyles[size]} ${className}`}
+			disabled={disabled}
+			onClick={onClick}
+			type={type}
 		>
 			{children}
 		</button>

@@ -10,7 +10,7 @@ export function getReturnPathname(redirectTo: unknown) {
 
 export async function buildSignInRedirect(
 	getUrl: (options?: { data: { returnPathname: string } }) => Promise<string>,
-	redirectTo: unknown,
+	redirectTo: unknown
 ) {
 	const returnPathname = getReturnPathname(redirectTo);
 	const href = await getUrl(
@@ -18,7 +18,7 @@ export async function buildSignInRedirect(
 			? {
 					data: { returnPathname },
 				}
-			: undefined,
+			: undefined
 	);
 
 	return redirect({ href });
@@ -26,7 +26,7 @@ export async function buildSignInRedirect(
 
 export async function buildSignUpRedirect(
 	getUrl: (options?: { data: { returnPathname: string } }) => Promise<string>,
-	redirectTo: unknown,
+	redirectTo: unknown
 ) {
 	const returnPathname = getReturnPathname(redirectTo);
 	const href = await getUrl(
@@ -34,7 +34,7 @@ export async function buildSignUpRedirect(
 			? {
 					data: { returnPathname },
 				}
-			: undefined,
+			: undefined
 	);
 
 	return redirect({ href });

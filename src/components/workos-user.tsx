@@ -17,17 +17,19 @@ export default function SignInButton({ large }: { large?: boolean }) {
 				<div className="flex items-center gap-2">
 					{user.profilePictureUrl && (
 						<img
-							src={user.profilePictureUrl}
 							alt={`Avatar of ${user.firstName} ${user.lastName}`}
-							className="w-10 h-10 rounded-full"
+							className="h-10 w-10 rounded-full"
+							height={40}
+							src={user.profilePictureUrl}
+							width={40}
 						/>
 					)}
 					{user.firstName} {user.lastName}
 				</div>
 				<button
-					type="button"
-					onClick={() => void signOut()}
 					className={buttonClasses}
+					onClick={() => void signOut()}
+					type="button"
 				>
 					Sign Out
 				</button>
@@ -38,16 +40,16 @@ export default function SignInButton({ large }: { large?: boolean }) {
 	return (
 		<>
 			<Link
-				to="/sign-in"
+				className="rounded-md bg-foreground px-4 py-2 text-background"
 				search={{ redirectTo: pathname }}
-				className="bg-foreground text-background px-4 py-2 rounded-md"
+				to="/sign-in"
 			>
 				Sign in
 			</Link>
 			<Link
-				to="/sign-up"
+				className="rounded-md bg-foreground px-4 py-2 text-background"
 				search={{ redirectTo: pathname }}
-				className="bg-foreground text-background px-4 py-2 rounded-md"
+				to="/sign-up"
 			>
 				Sign up
 			</Link>

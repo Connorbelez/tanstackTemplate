@@ -3,7 +3,7 @@ import {
 	buildSignInRedirect,
 	buildSignUpRedirect,
 	getReturnPathname,
-} from "./-auth-redirect";
+} from "../../routes/-auth-redirect";
 
 describe("shared auth routes", () => {
 	it("keeps only safe in-app return paths", () => {
@@ -18,7 +18,7 @@ describe("shared auth routes", () => {
 			.mockResolvedValueOnce("https://auth.example.com/sign-in");
 
 		await expect(
-			buildSignInRedirect(getSignInUrl, "/demo/workos"),
+			buildSignInRedirect(getSignInUrl, "/demo/workos")
 		).resolves.toMatchObject({
 			options: {
 				href: "https://auth.example.com/sign-in",
@@ -36,7 +36,7 @@ describe("shared auth routes", () => {
 			.mockResolvedValueOnce("https://auth.example.com/sign-up");
 
 		await expect(
-			buildSignUpRedirect(getSignUpUrl, "/demo/workos"),
+			buildSignUpRedirect(getSignUpUrl, "/demo/workos")
 		).resolves.toMatchObject({
 			options: {
 				href: "https://auth.example.com/sign-up",

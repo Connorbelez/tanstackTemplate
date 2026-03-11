@@ -11,8 +11,9 @@ import { createServerFn } from "@tanstack/react-start";
 import { getAuth } from "@workos/authkit-tanstack-react-start";
 import type { ConvexReactClient } from "convex/react";
 import type { ReactNode } from "react";
-import Footer from "../components/Footer";
-import Header from "../components/Header";
+import { AppErrorComponent } from "../components/error-boundary";
+import Footer from "../components/footer";
+import Header from "../components/header";
 import appCss from "../styles.css?url";
 
 const THEME_INIT_SCRIPT = `(function(){try{var stored=window.localStorage.getItem('theme');var mode=(stored==='light'||stored==='dark'||stored==='auto')?stored:'auto';var prefersDark=window.matchMedia('(prefers-color-scheme: dark)').matches;var resolved=mode==='auto'?(prefersDark?'dark':'light'):mode;var root=document.documentElement;root.classList.remove('light','dark');root.classList.add(resolved);if(mode==='auto'){root.removeAttribute('data-theme')}else{root.setAttribute('data-theme',mode)}root.style.colorScheme=resolved;}catch(e){}})();`;
@@ -51,7 +52,18 @@ export const Route = createRootRouteWithContext<{
 		],
 	}),
 	component: RootComponent,
-	notFoundComponent: () => <div>Not Found</div>,
+	errorComponent: ({ error, reset }) => (
+		<RootDocument>
+			<AppErrorComponent error={error} reset={reset} />
+		</RootDocument>
+	),
+	notFoundComponent: () => (
+		<AppErrorComponent
+			error={Object.assign(new Error("Page not found"), {
+				name: "NotFoundError",
+			})}
+		/>
+	),
 	beforeLoad: async (ctx) => {
 		const { userId, token } = await fetchWorkosAuth();
 

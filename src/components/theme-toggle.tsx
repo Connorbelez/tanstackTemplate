@@ -1,6 +1,39 @@
 import { useEffect, useState } from "react";
+import { Button } from "#/components/ui/button";
 
 type ThemeMode = "light" | "dark" | "auto";
+
+function resolveThemeMode(mode: ThemeMode, prefersDark: boolean) {
+	if (mode !== "auto") {
+		return mode;
+	}
+
+	return prefersDark ? "dark" : "light";
+}
+
+function getNextThemeMode(mode: ThemeMode): ThemeMode {
+	if (mode === "light") {
+		return "dark";
+	}
+
+	if (mode === "dark") {
+		return "auto";
+	}
+
+	return "light";
+}
+
+function getThemeLabel(mode: ThemeMode) {
+	if (mode === "auto") {
+		return "Auto";
+	}
+
+	if (mode === "dark") {
+		return "Dark";
+	}
+
+	return "Light";
+}
 
 function getInitialMode(): ThemeMode {
 	if (typeof window === "undefined") {
@@ -17,7 +50,7 @@ function getInitialMode(): ThemeMode {
 
 function applyThemeMode(mode: ThemeMode) {
 	const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-	const resolved = mode === "auto" ? (prefersDark ? "dark" : "light") : mode;
+	const resolved = resolveThemeMode(mode, prefersDark);
 
 	document.documentElement.classList.remove("light", "dark");
 	document.documentElement.classList.add(resolved);
@@ -55,8 +88,7 @@ export default function ThemeToggle() {
 	}, [mode]);
 
 	function toggleMode() {
-		const nextMode: ThemeMode =
-			mode === "light" ? "dark" : mode === "dark" ? "auto" : "light";
+		const nextMode = getNextThemeMode(mode);
 		setMode(nextMode);
 		applyThemeMode(nextMode);
 		window.localStorage.setItem("theme", nextMode);
@@ -68,14 +100,13 @@ export default function ThemeToggle() {
 			: `Theme mode: ${mode}. Click to switch mode.`;
 
 	return (
-		<button
-			type="button"
-			onClick={toggleMode}
+		<Button
 			aria-label={label}
+			className="rounded-full border border-[var(--chip-line)] bg-[var(--chip-bg)] px-3 py-1.5 font-semibold text-[var(--sea-ink)] text-sm shadow-[0_8px_22px_rgba(30,90,72,0.08)] transition hover:-translate-y-0.5"
+			onClick={toggleMode}
 			title={label}
-			className="rounded-full border border-[var(--chip-line)] bg-[var(--chip-bg)] px-3 py-1.5 text-sm font-semibold text-[var(--sea-ink)] shadow-[0_8px_22px_rgba(30,90,72,0.08)] transition hover:-translate-y-0.5"
 		>
-			{mode === "auto" ? "Auto" : mode === "dark" ? "Dark" : "Light"}
-		</button>
+			{getThemeLabel(mode)}
+		</Button>
 	);
 }
