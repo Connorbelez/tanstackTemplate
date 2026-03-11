@@ -2,15 +2,50 @@ import { Link, linkOptions } from "@tanstack/react-router";
 import ThemeToggle from "./theme-toggle";
 import WorkOSHeader from "./workos-user.tsx";
 
-const demoLinks = linkOptions([
-	{ to: "/demo/tanstack-query", label: "TanStack Query" },
-	{ to: "/demo/workos", label: "WorkOS" },
-	{ to: "/demo/convex", label: "Convex" },
-	{ to: "/demo/table", label: "TanStack Table" },
-	{ to: "/demo/form/simple", label: "Simple Form" },
-	{ to: "/demo/form/address", label: "Address Form" },
-	{ to: "/demo/storybook", label: "Storybook" },
-]);
+const demoSections = [
+	{
+		label: "Frontend",
+		links: linkOptions([
+			{ to: "/demo/tanstack-query", label: "TanStack Query" },
+			{ to: "/demo/table", label: "TanStack Table" },
+			{ to: "/demo/form/simple", label: "Simple Form" },
+			{ to: "/demo/form/address", label: "Address Form" },
+			{ to: "/demo/storybook", label: "Storybook" },
+		]),
+	},
+	{
+		label: "Auth",
+		links: linkOptions([{ to: "/demo/workos", label: "WorkOS" }]),
+	},
+	{
+		label: "Convex Core",
+		links: linkOptions([{ to: "/demo/convex", label: "Todos" }]),
+	},
+	{
+		label: "Convex Components",
+		links: linkOptions([
+			{ to: "/demo/convex-rate-limiter", label: "Rate Limiter" },
+			{ to: "/demo/convex-action-cache", label: "Action Cache" },
+			{ to: "/demo/convex-debouncer", label: "Debouncer" },
+			{ to: "/demo/convex-tracer", label: "Tracer" },
+			{ to: "/demo/convex-migrations", label: "Migrations" },
+			{ to: "/demo/convex-presence", label: "Presence" },
+			{ to: "/demo/convex-aggregate", label: "Aggregate" },
+			{ to: "/demo/convex-geospatial", label: "Geospatial" },
+			{ to: "/demo/convex-timeline", label: "Timeline" },
+			{ to: "/demo/convex-audit-log", label: "Audit Log" },
+			{ to: "/demo/convex-crons", label: "Crons" },
+			{ to: "/demo/convex-workflow", label: "Workflow" },
+			{ to: "/demo/convex-api-credentials", label: "API Credentials" },
+			{ to: "/demo/convex-file-management", label: "File Management" },
+			{ to: "/demo/convex-cascading-delete", label: "Cascading Delete" },
+		]),
+	},
+	{
+		label: "Convex Helpers",
+		links: linkOptions([{ to: "/demo/convex-triggers", label: "Triggers" }]),
+	},
+];
 
 const demoLinkClassName =
 	"block rounded-lg px-3 py-2 text-sm text-[var(--sea-ink-soft)] no-underline transition hover:bg-[var(--link-bg-hover)] hover:text-[var(--sea-ink)]";
@@ -89,19 +124,26 @@ export default function Header() {
 						<summary className="nav-link cursor-pointer list-none">
 							Demos
 						</summary>
-						<div className="mt-2 min-w-56 rounded-xl border border-(--line) bg-(--header-bg) p-2 shadow-lg sm:absolute sm:right-0">
-							{demoLinks.map(({ label, ...demoLink }) => (
-								<Link
-									key={demoLink.to}
-									{...demoLink}
-									activeProps={{
-										className:
-											"block rounded-lg bg-[var(--link-bg-hover)] px-3 py-2 text-sm text-[var(--sea-ink)] no-underline transition",
-									}}
-									className={demoLinkClassName}
-								>
-									{label}
-								</Link>
+						<div className="mt-2 max-h-[70vh] min-w-56 overflow-y-auto rounded-xl border border-(--line) bg-(--header-bg) p-2 shadow-lg sm:absolute sm:right-0">
+							{demoSections.map((section) => (
+								<div key={section.label}>
+									<div className="px-3 pt-2 pb-1 font-semibold text-[var(--sea-ink-soft)] text-xs uppercase tracking-wider">
+										{section.label}
+									</div>
+									{section.links.map(({ label, ...demoLink }) => (
+										<Link
+											key={demoLink.to}
+											{...demoLink}
+											activeProps={{
+												className:
+													"block rounded-lg bg-[var(--link-bg-hover)] px-3 py-2 text-sm text-[var(--sea-ink)] no-underline transition",
+											}}
+											className={demoLinkClassName}
+										>
+											{label}
+										</Link>
+									))}
+								</div>
 							))}
 						</div>
 					</details>

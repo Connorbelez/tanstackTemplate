@@ -23,14 +23,16 @@
 
 
 ## Code Quality
-- `bun check` and `bun typecheck` must pass before considering tasks completed.
+- `bun check`, `bun typecheck` and `bunx convex codegen` must pass before considering tasks completed.
 - NEVER USE `any` as a type unless you absolutely have to. 
 
 
-## Workflow 
+## Workflow
 - DO NOT try to fix linting/formatting errors BEFORE running `bun check`. Always run `bun check` first as this command also auto formats and fixes some linting errors.
-- After Completing a Major unit of work like a full SPEC run `coderabbit review --plain` to get a code review summary and check for any potential issues or improvements. 
-- This is an early stage project, feel free to suggest sweeping changes to the schema, architecture etc, but ask your human first. 
+- After Completing a Major unit of work like a full SPEC run `coderabbit review --plain` to get a code review summary and check for any potential issues or improvements.
+- This is an early stage project, feel free to suggest sweeping changes to the schema, architecture etc, but ask your human first.
+- **MANDATORY: Before writing or modifying code that uses a Convex Component listed in the Toolkit section below, you MUST first read its linked documentation file.** Do not rely on assumptions, node_modules exploration, or type inference alone. The docs contain critical configuration requirements (e.g. event registration, component options) that types alone won't reveal.
+- **AGENT_LESSONS.md**: Whenever you encounter a blocker, get corrected by the user, make a bad assumption, or get confused by something that prevents completing a task as intended, append a new lesson to `AGENT_LESSONS.md` (create the file if it doesn't exist). Each entry should include: date, context of what went wrong, root cause, and a proposed CLAUDE.md amendment. Do NOT write directly to CLAUDE.md — the user will review and promote lessons as appropriate.
 
 ## Maintainability
 
@@ -38,11 +40,6 @@ Long term maintainability is a core priority. If you add new functionality, firs
 
 
 ## Toolkit 
-
-### Tanstack Start
-- Description: The meta-framework for building full-stack applications with your choice of frontend and backend technologies. 
-- [FolderPath](./docs/tanstack)
-- When to use rules: Whenever working with tanstack router, tanstack query, or any full-stack application architecture decisions or when the user asks for tanstack best practices.
 
 ### Convex Components
 

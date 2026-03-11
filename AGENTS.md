@@ -1,4 +1,4 @@
-# CLAUDE
+# AGENTS
 ## Techstack
 - Backend, DB, API, ORM, Serverless: Convex
 - Frontend: React, TanStack Router, Tanstack Query + Convex query integration, Tailwind CSS, ShadCN UI
@@ -18,13 +18,86 @@
 - Lint, format and check errors: `bun check`
 - Type check: `bun typecheck`
 
-
-
-
 ## Code Quality
-- `bun check` and `bun typecheck` must pass before considering tasks completed.
+- `bun check`, `bun typecheck` and `bunx convex codegen` must pass before considering tasks completed.
 - NEVER USE `any` as a type unless you absolutely have to. 
 
+## Standards & Conventions 
+### Auth
+- WorkOS Authkit is the canonical source of truth. 
+- Always use `import { useAuth } from "@workos/authkit-tanstack-react-start/client"` to access auth state in React components.
+```ts
+export interface AuthContextType {
+    user: User | null;
+    sessionId: string | undefined;
+    organizationId: string | undefined;
+    role: string | undefined;
+    roles: string[] | undefined;
+    permissions: string[] | undefined;
+    entitlements: string[] | undefined;
+    featureFlags: string[] | undefined;
+    impersonator: Impersonator | undefined;
+    loading: boolean;
+    getAuth: (options?: {
+        ensureSignedIn?: boolean;
+    }) => Promise<void>;
+    refreshAuth: (options?: {
+        ensureSignedIn?: boolean;
+        organizationId?: string;
+    }) => Promise<void | {
+        error: string;
+    }>;
+    signOut: (options?: {
+        returnTo?: string;
+    }) => Promise<void>;
+    switchToOrganization: (organizationId: string) => Promise<void | {
+        error: string;
+    }>;
+}
+```
+- Always use the `getAuth` method to fetch auth state in server-side code, and pass the sessionId to Convex functions for auth checks. Do not directly query the Convex database for auth state.
+```ts
+export interface UserIdentity {
+  readonly tokenIdentifier: string;
+  readonly subject: string;
+  readonly issuer: string;
+  readonly name?: string;
+  readonly givenName?: string;
+  readonly familyName?: string;
+  readonly nickname?: string;
+  readonly preferredUsername?: string;
+  readonly profileUrl?: string;
+  readonly pictureUrl?: string;
+  readonly email?: string;
+  readonly emailVerified?: boolean;
+  readonly gender?: string;
+  readonly birthday?: string;
+  readonly timezone?: string;
+  readonly language?: string;
+  readonly phoneNumber?: string;
+  readonly phoneNumberVerified?: boolean;
+  readonly address?: string;
+  readonly updatedAt?: string;
+  [key: string]: JSONValue | undefined;
+}
+/**
+Custom Claims json shape: 
+{
+    "user_id": {{user.id}},
+    "user_email":{{user.email}},
+    "user_first_name":{{user.first_name}},
+    "user_last_name":{{user.last_name}},
+    "user_email_verified":{{user.email_verified}}, 
+    "user_profile_picture_url":{{user.profile_picture_url}},
+    "user_metadata":{{user.metadata}},
+    "organization_id":{{organization.id}},
+    "organization_name":{{organization.name}},
+    "organization_role":{{organization_membership.role}},
+    "organization_roles": {{organization_membership.roles}},
+    "organization_membership_id":{{organization_membership.id}}
+}
+*/
+```
 
 ## Workflow 
 - DO NOT try to fix linting/formatting errors BEFORE running `bun check`. Always run `bun check` first as this command also auto formats and fixes some linting errors.

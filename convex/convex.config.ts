@@ -10,6 +10,7 @@ import presence from "@convex-dev/presence/convex.config";
 import rateLimiter from "@convex-dev/rate-limiter/convex.config";
 import stripe from "@convex-dev/stripe/convex.config.js";
 import twilio from "@convex-dev/twilio/convex.config";
+import workflow from "@convex-dev/workflow/convex.config";
 import workOSAuthKit from "@convex-dev/workos-authkit/convex.config";
 import convexFilesControl from "@gilhrpenner/convex-files-control/convex.config";
 import debouncer from "@ikhrustalev/convex-debouncer/convex.config";
@@ -43,5 +44,6 @@ app.use(auditLog);
 app.use(fs);
 app.use(timeline);
 app.use(tracer);
+app.use(workflow);
 
 export default app;
