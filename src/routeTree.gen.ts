@@ -14,6 +14,7 @@ import { Route as SignInRouteImport } from './routes/sign-in'
 import { Route as CallbackRouteImport } from './routes/callback'
 import { Route as AboutRouteImport } from './routes/about'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as E2eSwitchOrgRouteImport } from './routes/e2e/switch-org'
 import { Route as DemoWorkosRouteImport } from './routes/demo/workos'
 import { Route as DemoTanstackQueryRouteImport } from './routes/demo/tanstack-query'
 import { Route as DemoTableRouteImport } from './routes/demo/table'
@@ -26,6 +27,7 @@ import { Route as DemoConvexRateLimiterRouteImport } from './routes/demo/convex-
 import { Route as DemoConvexPresenceRouteImport } from './routes/demo/convex-presence'
 import { Route as DemoConvexMigrationsRouteImport } from './routes/demo/convex-migrations'
 import { Route as DemoConvexGeospatialRouteImport } from './routes/demo/convex-geospatial'
+import { Route as DemoConvexFluentRouteImport } from './routes/demo/convex-fluent'
 import { Route as DemoConvexFileManagementRouteImport } from './routes/demo/convex-file-management'
 import { Route as DemoConvexDebouncerRouteImport } from './routes/demo/convex-debouncer'
 import { Route as DemoConvexCronsRouteImport } from './routes/demo/convex-crons'
@@ -62,6 +64,11 @@ const AboutRoute = AboutRouteImport.update({
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const E2eSwitchOrgRoute = E2eSwitchOrgRouteImport.update({
+  id: '/e2e/switch-org',
+  path: '/e2e/switch-org',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DemoWorkosRoute = DemoWorkosRouteImport.update({
@@ -122,6 +129,11 @@ const DemoConvexMigrationsRoute = DemoConvexMigrationsRouteImport.update({
 const DemoConvexGeospatialRoute = DemoConvexGeospatialRouteImport.update({
   id: '/demo/convex-geospatial',
   path: '/demo/convex-geospatial',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DemoConvexFluentRoute = DemoConvexFluentRouteImport.update({
+  id: '/demo/convex-fluent',
+  path: '/demo/convex-fluent',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DemoConvexFileManagementRoute =
@@ -205,6 +217,7 @@ export interface FileRoutesByFullPath {
   '/demo/convex-crons': typeof DemoConvexCronsRoute
   '/demo/convex-debouncer': typeof DemoConvexDebouncerRoute
   '/demo/convex-file-management': typeof DemoConvexFileManagementRoute
+  '/demo/convex-fluent': typeof DemoConvexFluentRoute
   '/demo/convex-geospatial': typeof DemoConvexGeospatialRoute
   '/demo/convex-migrations': typeof DemoConvexMigrationsRoute
   '/demo/convex-presence': typeof DemoConvexPresenceRoute
@@ -217,6 +230,7 @@ export interface FileRoutesByFullPath {
   '/demo/table': typeof DemoTableRoute
   '/demo/tanstack-query': typeof DemoTanstackQueryRoute
   '/demo/workos': typeof DemoWorkosRoute
+  '/e2e/switch-org': typeof E2eSwitchOrgRoute
   '/demo/form/address': typeof DemoFormAddressRoute
   '/demo/form/simple': typeof DemoFormSimpleRoute
 }
@@ -236,6 +250,7 @@ export interface FileRoutesByTo {
   '/demo/convex-crons': typeof DemoConvexCronsRoute
   '/demo/convex-debouncer': typeof DemoConvexDebouncerRoute
   '/demo/convex-file-management': typeof DemoConvexFileManagementRoute
+  '/demo/convex-fluent': typeof DemoConvexFluentRoute
   '/demo/convex-geospatial': typeof DemoConvexGeospatialRoute
   '/demo/convex-migrations': typeof DemoConvexMigrationsRoute
   '/demo/convex-presence': typeof DemoConvexPresenceRoute
@@ -248,6 +263,7 @@ export interface FileRoutesByTo {
   '/demo/table': typeof DemoTableRoute
   '/demo/tanstack-query': typeof DemoTanstackQueryRoute
   '/demo/workos': typeof DemoWorkosRoute
+  '/e2e/switch-org': typeof E2eSwitchOrgRoute
   '/demo/form/address': typeof DemoFormAddressRoute
   '/demo/form/simple': typeof DemoFormSimpleRoute
 }
@@ -268,6 +284,7 @@ export interface FileRoutesById {
   '/demo/convex-crons': typeof DemoConvexCronsRoute
   '/demo/convex-debouncer': typeof DemoConvexDebouncerRoute
   '/demo/convex-file-management': typeof DemoConvexFileManagementRoute
+  '/demo/convex-fluent': typeof DemoConvexFluentRoute
   '/demo/convex-geospatial': typeof DemoConvexGeospatialRoute
   '/demo/convex-migrations': typeof DemoConvexMigrationsRoute
   '/demo/convex-presence': typeof DemoConvexPresenceRoute
@@ -280,6 +297,7 @@ export interface FileRoutesById {
   '/demo/table': typeof DemoTableRoute
   '/demo/tanstack-query': typeof DemoTanstackQueryRoute
   '/demo/workos': typeof DemoWorkosRoute
+  '/e2e/switch-org': typeof E2eSwitchOrgRoute
   '/demo/form/address': typeof DemoFormAddressRoute
   '/demo/form/simple': typeof DemoFormSimpleRoute
 }
@@ -301,6 +319,7 @@ export interface FileRouteTypes {
     | '/demo/convex-crons'
     | '/demo/convex-debouncer'
     | '/demo/convex-file-management'
+    | '/demo/convex-fluent'
     | '/demo/convex-geospatial'
     | '/demo/convex-migrations'
     | '/demo/convex-presence'
@@ -313,6 +332,7 @@ export interface FileRouteTypes {
     | '/demo/table'
     | '/demo/tanstack-query'
     | '/demo/workos'
+    | '/e2e/switch-org'
     | '/demo/form/address'
     | '/demo/form/simple'
   fileRoutesByTo: FileRoutesByTo
@@ -332,6 +352,7 @@ export interface FileRouteTypes {
     | '/demo/convex-crons'
     | '/demo/convex-debouncer'
     | '/demo/convex-file-management'
+    | '/demo/convex-fluent'
     | '/demo/convex-geospatial'
     | '/demo/convex-migrations'
     | '/demo/convex-presence'
@@ -344,6 +365,7 @@ export interface FileRouteTypes {
     | '/demo/table'
     | '/demo/tanstack-query'
     | '/demo/workos'
+    | '/e2e/switch-org'
     | '/demo/form/address'
     | '/demo/form/simple'
   id:
@@ -363,6 +385,7 @@ export interface FileRouteTypes {
     | '/demo/convex-crons'
     | '/demo/convex-debouncer'
     | '/demo/convex-file-management'
+    | '/demo/convex-fluent'
     | '/demo/convex-geospatial'
     | '/demo/convex-migrations'
     | '/demo/convex-presence'
@@ -375,6 +398,7 @@ export interface FileRouteTypes {
     | '/demo/table'
     | '/demo/tanstack-query'
     | '/demo/workos'
+    | '/e2e/switch-org'
     | '/demo/form/address'
     | '/demo/form/simple'
   fileRoutesById: FileRoutesById
@@ -395,6 +419,7 @@ export interface RootRouteChildren {
   DemoConvexCronsRoute: typeof DemoConvexCronsRoute
   DemoConvexDebouncerRoute: typeof DemoConvexDebouncerRoute
   DemoConvexFileManagementRoute: typeof DemoConvexFileManagementRoute
+  DemoConvexFluentRoute: typeof DemoConvexFluentRoute
   DemoConvexGeospatialRoute: typeof DemoConvexGeospatialRoute
   DemoConvexMigrationsRoute: typeof DemoConvexMigrationsRoute
   DemoConvexPresenceRoute: typeof DemoConvexPresenceRoute
@@ -407,6 +432,7 @@ export interface RootRouteChildren {
   DemoTableRoute: typeof DemoTableRoute
   DemoTanstackQueryRoute: typeof DemoTanstackQueryRoute
   DemoWorkosRoute: typeof DemoWorkosRoute
+  E2eSwitchOrgRoute: typeof E2eSwitchOrgRoute
   DemoFormAddressRoute: typeof DemoFormAddressRoute
   DemoFormSimpleRoute: typeof DemoFormSimpleRoute
 }
@@ -446,6 +472,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/e2e/switch-org': {
+      id: '/e2e/switch-org'
+      path: '/e2e/switch-org'
+      fullPath: '/e2e/switch-org'
+      preLoaderRoute: typeof E2eSwitchOrgRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/demo/workos': {
@@ -530,6 +563,13 @@ declare module '@tanstack/react-router' {
       path: '/demo/convex-geospatial'
       fullPath: '/demo/convex-geospatial'
       preLoaderRoute: typeof DemoConvexGeospatialRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/demo/convex-fluent': {
+      id: '/demo/convex-fluent'
+      path: '/demo/convex-fluent'
+      fullPath: '/demo/convex-fluent'
+      preLoaderRoute: typeof DemoConvexFluentRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/demo/convex-file-management': {
@@ -635,6 +675,7 @@ const rootRouteChildren: RootRouteChildren = {
   DemoConvexCronsRoute: DemoConvexCronsRoute,
   DemoConvexDebouncerRoute: DemoConvexDebouncerRoute,
   DemoConvexFileManagementRoute: DemoConvexFileManagementRoute,
+  DemoConvexFluentRoute: DemoConvexFluentRoute,
   DemoConvexGeospatialRoute: DemoConvexGeospatialRoute,
   DemoConvexMigrationsRoute: DemoConvexMigrationsRoute,
   DemoConvexPresenceRoute: DemoConvexPresenceRoute,
@@ -647,6 +688,7 @@ const rootRouteChildren: RootRouteChildren = {
   DemoTableRoute: DemoTableRoute,
   DemoTanstackQueryRoute: DemoTanstackQueryRoute,
   DemoWorkosRoute: DemoWorkosRoute,
+  E2eSwitchOrgRoute: E2eSwitchOrgRoute,
   DemoFormAddressRoute: DemoFormAddressRoute,
   DemoFormSimpleRoute: DemoFormSimpleRoute,
 }
