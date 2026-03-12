@@ -123,7 +123,7 @@ export const validateZod = convex
 	.input(
 		z.object({
 			count: z.number().int().min(1).max(100),
-			email: z.email(),
+			email: z.string().email(),
 		})
 	)
 	.returns(
