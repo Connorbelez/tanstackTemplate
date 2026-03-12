@@ -46,6 +46,13 @@ const demoSections = [
 		label: "Convex Helpers",
 		links: linkOptions([{ to: "/demo/convex-triggers", label: "Triggers" }]),
 	},
+	{
+		label: "Platform",
+		links: linkOptions([
+			{ to: "/demo/document-engine", label: "Document Engine" },
+			{ to: "/demo/audit-traceability", label: "Audit & Traceability" },
+		]),
+	},
 ];
 
 const demoLinkClassName =
