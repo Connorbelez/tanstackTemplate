@@ -32,7 +32,7 @@
       "recommended": true,
       "style": {
         "noNestedTernary": "warn",
-        "useFilenamingConvention": "warn"
+        "useFilenamingConvention": "off"
       },
       "suspicious": {
         "noTsIgnore": "off",
