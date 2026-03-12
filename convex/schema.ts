@@ -1207,13 +1207,16 @@ export default defineSchema({
 			actorId: v.optional(v.string()),
 			actorType: v.optional(v.string()),
 			sessionId: v.optional(v.string()),
+			ip: v.optional(v.string()),
 		}),
 		machineVersion: v.optional(v.string()),
 		timestamp: v.number(),
 		effectsScheduled: v.optional(v.array(v.string())),
 	})
 		.index("by_entity", ["entityId", "timestamp"])
-		.index("by_outcome", ["outcome", "timestamp"]),
+		.index("by_outcome", ["outcome", "timestamp"])
+		.index("by_actor", ["source.actorId", "timestamp"])
+		.index("by_type_and_time", ["entityType", "timestamp"]),
 
 	demo_gt_effects_log: defineTable({
 		entityId: v.id("demo_gt_entities"),
