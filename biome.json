@@ -1,36 +1,58 @@
 {
-	"$schema": "https://biomejs.dev/schemas/2.2.4/schema.json",
-	"vcs": {
-		"enabled": false,
-		"clientKind": "git",
-		"useIgnoreFile": false
-	},
-	"files": {
-		"ignoreUnknown": false,
-		"includes": [
-			"**/src/**/*",
-			"**/.vscode/**/*",
-			"**/index.html",
-			"**/vite.config.ts",
-			"!**/src/routeTree.gen.ts",
-			"!**/src/styles.css"
-		]
-	},
-	"formatter": {
-		"enabled": true,
-		"indentStyle": "tab"
-	},
-	"assist": { "actions": { "source": { "organizeImports": "on" } } },
-	"linter": {
-		"enabled": true,
-		"rules": {
-			"recommended": true
-		}
-	},
-	"javascript": {
-		"formatter": {
-			"quoteStyle": "double"
-		}
-	}
+  "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
+  "extends": ["ultracite/biome/core", "ultracite/biome/react"],
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true
+  },
+  "files": {
+    "includes": [
+      "!!**/convex/_generated",
+      "!!**/src/routeTree.gen.ts",
+      "!!**/src/styles.css",
+      "!!**/src/components/ui/*",
+      "!!**/src/data/*",
+      "!!src/routes/-auth-redirect.ts",
+      "!!src/components/storybook/*"
+    ]
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "tab"
+  },
+  "assist": {
+    "actions": { "source": { "organizeImports": "on" } },
+    "enabled": true
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "recommended": true,
+      "style": {
+        "noNestedTernary": "warn",
+        "useFilenamingConvention": "warn"
+      },
+      "suspicious": {
+        "noTsIgnore": "off",
+        "noConsole": "off",
+        "useAwait": "off",
+        "noUnknownAtRules": "off",
+        "noBitwiseOperators": "off",
+        "noAlert": "warn",
+        "noEmptyBlockStatements": "warn"
+      },
+      "complexity": {
+        "noVoid": "off"
+      },
+      "a11y": {
+        "useSemanticElements": "off"
+      }
+    }
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "double"
+    }
+  }
 }
-

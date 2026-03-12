@@ -18,6 +18,22 @@ import { Route as DemoWorkosRouteImport } from './routes/demo/workos'
 import { Route as DemoTanstackQueryRouteImport } from './routes/demo/tanstack-query'
 import { Route as DemoTableRouteImport } from './routes/demo/table'
 import { Route as DemoStorybookRouteImport } from './routes/demo/storybook'
+import { Route as DemoConvexWorkflowRouteImport } from './routes/demo/convex-workflow'
+import { Route as DemoConvexTriggersRouteImport } from './routes/demo/convex-triggers'
+import { Route as DemoConvexTracerRouteImport } from './routes/demo/convex-tracer'
+import { Route as DemoConvexTimelineRouteImport } from './routes/demo/convex-timeline'
+import { Route as DemoConvexRateLimiterRouteImport } from './routes/demo/convex-rate-limiter'
+import { Route as DemoConvexPresenceRouteImport } from './routes/demo/convex-presence'
+import { Route as DemoConvexMigrationsRouteImport } from './routes/demo/convex-migrations'
+import { Route as DemoConvexGeospatialRouteImport } from './routes/demo/convex-geospatial'
+import { Route as DemoConvexFileManagementRouteImport } from './routes/demo/convex-file-management'
+import { Route as DemoConvexDebouncerRouteImport } from './routes/demo/convex-debouncer'
+import { Route as DemoConvexCronsRouteImport } from './routes/demo/convex-crons'
+import { Route as DemoConvexCascadingDeleteRouteImport } from './routes/demo/convex-cascading-delete'
+import { Route as DemoConvexAuditLogRouteImport } from './routes/demo/convex-audit-log'
+import { Route as DemoConvexApiCredentialsRouteImport } from './routes/demo/convex-api-credentials'
+import { Route as DemoConvexAggregateRouteImport } from './routes/demo/convex-aggregate'
+import { Route as DemoConvexActionCacheRouteImport } from './routes/demo/convex-action-cache'
 import { Route as DemoConvexRouteImport } from './routes/demo/convex'
 import { Route as AuthenticatedAuthenticatedRouteImport } from './routes/_authenticated/authenticated'
 import { Route as DemoFormSimpleRouteImport } from './routes/demo/form.simple'
@@ -68,6 +84,89 @@ const DemoStorybookRoute = DemoStorybookRouteImport.update({
   path: '/demo/storybook',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DemoConvexWorkflowRoute = DemoConvexWorkflowRouteImport.update({
+  id: '/demo/convex-workflow',
+  path: '/demo/convex-workflow',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DemoConvexTriggersRoute = DemoConvexTriggersRouteImport.update({
+  id: '/demo/convex-triggers',
+  path: '/demo/convex-triggers',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DemoConvexTracerRoute = DemoConvexTracerRouteImport.update({
+  id: '/demo/convex-tracer',
+  path: '/demo/convex-tracer',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DemoConvexTimelineRoute = DemoConvexTimelineRouteImport.update({
+  id: '/demo/convex-timeline',
+  path: '/demo/convex-timeline',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DemoConvexRateLimiterRoute = DemoConvexRateLimiterRouteImport.update({
+  id: '/demo/convex-rate-limiter',
+  path: '/demo/convex-rate-limiter',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DemoConvexPresenceRoute = DemoConvexPresenceRouteImport.update({
+  id: '/demo/convex-presence',
+  path: '/demo/convex-presence',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DemoConvexMigrationsRoute = DemoConvexMigrationsRouteImport.update({
+  id: '/demo/convex-migrations',
+  path: '/demo/convex-migrations',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DemoConvexGeospatialRoute = DemoConvexGeospatialRouteImport.update({
+  id: '/demo/convex-geospatial',
+  path: '/demo/convex-geospatial',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DemoConvexFileManagementRoute =
+  DemoConvexFileManagementRouteImport.update({
+    id: '/demo/convex-file-management',
+    path: '/demo/convex-file-management',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const DemoConvexDebouncerRoute = DemoConvexDebouncerRouteImport.update({
+  id: '/demo/convex-debouncer',
+  path: '/demo/convex-debouncer',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DemoConvexCronsRoute = DemoConvexCronsRouteImport.update({
+  id: '/demo/convex-crons',
+  path: '/demo/convex-crons',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DemoConvexCascadingDeleteRoute =
+  DemoConvexCascadingDeleteRouteImport.update({
+    id: '/demo/convex-cascading-delete',
+    path: '/demo/convex-cascading-delete',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const DemoConvexAuditLogRoute = DemoConvexAuditLogRouteImport.update({
+  id: '/demo/convex-audit-log',
+  path: '/demo/convex-audit-log',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DemoConvexApiCredentialsRoute =
+  DemoConvexApiCredentialsRouteImport.update({
+    id: '/demo/convex-api-credentials',
+    path: '/demo/convex-api-credentials',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const DemoConvexAggregateRoute = DemoConvexAggregateRouteImport.update({
+  id: '/demo/convex-aggregate',
+  path: '/demo/convex-aggregate',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DemoConvexActionCacheRoute = DemoConvexActionCacheRouteImport.update({
+  id: '/demo/convex-action-cache',
+  path: '/demo/convex-action-cache',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const DemoConvexRoute = DemoConvexRouteImport.update({
   id: '/demo/convex',
   path: '/demo/convex',
@@ -98,6 +197,22 @@ export interface FileRoutesByFullPath {
   '/sign-up': typeof SignUpRoute
   '/authenticated': typeof AuthenticatedAuthenticatedRoute
   '/demo/convex': typeof DemoConvexRoute
+  '/demo/convex-action-cache': typeof DemoConvexActionCacheRoute
+  '/demo/convex-aggregate': typeof DemoConvexAggregateRoute
+  '/demo/convex-api-credentials': typeof DemoConvexApiCredentialsRoute
+  '/demo/convex-audit-log': typeof DemoConvexAuditLogRoute
+  '/demo/convex-cascading-delete': typeof DemoConvexCascadingDeleteRoute
+  '/demo/convex-crons': typeof DemoConvexCronsRoute
+  '/demo/convex-debouncer': typeof DemoConvexDebouncerRoute
+  '/demo/convex-file-management': typeof DemoConvexFileManagementRoute
+  '/demo/convex-geospatial': typeof DemoConvexGeospatialRoute
+  '/demo/convex-migrations': typeof DemoConvexMigrationsRoute
+  '/demo/convex-presence': typeof DemoConvexPresenceRoute
+  '/demo/convex-rate-limiter': typeof DemoConvexRateLimiterRoute
+  '/demo/convex-timeline': typeof DemoConvexTimelineRoute
+  '/demo/convex-tracer': typeof DemoConvexTracerRoute
+  '/demo/convex-triggers': typeof DemoConvexTriggersRoute
+  '/demo/convex-workflow': typeof DemoConvexWorkflowRoute
   '/demo/storybook': typeof DemoStorybookRoute
   '/demo/table': typeof DemoTableRoute
   '/demo/tanstack-query': typeof DemoTanstackQueryRoute
@@ -113,6 +228,22 @@ export interface FileRoutesByTo {
   '/sign-up': typeof SignUpRoute
   '/authenticated': typeof AuthenticatedAuthenticatedRoute
   '/demo/convex': typeof DemoConvexRoute
+  '/demo/convex-action-cache': typeof DemoConvexActionCacheRoute
+  '/demo/convex-aggregate': typeof DemoConvexAggregateRoute
+  '/demo/convex-api-credentials': typeof DemoConvexApiCredentialsRoute
+  '/demo/convex-audit-log': typeof DemoConvexAuditLogRoute
+  '/demo/convex-cascading-delete': typeof DemoConvexCascadingDeleteRoute
+  '/demo/convex-crons': typeof DemoConvexCronsRoute
+  '/demo/convex-debouncer': typeof DemoConvexDebouncerRoute
+  '/demo/convex-file-management': typeof DemoConvexFileManagementRoute
+  '/demo/convex-geospatial': typeof DemoConvexGeospatialRoute
+  '/demo/convex-migrations': typeof DemoConvexMigrationsRoute
+  '/demo/convex-presence': typeof DemoConvexPresenceRoute
+  '/demo/convex-rate-limiter': typeof DemoConvexRateLimiterRoute
+  '/demo/convex-timeline': typeof DemoConvexTimelineRoute
+  '/demo/convex-tracer': typeof DemoConvexTracerRoute
+  '/demo/convex-triggers': typeof DemoConvexTriggersRoute
+  '/demo/convex-workflow': typeof DemoConvexWorkflowRoute
   '/demo/storybook': typeof DemoStorybookRoute
   '/demo/table': typeof DemoTableRoute
   '/demo/tanstack-query': typeof DemoTanstackQueryRoute
@@ -129,6 +260,22 @@ export interface FileRoutesById {
   '/sign-up': typeof SignUpRoute
   '/_authenticated/authenticated': typeof AuthenticatedAuthenticatedRoute
   '/demo/convex': typeof DemoConvexRoute
+  '/demo/convex-action-cache': typeof DemoConvexActionCacheRoute
+  '/demo/convex-aggregate': typeof DemoConvexAggregateRoute
+  '/demo/convex-api-credentials': typeof DemoConvexApiCredentialsRoute
+  '/demo/convex-audit-log': typeof DemoConvexAuditLogRoute
+  '/demo/convex-cascading-delete': typeof DemoConvexCascadingDeleteRoute
+  '/demo/convex-crons': typeof DemoConvexCronsRoute
+  '/demo/convex-debouncer': typeof DemoConvexDebouncerRoute
+  '/demo/convex-file-management': typeof DemoConvexFileManagementRoute
+  '/demo/convex-geospatial': typeof DemoConvexGeospatialRoute
+  '/demo/convex-migrations': typeof DemoConvexMigrationsRoute
+  '/demo/convex-presence': typeof DemoConvexPresenceRoute
+  '/demo/convex-rate-limiter': typeof DemoConvexRateLimiterRoute
+  '/demo/convex-timeline': typeof DemoConvexTimelineRoute
+  '/demo/convex-tracer': typeof DemoConvexTracerRoute
+  '/demo/convex-triggers': typeof DemoConvexTriggersRoute
+  '/demo/convex-workflow': typeof DemoConvexWorkflowRoute
   '/demo/storybook': typeof DemoStorybookRoute
   '/demo/table': typeof DemoTableRoute
   '/demo/tanstack-query': typeof DemoTanstackQueryRoute
@@ -146,6 +293,22 @@ export interface FileRouteTypes {
     | '/sign-up'
     | '/authenticated'
     | '/demo/convex'
+    | '/demo/convex-action-cache'
+    | '/demo/convex-aggregate'
+    | '/demo/convex-api-credentials'
+    | '/demo/convex-audit-log'
+    | '/demo/convex-cascading-delete'
+    | '/demo/convex-crons'
+    | '/demo/convex-debouncer'
+    | '/demo/convex-file-management'
+    | '/demo/convex-geospatial'
+    | '/demo/convex-migrations'
+    | '/demo/convex-presence'
+    | '/demo/convex-rate-limiter'
+    | '/demo/convex-timeline'
+    | '/demo/convex-tracer'
+    | '/demo/convex-triggers'
+    | '/demo/convex-workflow'
     | '/demo/storybook'
     | '/demo/table'
     | '/demo/tanstack-query'
@@ -161,6 +324,22 @@ export interface FileRouteTypes {
     | '/sign-up'
     | '/authenticated'
     | '/demo/convex'
+    | '/demo/convex-action-cache'
+    | '/demo/convex-aggregate'
+    | '/demo/convex-api-credentials'
+    | '/demo/convex-audit-log'
+    | '/demo/convex-cascading-delete'
+    | '/demo/convex-crons'
+    | '/demo/convex-debouncer'
+    | '/demo/convex-file-management'
+    | '/demo/convex-geospatial'
+    | '/demo/convex-migrations'
+    | '/demo/convex-presence'
+    | '/demo/convex-rate-limiter'
+    | '/demo/convex-timeline'
+    | '/demo/convex-tracer'
+    | '/demo/convex-triggers'
+    | '/demo/convex-workflow'
     | '/demo/storybook'
     | '/demo/table'
     | '/demo/tanstack-query'
@@ -176,6 +355,22 @@ export interface FileRouteTypes {
     | '/sign-up'
     | '/_authenticated/authenticated'
     | '/demo/convex'
+    | '/demo/convex-action-cache'
+    | '/demo/convex-aggregate'
+    | '/demo/convex-api-credentials'
+    | '/demo/convex-audit-log'
+    | '/demo/convex-cascading-delete'
+    | '/demo/convex-crons'
+    | '/demo/convex-debouncer'
+    | '/demo/convex-file-management'
+    | '/demo/convex-geospatial'
+    | '/demo/convex-migrations'
+    | '/demo/convex-presence'
+    | '/demo/convex-rate-limiter'
+    | '/demo/convex-timeline'
+    | '/demo/convex-tracer'
+    | '/demo/convex-triggers'
+    | '/demo/convex-workflow'
     | '/demo/storybook'
     | '/demo/table'
     | '/demo/tanstack-query'
@@ -192,6 +387,22 @@ export interface RootRouteChildren {
   SignUpRoute: typeof SignUpRoute
   AuthenticatedAuthenticatedRoute: typeof AuthenticatedAuthenticatedRoute
   DemoConvexRoute: typeof DemoConvexRoute
+  DemoConvexActionCacheRoute: typeof DemoConvexActionCacheRoute
+  DemoConvexAggregateRoute: typeof DemoConvexAggregateRoute
+  DemoConvexApiCredentialsRoute: typeof DemoConvexApiCredentialsRoute
+  DemoConvexAuditLogRoute: typeof DemoConvexAuditLogRoute
+  DemoConvexCascadingDeleteRoute: typeof DemoConvexCascadingDeleteRoute
+  DemoConvexCronsRoute: typeof DemoConvexCronsRoute
+  DemoConvexDebouncerRoute: typeof DemoConvexDebouncerRoute
+  DemoConvexFileManagementRoute: typeof DemoConvexFileManagementRoute
+  DemoConvexGeospatialRoute: typeof DemoConvexGeospatialRoute
+  DemoConvexMigrationsRoute: typeof DemoConvexMigrationsRoute
+  DemoConvexPresenceRoute: typeof DemoConvexPresenceRoute
+  DemoConvexRateLimiterRoute: typeof DemoConvexRateLimiterRoute
+  DemoConvexTimelineRoute: typeof DemoConvexTimelineRoute
+  DemoConvexTracerRoute: typeof DemoConvexTracerRoute
+  DemoConvexTriggersRoute: typeof DemoConvexTriggersRoute
+  DemoConvexWorkflowRoute: typeof DemoConvexWorkflowRoute
   DemoStorybookRoute: typeof DemoStorybookRoute
   DemoTableRoute: typeof DemoTableRoute
   DemoTanstackQueryRoute: typeof DemoTanstackQueryRoute
@@ -265,6 +476,118 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DemoStorybookRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/demo/convex-workflow': {
+      id: '/demo/convex-workflow'
+      path: '/demo/convex-workflow'
+      fullPath: '/demo/convex-workflow'
+      preLoaderRoute: typeof DemoConvexWorkflowRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/demo/convex-triggers': {
+      id: '/demo/convex-triggers'
+      path: '/demo/convex-triggers'
+      fullPath: '/demo/convex-triggers'
+      preLoaderRoute: typeof DemoConvexTriggersRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/demo/convex-tracer': {
+      id: '/demo/convex-tracer'
+      path: '/demo/convex-tracer'
+      fullPath: '/demo/convex-tracer'
+      preLoaderRoute: typeof DemoConvexTracerRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/demo/convex-timeline': {
+      id: '/demo/convex-timeline'
+      path: '/demo/convex-timeline'
+      fullPath: '/demo/convex-timeline'
+      preLoaderRoute: typeof DemoConvexTimelineRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/demo/convex-rate-limiter': {
+      id: '/demo/convex-rate-limiter'
+      path: '/demo/convex-rate-limiter'
+      fullPath: '/demo/convex-rate-limiter'
+      preLoaderRoute: typeof DemoConvexRateLimiterRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/demo/convex-presence': {
+      id: '/demo/convex-presence'
+      path: '/demo/convex-presence'
+      fullPath: '/demo/convex-presence'
+      preLoaderRoute: typeof DemoConvexPresenceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/demo/convex-migrations': {
+      id: '/demo/convex-migrations'
+      path: '/demo/convex-migrations'
+      fullPath: '/demo/convex-migrations'
+      preLoaderRoute: typeof DemoConvexMigrationsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/demo/convex-geospatial': {
+      id: '/demo/convex-geospatial'
+      path: '/demo/convex-geospatial'
+      fullPath: '/demo/convex-geospatial'
+      preLoaderRoute: typeof DemoConvexGeospatialRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/demo/convex-file-management': {
+      id: '/demo/convex-file-management'
+      path: '/demo/convex-file-management'
+      fullPath: '/demo/convex-file-management'
+      preLoaderRoute: typeof DemoConvexFileManagementRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/demo/convex-debouncer': {
+      id: '/demo/convex-debouncer'
+      path: '/demo/convex-debouncer'
+      fullPath: '/demo/convex-debouncer'
+      preLoaderRoute: typeof DemoConvexDebouncerRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/demo/convex-crons': {
+      id: '/demo/convex-crons'
+      path: '/demo/convex-crons'
+      fullPath: '/demo/convex-crons'
+      preLoaderRoute: typeof DemoConvexCronsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/demo/convex-cascading-delete': {
+      id: '/demo/convex-cascading-delete'
+      path: '/demo/convex-cascading-delete'
+      fullPath: '/demo/convex-cascading-delete'
+      preLoaderRoute: typeof DemoConvexCascadingDeleteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/demo/convex-audit-log': {
+      id: '/demo/convex-audit-log'
+      path: '/demo/convex-audit-log'
+      fullPath: '/demo/convex-audit-log'
+      preLoaderRoute: typeof DemoConvexAuditLogRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/demo/convex-api-credentials': {
+      id: '/demo/convex-api-credentials'
+      path: '/demo/convex-api-credentials'
+      fullPath: '/demo/convex-api-credentials'
+      preLoaderRoute: typeof DemoConvexApiCredentialsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/demo/convex-aggregate': {
+      id: '/demo/convex-aggregate'
+      path: '/demo/convex-aggregate'
+      fullPath: '/demo/convex-aggregate'
+      preLoaderRoute: typeof DemoConvexAggregateRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/demo/convex-action-cache': {
+      id: '/demo/convex-action-cache'
+      path: '/demo/convex-action-cache'
+      fullPath: '/demo/convex-action-cache'
+      preLoaderRoute: typeof DemoConvexActionCacheRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/demo/convex': {
       id: '/demo/convex'
       path: '/demo/convex'
@@ -304,6 +627,22 @@ const rootRouteChildren: RootRouteChildren = {
   SignUpRoute: SignUpRoute,
   AuthenticatedAuthenticatedRoute: AuthenticatedAuthenticatedRoute,
   DemoConvexRoute: DemoConvexRoute,
+  DemoConvexActionCacheRoute: DemoConvexActionCacheRoute,
+  DemoConvexAggregateRoute: DemoConvexAggregateRoute,
+  DemoConvexApiCredentialsRoute: DemoConvexApiCredentialsRoute,
+  DemoConvexAuditLogRoute: DemoConvexAuditLogRoute,
+  DemoConvexCascadingDeleteRoute: DemoConvexCascadingDeleteRoute,
+  DemoConvexCronsRoute: DemoConvexCronsRoute,
+  DemoConvexDebouncerRoute: DemoConvexDebouncerRoute,
+  DemoConvexFileManagementRoute: DemoConvexFileManagementRoute,
+  DemoConvexGeospatialRoute: DemoConvexGeospatialRoute,
+  DemoConvexMigrationsRoute: DemoConvexMigrationsRoute,
+  DemoConvexPresenceRoute: DemoConvexPresenceRoute,
+  DemoConvexRateLimiterRoute: DemoConvexRateLimiterRoute,
+  DemoConvexTimelineRoute: DemoConvexTimelineRoute,
+  DemoConvexTracerRoute: DemoConvexTracerRoute,
+  DemoConvexTriggersRoute: DemoConvexTriggersRoute,
+  DemoConvexWorkflowRoute: DemoConvexWorkflowRoute,
   DemoStorybookRoute: DemoStorybookRoute,
   DemoTableRoute: DemoTableRoute,
   DemoTanstackQueryRoute: DemoTanstackQueryRoute,

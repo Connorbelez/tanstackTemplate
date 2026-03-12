@@ -25,6 +25,15 @@ This project uses [Vitest](https://vitest.dev/) for testing. You can run the tes
 bun --bun run test
 ```
 
+End-to-end tests use [Playwright](https://playwright.dev/) and only run when explicitly requested:
+
+```bash
+bunx playwright install chromium
+bun --bun run test:e2e
+```
+
+`bun --bun run test` stays Vitest-only.
+
 ## Styling
 
 This project uses [Tailwind CSS](https://tailwindcss.com/) for styling.
@@ -40,13 +49,15 @@ If you prefer not to use Tailwind CSS:
 
 ## Linting & Formatting
 
-This project uses [Biome](https://biomejs.dev/) for linting and formatting. The following scripts are available:
+This project keeps the existing [Biome](https://biomejs.dev/) scripts for day-to-day linting, while [Ultracite](https://www.ultracite.ai/) is wired into the Biome config and Husky pre-commit hook for incremental adoption. The following scripts are available:
 
 
 ```bash
 bun --bun run lint
 bun --bun run format
 bun --bun run check
+bun --bun run ultracite:check
+bun --bun run ultracite:fix
 ```
 
 

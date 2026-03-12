@@ -1,93 +1,95 @@
-import { createFileRoute } from '@tanstack/react-router'
-import { useState } from 'react'
+import { createFileRoute } from "@tanstack/react-router";
+import type { FormEvent } from "react";
+import { useState } from "react";
+import { Button } from "#/components/storybook/button";
+import { Dialog } from "#/components/storybook/dialog";
+import { Input } from "#/components/storybook/input";
+import { RadioGroup } from "#/components/storybook/radio-group";
+import { Slider } from "#/components/storybook/slider";
 
-import { Dialog } from '#/components/storybook/dialog'
-import { Input } from '#/components/storybook/input'
-import { RadioGroup } from '#/components/storybook/radio-group'
-import { Slider } from '#/components/storybook/slider'
-import { Button } from '#/components/storybook/button'
-
-export const Route = createFileRoute('/demo/storybook')({
-  component: StorybookDemo,
-})
+export const Route = createFileRoute("/demo/storybook")({
+	component: StorybookDemo,
+});
 
 function StorybookDemo() {
-  const [firstName, setFirstName] = useState('')
-  const [lastName, setLastName] = useState('')
-  const [employmentType, setEmploymentType] = useState('full-time')
-  const [coffeeCups, setCoffeeCups] = useState(3)
+	const [firstName, setFirstName] = useState("");
+	const [lastName, setLastName] = useState("");
+	const [employmentType, setEmploymentType] = useState("full-time");
+	const [coffeeCups, setCoffeeCups] = useState(3);
 
-  const handleSubmit = () => {}
+	const handleSubmit = (event?: FormEvent<HTMLFormElement>) => {
+		event?.preventDefault();
+	};
 
-  const handleReset = () => {
-    setFirstName('')
-    setLastName('')
-    setEmploymentType('full-time')
-    setCoffeeCups(3)
-  }
+	const handleReset = () => {
+		setFirstName("");
+		setLastName("");
+		setEmploymentType("full-time");
+		setCoffeeCups(3);
+	};
 
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 py-12 px-4">
-      <div className="max-w-2xl mx-auto">
-        <Dialog
-          title="Employee Information Form"
-          footer={
-            <div className="flex gap-3 justify-end">
-              <Button variant="secondary" size="medium" onClick={handleReset}>
-                Reset
-              </Button>
-              <Button
-                variant="primary"
-                size="medium"
-                type="submit"
-                onClick={handleSubmit}
-              >
-                Submit
-              </Button>
-            </div>
-          }
-        >
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <Input
-              label="First Name"
-              id="firstName"
-              value={firstName}
-              onChange={setFirstName}
-              placeholder="John"
-              required
-            />
+	return (
+		<div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 px-4 py-12 dark:from-gray-900 dark:to-gray-800">
+			<div className="mx-auto max-w-2xl">
+				<Dialog
+					footer={
+						<div className="flex justify-end gap-3">
+							<Button onClick={handleReset} size="medium" variant="secondary">
+								Reset
+							</Button>
+							<Button
+								onClick={() => handleSubmit()}
+								size="medium"
+								type="submit"
+								variant="primary"
+							>
+								Submit
+							</Button>
+						</div>
+					}
+					title="Employee Information Form"
+				>
+					<form className="space-y-6" onSubmit={handleSubmit}>
+						<Input
+							id="firstName"
+							label="First Name"
+							onChange={setFirstName}
+							placeholder="John"
+							required
+							value={firstName}
+						/>
 
-            <Input
-              label="Last Name"
-              id="lastName"
-              value={lastName}
-              onChange={setLastName}
-              placeholder="Doe"
-              required
-            />
+						<Input
+							id="lastName"
+							label="Last Name"
+							onChange={setLastName}
+							placeholder="Doe"
+							required
+							value={lastName}
+						/>
 
-            <RadioGroup
-              label="Employment Type"
-              name="employmentType"
-              options={[
-                { value: 'full-time', label: 'Full Time' },
-                { value: 'part-time', label: 'Part Time' },
-              ]}
-              value={employmentType}
-              onChange={setEmploymentType}
-            />
+						<RadioGroup
+							label="Employment Type"
+							name="employmentType"
+							onChange={setEmploymentType}
+							options={[
+								{ value: "full-time", label: "Full Time" },
+								{ value: "part-time", label: "Part Time" },
+							]}
+							value={employmentType}
+						/>
 
-            <Slider
-              label="Coffee Cups Per Day"
-              id="coffeeCups"
-              value={coffeeCups}
-              onChange={setCoffeeCups}
-              min={0}
-              max={10}
-            />
-          </form>
-        </Dialog>
-      </div>
-    </div>
-  )
+						<Slider
+							id="coffeeCups"
+							label="Coffee Cups Per Day"
+							max={10}
+							min={0}
+							onChange={setCoffeeCups}
+							value={coffeeCups}
+						/>
+					</form>
+				</Dialog>
+			</div>
+		</div>
+	);
 }

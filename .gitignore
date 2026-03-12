@@ -1,5 +1,8 @@
 node_modules
 .DS_Store
+docs/*
+docs/
+doc-crawler.skill
 dist
 dist-ssr
 *.local
@@ -14,3 +17,7 @@ __unconfig*
 todos.json
 .cta.json
 .tmp.vite.min.ts
+.husky/_
+playwright-report
+test-results
+reviews/

@@ -1,0 +1,8 @@
+#!/usr/bin/env sh
+set -e
+
+commit_hash="$(git rev-parse --short HEAD)"
+
+echo "Committed ${commit_hash}"
+echo "Unit tests: bun run test"
+echo "E2E tests: bun run test:e2e"

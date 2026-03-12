@@ -6,6 +6,7 @@ import {
 	getSignUpUrl,
 } from "@workos/authkit-tanstack-react-start";
 import { Authenticated, Unauthenticated, useMutation } from "convex/react";
+import { Button } from "#/components/ui/button";
 import { api } from "../../convex/_generated/api";
 
 export const Route = createFileRoute("/")({
@@ -32,7 +33,7 @@ function HomeContent({
 }) {
 	return (
 		<main className="page-wrap flex flex-col gap-8 px-4 py-10 sm:py-12">
-			<h1 className="text-center text-4xl font-bold">
+			<h1 className="text-center font-bold text-4xl">
 				Convex + TanStack Start + WorkOS
 			</h1>
 			<Authenticated>
@@ -53,17 +54,17 @@ function SignInForm({
 	signUpUrl: string;
 }) {
 	return (
-		<div className="flex flex-col gap-8 w-96 mx-auto">
+		<div className="mx-auto flex w-96 flex-col gap-8">
 			<p>Log in to see the numbers</p>
 			<a
+				className="rounded-md bg-foreground px-4 py-2 text-center text-background"
 				href={signInUrl}
-				className="bg-foreground text-background px-4 py-2 rounded-md text-center"
 			>
 				Sign in
 			</a>
 			<a
+				className="rounded-md bg-foreground px-4 py-2 text-center text-background"
 				href={signUpUrl}
-				className="bg-foreground text-background px-4 py-2 rounded-md text-center"
 			>
 				Sign up
 			</a>
@@ -75,29 +76,28 @@ function Content() {
 	const {
 		data: { viewer, numbers },
 	} = useSuspenseQuery(
-		convexQuery(api.myFunctions.listNumbers, {
+		convexQuery(api.numbers.listNumbers, {
 			count: 10,
-		}),
+		})
 	);
-	const addNumber = useMutation(api.myFunctions.addNumber);
+	const addNumber = useMutation(api.numbers.addNumber);
 
 	return (
-		<div className="flex flex-col gap-8 max-w-lg mx-auto">
+		<div className="mx-auto flex max-w-lg flex-col gap-8">
 			<p>Welcome {viewer}!</p>
 			<p>
 				Click the button below and open this page in another window - this data
 				is persisted in the Convex cloud database!
 			</p>
 			<p>
-				<button
-					type="button"
-					className="bg-foreground text-background text-sm px-4 py-2 rounded-md"
+				<Button
+					className="rounded-md bg-foreground px-4 py-2 text-background text-sm"
 					onClick={() => {
 						void addNumber({ value: Math.floor(Math.random() * 10) });
 					}}
 				>
 					Add a random number
-				</button>
+				</Button>
 			</p>
 			<p>
 				Numbers:{" "}
@@ -105,50 +105,50 @@ function Content() {
 			</p>
 			<p>
 				Edit{" "}
-				<code className="text-sm font-bold font-mono bg-slate-200 dark:bg-slate-800 px-1 py-0.5 rounded-md">
-					convex/myFunctions.ts
+				<code className="rounded-md bg-slate-200 px-1 py-0.5 font-bold font-mono text-sm dark:bg-slate-800">
+					convex/numbers.ts
 				</code>{" "}
 				to change your backend
 			</p>
 			<p>
 				Edit{" "}
-				<code className="text-sm font-bold font-mono bg-slate-200 dark:bg-slate-800 px-1 py-0.5 rounded-md">
+				<code className="rounded-md bg-slate-200 px-1 py-0.5 font-bold font-mono text-sm dark:bg-slate-800">
 					src/routes/index.tsx
 				</code>{" "}
 				to change your frontend
 			</p>
 			<p>
 				See{" "}
-				<Link to="/authenticated" className="underline hover:no-underline">
+				<Link className="underline hover:no-underline" to="/authenticated">
 					/authenticated
 				</Link>{" "}
 				for an example of a page only available to authenticated users.
 			</p>
 			<div className="flex flex-col">
-				<p className="text-lg font-bold">Useful resources:</p>
+				<p className="font-bold text-lg">Useful resources:</p>
 				<div className="flex gap-2">
-					<div className="flex flex-col gap-2 w-1/2">
+					<div className="flex w-1/2 flex-col gap-2">
 						<ResourceCard
-							title="Convex docs"
 							description="Read comprehensive documentation for all Convex features."
 							href="https://docs.convex.dev/home"
+							title="Convex docs"
 						/>
 						<ResourceCard
-							title="Stack articles"
 							description="Learn about best practices, use cases, and more from a growing collection of articles, videos, and walkthroughs."
 							href="https://stack.convex.dev"
+							title="Stack articles"
 						/>
 					</div>
-					<div className="flex flex-col gap-2 w-1/2">
+					<div className="flex w-1/2 flex-col gap-2">
 						<ResourceCard
-							title="Templates"
 							description="Browse our collection of templates to get started quickly."
 							href="https://www.convex.dev/templates"
+							title="Templates"
 						/>
 						<ResourceCard
-							title="Discord"
 							description="Join our developer community to ask questions, trade tips & tricks, and show off your projects."
 							href="https://www.convex.dev/community"
+							title="Discord"
 						/>
 					</div>
 				</div>
@@ -167,8 +167,8 @@ function ResourceCard({
 	href: string;
 }) {
 	return (
-		<div className="flex flex-col gap-2 bg-slate-200 dark:bg-slate-800 p-4 rounded-md h-28 overflow-auto">
-			<a href={href} className="text-sm underline hover:no-underline">
+		<div className="flex h-28 flex-col gap-2 overflow-auto rounded-md bg-slate-200 p-4 dark:bg-slate-800">
+			<a className="text-sm underline hover:no-underline" href={href}>
 				{title}
 			</a>
 			<p className="text-xs">{description}</p>
