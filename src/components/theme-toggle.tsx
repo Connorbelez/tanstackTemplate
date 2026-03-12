@@ -40,9 +40,13 @@ function getInitialMode(): ThemeMode {
 		return "auto";
 	}
 
-	const stored = window.localStorage.getItem("theme");
-	if (stored === "light" || stored === "dark" || stored === "auto") {
-		return stored;
+	try {
+		const stored = window.localStorage.getItem("theme");
+		if (stored === "light" || stored === "dark" || stored === "auto") {
+			return stored;
+		}
+	} catch {
+		// localStorage unavailable (private browsing, sandboxed iframe, etc.)
 	}
 
 	return "auto";
@@ -91,7 +95,11 @@ export default function ThemeToggle() {
 		const nextMode = getNextThemeMode(mode);
 		setMode(nextMode);
 		applyThemeMode(nextMode);
-		window.localStorage.setItem("theme", nextMode);
+		try {
+			window.localStorage.setItem("theme", nextMode);
+		} catch {
+			// localStorage unavailable
+		}
 	}
 
 	const label =

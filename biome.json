@@ -14,7 +14,8 @@
       "!!**/src/components/ui/*",
       "!!**/src/data/*",
       "!!src/routes/-auth-redirect.ts",
-      "!!src/components/storybook/*"
+      "!!src/components/storybook/*",
+      "!!e2e/*"
     ]
   },
   "formatter": {
@@ -31,7 +32,7 @@
       "recommended": true,
       "style": {
         "noNestedTernary": "warn",
-        "useFilenamingConvention": "warn"
+        "useFilenamingConvention": "off"
       },
       "suspicious": {
         "noTsIgnore": "off",

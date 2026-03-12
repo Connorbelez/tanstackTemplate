@@ -47,3 +47,32 @@ Proposed CLAUDE.md amendments from issues encountered during development. Review
 **Fix:** Changed `user.updated` to upsert (create-if-missing) and schedule `syncUserRelatedData` to backfill orgs/memberships/roles from the WorkOS API.
 **Proposed amendment:**
 > Event handlers that depend on prior events (e.g. `user.updated` assuming `user.created` ran first) MUST be written as upserts, not patches. Webhook delivery order is never guaranteed. Always handle the "entity doesn't exist yet" case by creating it from available event data.
+
+---
+
+## Lesson 6: Playwright E2E tests for external auth UIs require manual browser exploration first
+**Date:** 2026-03-11
+**Context:** Writing Playwright selectors for the WorkOS AuthKit hosted login page based on assumptions about the DOM structure led to 5 consecutive test failures: wrong button names, strict mode violations, unmatched regex filters, incorrect parent traversal. The WorkOS UI renders button text in nested `<span>` elements, has a multi-step flow (email → password → org picker), and the ARIA tree doesn't match CSS DOM structure.
+**Root cause:** Assumed standard HTML patterns (`input[type="email"]`, `button[type="submit"]`) instead of inspecting the actual page. Each assumption required a separate debugging cycle.
+**Fix:** Used dev-browser to walk each step of the flow, captured ARIA snapshots, tested selector candidates interactively (`getByRole name` vs `filter hasText`), then wrote the test from confirmed selectors.
+**Proposed amendment:**
+> When writing Playwright tests for third-party hosted UIs (OAuth providers, payment pages, etc.), ALWAYS use browser automation tools to manually walk the flow first and inspect the ARIA tree at each step. Do not guess selectors — external UIs have unpredictable DOM structures. Key Playwright selector pitfalls: `getByRole({ name })` uses computed accessible name (whitespace-normalized), while `filter({ hasText })` checks raw textContent (preserves whitespace from nested elements).
+
+---
+
+## Lesson 7: Playwright does not auto-load .env.local — configure dotenv explicitly
+**Date:** 2026-03-11
+**Context:** E2E tests failed with `value: expected string, got undefined` because `process.env.TEST_ACCOUNT_EMAIL` was undefined at runtime. The `as string` TypeScript cast silently passed `undefined` through.
+**Root cause:** Playwright doesn't load `.env.local` files. Even though Bun auto-loads them for `bun run` scripts, the test runner needs explicit dotenv configuration.
+**Fix:** Installed `dotenv` and added `dotenv.config({ path: '.env.local' })` to `playwright.config.ts`. Also added `requireEnv()` helper to fail fast with clear error messages.
+**Proposed amendment:**
+> Playwright does not auto-load `.env.local`. Always add `dotenv.config()` to `playwright.config.ts`. For required env vars in test files, use a `requireEnv()` guard instead of `as string` casts to fail fast with clear messages.
+
+---
+
+## Lesson 8: Don't recommend production hardening for demo-only code
+**Date:** 2026-03-11
+**Context:** Suggested adding segregation-of-duties enforcement to `approveTransfer`/`completeTransfer` mutations in `convex/demo/auditTraceability.ts`. These are demo functions showcasing the audit trail — there's no production mortgage workflow in the repo. Recommending production controls for demo code wastes time and misrepresents scope.
+**Root cause:** Treated demo code as production code when assessing compliance gaps. Didn't check whether the mutations were actually used in a real workflow.
+**Proposed amendment:**
+> Before recommending production hardening (RBAC, segregation of duties, input validation), verify the code is part of an actual production workflow — not a demo or showcase. Files in `convex/demo/` and `src/routes/demo/` are demo code by convention.

@@ -14,6 +14,7 @@ import type { ReactNode } from "react";
 import { AppErrorComponent } from "../components/error-boundary";
 import Footer from "../components/footer";
 import Header from "../components/header";
+import { Toaster } from "../components/ui/sonner";
 import appCss from "../styles.css?url";
 
 // Suppress known TanStack Start SSR hydration warning (dev-only, harmless)
@@ -102,6 +103,7 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
 			</head>
 			<body className="wrap-anywhere font-sans antialiased selection:bg-[rgba(79,184,178,0.24)]">
 				{children}
+				<Toaster />
 				<Scripts />
 			</body>
 		</html>

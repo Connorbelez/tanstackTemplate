@@ -1,6 +1,9 @@
 import { expect, test } from "@playwright/test";
 
-const testEmail = process.env.TEST_ACCOUNT_EMAIL as string;
+const testEmail = process.env.TEST_ACCOUNT_EMAIL;
+if (!testEmail) {
+	throw new Error("TEST_ACCOUNT_EMAIL environment variable is required for e2e tests");
+}
 const SIGN_OUT_PATTERN = /sign out/i;
 const SIGN_IN_PATTERN = /sign in with authkit/i;
 

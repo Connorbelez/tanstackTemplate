@@ -38,6 +38,7 @@ function StorybookDemo() {
 								Reset
 							</Button>
 							<Button
+								form="employee-form"
 								onClick={() => handleSubmit()}
 								size="medium"
 								type="submit"
@@ -49,7 +50,11 @@ function StorybookDemo() {
 					}
 					title="Employee Information Form"
 				>
-					<form className="space-y-6" onSubmit={handleSubmit}>
+					<form
+						className="space-y-6"
+						id="employee-form"
+						onSubmit={handleSubmit}
+					>
 						<Input
 							id="firstName"
 							label="First Name"

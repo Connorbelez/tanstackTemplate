@@ -15,7 +15,7 @@ echo "Branch: $BRANCH"
 echo "Commit: $COMMIT"
 echo "Output: $OUTFILE"
 
-coderabbit review --plain 2>&1 | tee "$OUTFILE"
+coderabbit review --plain -t committed 2>&1 | tee "$OUTFILE"
 
 echo ""
 echo "Review saved to $OUTFILE"

@@ -4,7 +4,16 @@ import { useState } from "react";
 import { useAppForm } from "#/hooks/demo.form";
 
 const EMAIL_REGEX = /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i;
-const ZIP_CODE_REGEX = /^\d{5}(-\d{4})?$/;
+const POSTAL_CODE_PATTERNS: Record<string, RegExp> = {
+	US: /^\d{5}(-\d{4})?$/,
+	CA: /^[A-Z]\d[A-Z]\s?\d[A-Z]\d$/i,
+	GB: /^[A-Z]{1,2}\d[A-Z\d]?\s?\d[A-Z]{2}$/i,
+	AU: /^\d{4}$/,
+	DE: /^\d{5}$/,
+	FR: /^\d{5}$/,
+	JP: /^\d{3}-?\d{4}$/,
+};
+const POSTAL_CODE_FALLBACK = /^[A-Za-z0-9\s-]{2,10}$/;
 const PHONE_REGEX = /^(\+\d{1,3})?\s?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}$/;
 
 export const Route = createFileRoute("/demo/form/address")({
@@ -43,6 +52,7 @@ function AddressForm() {
 		onSubmit: ({ value }) => {
 			console.log(value);
 			setSubmitMessage("Form submitted successfully.");
+			setTimeout(() => setSubmitMessage(null), 3000);
 		},
 	});
 
@@ -128,18 +138,22 @@ function AddressForm() {
 						<form.AppField
 							name="address.zipCode"
 							validators={{
-								onBlur: ({ value }) => {
+								onBlur: ({ value, fieldApi }) => {
 									if (!value || value.trim().length === 0) {
 										return "Zip code is required";
 									}
-									if (!ZIP_CODE_REGEX.test(value)) {
-										return "Invalid zip code format";
+									const country =
+										fieldApi.form.getFieldValue("address.country");
+									const pattern =
+										POSTAL_CODE_PATTERNS[country] ?? POSTAL_CODE_FALLBACK;
+									if (!pattern.test(value)) {
+										return "Invalid postal code format";
 									}
 									return undefined;
 								},
 							}}
 						>
-							{(field) => <field.TextField label="Zip Code" />}
+							{(field) => <field.TextField label="Postal Code" />}
 						</form.AppField>
 					</div>
 
@@ -161,7 +175,7 @@ function AddressForm() {
 								values={[
 									{ label: "United States", value: "US" },
 									{ label: "Canada", value: "CA" },
-									{ label: "United Kingdom", value: "UK" },
+									{ label: "United Kingdom", value: "GB" },
 									{ label: "Australia", value: "AU" },
 									{ label: "Germany", value: "DE" },
 									{ label: "France", value: "FR" },

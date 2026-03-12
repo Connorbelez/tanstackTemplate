@@ -16,6 +16,34 @@ export const Route = createFileRoute("/demo/convex-workflow")({
 
 const STEPS = ["created", "validate", "charge", "fulfill", "notify"] as const;
 
+function getOrderBadgeVariant(status: string) {
+	if (status === "completed") {
+		return "default" as const;
+	}
+	if (status === "processing") {
+		return "secondary" as const;
+	}
+	return "outline" as const;
+}
+
+function StepIcon({
+	isActive,
+	isCurrent,
+	isProcessing,
+}: {
+	isActive: boolean;
+	isCurrent: boolean;
+	isProcessing: boolean;
+}) {
+	if (!isActive) {
+		return <Circle className="size-4 text-muted-foreground" />;
+	}
+	if (isCurrent && isProcessing) {
+		return <Loader2 className="size-4 animate-spin text-blue-500" />;
+	}
+	return <CheckCircle className="size-4 text-green-500" />;
+}
+
 function WorkflowDemo() {
 	const [amount, setAmount] = useState("99");
 	const orders = useQuery(api.demo.workflow.listOrders);
@@ -78,31 +106,18 @@ function WorkflowDemo() {
 									<CardContent className="pt-6">
 										<div className="mb-3 flex items-center justify-between">
 											<span className="font-medium">Order ${order.amount}</span>
-											<Badge
-												variant={
-													order.status === "completed"
-														? "default"
-														: order.status === "processing"
-															? "secondary"
-															: "outline"
-												}
-											>
+											<Badge variant={getOrderBadgeVariant(order.status)}>
 												{order.status}
 											</Badge>
 										</div>
 										<div className="flex items-center gap-2">
 											{STEPS.map((step, i) => (
 												<div className="flex items-center gap-1" key={step}>
-													{i <= currentStepIdx ? (
-														i === currentStepIdx &&
-														order.status === "processing" ? (
-															<Loader2 className="size-4 animate-spin text-blue-500" />
-														) : (
-															<CheckCircle className="size-4 text-green-500" />
-														)
-													) : (
-														<Circle className="size-4 text-muted-foreground" />
-													)}
+													<StepIcon
+														isActive={i <= currentStepIdx}
+														isCurrent={i === currentStepIdx}
+														isProcessing={order.status === "processing"}
+													/>
 													<span
 														className={`text-xs ${i <= currentStepIdx ? "font-medium" : "text-muted-foreground"}`}
 													>

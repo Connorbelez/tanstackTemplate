@@ -32,8 +32,8 @@ export const removeScore = mutation({
 		if (!doc) {
 			throw new Error("Score not found");
 		}
-		await aggregate.delete(ctx, { key: [doc.score], id: args.id });
 		await ctx.db.delete(args.id);
+		await aggregate.delete(ctx, { key: [doc.score], id: args.id });
 	},
 });
 
