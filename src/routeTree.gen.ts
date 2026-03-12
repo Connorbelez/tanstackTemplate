@@ -39,10 +39,14 @@ import { Route as DemoConvexAggregateRouteImport } from './routes/demo/convex-ag
 import { Route as DemoConvexActionCacheRouteImport } from './routes/demo/convex-action-cache'
 import { Route as DemoConvexRouteImport } from './routes/demo/convex'
 import { Route as AuthenticatedAuthenticatedRouteImport } from './routes/_authenticated/authenticated'
+import { Route as DemoGovernedTransitionsRouteRouteImport } from './routes/demo/governed-transitions/route'
 import { Route as DemoDocumentEngineRouteRouteImport } from './routes/demo/document-engine/route'
 import { Route as DemoAuditTraceabilityRouteRouteImport } from './routes/demo/audit-traceability/route'
+import { Route as DemoGovernedTransitionsIndexRouteImport } from './routes/demo/governed-transitions/index'
 import { Route as DemoDocumentEngineIndexRouteImport } from './routes/demo/document-engine/index'
 import { Route as DemoAuditTraceabilityIndexRouteImport } from './routes/demo/audit-traceability/index'
+import { Route as DemoGovernedTransitionsMachineRouteImport } from './routes/demo/governed-transitions/machine'
+import { Route as DemoGovernedTransitionsJournalRouteImport } from './routes/demo/governed-transitions/journal'
 import { Route as DemoFormSimpleRouteImport } from './routes/demo/form.simple'
 import { Route as DemoFormAddressRouteImport } from './routes/demo/form.address'
 import { Route as DemoDocumentEngineVariablesRouteImport } from './routes/demo/document-engine/variables'
@@ -211,6 +215,12 @@ const AuthenticatedAuthenticatedRoute =
     path: '/authenticated',
     getParentRoute: () => rootRouteImport,
   } as any)
+const DemoGovernedTransitionsRouteRoute =
+  DemoGovernedTransitionsRouteRouteImport.update({
+    id: '/demo/governed-transitions',
+    path: '/demo/governed-transitions',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const DemoDocumentEngineRouteRoute = DemoDocumentEngineRouteRouteImport.update({
   id: '/demo/document-engine',
   path: '/demo/document-engine',
@@ -222,6 +232,12 @@ const DemoAuditTraceabilityRouteRoute =
     path: '/demo/audit-traceability',
     getParentRoute: () => rootRouteImport,
   } as any)
+const DemoGovernedTransitionsIndexRoute =
+  DemoGovernedTransitionsIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => DemoGovernedTransitionsRouteRoute,
+  } as any)
 const DemoDocumentEngineIndexRoute = DemoDocumentEngineIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -232,6 +248,18 @@ const DemoAuditTraceabilityIndexRoute =
     id: '/',
     path: '/',
     getParentRoute: () => DemoAuditTraceabilityRouteRoute,
+  } as any)
+const DemoGovernedTransitionsMachineRoute =
+  DemoGovernedTransitionsMachineRouteImport.update({
+    id: '/machine',
+    path: '/machine',
+    getParentRoute: () => DemoGovernedTransitionsRouteRoute,
+  } as any)
+const DemoGovernedTransitionsJournalRoute =
+  DemoGovernedTransitionsJournalRouteImport.update({
+    id: '/journal',
+    path: '/journal',
+    getParentRoute: () => DemoGovernedTransitionsRouteRoute,
   } as any)
 const DemoFormSimpleRoute = DemoFormSimpleRouteImport.update({
   id: '/demo/form/simple',
@@ -318,6 +346,7 @@ export interface FileRoutesByFullPath {
   '/sign-up': typeof SignUpRoute
   '/demo/audit-traceability': typeof DemoAuditTraceabilityRouteRouteWithChildren
   '/demo/document-engine': typeof DemoDocumentEngineRouteRouteWithChildren
+  '/demo/governed-transitions': typeof DemoGovernedTransitionsRouteRouteWithChildren
   '/authenticated': typeof AuthenticatedAuthenticatedRoute
   '/demo/convex': typeof DemoConvexRoute
   '/demo/convex-action-cache': typeof DemoConvexActionCacheRoute
@@ -355,8 +384,11 @@ export interface FileRoutesByFullPath {
   '/demo/document-engine/variables': typeof DemoDocumentEngineVariablesRoute
   '/demo/form/address': typeof DemoFormAddressRoute
   '/demo/form/simple': typeof DemoFormSimpleRoute
+  '/demo/governed-transitions/journal': typeof DemoGovernedTransitionsJournalRoute
+  '/demo/governed-transitions/machine': typeof DemoGovernedTransitionsMachineRoute
   '/demo/audit-traceability/': typeof DemoAuditTraceabilityIndexRoute
   '/demo/document-engine/': typeof DemoDocumentEngineIndexRoute
+  '/demo/governed-transitions/': typeof DemoGovernedTransitionsIndexRoute
   '/demo/document-engine/designer/$templateId': typeof DemoDocumentEngineDesignerTemplateIdRoute
 }
 export interface FileRoutesByTo {
@@ -402,8 +434,11 @@ export interface FileRoutesByTo {
   '/demo/document-engine/variables': typeof DemoDocumentEngineVariablesRoute
   '/demo/form/address': typeof DemoFormAddressRoute
   '/demo/form/simple': typeof DemoFormSimpleRoute
+  '/demo/governed-transitions/journal': typeof DemoGovernedTransitionsJournalRoute
+  '/demo/governed-transitions/machine': typeof DemoGovernedTransitionsMachineRoute
   '/demo/audit-traceability': typeof DemoAuditTraceabilityIndexRoute
   '/demo/document-engine': typeof DemoDocumentEngineIndexRoute
+  '/demo/governed-transitions': typeof DemoGovernedTransitionsIndexRoute
   '/demo/document-engine/designer/$templateId': typeof DemoDocumentEngineDesignerTemplateIdRoute
 }
 export interface FileRoutesById {
@@ -415,6 +450,7 @@ export interface FileRoutesById {
   '/sign-up': typeof SignUpRoute
   '/demo/audit-traceability': typeof DemoAuditTraceabilityRouteRouteWithChildren
   '/demo/document-engine': typeof DemoDocumentEngineRouteRouteWithChildren
+  '/demo/governed-transitions': typeof DemoGovernedTransitionsRouteRouteWithChildren
   '/_authenticated/authenticated': typeof AuthenticatedAuthenticatedRoute
   '/demo/convex': typeof DemoConvexRoute
   '/demo/convex-action-cache': typeof DemoConvexActionCacheRoute
@@ -452,8 +488,11 @@ export interface FileRoutesById {
   '/demo/document-engine/variables': typeof DemoDocumentEngineVariablesRoute
   '/demo/form/address': typeof DemoFormAddressRoute
   '/demo/form/simple': typeof DemoFormSimpleRoute
+  '/demo/governed-transitions/journal': typeof DemoGovernedTransitionsJournalRoute
+  '/demo/governed-transitions/machine': typeof DemoGovernedTransitionsMachineRoute
   '/demo/audit-traceability/': typeof DemoAuditTraceabilityIndexRoute
   '/demo/document-engine/': typeof DemoDocumentEngineIndexRoute
+  '/demo/governed-transitions/': typeof DemoGovernedTransitionsIndexRoute
   '/demo/document-engine/designer/$templateId': typeof DemoDocumentEngineDesignerTemplateIdRoute
 }
 export interface FileRouteTypes {
@@ -466,6 +505,7 @@ export interface FileRouteTypes {
     | '/sign-up'
     | '/demo/audit-traceability'
     | '/demo/document-engine'
+    | '/demo/governed-transitions'
     | '/authenticated'
     | '/demo/convex'
     | '/demo/convex-action-cache'
@@ -503,8 +543,11 @@ export interface FileRouteTypes {
     | '/demo/document-engine/variables'
     | '/demo/form/address'
     | '/demo/form/simple'
+    | '/demo/governed-transitions/journal'
+    | '/demo/governed-transitions/machine'
     | '/demo/audit-traceability/'
     | '/demo/document-engine/'
+    | '/demo/governed-transitions/'
     | '/demo/document-engine/designer/$templateId'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -550,8 +593,11 @@ export interface FileRouteTypes {
     | '/demo/document-engine/variables'
     | '/demo/form/address'
     | '/demo/form/simple'
+    | '/demo/governed-transitions/journal'
+    | '/demo/governed-transitions/machine'
     | '/demo/audit-traceability'
     | '/demo/document-engine'
+    | '/demo/governed-transitions'
     | '/demo/document-engine/designer/$templateId'
   id:
     | '__root__'
@@ -562,6 +608,7 @@ export interface FileRouteTypes {
     | '/sign-up'
     | '/demo/audit-traceability'
     | '/demo/document-engine'
+    | '/demo/governed-transitions'
     | '/_authenticated/authenticated'
     | '/demo/convex'
     | '/demo/convex-action-cache'
@@ -599,8 +646,11 @@ export interface FileRouteTypes {
     | '/demo/document-engine/variables'
     | '/demo/form/address'
     | '/demo/form/simple'
+    | '/demo/governed-transitions/journal'
+    | '/demo/governed-transitions/machine'
     | '/demo/audit-traceability/'
     | '/demo/document-engine/'
+    | '/demo/governed-transitions/'
     | '/demo/document-engine/designer/$templateId'
   fileRoutesById: FileRoutesById
 }
@@ -612,6 +662,7 @@ export interface RootRouteChildren {
   SignUpRoute: typeof SignUpRoute
   DemoAuditTraceabilityRouteRoute: typeof DemoAuditTraceabilityRouteRouteWithChildren
   DemoDocumentEngineRouteRoute: typeof DemoDocumentEngineRouteRouteWithChildren
+  DemoGovernedTransitionsRouteRoute: typeof DemoGovernedTransitionsRouteRouteWithChildren
   AuthenticatedAuthenticatedRoute: typeof AuthenticatedAuthenticatedRoute
   DemoConvexRoute: typeof DemoConvexRoute
   DemoConvexActionCacheRoute: typeof DemoConvexActionCacheRoute
@@ -853,6 +904,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAuthenticatedRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/demo/governed-transitions': {
+      id: '/demo/governed-transitions'
+      path: '/demo/governed-transitions'
+      fullPath: '/demo/governed-transitions'
+      preLoaderRoute: typeof DemoGovernedTransitionsRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/demo/document-engine': {
       id: '/demo/document-engine'
       path: '/demo/document-engine'
@@ -867,6 +925,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DemoAuditTraceabilityRouteRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/demo/governed-transitions/': {
+      id: '/demo/governed-transitions/'
+      path: '/'
+      fullPath: '/demo/governed-transitions/'
+      preLoaderRoute: typeof DemoGovernedTransitionsIndexRouteImport
+      parentRoute: typeof DemoGovernedTransitionsRouteRoute
+    }
     '/demo/document-engine/': {
       id: '/demo/document-engine/'
       path: '/'
@@ -880,6 +945,20 @@ declare module '@tanstack/react-router' {
       fullPath: '/demo/audit-traceability/'
       preLoaderRoute: typeof DemoAuditTraceabilityIndexRouteImport
       parentRoute: typeof DemoAuditTraceabilityRouteRoute
+    }
+    '/demo/governed-transitions/machine': {
+      id: '/demo/governed-transitions/machine'
+      path: '/machine'
+      fullPath: '/demo/governed-transitions/machine'
+      preLoaderRoute: typeof DemoGovernedTransitionsMachineRouteImport
+      parentRoute: typeof DemoGovernedTransitionsRouteRoute
+    }
+    '/demo/governed-transitions/journal': {
+      id: '/demo/governed-transitions/journal'
+      path: '/journal'
+      fullPath: '/demo/governed-transitions/journal'
+      preLoaderRoute: typeof DemoGovernedTransitionsJournalRouteImport
+      parentRoute: typeof DemoGovernedTransitionsRouteRoute
     }
     '/demo/form/simple': {
       id: '/demo/form/simple'
@@ -1026,6 +1105,24 @@ const DemoDocumentEngineRouteRouteWithChildren =
     DemoDocumentEngineRouteRouteChildren,
   )
 
+interface DemoGovernedTransitionsRouteRouteChildren {
+  DemoGovernedTransitionsJournalRoute: typeof DemoGovernedTransitionsJournalRoute
+  DemoGovernedTransitionsMachineRoute: typeof DemoGovernedTransitionsMachineRoute
+  DemoGovernedTransitionsIndexRoute: typeof DemoGovernedTransitionsIndexRoute
+}
+
+const DemoGovernedTransitionsRouteRouteChildren: DemoGovernedTransitionsRouteRouteChildren =
+  {
+    DemoGovernedTransitionsJournalRoute: DemoGovernedTransitionsJournalRoute,
+    DemoGovernedTransitionsMachineRoute: DemoGovernedTransitionsMachineRoute,
+    DemoGovernedTransitionsIndexRoute: DemoGovernedTransitionsIndexRoute,
+  }
+
+const DemoGovernedTransitionsRouteRouteWithChildren =
+  DemoGovernedTransitionsRouteRoute._addFileChildren(
+    DemoGovernedTransitionsRouteRouteChildren,
+  )
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AboutRoute: AboutRoute,
@@ -1034,6 +1131,8 @@ const rootRouteChildren: RootRouteChildren = {
   SignUpRoute: SignUpRoute,
   DemoAuditTraceabilityRouteRoute: DemoAuditTraceabilityRouteRouteWithChildren,
   DemoDocumentEngineRouteRoute: DemoDocumentEngineRouteRouteWithChildren,
+  DemoGovernedTransitionsRouteRoute:
+    DemoGovernedTransitionsRouteRouteWithChildren,
   AuthenticatedAuthenticatedRoute: AuthenticatedAuthenticatedRoute,
   DemoConvexRoute: DemoConvexRoute,
   DemoConvexActionCacheRoute: DemoConvexActionCacheRoute,

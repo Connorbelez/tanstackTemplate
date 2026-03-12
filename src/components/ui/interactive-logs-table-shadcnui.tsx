@@ -6,9 +6,9 @@ import { Badge } from "#/components/ui/badge";
 import { Button } from "#/components/ui/button";
 import { Input } from "#/components/ui/input";
 
-type LogLevel = "info" | "warning" | "error";
+export type LogLevel = "info" | "warning" | "error";
 
-interface Log {
+export interface Log {
   id: string;
   timestamp: string;
   level: LogLevel;
@@ -17,6 +17,12 @@ interface Log {
   duration: string;
   status: string;
   tags: string[];
+}
+
+interface InteractiveLogsTableProps {
+  logs?: Log[];
+  title?: string;
+  subtitle?: string;
 }
 
 type Filters = {
@@ -393,7 +399,11 @@ function FilterPanel({
   );
 }
 
-export function InteractiveLogsTable() {
+export function InteractiveLogsTable({
+  logs = SAMPLE_LOGS,
+  title = "Logs",
+  subtitle,
+}: InteractiveLogsTableProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState(false);
@@ -404,7 +414,7 @@ export function InteractiveLogsTable() {
   });
 
   const filteredLogs = useMemo(() => {
-    return SAMPLE_LOGS.filter((log) => {
+    return logs.filter((log) => {
       const lowerQuery = searchQuery.toLowerCase();
 
       const matchSearch =
@@ -420,20 +430,23 @@ export function InteractiveLogsTable() {
 
       return matchSearch && matchLevel && matchService && matchStatus;
     });
-  }, [filters, searchQuery]);
+  }, [logs, filters, searchQuery]);
 
   const activeFilters =
     filters.level.length + filters.service.length + filters.status.length;
 
   return (
-    <main className="h-screen w-full bg-background">
+    <main className="h-full w-full bg-background">
       <div className="flex h-full flex-col">
         <div className="border-b border-border bg-card p-6">
           <div className="space-y-4">
             <div>
-              <h1 className="text-2xl font-semibold text-foreground">Logs</h1>
+              <h1 className="text-2xl font-semibold text-foreground">{title}</h1>
+              {subtitle && (
+                <p className="text-sm text-muted-foreground">{subtitle}</p>
+              )}
               <p className="text-sm text-muted-foreground">
-                {filteredLogs.length} of {SAMPLE_LOGS.length} logs
+                {filteredLogs.length} of {logs.length} entries
               </p>
             </div>
 
@@ -478,7 +491,7 @@ export function InteractiveLogsTable() {
                 <FilterPanel
                   filters={filters}
                   onChange={setFilters}
-                  logs={SAMPLE_LOGS}
+                  logs={logs}
                 />
               </motion.div>
             )}
