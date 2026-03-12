@@ -2,7 +2,12 @@ import { useMutation } from "convex/react";
 import { useEffect, useRef } from "react";
 import { api } from "../../convex/_generated/api";
 
-type AuditPage = "hash-chain" | "audit-trail" | "pipeline" | "export";
+type AuditPage =
+	| "hash-chain"
+	| "audit-trail"
+	| "access-log"
+	| "pipeline"
+	| "export";
 
 /**
  * Logs a single access event when the user navigates to an audit page.

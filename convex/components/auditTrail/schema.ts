@@ -18,7 +18,8 @@ export default defineSchema({
 		timestamp: v.number(),
 	})
 		.index("by_entity", ["entityId", "timestamp"])
-		.index("by_emitted", ["emitted"]),
+		.index("by_emitted", ["emitted"])
+		.index("by_timestamp", ["timestamp"]),
 
 	audit_outbox: defineTable({
 		eventId: v.id("audit_events"),

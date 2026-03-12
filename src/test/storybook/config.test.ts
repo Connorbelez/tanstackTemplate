@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
 
+const STORY_EXTENSIONS_PATTERN = /\.(js|jsx|mjs|ts|tsx)$/;
+const COLOR_MATCHER = /(background|color)$/i;
+const DATE_MATCHER = /Date$/i;
+const TS_STORIES_PATTERN = /\.stories\.(ts|tsx)$/;
+const JS_STORIES_PATTERN = /\.stories\.(js|jsx|mjs)$/;
+const ALL_STORIES_PATTERN = /\.stories\.(js|jsx|mjs|ts|tsx)$/;
+
 describe("Storybook configuration", () => {
 	describe("main.ts configuration", () => {
 		it("should define stories glob pattern", () => {
@@ -7,7 +14,7 @@ describe("Storybook configuration", () => {
 
 			expect(storiesPattern).toContain("../src/");
 			expect(storiesPattern).toContain("*.stories.");
-			expect(storiesPattern).toMatch(/\.(js|jsx|mjs|ts|tsx)$/);
+			expect(storiesPattern).toMatch(STORY_EXTENSIONS_PATTERN);
 		});
 
 		it("should configure react-vite framework", () => {
@@ -86,8 +93,8 @@ describe("Storybook configuration", () => {
 			const parameters = {
 				controls: {
 					matchers: {
-						color: /(background|color)$/i,
-						date: /Date$/i,
+						color: COLOR_MATCHER,
+						date: DATE_MATCHER,
 					},
 				},
 			};
@@ -97,33 +104,26 @@ describe("Storybook configuration", () => {
 		});
 
 		it("should match color controls correctly", () => {
-			const colorMatcher = /(background|color)$/i;
-
-			expect("backgroundColor".match(colorMatcher)).toBeTruthy();
-			expect("color".match(colorMatcher)).toBeTruthy();
-			expect("textColor".match(colorMatcher)).toBeTruthy();
-			expect("background".match(colorMatcher)).toBeTruthy();
-			expect("borderWidth".match(colorMatcher)).toBeFalsy();
+			expect("backgroundColor".match(COLOR_MATCHER)).toBeTruthy();
+			expect("color".match(COLOR_MATCHER)).toBeTruthy();
+			expect("textColor".match(COLOR_MATCHER)).toBeTruthy();
+			expect("background".match(COLOR_MATCHER)).toBeTruthy();
+			expect("borderWidth".match(COLOR_MATCHER)).toBeFalsy();
 		});
 
 		it("should match date controls correctly", () => {
-			const dateMatcher = /Date$/i;
-
-			expect("createdDate".match(dateMatcher)).toBeTruthy();
-			expect("updatedDate".match(dateMatcher)).toBeTruthy();
-			expect("date".match(dateMatcher)).toBeTruthy();
-			expect("startDate".match(dateMatcher)).toBeTruthy();
-			expect("dateOfBirth".match(dateMatcher)).toBeFalsy();
-			expect("datetime".match(dateMatcher)).toBeFalsy();
+			expect("createdDate".match(DATE_MATCHER)).toBeTruthy();
+			expect("updatedDate".match(DATE_MATCHER)).toBeTruthy();
+			expect("date".match(DATE_MATCHER)).toBeTruthy();
+			expect("startDate".match(DATE_MATCHER)).toBeTruthy();
+			expect("dateOfBirth".match(DATE_MATCHER)).toBeFalsy();
+			expect("datetime".match(DATE_MATCHER)).toBeFalsy();
 		});
 
 		it("should be case-insensitive for matchers", () => {
-			const colorMatcher = /(background|color)$/i;
-			const dateMatcher = /Date$/i;
-
-			expect("BACKGROUND".match(colorMatcher)).toBeTruthy();
-			expect("COLOR".match(colorMatcher)).toBeTruthy();
-			expect("DATE".match(dateMatcher)).toBeTruthy();
+			expect("BACKGROUND".match(COLOR_MATCHER)).toBeTruthy();
+			expect("COLOR".match(COLOR_MATCHER)).toBeTruthy();
+			expect("DATE".match(DATE_MATCHER)).toBeTruthy();
 		});
 	});
 
@@ -150,8 +150,8 @@ describe("Storybook configuration", () => {
 				parameters: {
 					controls: {
 						matchers: {
-							color: /(background|color)$/i,
-							date: /Date$/i,
+							color: COLOR_MATCHER,
+							date: DATE_MATCHER,
 						},
 					},
 				},
@@ -165,27 +165,21 @@ describe("Storybook configuration", () => {
 
 	describe("stories glob pattern validation", () => {
 		it("should match TypeScript story files", () => {
-			const pattern = /\.stories\.(ts|tsx)$/;
-
-			expect("Button.stories.ts".match(pattern)).toBeTruthy();
-			expect("Button.stories.tsx".match(pattern)).toBeTruthy();
-			expect("Input.stories.ts".match(pattern)).toBeTruthy();
+			expect("Button.stories.ts".match(TS_STORIES_PATTERN)).toBeTruthy();
+			expect("Button.stories.tsx".match(TS_STORIES_PATTERN)).toBeTruthy();
+			expect("Input.stories.ts".match(TS_STORIES_PATTERN)).toBeTruthy();
 		});
 
 		it("should match JavaScript story files", () => {
-			const pattern = /\.stories\.(js|jsx|mjs)$/;
-
-			expect("Button.stories.js".match(pattern)).toBeTruthy();
-			expect("Button.stories.jsx".match(pattern)).toBeTruthy();
-			expect("Button.stories.mjs".match(pattern)).toBeTruthy();
+			expect("Button.stories.js".match(JS_STORIES_PATTERN)).toBeTruthy();
+			expect("Button.stories.jsx".match(JS_STORIES_PATTERN)).toBeTruthy();
+			expect("Button.stories.mjs".match(JS_STORIES_PATTERN)).toBeTruthy();
 		});
 
 		it("should not match non-story files", () => {
-			const pattern = /\.stories\.(js|jsx|mjs|ts|tsx)$/;
-
-			expect("Button.ts".match(pattern)).toBeFalsy();
-			expect("Button.test.tsx".match(pattern)).toBeFalsy();
-			expect("index.ts".match(pattern)).toBeFalsy();
+			expect("Button.ts".match(ALL_STORIES_PATTERN)).toBeFalsy();
+			expect("Button.test.tsx".match(ALL_STORIES_PATTERN)).toBeFalsy();
+			expect("index.ts".match(ALL_STORIES_PATTERN)).toBeFalsy();
 		});
 	});
 
@@ -230,24 +224,18 @@ describe("Storybook configuration", () => {
 
 	describe("control matchers edge cases", () => {
 		it("should not match partial color words", () => {
-			const colorMatcher = /(background|color)$/i;
-
-			expect("discolored".match(colorMatcher)).toBeFalsy();
-			expect("coloring".match(colorMatcher)).toBeFalsy();
+			expect("discolored".match(COLOR_MATCHER)).toBeFalsy();
+			expect("coloring".match(COLOR_MATCHER)).toBeFalsy();
 		});
 
 		it("should not match partial date words", () => {
-			const dateMatcher = /Date$/i;
-
-			expect("update".match(dateMatcher)).toBeFalsy();
-			expect("dated".match(dateMatcher)).toBeFalsy();
+			expect("update".match(DATE_MATCHER)).toBeFalsy();
+			expect("dated".match(DATE_MATCHER)).toBeFalsy();
 		});
 
 		it("should match compound property names", () => {
-			const colorMatcher = /(background|color)$/i;
-
-			expect("primaryColor".match(colorMatcher)).toBeTruthy();
-			expect("cardBackground".match(colorMatcher)).toBeTruthy();
+			expect("primaryColor".match(COLOR_MATCHER)).toBeTruthy();
+			expect("cardBackground".match(COLOR_MATCHER)).toBeTruthy();
 		});
 	});
 

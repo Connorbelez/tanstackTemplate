@@ -103,6 +103,7 @@ function TableDemo() {
 	);
 
 	const [data, setData] = React.useState<Person[]>(() => makeData(5000));
+	const [pageInputValue, setPageInputValue] = React.useState("");
 	const refreshData = () => setData((_old) => makeData(50_000)); //stress test
 
 	const table = useReactTable({
@@ -260,12 +261,22 @@ function TableDemo() {
 					| Go to page:
 					<input
 						className="w-16 rounded-md border border-gray-700 bg-gray-800 px-2 py-1 outline-none focus:border-transparent focus:ring-2 focus:ring-blue-500"
-						onChange={(e) => {
+						onBlur={(e) => {
 							const page = e.target.value ? Number(e.target.value) - 1 : 0;
-							table.setPageIndex(page);
+							table.setPageIndex(
+								Math.max(0, Math.min(page, table.getPageCount() - 1))
+							);
+							setPageInputValue("");
 						}}
+						onChange={(e) => setPageInputValue(e.target.value)}
+						onKeyDown={(e) => {
+							if (e.key === "Enter") {
+								e.currentTarget.blur();
+							}
+						}}
+						placeholder={String(table.getState().pagination.pageIndex + 1)}
 						type="number"
-						value={table.getState().pagination.pageIndex + 1}
+						value={pageInputValue}
 					/>
 				</span>
 				<select

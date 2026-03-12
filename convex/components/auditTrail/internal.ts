@@ -57,8 +57,7 @@ export const processRetention = internalMutation({
 
 		const expired = await ctx.db
 			.query("audit_events")
-			.withIndex("by_entity")
-			.filter((q) => q.lt(q.field("timestamp"), cutoff))
+			.withIndex("by_timestamp", (q) => q.lt("timestamp", cutoff))
 			.take(100);
 
 		let deletedCount = 0;

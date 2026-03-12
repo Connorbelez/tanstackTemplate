@@ -400,6 +400,7 @@ export const logAuditAccess = auditedMutation
 		page: v.union(
 			v.literal("hash-chain"),
 			v.literal("audit-trail"),
+			v.literal("access-log"),
 			v.literal("pipeline"),
 			v.literal("export")
 		),

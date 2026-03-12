@@ -21,6 +21,7 @@ describe("AuditTrail client", () => {
 
 			const mockCtx = {
 				runMutation: vi.fn().mockResolvedValue("event_id_123"),
+				runQuery: vi.fn(),
 			};
 
 			const client = new AuditTrail(mockComponent);
@@ -54,6 +55,7 @@ describe("AuditTrail client", () => {
 
 			const mockCtx = {
 				runMutation: vi.fn().mockResolvedValue("event_id_456"),
+				runQuery: vi.fn(),
 			};
 
 			const client = new AuditTrail(mockComponent);
@@ -63,7 +65,7 @@ describe("AuditTrail client", () => {
 				entityType: "user",
 				eventType: "created",
 				actorId: "system",
-				timestamp: 1234567890,
+				timestamp: 1_234_567_890,
 			};
 
 			const result = await client.insert(mockCtx, event);
@@ -330,6 +332,7 @@ describe("AuditTrail client", () => {
 
 			const mockCtx = {
 				runMutation: vi.fn().mockResolvedValue(mockResult),
+				runQuery: vi.fn(),
 			};
 
 			const client = new AuditTrail(mockComponent);
@@ -357,6 +360,7 @@ describe("AuditTrail client", () => {
 
 			const mockCtx = {
 				runMutation: vi.fn().mockResolvedValue(mockResult),
+				runQuery: vi.fn(),
 			};
 
 			const client = new AuditTrail(mockComponent);
@@ -381,6 +385,7 @@ describe("AuditTrail client", () => {
 
 			const mockCtx = {
 				runMutation: vi.fn().mockResolvedValue(mockResult),
+				runQuery: vi.fn(),
 			};
 
 			const client = new AuditTrail(mockComponent);
@@ -434,6 +439,7 @@ describe("AuditTrail client", () => {
 			const mockComponent = { lib: { insert: "component.lib.insert" } };
 			const mockCtx = {
 				runMutation: vi.fn().mockResolvedValue("event_id"),
+				runQuery: vi.fn(),
 			};
 			const client = new AuditTrail(mockComponent);
 
@@ -457,6 +463,7 @@ describe("AuditTrail client", () => {
 			const mockComponent = { lib: { insert: "component.lib.insert" } };
 			const mockCtx = {
 				runMutation: vi.fn().mockResolvedValue("event_id"),
+				runQuery: vi.fn(),
 			};
 			const client = new AuditTrail(mockComponent);
 
@@ -485,6 +492,7 @@ describe("AuditTrail client", () => {
 			const mockComponent = { lib: { insert: "component.lib.insert" } };
 			const mockCtx = {
 				runMutation: vi.fn().mockResolvedValue("event_id"),
+				runQuery: vi.fn(),
 			};
 			const client = new AuditTrail(mockComponent);
 

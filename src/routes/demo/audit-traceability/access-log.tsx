@@ -18,7 +18,7 @@ export const Route = createFileRoute("/demo/audit-traceability/access-log")({
 });
 
 function AccessLogPage() {
-	useAuditAccessLog("audit-trail");
+	useAuditAccessLog("access-log");
 	const accessLog = useQuery(api.demo.auditTraceability.getAccessLog, {});
 
 	return (

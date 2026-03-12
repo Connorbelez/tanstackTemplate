@@ -16,7 +16,13 @@ describe("Auth helper functions logic", () => {
 				patch: vi.fn(),
 			};
 
-			const data = {
+			const data: {
+				id: string;
+				name: string;
+				allowProfilesOutsideOrganization?: boolean;
+				externalId?: string;
+				metadata?: Record<string, unknown>;
+			} = {
 				id: "org_workos_123",
 				name: "Test Organization",
 				allowProfilesOutsideOrganization: true,
@@ -67,7 +73,13 @@ describe("Auth helper functions logic", () => {
 				patch: vi.fn().mockResolvedValue(undefined),
 			};
 
-			const data = {
+			const data: {
+				id: string;
+				name: string;
+				allowProfilesOutsideOrganization?: boolean;
+				externalId?: string;
+				metadata?: Record<string, unknown>;
+			} = {
 				id: "org_workos_123",
 				name: "Updated Organization",
 				allowProfilesOutsideOrganization: false,
@@ -113,7 +125,13 @@ describe("Auth helper functions logic", () => {
 				patch: vi.fn(),
 			};
 
-			const data = {
+			const data: {
+				id: string;
+				name: string;
+				allowProfilesOutsideOrganization?: boolean;
+				externalId?: string;
+				metadata?: Record<string, unknown>;
+			} = {
 				id: "org_workos_123",
 				name: "Test Organization",
 			};
@@ -240,7 +258,18 @@ describe("Auth helper functions logic", () => {
 				patch: vi.fn(),
 			};
 
-			const data = {
+			const data: {
+				id: string;
+				organizationId: string;
+				userId: string;
+				status: string;
+				role: {
+					slug: string;
+				};
+				roles?: {
+					slug: string;
+				}[];
+			} = {
 				id: "mem_workos_123",
 				organizationId: "org_workos_123",
 				userId: "user_workos_123",
@@ -269,7 +298,7 @@ describe("Auth helper functions logic", () => {
 				userWorkosId: data.userId,
 				status: data.status,
 				roleSlug: data.role.slug,
-				roleSlugs: data.roles?.map((r) => r.slug),
+				roleSlugs: data.roles?.map((r: { slug: string }) => r.slug),
 			};
 
 			if (!existing) {
@@ -309,7 +338,18 @@ describe("Auth helper functions logic", () => {
 				patch: vi.fn().mockResolvedValue(undefined),
 			};
 
-			const data = {
+			const data: {
+				id: string;
+				organizationId: string;
+				userId: string;
+				status: string;
+				role: {
+					slug: string;
+				};
+				roles?: {
+					slug: string;
+				}[];
+			} = {
 				id: "mem_workos_123",
 				organizationId: "org_workos_123",
 				userId: "user_workos_123",
@@ -336,7 +376,7 @@ describe("Auth helper functions logic", () => {
 				userWorkosId: data.userId,
 				status: data.status,
 				roleSlug: data.role.slug,
-				roleSlugs: data.roles?.map((r) => r.slug),
+				roleSlugs: data.roles?.map((r: { slug: string }) => r.slug),
 			};
 
 			if (existing) {
@@ -551,7 +591,8 @@ describe("Auth event handler patterns", () => {
 			const structuredOrg = {
 				workosId: rawOrg.id,
 				name: rawOrg.name,
-				allowProfilesOutsideOrganization: rawOrg.allowProfilesOutsideOrganization,
+				allowProfilesOutsideOrganization:
+					rawOrg.allowProfilesOutsideOrganization,
 				externalId: rawOrg.externalId ?? undefined,
 				metadata: rawOrg.metadata,
 			};
@@ -566,7 +607,18 @@ describe("Auth event handler patterns", () => {
 		});
 
 		it("should structure membership data correctly", () => {
-			const rawMembership = {
+			const rawMembership: {
+				id: string;
+				organizationId: string;
+				userId: string;
+				status: string;
+				role: {
+					slug: string;
+				};
+				roles?: {
+					slug: string;
+				}[];
+			} = {
 				id: "mem_123",
 				organizationId: "org_123",
 				userId: "user_123",
@@ -581,7 +633,7 @@ describe("Auth event handler patterns", () => {
 				userWorkosId: rawMembership.userId,
 				status: rawMembership.status,
 				roleSlug: rawMembership.role?.slug ?? "",
-				roleSlugs: rawMembership.roles?.map((r) => r.slug),
+				roleSlugs: rawMembership.roles?.map((r: { slug: string }) => r.slug),
 			};
 
 			expect(structuredMembership).toEqual({
@@ -595,7 +647,18 @@ describe("Auth event handler patterns", () => {
 		});
 
 		it("should handle membership without roles array", () => {
-			const rawMembership = {
+			const rawMembership: {
+				id: string;
+				organizationId: string;
+				userId: string;
+				status: string;
+				role: {
+					slug: string;
+				};
+				roles?: {
+					slug: string;
+				}[];
+			} = {
 				id: "mem_123",
 				organizationId: "org_123",
 				userId: "user_123",
@@ -610,7 +673,7 @@ describe("Auth event handler patterns", () => {
 				userWorkosId: rawMembership.userId,
 				status: rawMembership.status,
 				roleSlug: rawMembership.role?.slug ?? "",
-				roleSlugs: rawMembership.roles?.map((r) => r.slug),
+				roleSlugs: rawMembership.roles?.map((r: { slug: string }) => r.slug),
 			};
 
 			expect(structuredMembership.roleSlugs).toBeUndefined();

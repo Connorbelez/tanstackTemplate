@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
 
+const KEBAB_CASE_PATTERN = /^[a-z]+(-[a-z]+)*$/;
+const INTERNAL_PREFIX_PATTERN = /^internal\./;
+
 describe("Audit trail cron jobs configuration", () => {
 	describe("cron job schedule patterns", () => {
 		it("should validate interval-based cron configuration", () => {
@@ -60,7 +63,7 @@ describe("Audit trail cron jobs configuration", () => {
 			const cronNames = ["audit-outbox-processor", "audit-retention-cleanup"];
 
 			for (const name of cronNames) {
-				expect(name).toMatch(/^[a-z]+(-[a-z]+)*$/);
+				expect(name).toMatch(KEBAB_CASE_PATTERN);
 			}
 		});
 
@@ -82,8 +85,8 @@ describe("Audit trail cron jobs configuration", () => {
 			const processOutboxRef = "internal.internal.processOutbox";
 			const processRetentionRef = "internal.internal.processRetention";
 
-			expect(processOutboxRef).toMatch(/^internal\./);
-			expect(processRetentionRef).toMatch(/^internal\./);
+			expect(processOutboxRef).toMatch(INTERNAL_PREFIX_PATTERN);
+			expect(processRetentionRef).toMatch(INTERNAL_PREFIX_PATTERN);
 		});
 
 		it("should point to correct internal module functions", () => {
@@ -108,7 +111,7 @@ describe("Audit trail cron jobs configuration", () => {
 
 			for (const interval of validIntervals) {
 				expect(interval.seconds).toBeGreaterThan(0);
-				expect(interval.seconds).toBeLessThanOrEqual(86400); // Max 1 day
+				expect(interval.seconds).toBeLessThanOrEqual(86_400); // Max 1 day
 			}
 		});
 

@@ -43,7 +43,7 @@ describe("Audit trail internal mutations", () => {
 						emittedAt,
 					});
 					emittedCount++;
-				} catch (error) {
+				} catch (_error) {
 					failedCount++;
 				}
 			}
@@ -187,7 +187,7 @@ describe("Audit trail internal mutations", () => {
 		});
 
 		it("should handle non-Error exceptions", () => {
-			const error = "String error";
+			const error: unknown = "String error";
 			const reason = error instanceof Error ? error.message : String(error);
 
 			expect(reason).toBe("String error");
@@ -294,9 +294,9 @@ describe("Audit trail internal mutations", () => {
 						return {
 							withIndex: vi.fn().mockReturnValue({
 								filter: vi.fn().mockReturnValue({
-									take: vi.fn().mockResolvedValue([
-										{ _id: "event_1", timestamp: 1000 },
-									]),
+									take: vi
+										.fn()
+										.mockResolvedValue([{ _id: "event_1", timestamp: 1000 }]),
 								}),
 							}),
 						};
@@ -403,7 +403,8 @@ describe("Audit trail internal mutations", () => {
 	describe("retention policy calculations", () => {
 		it("should calculate production retention period (7 years)", () => {
 			const PRODUCTION_RETENTION_MS = 7 * 365.25 * 24 * 60 * 60 * 1000;
-			const retentionYears = PRODUCTION_RETENTION_MS / (365.25 * 24 * 60 * 60 * 1000);
+			const retentionYears =
+				PRODUCTION_RETENTION_MS / (365.25 * 24 * 60 * 60 * 1000);
 
 			expect(retentionYears).toBe(7);
 		});

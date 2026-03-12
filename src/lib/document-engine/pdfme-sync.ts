@@ -28,8 +28,14 @@ function mergeFieldMeta(
 	existing?: FieldMeta
 ): FieldMeta | undefined {
 	const merged: FieldMeta = {
-		placeholder: pdfmeSchema.placeholder || existing?.placeholder || undefined,
-		helpText: pdfmeSchema.helpText || existing?.helpText || undefined,
+		placeholder:
+			pdfmeSchema.placeholder !== undefined && pdfmeSchema.placeholder !== ""
+				? pdfmeSchema.placeholder
+				: (existing?.placeholder ?? undefined),
+		helpText:
+			pdfmeSchema.helpText !== undefined && pdfmeSchema.helpText !== ""
+				? pdfmeSchema.helpText
+				: (existing?.helpText ?? undefined),
 		readOnly: pdfmeSchema.fieldReadOnly ?? existing?.readOnly,
 	};
 	return Object.values(merged).some((v) => v !== undefined)
@@ -145,23 +151,29 @@ function mergeExistingField(
 	const base: FieldConfig = {
 		...existing,
 		position: extractPosition(schema, pageIdx),
-		label: pdfmeSchema.fieldLabel || existing.label,
+		label:
+			pdfmeSchema.fieldLabel !== ""
+				? pdfmeSchema.fieldLabel || existing.label
+				: undefined,
 		required: schema.required ?? existing.required,
 		...(mergedMeta ? { fieldMeta: mergedMeta } : {}),
 	};
 
 	if (existing.type === "interpolable") {
+		const newKey = (pdfmeSchema as InterpolableSchema).variableKey;
 		base.variableKey =
-			(pdfmeSchema as InterpolableSchema).variableKey || existing.variableKey;
+			newKey !== undefined ? newKey || undefined : existing.variableKey;
 	}
 
 	if (existing.type === "signable") {
+		const newSignableType = (pdfmeSchema as SignableSchema).signableType;
+		const newPlatformRole = (pdfmeSchema as SignableSchema).platformRole;
 		base.signableType =
-			((pdfmeSchema as SignableSchema).signableType as SignableType) ||
-			existing.signableType;
+			(newSignableType as SignableType) || existing.signableType;
 		base.signatoryPlatformRole =
-			((pdfmeSchema as SignableSchema).platformRole || undefined) ??
-			existing.signatoryPlatformRole;
+			newPlatformRole !== undefined
+				? newPlatformRole || undefined
+				: existing.signatoryPlatformRole;
 	}
 
 	return base;
