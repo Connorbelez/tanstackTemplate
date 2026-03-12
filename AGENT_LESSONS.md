@@ -67,3 +67,12 @@ Proposed CLAUDE.md amendments from issues encountered during development. Review
 **Fix:** Installed `dotenv` and added `dotenv.config({ path: '.env.local' })` to `playwright.config.ts`. Also added `requireEnv()` helper to fail fast with clear error messages.
 **Proposed amendment:**
 > Playwright does not auto-load `.env.local`. Always add `dotenv.config()` to `playwright.config.ts`. For required env vars in test files, use a `requireEnv()` guard instead of `as string` casts to fail fast with clear messages.
+
+---
+
+## Lesson 8: Don't recommend production hardening for demo-only code
+**Date:** 2026-03-11
+**Context:** Suggested adding segregation-of-duties enforcement to `approveTransfer`/`completeTransfer` mutations in `convex/demo/auditTraceability.ts`. These are demo functions showcasing the audit trail — there's no production mortgage workflow in the repo. Recommending production controls for demo code wastes time and misrepresents scope.
+**Root cause:** Treated demo code as production code when assessing compliance gaps. Didn't check whether the mutations were actually used in a real workflow.
+**Proposed amendment:**
+> Before recommending production hardening (RBAC, segregation of duties, input validation), verify the code is part of an actual production workflow — not a demo or showcase. Files in `convex/demo/` and `src/routes/demo/` are demo code by convention.

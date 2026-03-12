@@ -38,8 +38,23 @@ import { Route as DemoConvexAggregateRouteImport } from './routes/demo/convex-ag
 import { Route as DemoConvexActionCacheRouteImport } from './routes/demo/convex-action-cache'
 import { Route as DemoConvexRouteImport } from './routes/demo/convex'
 import { Route as AuthenticatedAuthenticatedRouteImport } from './routes/_authenticated/authenticated'
+import { Route as DemoDocumentEngineRouteRouteImport } from './routes/demo/document-engine/route'
+import { Route as DemoAuditTraceabilityRouteRouteImport } from './routes/demo/audit-traceability/route'
+import { Route as DemoDocumentEngineIndexRouteImport } from './routes/demo/document-engine/index'
+import { Route as DemoAuditTraceabilityIndexRouteImport } from './routes/demo/audit-traceability/index'
 import { Route as DemoFormSimpleRouteImport } from './routes/demo/form.simple'
 import { Route as DemoFormAddressRouteImport } from './routes/demo/form.address'
+import { Route as DemoDocumentEngineVariablesRouteImport } from './routes/demo/document-engine/variables'
+import { Route as DemoDocumentEngineTemplatesRouteImport } from './routes/demo/document-engine/templates'
+import { Route as DemoDocumentEngineLibraryRouteImport } from './routes/demo/document-engine/library'
+import { Route as DemoDocumentEngineGroupsRouteImport } from './routes/demo/document-engine/groups'
+import { Route as DemoDocumentEngineGenerateRouteImport } from './routes/demo/document-engine/generate'
+import { Route as DemoAuditTraceabilityReportRouteImport } from './routes/demo/audit-traceability/report'
+import { Route as DemoAuditTraceabilityPipelineRouteImport } from './routes/demo/audit-traceability/pipeline'
+import { Route as DemoAuditTraceabilityHashChainRouteImport } from './routes/demo/audit-traceability/hash-chain'
+import { Route as DemoAuditTraceabilityAuditTrailRouteImport } from './routes/demo/audit-traceability/audit-trail'
+import { Route as DemoAuditTraceabilityAccessLogRouteImport } from './routes/demo/audit-traceability/access-log'
+import { Route as DemoDocumentEngineDesignerTemplateIdRouteImport } from './routes/demo/document-engine/designer.$templateId'
 
 const SignUpRoute = SignUpRouteImport.update({
   id: '/sign-up',
@@ -190,6 +205,28 @@ const AuthenticatedAuthenticatedRoute =
     path: '/authenticated',
     getParentRoute: () => rootRouteImport,
   } as any)
+const DemoDocumentEngineRouteRoute = DemoDocumentEngineRouteRouteImport.update({
+  id: '/demo/document-engine',
+  path: '/demo/document-engine',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DemoAuditTraceabilityRouteRoute =
+  DemoAuditTraceabilityRouteRouteImport.update({
+    id: '/demo/audit-traceability',
+    path: '/demo/audit-traceability',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const DemoDocumentEngineIndexRoute = DemoDocumentEngineIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => DemoDocumentEngineRouteRoute,
+} as any)
+const DemoAuditTraceabilityIndexRoute =
+  DemoAuditTraceabilityIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => DemoAuditTraceabilityRouteRoute,
+  } as any)
 const DemoFormSimpleRoute = DemoFormSimpleRouteImport.update({
   id: '/demo/form/simple',
   path: '/demo/form/simple',
@@ -200,6 +237,72 @@ const DemoFormAddressRoute = DemoFormAddressRouteImport.update({
   path: '/demo/form/address',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DemoDocumentEngineVariablesRoute =
+  DemoDocumentEngineVariablesRouteImport.update({
+    id: '/variables',
+    path: '/variables',
+    getParentRoute: () => DemoDocumentEngineRouteRoute,
+  } as any)
+const DemoDocumentEngineTemplatesRoute =
+  DemoDocumentEngineTemplatesRouteImport.update({
+    id: '/templates',
+    path: '/templates',
+    getParentRoute: () => DemoDocumentEngineRouteRoute,
+  } as any)
+const DemoDocumentEngineLibraryRoute =
+  DemoDocumentEngineLibraryRouteImport.update({
+    id: '/library',
+    path: '/library',
+    getParentRoute: () => DemoDocumentEngineRouteRoute,
+  } as any)
+const DemoDocumentEngineGroupsRoute =
+  DemoDocumentEngineGroupsRouteImport.update({
+    id: '/groups',
+    path: '/groups',
+    getParentRoute: () => DemoDocumentEngineRouteRoute,
+  } as any)
+const DemoDocumentEngineGenerateRoute =
+  DemoDocumentEngineGenerateRouteImport.update({
+    id: '/generate',
+    path: '/generate',
+    getParentRoute: () => DemoDocumentEngineRouteRoute,
+  } as any)
+const DemoAuditTraceabilityReportRoute =
+  DemoAuditTraceabilityReportRouteImport.update({
+    id: '/report',
+    path: '/report',
+    getParentRoute: () => DemoAuditTraceabilityRouteRoute,
+  } as any)
+const DemoAuditTraceabilityPipelineRoute =
+  DemoAuditTraceabilityPipelineRouteImport.update({
+    id: '/pipeline',
+    path: '/pipeline',
+    getParentRoute: () => DemoAuditTraceabilityRouteRoute,
+  } as any)
+const DemoAuditTraceabilityHashChainRoute =
+  DemoAuditTraceabilityHashChainRouteImport.update({
+    id: '/hash-chain',
+    path: '/hash-chain',
+    getParentRoute: () => DemoAuditTraceabilityRouteRoute,
+  } as any)
+const DemoAuditTraceabilityAuditTrailRoute =
+  DemoAuditTraceabilityAuditTrailRouteImport.update({
+    id: '/audit-trail',
+    path: '/audit-trail',
+    getParentRoute: () => DemoAuditTraceabilityRouteRoute,
+  } as any)
+const DemoAuditTraceabilityAccessLogRoute =
+  DemoAuditTraceabilityAccessLogRouteImport.update({
+    id: '/access-log',
+    path: '/access-log',
+    getParentRoute: () => DemoAuditTraceabilityRouteRoute,
+  } as any)
+const DemoDocumentEngineDesignerTemplateIdRoute =
+  DemoDocumentEngineDesignerTemplateIdRouteImport.update({
+    id: '/designer/$templateId',
+    path: '/designer/$templateId',
+    getParentRoute: () => DemoDocumentEngineRouteRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -207,6 +310,8 @@ export interface FileRoutesByFullPath {
   '/callback': typeof CallbackRoute
   '/sign-in': typeof SignInRoute
   '/sign-up': typeof SignUpRoute
+  '/demo/audit-traceability': typeof DemoAuditTraceabilityRouteRouteWithChildren
+  '/demo/document-engine': typeof DemoDocumentEngineRouteRouteWithChildren
   '/authenticated': typeof AuthenticatedAuthenticatedRoute
   '/demo/convex': typeof DemoConvexRoute
   '/demo/convex-action-cache': typeof DemoConvexActionCacheRoute
@@ -231,8 +336,21 @@ export interface FileRoutesByFullPath {
   '/demo/tanstack-query': typeof DemoTanstackQueryRoute
   '/demo/workos': typeof DemoWorkosRoute
   '/e2e/switch-org': typeof E2eSwitchOrgRoute
+  '/demo/audit-traceability/access-log': typeof DemoAuditTraceabilityAccessLogRoute
+  '/demo/audit-traceability/audit-trail': typeof DemoAuditTraceabilityAuditTrailRoute
+  '/demo/audit-traceability/hash-chain': typeof DemoAuditTraceabilityHashChainRoute
+  '/demo/audit-traceability/pipeline': typeof DemoAuditTraceabilityPipelineRoute
+  '/demo/audit-traceability/report': typeof DemoAuditTraceabilityReportRoute
+  '/demo/document-engine/generate': typeof DemoDocumentEngineGenerateRoute
+  '/demo/document-engine/groups': typeof DemoDocumentEngineGroupsRoute
+  '/demo/document-engine/library': typeof DemoDocumentEngineLibraryRoute
+  '/demo/document-engine/templates': typeof DemoDocumentEngineTemplatesRoute
+  '/demo/document-engine/variables': typeof DemoDocumentEngineVariablesRoute
   '/demo/form/address': typeof DemoFormAddressRoute
   '/demo/form/simple': typeof DemoFormSimpleRoute
+  '/demo/audit-traceability/': typeof DemoAuditTraceabilityIndexRoute
+  '/demo/document-engine/': typeof DemoDocumentEngineIndexRoute
+  '/demo/document-engine/designer/$templateId': typeof DemoDocumentEngineDesignerTemplateIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -264,8 +382,21 @@ export interface FileRoutesByTo {
   '/demo/tanstack-query': typeof DemoTanstackQueryRoute
   '/demo/workos': typeof DemoWorkosRoute
   '/e2e/switch-org': typeof E2eSwitchOrgRoute
+  '/demo/audit-traceability/access-log': typeof DemoAuditTraceabilityAccessLogRoute
+  '/demo/audit-traceability/audit-trail': typeof DemoAuditTraceabilityAuditTrailRoute
+  '/demo/audit-traceability/hash-chain': typeof DemoAuditTraceabilityHashChainRoute
+  '/demo/audit-traceability/pipeline': typeof DemoAuditTraceabilityPipelineRoute
+  '/demo/audit-traceability/report': typeof DemoAuditTraceabilityReportRoute
+  '/demo/document-engine/generate': typeof DemoDocumentEngineGenerateRoute
+  '/demo/document-engine/groups': typeof DemoDocumentEngineGroupsRoute
+  '/demo/document-engine/library': typeof DemoDocumentEngineLibraryRoute
+  '/demo/document-engine/templates': typeof DemoDocumentEngineTemplatesRoute
+  '/demo/document-engine/variables': typeof DemoDocumentEngineVariablesRoute
   '/demo/form/address': typeof DemoFormAddressRoute
   '/demo/form/simple': typeof DemoFormSimpleRoute
+  '/demo/audit-traceability': typeof DemoAuditTraceabilityIndexRoute
+  '/demo/document-engine': typeof DemoDocumentEngineIndexRoute
+  '/demo/document-engine/designer/$templateId': typeof DemoDocumentEngineDesignerTemplateIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -274,6 +405,8 @@ export interface FileRoutesById {
   '/callback': typeof CallbackRoute
   '/sign-in': typeof SignInRoute
   '/sign-up': typeof SignUpRoute
+  '/demo/audit-traceability': typeof DemoAuditTraceabilityRouteRouteWithChildren
+  '/demo/document-engine': typeof DemoDocumentEngineRouteRouteWithChildren
   '/_authenticated/authenticated': typeof AuthenticatedAuthenticatedRoute
   '/demo/convex': typeof DemoConvexRoute
   '/demo/convex-action-cache': typeof DemoConvexActionCacheRoute
@@ -298,8 +431,21 @@ export interface FileRoutesById {
   '/demo/tanstack-query': typeof DemoTanstackQueryRoute
   '/demo/workos': typeof DemoWorkosRoute
   '/e2e/switch-org': typeof E2eSwitchOrgRoute
+  '/demo/audit-traceability/access-log': typeof DemoAuditTraceabilityAccessLogRoute
+  '/demo/audit-traceability/audit-trail': typeof DemoAuditTraceabilityAuditTrailRoute
+  '/demo/audit-traceability/hash-chain': typeof DemoAuditTraceabilityHashChainRoute
+  '/demo/audit-traceability/pipeline': typeof DemoAuditTraceabilityPipelineRoute
+  '/demo/audit-traceability/report': typeof DemoAuditTraceabilityReportRoute
+  '/demo/document-engine/generate': typeof DemoDocumentEngineGenerateRoute
+  '/demo/document-engine/groups': typeof DemoDocumentEngineGroupsRoute
+  '/demo/document-engine/library': typeof DemoDocumentEngineLibraryRoute
+  '/demo/document-engine/templates': typeof DemoDocumentEngineTemplatesRoute
+  '/demo/document-engine/variables': typeof DemoDocumentEngineVariablesRoute
   '/demo/form/address': typeof DemoFormAddressRoute
   '/demo/form/simple': typeof DemoFormSimpleRoute
+  '/demo/audit-traceability/': typeof DemoAuditTraceabilityIndexRoute
+  '/demo/document-engine/': typeof DemoDocumentEngineIndexRoute
+  '/demo/document-engine/designer/$templateId': typeof DemoDocumentEngineDesignerTemplateIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -309,6 +455,8 @@ export interface FileRouteTypes {
     | '/callback'
     | '/sign-in'
     | '/sign-up'
+    | '/demo/audit-traceability'
+    | '/demo/document-engine'
     | '/authenticated'
     | '/demo/convex'
     | '/demo/convex-action-cache'
@@ -333,8 +481,21 @@ export interface FileRouteTypes {
     | '/demo/tanstack-query'
     | '/demo/workos'
     | '/e2e/switch-org'
+    | '/demo/audit-traceability/access-log'
+    | '/demo/audit-traceability/audit-trail'
+    | '/demo/audit-traceability/hash-chain'
+    | '/demo/audit-traceability/pipeline'
+    | '/demo/audit-traceability/report'
+    | '/demo/document-engine/generate'
+    | '/demo/document-engine/groups'
+    | '/demo/document-engine/library'
+    | '/demo/document-engine/templates'
+    | '/demo/document-engine/variables'
     | '/demo/form/address'
     | '/demo/form/simple'
+    | '/demo/audit-traceability/'
+    | '/demo/document-engine/'
+    | '/demo/document-engine/designer/$templateId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -366,8 +527,21 @@ export interface FileRouteTypes {
     | '/demo/tanstack-query'
     | '/demo/workos'
     | '/e2e/switch-org'
+    | '/demo/audit-traceability/access-log'
+    | '/demo/audit-traceability/audit-trail'
+    | '/demo/audit-traceability/hash-chain'
+    | '/demo/audit-traceability/pipeline'
+    | '/demo/audit-traceability/report'
+    | '/demo/document-engine/generate'
+    | '/demo/document-engine/groups'
+    | '/demo/document-engine/library'
+    | '/demo/document-engine/templates'
+    | '/demo/document-engine/variables'
     | '/demo/form/address'
     | '/demo/form/simple'
+    | '/demo/audit-traceability'
+    | '/demo/document-engine'
+    | '/demo/document-engine/designer/$templateId'
   id:
     | '__root__'
     | '/'
@@ -375,6 +549,8 @@ export interface FileRouteTypes {
     | '/callback'
     | '/sign-in'
     | '/sign-up'
+    | '/demo/audit-traceability'
+    | '/demo/document-engine'
     | '/_authenticated/authenticated'
     | '/demo/convex'
     | '/demo/convex-action-cache'
@@ -399,8 +575,21 @@ export interface FileRouteTypes {
     | '/demo/tanstack-query'
     | '/demo/workos'
     | '/e2e/switch-org'
+    | '/demo/audit-traceability/access-log'
+    | '/demo/audit-traceability/audit-trail'
+    | '/demo/audit-traceability/hash-chain'
+    | '/demo/audit-traceability/pipeline'
+    | '/demo/audit-traceability/report'
+    | '/demo/document-engine/generate'
+    | '/demo/document-engine/groups'
+    | '/demo/document-engine/library'
+    | '/demo/document-engine/templates'
+    | '/demo/document-engine/variables'
     | '/demo/form/address'
     | '/demo/form/simple'
+    | '/demo/audit-traceability/'
+    | '/demo/document-engine/'
+    | '/demo/document-engine/designer/$templateId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -409,6 +598,8 @@ export interface RootRouteChildren {
   CallbackRoute: typeof CallbackRoute
   SignInRoute: typeof SignInRoute
   SignUpRoute: typeof SignUpRoute
+  DemoAuditTraceabilityRouteRoute: typeof DemoAuditTraceabilityRouteRouteWithChildren
+  DemoDocumentEngineRouteRoute: typeof DemoDocumentEngineRouteRouteWithChildren
   AuthenticatedAuthenticatedRoute: typeof AuthenticatedAuthenticatedRoute
   DemoConvexRoute: typeof DemoConvexRoute
   DemoConvexActionCacheRoute: typeof DemoConvexActionCacheRoute
@@ -642,6 +833,34 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAuthenticatedRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/demo/document-engine': {
+      id: '/demo/document-engine'
+      path: '/demo/document-engine'
+      fullPath: '/demo/document-engine'
+      preLoaderRoute: typeof DemoDocumentEngineRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/demo/audit-traceability': {
+      id: '/demo/audit-traceability'
+      path: '/demo/audit-traceability'
+      fullPath: '/demo/audit-traceability'
+      preLoaderRoute: typeof DemoAuditTraceabilityRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/demo/document-engine/': {
+      id: '/demo/document-engine/'
+      path: '/'
+      fullPath: '/demo/document-engine/'
+      preLoaderRoute: typeof DemoDocumentEngineIndexRouteImport
+      parentRoute: typeof DemoDocumentEngineRouteRoute
+    }
+    '/demo/audit-traceability/': {
+      id: '/demo/audit-traceability/'
+      path: '/'
+      fullPath: '/demo/audit-traceability/'
+      preLoaderRoute: typeof DemoAuditTraceabilityIndexRouteImport
+      parentRoute: typeof DemoAuditTraceabilityRouteRoute
+    }
     '/demo/form/simple': {
       id: '/demo/form/simple'
       path: '/demo/form/simple'
@@ -656,8 +875,136 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DemoFormAddressRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/demo/document-engine/variables': {
+      id: '/demo/document-engine/variables'
+      path: '/variables'
+      fullPath: '/demo/document-engine/variables'
+      preLoaderRoute: typeof DemoDocumentEngineVariablesRouteImport
+      parentRoute: typeof DemoDocumentEngineRouteRoute
+    }
+    '/demo/document-engine/templates': {
+      id: '/demo/document-engine/templates'
+      path: '/templates'
+      fullPath: '/demo/document-engine/templates'
+      preLoaderRoute: typeof DemoDocumentEngineTemplatesRouteImport
+      parentRoute: typeof DemoDocumentEngineRouteRoute
+    }
+    '/demo/document-engine/library': {
+      id: '/demo/document-engine/library'
+      path: '/library'
+      fullPath: '/demo/document-engine/library'
+      preLoaderRoute: typeof DemoDocumentEngineLibraryRouteImport
+      parentRoute: typeof DemoDocumentEngineRouteRoute
+    }
+    '/demo/document-engine/groups': {
+      id: '/demo/document-engine/groups'
+      path: '/groups'
+      fullPath: '/demo/document-engine/groups'
+      preLoaderRoute: typeof DemoDocumentEngineGroupsRouteImport
+      parentRoute: typeof DemoDocumentEngineRouteRoute
+    }
+    '/demo/document-engine/generate': {
+      id: '/demo/document-engine/generate'
+      path: '/generate'
+      fullPath: '/demo/document-engine/generate'
+      preLoaderRoute: typeof DemoDocumentEngineGenerateRouteImport
+      parentRoute: typeof DemoDocumentEngineRouteRoute
+    }
+    '/demo/audit-traceability/report': {
+      id: '/demo/audit-traceability/report'
+      path: '/report'
+      fullPath: '/demo/audit-traceability/report'
+      preLoaderRoute: typeof DemoAuditTraceabilityReportRouteImport
+      parentRoute: typeof DemoAuditTraceabilityRouteRoute
+    }
+    '/demo/audit-traceability/pipeline': {
+      id: '/demo/audit-traceability/pipeline'
+      path: '/pipeline'
+      fullPath: '/demo/audit-traceability/pipeline'
+      preLoaderRoute: typeof DemoAuditTraceabilityPipelineRouteImport
+      parentRoute: typeof DemoAuditTraceabilityRouteRoute
+    }
+    '/demo/audit-traceability/hash-chain': {
+      id: '/demo/audit-traceability/hash-chain'
+      path: '/hash-chain'
+      fullPath: '/demo/audit-traceability/hash-chain'
+      preLoaderRoute: typeof DemoAuditTraceabilityHashChainRouteImport
+      parentRoute: typeof DemoAuditTraceabilityRouteRoute
+    }
+    '/demo/audit-traceability/audit-trail': {
+      id: '/demo/audit-traceability/audit-trail'
+      path: '/audit-trail'
+      fullPath: '/demo/audit-traceability/audit-trail'
+      preLoaderRoute: typeof DemoAuditTraceabilityAuditTrailRouteImport
+      parentRoute: typeof DemoAuditTraceabilityRouteRoute
+    }
+    '/demo/audit-traceability/access-log': {
+      id: '/demo/audit-traceability/access-log'
+      path: '/access-log'
+      fullPath: '/demo/audit-traceability/access-log'
+      preLoaderRoute: typeof DemoAuditTraceabilityAccessLogRouteImport
+      parentRoute: typeof DemoAuditTraceabilityRouteRoute
+    }
+    '/demo/document-engine/designer/$templateId': {
+      id: '/demo/document-engine/designer/$templateId'
+      path: '/designer/$templateId'
+      fullPath: '/demo/document-engine/designer/$templateId'
+      preLoaderRoute: typeof DemoDocumentEngineDesignerTemplateIdRouteImport
+      parentRoute: typeof DemoDocumentEngineRouteRoute
+    }
   }
 }
+
+interface DemoAuditTraceabilityRouteRouteChildren {
+  DemoAuditTraceabilityAccessLogRoute: typeof DemoAuditTraceabilityAccessLogRoute
+  DemoAuditTraceabilityAuditTrailRoute: typeof DemoAuditTraceabilityAuditTrailRoute
+  DemoAuditTraceabilityHashChainRoute: typeof DemoAuditTraceabilityHashChainRoute
+  DemoAuditTraceabilityPipelineRoute: typeof DemoAuditTraceabilityPipelineRoute
+  DemoAuditTraceabilityReportRoute: typeof DemoAuditTraceabilityReportRoute
+  DemoAuditTraceabilityIndexRoute: typeof DemoAuditTraceabilityIndexRoute
+}
+
+const DemoAuditTraceabilityRouteRouteChildren: DemoAuditTraceabilityRouteRouteChildren =
+  {
+    DemoAuditTraceabilityAccessLogRoute: DemoAuditTraceabilityAccessLogRoute,
+    DemoAuditTraceabilityAuditTrailRoute: DemoAuditTraceabilityAuditTrailRoute,
+    DemoAuditTraceabilityHashChainRoute: DemoAuditTraceabilityHashChainRoute,
+    DemoAuditTraceabilityPipelineRoute: DemoAuditTraceabilityPipelineRoute,
+    DemoAuditTraceabilityReportRoute: DemoAuditTraceabilityReportRoute,
+    DemoAuditTraceabilityIndexRoute: DemoAuditTraceabilityIndexRoute,
+  }
+
+const DemoAuditTraceabilityRouteRouteWithChildren =
+  DemoAuditTraceabilityRouteRoute._addFileChildren(
+    DemoAuditTraceabilityRouteRouteChildren,
+  )
+
+interface DemoDocumentEngineRouteRouteChildren {
+  DemoDocumentEngineGenerateRoute: typeof DemoDocumentEngineGenerateRoute
+  DemoDocumentEngineGroupsRoute: typeof DemoDocumentEngineGroupsRoute
+  DemoDocumentEngineLibraryRoute: typeof DemoDocumentEngineLibraryRoute
+  DemoDocumentEngineTemplatesRoute: typeof DemoDocumentEngineTemplatesRoute
+  DemoDocumentEngineVariablesRoute: typeof DemoDocumentEngineVariablesRoute
+  DemoDocumentEngineIndexRoute: typeof DemoDocumentEngineIndexRoute
+  DemoDocumentEngineDesignerTemplateIdRoute: typeof DemoDocumentEngineDesignerTemplateIdRoute
+}
+
+const DemoDocumentEngineRouteRouteChildren: DemoDocumentEngineRouteRouteChildren =
+  {
+    DemoDocumentEngineGenerateRoute: DemoDocumentEngineGenerateRoute,
+    DemoDocumentEngineGroupsRoute: DemoDocumentEngineGroupsRoute,
+    DemoDocumentEngineLibraryRoute: DemoDocumentEngineLibraryRoute,
+    DemoDocumentEngineTemplatesRoute: DemoDocumentEngineTemplatesRoute,
+    DemoDocumentEngineVariablesRoute: DemoDocumentEngineVariablesRoute,
+    DemoDocumentEngineIndexRoute: DemoDocumentEngineIndexRoute,
+    DemoDocumentEngineDesignerTemplateIdRoute:
+      DemoDocumentEngineDesignerTemplateIdRoute,
+  }
+
+const DemoDocumentEngineRouteRouteWithChildren =
+  DemoDocumentEngineRouteRoute._addFileChildren(
+    DemoDocumentEngineRouteRouteChildren,
+  )
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
@@ -665,6 +1012,8 @@ const rootRouteChildren: RootRouteChildren = {
   CallbackRoute: CallbackRoute,
   SignInRoute: SignInRoute,
   SignUpRoute: SignUpRoute,
+  DemoAuditTraceabilityRouteRoute: DemoAuditTraceabilityRouteRouteWithChildren,
+  DemoDocumentEngineRouteRoute: DemoDocumentEngineRouteRouteWithChildren,
   AuthenticatedAuthenticatedRoute: AuthenticatedAuthenticatedRoute,
   DemoConvexRoute: DemoConvexRoute,
   DemoConvexActionCacheRoute: DemoConvexActionCacheRoute,

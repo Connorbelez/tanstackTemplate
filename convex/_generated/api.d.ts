@@ -8,11 +8,14 @@
  * @module
  */
 
+import type * as auditTrailClient from "../auditTrailClient.js";
 import type * as auth from "../auth.js";
+import type * as crons from "../crons.js";
 import type * as demo_actionCache from "../demo/actionCache.js";
 import type * as demo_aggregate from "../demo/aggregate.js";
 import type * as demo_apiCredentials from "../demo/apiCredentials.js";
 import type * as demo_auditLog from "../demo/auditLog.js";
+import type * as demo_auditTraceability from "../demo/auditTraceability.js";
 import type * as demo_cascadingDelete from "../demo/cascadingDelete.js";
 import type * as demo_crons from "../demo/crons.js";
 import type * as demo_debouncer from "../demo/debouncer.js";
@@ -27,6 +30,15 @@ import type * as demo_tracer from "../demo/tracer.js";
 import type * as demo_triggers from "../demo/triggers.js";
 import type * as demo_workflow from "../demo/workflow.js";
 import type * as demo_workosAuth from "../demo/workosAuth.js";
+import type * as documentEngine_basePdfs from "../documentEngine/basePdfs.js";
+import type * as documentEngine_generation from "../documentEngine/generation.js";
+import type * as documentEngine_generationHelpers from "../documentEngine/generationHelpers.js";
+import type * as documentEngine_systemVariables from "../documentEngine/systemVariables.js";
+import type * as documentEngine_templateGroups from "../documentEngine/templateGroups.js";
+import type * as documentEngine_templateTimeline from "../documentEngine/templateTimeline.js";
+import type * as documentEngine_templateVersions from "../documentEngine/templateVersions.js";
+import type * as documentEngine_templates from "../documentEngine/templates.js";
+import type * as documentEngine_validators from "../documentEngine/validators.js";
 import type * as fluent from "../fluent.js";
 import type * as http from "../http.js";
 import type * as numbers from "../numbers.js";
@@ -39,11 +51,14 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  auditTrailClient: typeof auditTrailClient;
   auth: typeof auth;
+  crons: typeof crons;
   "demo/actionCache": typeof demo_actionCache;
   "demo/aggregate": typeof demo_aggregate;
   "demo/apiCredentials": typeof demo_apiCredentials;
   "demo/auditLog": typeof demo_auditLog;
+  "demo/auditTraceability": typeof demo_auditTraceability;
   "demo/cascadingDelete": typeof demo_cascadingDelete;
   "demo/crons": typeof demo_crons;
   "demo/debouncer": typeof demo_debouncer;
@@ -58,6 +73,15 @@ declare const fullApi: ApiFromModules<{
   "demo/triggers": typeof demo_triggers;
   "demo/workflow": typeof demo_workflow;
   "demo/workosAuth": typeof demo_workosAuth;
+  "documentEngine/basePdfs": typeof documentEngine_basePdfs;
+  "documentEngine/generation": typeof documentEngine_generation;
+  "documentEngine/generationHelpers": typeof documentEngine_generationHelpers;
+  "documentEngine/systemVariables": typeof documentEngine_systemVariables;
+  "documentEngine/templateGroups": typeof documentEngine_templateGroups;
+  "documentEngine/templateTimeline": typeof documentEngine_templateTimeline;
+  "documentEngine/templateVersions": typeof documentEngine_templateVersions;
+  "documentEngine/templates": typeof documentEngine_templates;
+  "documentEngine/validators": typeof documentEngine_validators;
   fluent: typeof fluent;
   http: typeof http;
   numbers: typeof numbers;
@@ -3627,6 +3651,61 @@ export declare const components: {
           timestamp: number;
           userAgent?: string;
         }>
+      >;
+    };
+  };
+  auditTrail: {
+    lib: {
+      emitPending: FunctionReference<"mutation", "internal", {}, any>;
+      exportTrail: FunctionReference<
+        "query",
+        "internal",
+        { entityId: string },
+        any
+      >;
+      getOutboxStatus: FunctionReference<"query", "internal", {}, any>;
+      insert: FunctionReference<
+        "mutation",
+        "internal",
+        {
+          actorId: string;
+          afterState?: string;
+          beforeState?: string;
+          entityId: string;
+          entityType: string;
+          eventType: string;
+          metadata?: string;
+          timestamp: number;
+        },
+        string
+      >;
+      queryByEntity: FunctionReference<
+        "query",
+        "internal",
+        { entityId: string },
+        Array<{
+          _creationTime: number;
+          _id: string;
+          actorId: string;
+          afterState?: string;
+          beforeState?: string;
+          emitFailures?: number;
+          emitted: boolean;
+          emittedAt?: number;
+          entityId: string;
+          entityType: string;
+          eventType: string;
+          hash: string;
+          metadata?: string;
+          prevHash: string;
+          timestamp: number;
+        }>
+      >;
+      verifyChain: FunctionReference<
+        "query",
+        "internal",
+        { entityId: string },
+        any
       >;
     };
   };

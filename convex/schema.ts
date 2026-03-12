@@ -1,5 +1,12 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
+import {
+	draftStateValidator,
+	formatOptionsValidator,
+	pageDimensionValidator,
+	signatoryConfigValidator,
+	variableTypeValidator,
+} from "./documentEngine/validators";
 
 export default defineSchema({
 	products: defineTable({
@@ -160,4 +167,97 @@ export default defineSchema({
 		userId: v.string(),
 		role: v.string(),
 	}).index("by_widget", ["widgetId"]),
+
+	// ── Demo Audit & Traceability ────────────────────────────────────
+	demo_audit_mortgages: defineTable({
+		label: v.string(),
+		currentOwnerId: v.string(),
+		newOwnerId: v.optional(v.string()),
+		ownershipPercentage: v.number(),
+		status: v.union(
+			v.literal("active"),
+			v.literal("transfer_initiated"),
+			v.literal("transfer_approved"),
+			v.literal("transfer_completed"),
+			v.literal("transfer_rejected")
+		),
+		borrowerEmail: v.optional(v.string()),
+		borrowerPhone: v.optional(v.string()),
+		borrowerSsn: v.optional(v.string()),
+		propertyAddress: v.optional(v.string()),
+		loanAmount: v.number(),
+		updatedBy: v.string(),
+		createdAt: v.number(),
+		updatedAt: v.number(),
+	}).index("by_status", ["status"]),
+
+	// NOTE: demo_audit_events and demo_audit_outbox have moved into the
+	// auditTrail component (convex/components/auditTrail/). The host app's
+	// ctx.db cannot access them — append-only by design, not policy.
+
+	// ── Document Engine ──────────────────────────────────────────────
+
+	documentBasePdfs: defineTable({
+		name: v.string(),
+		description: v.optional(v.string()),
+		fileRef: v.id("_storage"),
+		fileHash: v.string(),
+		fileSize: v.number(),
+		pageCount: v.number(),
+		pageDimensions: v.array(pageDimensionValidator),
+		uploadedBy: v.optional(v.string()),
+		uploadedAt: v.number(),
+	})
+		.index("by_hash", ["fileHash"])
+		.index("by_name", ["name"]),
+
+	systemVariables: defineTable({
+		key: v.string(),
+		label: v.string(),
+		type: variableTypeValidator,
+		description: v.optional(v.string()),
+		systemPath: v.optional(v.string()),
+		formatOptions: formatOptionsValidator,
+		createdBy: v.optional(v.string()),
+		createdAt: v.number(),
+	}).index("by_key", ["key"]),
+
+	documentTemplates: defineTable({
+		name: v.string(),
+		description: v.optional(v.string()),
+		basePdfId: v.id("documentBasePdfs"),
+		basePdfHash: v.string(),
+		draft: draftStateValidator,
+		currentPublishedVersion: v.optional(v.number()),
+		hasDraftChanges: v.boolean(),
+		createdAt: v.number(),
+		updatedAt: v.number(),
+	})
+		.index("by_name", ["name"])
+		.index("by_base_pdf", ["basePdfId"]),
+
+	documentTemplateVersions: defineTable({
+		templateId: v.id("documentTemplates"),
+		version: v.number(),
+		basePdfId: v.id("documentBasePdfs"),
+		basePdfHash: v.string(),
+		snapshot: draftStateValidator,
+		publishedBy: v.optional(v.string()),
+		publishedAt: v.number(),
+	}).index("by_template", ["templateId", "version"]),
+
+	documentTemplateGroups: defineTable({
+		name: v.string(),
+		description: v.optional(v.string()),
+		templateRefs: v.array(
+			v.object({
+				templateId: v.id("documentTemplates"),
+				order: v.number(),
+				pinnedVersion: v.optional(v.number()),
+			})
+		),
+		signatories: v.array(signatoryConfigValidator),
+		createdAt: v.number(),
+		updatedAt: v.number(),
+	}).index("by_name", ["name"]),
 });
