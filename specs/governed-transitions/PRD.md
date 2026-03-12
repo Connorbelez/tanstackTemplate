@@ -155,3 +155,38 @@ These are the invariants of the pattern. Every implementation decision must hono
 - machineContext with guards that accumulate across transitions — demo guard checks event payload only
 - Production-grade transition engine (the real one will be shared infrastructure)
 - The `ip` field from the production `CommandSource` — demo runs in browser where IP collection isn't meaningful
+
+## Addendum — Demo Route UI Refinement
+
+This addendum refines the demo route UX while preserving the existing route structure, backend APIs, and core use cases. In case of conflict, this addendum supersedes earlier generic frontend wording.
+
+### Demo Route Interaction Model
+
+The `/demo/governed-transitions` route is divided into three surfaces:
+
+1. **Command Center** — the only interactive surface. Users can create entities, select an entity, choose a command, choose a source channel, submit commands, seed data, reset the demo, and run the full lifecycle.
+2. **Journal** — a read-only observer surface backed by the existing `InteractiveLogsTable` component via a governed-transitions-specific adapter.
+3. **Machine** — a read-only observer surface backed by the existing `N8nWorkflowBlock` component via a governed-transitions-specific adapter.
+
+### Read-Only Observer Rule
+
+The Journal and Machine tabs are presentation-only views.
+
+- They may support inspection affordances such as filtering, searching, row expansion, and current-state highlighting.
+- They may not dispatch commands, mutate entity state, edit topology, reorder states, add/remove nodes, or perform any destructive action.
+- All state changes must continue to originate from the Command Center and flow through the Transition Engine mutation.
+
+### Component Reuse Strategy
+
+The demo should explicitly reuse:
+
+- `src/components/ui/interactive-logs-table-shadcnui.tsx` for journal/audit visualization
+- `src/components/ui/n8n-workflow-block-shadcnui.tsx` for state machine visualization
+
+These components should be wrapped or adapted for governed-transitions-specific display semantics rather than used as-is if they expose generic workflow/log behaviors that conflict with the read-only observer rule.
+
+### Updated UX Expectations
+
+- The Journal tab should feel like an audit console, not an editor.
+- The Machine tab should feel like a live machine/status viewer, not a workflow builder.
+- The Command Center remains the sole place where demo users can take actions that change persisted state.

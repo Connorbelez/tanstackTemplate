@@ -733,3 +733,144 @@ describe("loanApplication machine", () => {
   });
 });
 ```
+
+## Addendum — Demo Route UI Refinement
+
+This addendum refines the frontend architecture for the demo route while preserving the existing backend, route, and state-model design. In case of conflict, the guidance below supersedes earlier generic UI implementation notes.
+
+### UI Adaptation Strategy
+
+The demo route keeps the current three-surface structure:
+
+- **Command Center**: interactive, mutative, and command-oriented
+- **Journal**: read-only observer surface
+- **Machine**: read-only observer surface
+
+The key refinement is that the Journal and Machine surfaces should explicitly leverage the two existing reusable UI components already present in the codebase:
+
+- `InteractiveLogsTable` for audit/journal visualization
+- `N8nWorkflowBlock` for machine/state visualization
+
+These reused components must be treated as presentation shells fed by governed-transitions-specific adapter/view-model layers.
+
+### Frontend Wrappers
+
+Create governed-transitions-specific wrappers rather than coupling the route directly to the raw reusable components:
+
+- `GovernedTransitionsJournalView`
+- `GovernedTransitionsMachineView`
+
+These wrappers are responsible for:
+
+- querying governed-transitions data
+- adapting domain records into the prop/data shape expected by the reusable component
+- suppressing or removing any mutative affordances from the underlying component
+- presenting domain language that matches the governed-transitions demo
+
+### Journal Adapter
+
+`GovernedTransitionsJournalView` should adapt `demo_gt_journal` entries into a log-table-style read model.
+
+Recommended mapping:
+
+- `eventType` → primary log message/title
+- `outcome` → severity/level styling (`transitioned` vs `rejected`)
+- `source.channel` → service/source label
+- `previousState` and `newState` → compact transition summary
+- `timestamp` → log timestamp
+- `reason` and `effectsScheduled` → expanded detail content
+
+The Journal surface may support:
+
+- search
+- outcome/source filtering
+- row expansion
+- entity scoping
+
+The Journal surface may not support:
+
+- command dispatch
+- inline editing
+- delete/reset actions
+- any mutation-triggering affordance
+
+### Machine Adapter
+
+`GovernedTransitionsMachineView` should adapt `MachineSnapshot` and selected-entity state into a read-only workflow/state visualization.
+
+Recommended mapping:
+
+- machine states → workflow nodes
+- allowed transitions → workflow connections
+- current entity state → highlighted active node
+- terminal state (`closed`) → terminal/final styling
+- guard and action metadata → secondary labels or inspector detail
+
+The Machine surface must be configured as read-only even if the base component supports authoring behaviors.
+
+The Machine surface may support:
+
+- current-state highlighting
+- hover/inspection details
+- entity selection context
+- static legend or transition metadata
+
+The Machine surface may not support:
+
+- dragging nodes
+- adding nodes
+- editing edges
+- rearranging topology
+- any mutation-triggering affordance
+
+### Component Behavior Constraints
+
+If the base reusable components currently expose edit-like behaviors, the governed-transitions wrappers must disable, hide, or bypass them.
+
+Specifically:
+
+- `InteractiveLogsTable` should be used as a searchable/filterable inspection surface only.
+- `N8nWorkflowBlock` should be rendered in a non-authoring mode that removes builder interactions from the governed-transitions experience.
+
+### Refined Page Responsibilities
+
+#### CommandCenter
+
+The Command Center remains the sole mutative UI surface. It is responsible for:
+
+- entity creation
+- entity selection
+- displaying available/all event options
+- source channel selection
+- command submission
+- seed/reset/full lifecycle actions
+
+It is explicitly not responsible for rendering the complete audit trail or machine topology beyond lightweight summary context.
+
+#### JournalViewer
+
+The Journal route/page should be implemented as a governed-transitions-specific wrapper around `InteractiveLogsTable`, with domain mapping for journal and audit semantics.
+
+#### MachineInspector
+
+The Machine route/page should be implemented as a governed-transitions-specific wrapper around `N8nWorkflowBlock`, with domain mapping for machine-state semantics and read-only behavior constraints.
+
+### Verification Criteria
+
+The frontend implementation should be considered correct only if all of the following are true:
+
+- commands can only be dispatched from the Command Center
+- Journal interactions are limited to viewing, filtering, searching, and expanding details
+- Machine interactions are limited to viewing and inspection
+- neither Journal nor Machine can directly mutate Convex data
+- observer surfaces reactively update after Command Center actions complete
+
+### Testing Additions
+
+Add explicit test coverage for the observer/mutator boundary:
+
+- Journal view does not expose command or mutation controls
+- Machine view does not expose builder/edit controls
+- Command Center remains the only command-entry surface
+- Journal and Machine both update after a successful transition
+- rejected transitions appear in the Journal observer view with the proper rejection detail
