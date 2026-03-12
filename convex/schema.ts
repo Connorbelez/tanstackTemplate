@@ -148,4 +148,16 @@ export default defineSchema({
 		summary: v.string(),
 		timestamp: v.number(),
 	}),
+
+	// ── Demo fluent-convex tables ───────────────────────────────────
+	demo_fluent_widgets: defineTable({
+		name: v.string(),
+		createdBy: v.string(),
+		createdAt: v.number(),
+	}),
+	demo_fluent_widget_users: defineTable({
+		widgetId: v.id("demo_fluent_widgets"),
+		userId: v.string(),
+		role: v.string(),
+	}).index("by_widget", ["widgetId"]),
 });

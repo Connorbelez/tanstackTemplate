@@ -38,6 +38,7 @@ const demoSections = [
 			{ to: "/demo/convex-workflow", label: "Workflow" },
 			{ to: "/demo/convex-api-credentials", label: "API Credentials" },
 			{ to: "/demo/convex-file-management", label: "File Management" },
+			{ to: "/demo/convex-fluent", label: "Fluent Convex" },
 			{ to: "/demo/convex-cascading-delete", label: "Cascading Delete" },
 		]),
 	},

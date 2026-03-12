@@ -105,6 +105,30 @@ export const upsertRoleFromApi = internalMutation({
 	},
 });
 
+export const upsertUserFromApi = internalMutation({
+	args: {
+		authId: v.string(),
+		email: v.string(),
+		firstName: v.string(),
+		lastName: v.string(),
+	},
+	handler: async (ctx, args) => {
+		const existing = await ctx.db
+			.query("users")
+			.withIndex("authId", (q) => q.eq("authId", args.authId))
+			.unique();
+		if (existing) {
+			await ctx.db.patch(existing._id, {
+				email: args.email,
+				firstName: args.firstName,
+				lastName: args.lastName,
+			});
+		} else {
+			await ctx.db.insert("users", args);
+		}
+	},
+});
+
 // ── Full sync action ─────────────────────────────────────────────────
 
 export const syncAllFromWorkosApi = action({
@@ -116,9 +140,38 @@ export const syncAllFromWorkosApi = action({
 		}
 
 		const userId = identity.subject;
+		let userCount = 0;
 		let orgCount = 0;
 		let membershipCount = 0;
 		let roleCount = 0;
+
+		// 0. Sync current user to our users table
+		const workosUser = await authKit.workos.userManagement.getUser(userId);
+		await ctx.runMutation(internal.demo.workosAuth.upsertUserFromApi, {
+			authId: workosUser.id,
+			email: workosUser.email,
+			firstName: workosUser.firstName ?? "",
+			lastName: workosUser.lastName ?? "",
+		});
+		userCount++;
+
+		// 0b. Touch user in WorkOS to generate a fresh user.updated event,
+		// then trigger the component's event poll so it picks up the user
+		// in its internal table.
+		await authKit.workos.userManagement.updateUser({
+			userId,
+			firstName: workosUser.firstName ?? undefined,
+			lastName: workosUser.lastName ?? undefined,
+		});
+		const apiKey = process.env.WORKOS_API_KEY;
+		if (apiKey) {
+			await ctx.runMutation(authKit.component.lib.enqueueWebhookEvent, {
+				apiKey,
+				eventId: `sync-${Date.now()}`,
+				event: "user.updated",
+				eventTypes: authKit.options?.additionalEventTypes,
+			});
+		}
 
 		// 1. Sync all organizations
 		// NOTE: Only fetches first page of results. For accounts with many orgs/roles,
@@ -171,6 +224,6 @@ export const syncAllFromWorkosApi = action({
 			membershipCount++;
 		}
 
-		return { orgCount, membershipCount, roleCount };
+		return { userCount, orgCount, membershipCount, roleCount };
 	},
 });

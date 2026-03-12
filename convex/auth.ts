@@ -1,8 +1,9 @@
 import { type AuthFunctions, AuthKit } from "@convex-dev/workos-authkit";
 import type { GenericMutationCtx } from "convex/server";
+import { v } from "convex/values";
 import { components, internal } from "./_generated/api";
 import type { DataModel } from "./_generated/dataModel";
-import { query } from "./_generated/server";
+import { internalAction, internalMutation, query } from "./_generated/server";
 
 const authFunctions: AuthFunctions = internal.auth;
 
@@ -190,6 +191,7 @@ export const { authKitAction } = authKit.actions({
 export const { authKitEvent } = authKit.events({
 	// ── User events ───────────────────────────────────────────────────
 	"user.created": async (ctx, event) => {
+		console.log("Received user.created event for", event.data.id);
 		await ctx.db.insert("users", {
 			authId: event.data.id,
 			email: event.data.email,
@@ -198,12 +200,26 @@ export const { authKitEvent } = authKit.events({
 		});
 	},
 	"user.updated": async (ctx, event) => {
+		console.log("Received user.updated event for", event.data.id);
 		const user = await ctx.db
 			.query("users")
 			.withIndex("authId", (q) => q.eq("authId", event.data.id))
 			.unique();
 		if (!user) {
-			console.warn(`User not found: ${event.data.id}`);
+			// User doesn't exist yet (event arrived before user.created, or it was lost).
+			// Create the user from event data, then backfill related data from WorkOS.
+			console.log(
+				`user.updated for unknown user ${event.data.id} — creating and scheduling backfill`
+			);
+			await ctx.db.insert("users", {
+				authId: event.data.id,
+				email: event.data.email,
+				firstName: `${event.data.firstName}`,
+				lastName: `${event.data.lastName}`,
+			});
+			await ctx.scheduler.runAfter(0, internal.auth.syncUserRelatedData, {
+				userId: event.data.id,
+			});
 			return;
 		}
 		await ctx.db.patch(user._id, {
@@ -281,5 +297,154 @@ export const getCurrentUser = query({
 	handler: async (ctx, _args) => {
 		const user = await authKit.getAuthUser(ctx);
 		return user;
+	},
+});
+
+// ── Backfill: sync a user's orgs, memberships, and roles from WorkOS ─
+
+export const upsertRelatedData = internalMutation({
+	args: {
+		orgs: v.array(
+			v.object({
+				workosId: v.string(),
+				name: v.string(),
+				allowProfilesOutsideOrganization: v.boolean(),
+				externalId: v.optional(v.string()),
+				metadata: v.optional(v.record(v.string(), v.string())),
+			})
+		),
+		memberships: v.array(
+			v.object({
+				workosId: v.string(),
+				organizationWorkosId: v.string(),
+				organizationName: v.optional(v.string()),
+				userWorkosId: v.string(),
+				status: v.string(),
+				roleSlug: v.string(),
+				roleSlugs: v.optional(v.array(v.string())),
+			})
+		),
+		roles: v.array(
+			v.object({
+				slug: v.string(),
+				permissions: v.array(v.string()),
+			})
+		),
+	},
+	handler: async (ctx, args) => {
+		for (const org of args.orgs) {
+			await upsertOrganization(ctx, {
+				id: org.workosId,
+				name: org.name,
+				allowProfilesOutsideOrganization: org.allowProfilesOutsideOrganization,
+				externalId: org.externalId,
+				metadata: org.metadata,
+			});
+		}
+		for (const m of args.memberships) {
+			await upsertMembership(ctx, {
+				id: m.workosId,
+				organizationId: m.organizationWorkosId,
+				userId: m.userWorkosId,
+				status: m.status,
+				role: { slug: m.roleSlug },
+				roles: m.roleSlugs?.map((slug) => ({ slug })),
+			});
+		}
+		for (const role of args.roles) {
+			await upsertRole(ctx, role);
+		}
+	},
+});
+
+export const syncUserRelatedData = internalAction({
+	args: { userId: v.string() },
+	handler: async (ctx, args) => {
+		console.log(
+			`[syncUserRelatedData] Backfilling data for user ${args.userId}`
+		);
+
+		const orgs: {
+			workosId: string;
+			name: string;
+			allowProfilesOutsideOrganization: boolean;
+			externalId?: string;
+			metadata?: Record<string, string>;
+		}[] = [];
+		const memberships: {
+			workosId: string;
+			organizationWorkosId: string;
+			organizationName?: string;
+			userWorkosId: string;
+			status: string;
+			roleSlug: string;
+			roleSlugs?: string[];
+		}[] = [];
+		const roles: { slug: string; permissions: string[] }[] = [];
+
+		// 1. Fetch the user's org memberships from WorkOS
+		const membershipsResult =
+			await authKit.workos.userManagement.listOrganizationMemberships({
+				userId: args.userId,
+			});
+
+		const orgIds = new Set<string>();
+		for (const m of membershipsResult.data) {
+			orgIds.add(m.organizationId);
+			memberships.push({
+				workosId: m.id,
+				organizationWorkosId: m.organizationId,
+				userWorkosId: m.userId,
+				status: m.status,
+				roleSlug: m.role?.slug ?? "",
+				roleSlugs: m.roles?.map((r) => r.slug),
+			});
+		}
+
+		// 2. Fetch each org the user belongs to + its roles
+		const seenRoleSlugs = new Set<string>();
+		for (const orgId of orgIds) {
+			const org = await authKit.workos.organizations.getOrganization(orgId);
+			orgs.push({
+				workosId: org.id,
+				name: org.name,
+				allowProfilesOutsideOrganization: org.allowProfilesOutsideOrganization,
+				externalId: org.externalId ?? undefined,
+				metadata: org.metadata,
+			});
+
+			// Denormalize org name onto memberships
+			for (const m of memberships) {
+				if (m.organizationWorkosId === orgId) {
+					m.organizationName = org.name;
+				}
+			}
+
+			// Fetch roles for this org
+			const rolesResult =
+				await authKit.workos.organizations.listOrganizationRoles({
+					organizationId: orgId,
+				});
+			for (const role of rolesResult.data) {
+				if (!seenRoleSlugs.has(role.slug)) {
+					seenRoleSlugs.add(role.slug);
+					roles.push({
+						slug: role.slug,
+						permissions: role.permissions,
+					});
+				}
+			}
+		}
+
+		// 3. Write everything in a single mutation
+		await ctx.runMutation(internal.auth.upsertRelatedData, {
+			orgs,
+			memberships,
+			roles,
+		});
+
+		console.log(
+			`[syncUserRelatedData] Done for ${args.userId}: ${orgs.length} orgs, ${memberships.length} memberships, ${roles.length} roles`
+		);
 	},
 });
