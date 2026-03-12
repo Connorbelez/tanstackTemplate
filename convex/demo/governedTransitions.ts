@@ -1,5 +1,6 @@
 import type { GenericMutationCtx } from "convex/server";
 import { v } from "convex/values";
+import { AuditLog } from "convex-audit-log";
 import { transition as xstateTransition } from "xstate";
 import { components, internal } from "../_generated/api";
 import type { DataModel, Id } from "../_generated/dataModel";
@@ -9,6 +10,9 @@ import { type EntityType, machineRegistry } from "./machines/registry";
 
 // ── Audit Trail Client ─────────────────────────────────────────
 const auditTrail = new AuditTrail(components.auditTrail);
+
+// ── Audit Log Client (Layer 3) ─────────────────────────────────
+const auditLog = new AuditLog(components.auditLog);
 
 // ── MachineSnapshot type ───────────────────────────────────────
 
@@ -43,6 +47,7 @@ interface TransitionSource {
 	actorId?: string;
 	actorType?: string;
 	channel: string;
+	ip?: string;
 	sessionId?: string;
 }
 
@@ -53,6 +58,19 @@ interface TransitionResult {
 	reason?: string;
 	success: boolean;
 }
+
+// ── Effect Registry ────────────────────────────────────────────
+// Maps machine action names to dedicated internalMutation handlers.
+// Falls back to the generic `executeEffect` for unknown actions.
+const effectRegistry: Record<
+	string,
+	typeof internal.demo.governedTransitionsEffects.notifyReviewer
+> = {
+	notifyReviewer: internal.demo.governedTransitionsEffects.notifyReviewer,
+	notifyApplicant: internal.demo.governedTransitionsEffects.notifyApplicant,
+	scheduleFunding: internal.demo.governedTransitionsEffects.scheduleFunding,
+	generateDocuments: internal.demo.governedTransitionsEffects.generateDocuments,
+};
 
 async function executeTransition(
 	ctx: GenericMutationCtx<DataModel>,
@@ -164,17 +182,16 @@ async function executeTransition(
 		effectsScheduled: effectNames.length > 0 ? effectNames : undefined,
 	});
 
-	// 9. Schedule declared effects (fire-and-forget)
+	// 9. Schedule declared effects via registry (fire-and-forget)
 	for (const effectName of effectNames) {
-		await ctx.scheduler.runAfter(
-			0,
-			internal.demo.governedTransitions.executeEffect,
-			{
-				entityId,
-				journalEntryId: journalId,
-				effectName,
-			}
-		);
+		const handler =
+			effectRegistry[effectName] ??
+			internal.demo.governedTransitions.executeEffect;
+		await ctx.scheduler.runAfter(0, handler, {
+			entityId,
+			journalEntryId: journalId,
+			effectName,
+		});
 	}
 
 	// 10. Schedule hash-chain copy to auditTrail component
@@ -204,6 +221,7 @@ export const transition = mutation({
 			actorId: v.optional(v.string()),
 			actorType: v.optional(v.string()),
 			sessionId: v.optional(v.string()),
+			ip: v.optional(v.string()),
 		}),
 	},
 	handler: async (ctx, args) => {
@@ -225,7 +243,7 @@ export const createEntity = mutation({
 		applicantName: v.optional(v.string()),
 	},
 	handler: async (ctx, args) => {
-		return await ctx.db.insert("demo_gt_entities", {
+		const entityId = await ctx.db.insert("demo_gt_entities", {
 			entityType: "loanApplication",
 			label: args.label,
 			status: "draft",
@@ -235,6 +253,15 @@ export const createEntity = mutation({
 			},
 			createdAt: Date.now(),
 		});
+		await auditLog.log(ctx, {
+			action: "gt.entity.created",
+			actorId: "demo-user",
+			resourceType: "demo_gt_entities",
+			resourceId: entityId,
+			severity: "info",
+			metadata: { label: args.label, loanAmount: args.loanAmount },
+		});
+		return entityId;
 	},
 });
 
@@ -279,6 +306,14 @@ export const seedEntities = mutation({
 				createdAt: Date.now(),
 			});
 		}
+		await auditLog.log(ctx, {
+			action: "gt.demo.seeded",
+			actorId: "demo-system",
+			resourceType: "demo_gt_entities",
+			resourceId: "batch",
+			severity: "info",
+			metadata: { count: samples.length },
+		});
 	},
 });
 
@@ -310,6 +345,7 @@ export const runFullLifecycle = mutation({
 					channel: "borrower_portal",
 					actorId: "borrower-demo",
 					actorType: "borrower",
+					ip: "203.0.113.42",
 				},
 			},
 			{
@@ -318,6 +354,7 @@ export const runFullLifecycle = mutation({
 					channel: "admin_dashboard",
 					actorId: "admin-demo",
 					actorType: "admin",
+					ip: "10.0.1.50",
 				},
 			},
 			{
@@ -326,6 +363,7 @@ export const runFullLifecycle = mutation({
 					channel: "admin_dashboard",
 					actorId: "admin-demo",
 					actorType: "admin",
+					ip: "10.0.1.50",
 				},
 			},
 			{
@@ -334,6 +372,7 @@ export const runFullLifecycle = mutation({
 					channel: "api_webhook",
 					actorId: "system",
 					actorType: "system",
+					ip: "198.51.100.1",
 				},
 			},
 			{
@@ -342,6 +381,7 @@ export const runFullLifecycle = mutation({
 					channel: "scheduler",
 					actorId: "system",
 					actorType: "system",
+					// No ip — demonstrates optionality for scheduler-initiated transitions
 				},
 			},
 		];
@@ -358,6 +398,15 @@ export const runFullLifecycle = mutation({
 				);
 			}
 		}
+
+		await auditLog.log(ctx, {
+			action: "gt.lifecycle.executed",
+			actorId: "demo-system",
+			resourceType: "demo_gt_entities",
+			resourceId: entityId,
+			severity: "info",
+			metadata: { entityId, transitionCount: steps.length },
+		});
 
 		return { entityId, journalEntries: steps.length };
 	},
@@ -686,5 +735,40 @@ export const resetDemo = mutation({
 		for (const ef of effects) {
 			await ctx.db.delete(ef._id);
 		}
+
+		await auditLog.log(ctx, {
+			action: "gt.demo.reset",
+			actorId: "demo-user",
+			resourceType: "demo_gt_entities",
+			resourceId: "all",
+			severity: "warning",
+			metadata: {
+				entitiesDeleted: entities.length,
+				journalEntriesDeleted: journal.length,
+				effectsDeleted: effects.length,
+			},
+		});
+	},
+});
+
+// ── Index-backed Queries ────────────────────────────────────────
+
+export const getJournalByActor = query({
+	args: { actorId: v.string() },
+	handler: async (ctx, { actorId }) => {
+		return await ctx.db
+			.query("demo_gt_journal")
+			.withIndex("by_actor", (q) => q.eq("source.actorId", actorId))
+			.collect();
+	},
+});
+
+export const getJournalByEntityType = query({
+	args: { entityType: v.string() },
+	handler: async (ctx, { entityType }) => {
+		return await ctx.db
+			.query("demo_gt_journal")
+			.withIndex("by_type_and_time", (q) => q.eq("entityType", entityType))
+			.collect();
 	},
 });

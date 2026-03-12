@@ -23,6 +23,7 @@ import type * as demo_fileManagement from "../demo/fileManagement.js";
 import type * as demo_fluentConvex from "../demo/fluentConvex.js";
 import type * as demo_geospatial from "../demo/geospatial.js";
 import type * as demo_governedTransitions from "../demo/governedTransitions.js";
+import type * as demo_governedTransitionsEffects from "../demo/governedTransitionsEffects.js";
 import type * as demo_machines_registry from "../demo/machines/registry.js";
 import type * as demo_migrations from "../demo/migrations.js";
 import type * as demo_presence from "../demo/presence.js";
@@ -69,6 +70,7 @@ declare const fullApi: ApiFromModules<{
   "demo/fluentConvex": typeof demo_fluentConvex;
   "demo/geospatial": typeof demo_geospatial;
   "demo/governedTransitions": typeof demo_governedTransitions;
+  "demo/governedTransitionsEffects": typeof demo_governedTransitionsEffects;
   "demo/machines/registry": typeof demo_machines_registry;
   "demo/migrations": typeof demo_migrations;
   "demo/presence": typeof demo_presence;
