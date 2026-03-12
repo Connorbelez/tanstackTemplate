@@ -10,6 +10,9 @@ import type {
 export interface InterpolableSchema extends Schema {
 	fieldKind: "interpolable";
 	fieldLabel?: string;
+	fieldReadOnly?: boolean; // "readOnly" is reserved by pdfme's base Schema
+	helpText?: string;
+	placeholder?: string;
 	variableKey?: string;
 }
 
@@ -81,14 +84,25 @@ function ui(props: UIRenderProps<InterpolableSchema>) {
 	rootElement.appendChild(container);
 }
 
-// ── Property panel: minimal (position/size handled by pdfme) ────
+// ── Module-level state for dynamic variable options ─────────────
+let _variableOptions: { value: string; label: string }[] = [];
+export function setVariableOptions(
+	options: { value: string; label: string }[]
+) {
+	_variableOptions = options;
+}
+
+// ── Property panel: business logic fields exposed in pdfme UI ───
 const propPanel: PropPanel<InterpolableSchema> = {
-	schema: {
+	schema: () => ({
 		variableKey: {
-			title: "Variable Key",
+			title: "System Variable",
 			type: "string",
-			widget: "input",
+			widget: "select",
 			span: 24,
+			props: {
+				options: [{ label: "(None)", value: "" }, ..._variableOptions],
+			},
 		},
 		fieldLabel: {
 			title: "Label",
@@ -96,7 +110,31 @@ const propPanel: PropPanel<InterpolableSchema> = {
 			widget: "input",
 			span: 24,
 		},
-	},
+		required: {
+			title: "Required",
+			type: "boolean",
+			widget: "switch",
+			span: 12,
+		},
+		fieldReadOnly: {
+			title: "Read Only",
+			type: "boolean",
+			widget: "switch",
+			span: 12,
+		},
+		placeholder: {
+			title: "Placeholder",
+			type: "string",
+			widget: "input",
+			span: 24,
+		},
+		helpText: {
+			title: "Help Text",
+			type: "string",
+			widget: "textArea",
+			span: 24,
+		},
+	}),
 	defaultSchema: {
 		name: "",
 		type: "interpolableField",
@@ -107,6 +145,10 @@ const propPanel: PropPanel<InterpolableSchema> = {
 		fieldKind: "interpolable" as const,
 		variableKey: "",
 		fieldLabel: "",
+		required: true,
+		placeholder: "",
+		helpText: "",
+		fieldReadOnly: false,
 	},
 };
 

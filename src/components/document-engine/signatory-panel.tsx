@@ -2,6 +2,7 @@ import { GripVertical, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { Badge } from "#/components/ui/badge";
 import { Button } from "#/components/ui/button";
+import { Input } from "#/components/ui/input";
 import {
 	Select,
 	SelectContent,
@@ -9,29 +10,18 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "#/components/ui/select";
-import type { PlatformRole } from "#/lib/document-engine/types";
-import { PLATFORM_ROLE_LABELS, SIGNATORY_COLORS } from "./signatory-colors";
-
-interface Signatory {
-	order: number;
-	platformRole: PlatformRole;
-	role: "signatory" | "approver" | "viewer";
-}
+import {
+	getSignatoryColor,
+	getSignatoryLabel,
+} from "#/lib/document-engine/signatory-utils";
+import type { SignatoryConfig } from "#/lib/document-engine/types";
+import { DOMAIN_ROLES } from "#/lib/document-engine/types";
 
 interface SignatoryPanelProps {
-	onChange: (signatories: Signatory[]) => void;
+	onChange: (signatories: SignatoryConfig[]) => void;
 	readOnly?: boolean;
-	signatories: Signatory[];
+	signatories: SignatoryConfig[];
 }
-
-const ALL_ROLES: PlatformRole[] = [
-	"fairlend_broker",
-	"lender_lawyer",
-	"lender",
-	"seller_lawyer",
-	"borrower_lawyer",
-	"borrower",
-];
 
 const SIGNATORY_ROLES = [
 	{ value: "signatory", label: "Signatory" },
@@ -39,15 +29,27 @@ const SIGNATORY_ROLES = [
 	{ value: "viewer", label: "Viewer" },
 ] as const;
 
+const CUSTOM_SIGNATORY_VALUE = "__custom__";
+
 export function SignatoryPanel({
 	signatories,
 	onChange,
 	readOnly,
 }: SignatoryPanelProps) {
-	const [newRole, setNewRole] = useState<PlatformRole | "">("");
+	const [newRole, setNewRole] = useState("");
+	const [customLabel, setCustomLabel] = useState("");
+	const [showCustomInput, setShowCustomInput] = useState(false);
 
 	const usedRoles = new Set(signatories.map((s) => s.platformRole));
-	const availableRoles = ALL_ROLES.filter((r) => !usedRoles.has(r));
+	const availableDomainRoles = DOMAIN_ROLES.filter((r) => !usedRoles.has(r));
+
+	const nextCustomId = (): string => {
+		let n = 1;
+		while (usedRoles.has(`signatory_${n}`)) {
+			n++;
+		}
+		return `signatory_${n}`;
+	};
 
 	const handleAdd = () => {
 		if (!newRole) {
@@ -64,7 +66,24 @@ export function SignatoryPanel({
 		setNewRole("");
 	};
 
-	const handleRemove = (platformRole: PlatformRole) => {
+	const handleAddCustom = () => {
+		const id = nextCustomId();
+		onChange([
+			...signatories,
+			{
+				platformRole: id,
+				role: "signatory",
+				order: signatories.length,
+				label:
+					customLabel.trim() ||
+					id.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+			},
+		]);
+		setCustomLabel("");
+		setShowCustomInput(false);
+	};
+
+	const handleRemove = (platformRole: string) => {
 		const updated = signatories
 			.filter((s) => s.platformRole !== platformRole)
 			.map((s, i) => ({ ...s, order: i }));
@@ -72,7 +91,7 @@ export function SignatoryPanel({
 	};
 
 	const handleRoleChange = (
-		platformRole: PlatformRole,
+		platformRole: string,
 		role: "signatory" | "approver" | "viewer"
 	) => {
 		onChange(
@@ -80,6 +99,16 @@ export function SignatoryPanel({
 				s.platformRole === platformRole ? { ...s, role } : s
 			)
 		);
+	};
+
+	const handleSelectChange = (value: string) => {
+		if (value === CUSTOM_SIGNATORY_VALUE) {
+			setShowCustomInput(true);
+			setNewRole("");
+		} else {
+			setShowCustomInput(false);
+			setNewRole(value);
+		}
 	};
 
 	return (
@@ -98,11 +127,11 @@ export function SignatoryPanel({
 							<div
 								className="size-3 shrink-0 rounded-full"
 								style={{
-									backgroundColor: SIGNATORY_COLORS[sig.platformRole],
+									backgroundColor: getSignatoryColor(sig.platformRole),
 								}}
 							/>
 							<span className="min-w-0 flex-1 truncate text-sm">
-								{PLATFORM_ROLE_LABELS[sig.platformRole]}
+								{getSignatoryLabel(sig.platformRole, sig.label)}
 							</span>
 							{!readOnly && (
 								<Button
@@ -123,7 +152,10 @@ export function SignatoryPanel({
 							<div className="mt-1 pl-9">
 								<Select
 									onValueChange={(v) =>
-										handleRoleChange(sig.platformRole, v as Signatory["role"])
+										handleRoleChange(
+											sig.platformRole,
+											v as SignatoryConfig["role"]
+										)
 									}
 									value={sig.role}
 								>
@@ -144,31 +176,57 @@ export function SignatoryPanel({
 				))}
 			</div>
 
-			{!readOnly && availableRoles.length > 0 && (
-				<div className="flex gap-2">
-					<Select
-						onValueChange={(v) => setNewRole(v as PlatformRole)}
-						value={newRole}
-					>
-						<SelectTrigger className="h-8 text-xs">
-							<SelectValue placeholder="Add signatory..." />
-						</SelectTrigger>
-						<SelectContent>
-							{availableRoles.map((role) => (
-								<SelectItem key={role} value={role}>
-									{PLATFORM_ROLE_LABELS[role]}
+			{!readOnly && (
+				<div className="space-y-2">
+					<div className="flex gap-2">
+						<Select
+							onValueChange={handleSelectChange}
+							value={showCustomInput ? CUSTOM_SIGNATORY_VALUE : newRole}
+						>
+							<SelectTrigger className="h-8 text-xs">
+								<SelectValue placeholder="Add signatory..." />
+							</SelectTrigger>
+							<SelectContent>
+								{availableDomainRoles.map((role) => (
+									<SelectItem key={role} value={role}>
+										{getSignatoryLabel(role)}
+									</SelectItem>
+								))}
+								<SelectItem value={CUSTOM_SIGNATORY_VALUE}>
+									+ Custom Signatory
 								</SelectItem>
-							))}
-						</SelectContent>
-					</Select>
-					<Button
-						disabled={!newRole}
-						onClick={handleAdd}
-						size="sm"
-						variant="outline"
-					>
-						<Plus className="size-3" />
-					</Button>
+							</SelectContent>
+						</Select>
+						{!showCustomInput && (
+							<Button
+								disabled={!newRole}
+								onClick={handleAdd}
+								size="sm"
+								variant="outline"
+							>
+								<Plus className="size-3" />
+							</Button>
+						)}
+					</div>
+
+					{showCustomInput && (
+						<div className="flex gap-2">
+							<Input
+								className="h-8 text-xs"
+								onChange={(e) => setCustomLabel(e.target.value)}
+								onKeyDown={(e) => {
+									if (e.key === "Enter") {
+										handleAddCustom();
+									}
+								}}
+								placeholder="Display label (e.g. Guarantor)"
+								value={customLabel}
+							/>
+							<Button onClick={handleAddCustom} size="sm" variant="outline">
+								<Plus className="size-3" />
+							</Button>
+						</div>
+					)}
 				</div>
 			)}
 		</div>

@@ -18,8 +18,11 @@ import { SignatoryPanel } from "#/components/document-engine/signatory-panel";
 import { Badge } from "#/components/ui/badge";
 import { Button } from "#/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "#/components/ui/card";
+import { setVariableOptions } from "#/lib/document-engine/pdfme-plugins/interpolable-field";
+import { setSignatoryOptions } from "#/lib/document-engine/pdfme-plugins/signable-field";
 import { fieldConfigsToPdfmeSchemas } from "#/lib/document-engine/pdfme-sync";
-import type { FieldConfig, PlatformRole } from "#/lib/document-engine/types";
+import { getSignatoryLabel } from "#/lib/document-engine/signatory-utils";
+import type { FieldConfig, SignatoryConfig } from "#/lib/document-engine/types";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 
@@ -28,12 +31,6 @@ export const Route = createFileRoute(
 )({
 	component: DesignerPage,
 });
-
-interface SignatoryConfig {
-	order: number;
-	platformRole: PlatformRole;
-	role: "signatory" | "approver" | "viewer";
-}
 
 function DesignerPage() {
 	const { templateId } = Route.useParams();
@@ -44,6 +41,7 @@ function DesignerPage() {
 		api.documentEngine.basePdfs.getUrl,
 		template?.basePdf?.fileRef ? { fileRef: template.basePdf.fileRef } : "skip"
 	);
+	const variables = useQuery(api.documentEngine.systemVariables.list);
 
 	const pushDraftState = useMutation(
 		api.documentEngine.templateTimeline.pushDraftState
@@ -74,6 +72,25 @@ function DesignerPage() {
 			initializedRef.current = true;
 		}
 	}, [template]);
+
+	// Sync signatory options to pdfme plugin
+	useEffect(() => {
+		setSignatoryOptions(
+			signatories.map((s) => ({
+				value: s.platformRole,
+				label: getSignatoryLabel(s.platformRole, s.label),
+			}))
+		);
+	}, [signatories]);
+
+	// Sync variable options to pdfme plugin
+	useEffect(() => {
+		if (variables) {
+			setVariableOptions(
+				variables.map((v) => ({ value: v.key, label: `${v.key} (${v.type})` }))
+			);
+		}
+	}, [variables]);
 
 	// Build pdfmeSchema from current fields for saving
 	const buildPdfmeSchemaForSave = useCallback(() => {
@@ -229,9 +246,10 @@ function DesignerPage() {
 	]);
 
 	const selectedField = fields.find((f) => f.id === selectedFieldId) ?? null;
-	const availableRoles = signatories.map(
-		(s) => s.platformRole
-	) as PlatformRole[];
+	const availableRoles = signatories.map((s) => ({
+		value: s.platformRole,
+		label: getSignatoryLabel(s.platformRole, s.label),
+	}));
 
 	if (!template) {
 		return (

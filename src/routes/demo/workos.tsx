@@ -295,55 +295,7 @@ function OrganizationsTab({ userId }: { userId: string }) {
 					</div>
 				</CardHeader>
 				<CardContent>
-					{userOrgs === undefined ? (
-						<p className="text-muted-foreground text-sm">Loading...</p>
-					) : userOrgs.length === 0 ? (
-						<div className="rounded-lg border border-dashed p-6 text-center">
-							<Building2 className="mx-auto mb-2 size-8 text-muted-foreground" />
-							<p className="font-medium text-sm">No organizations</p>
-							<p className="mt-1 text-muted-foreground text-xs">
-								This user has no organization memberships. Configure
-								organizations in the{" "}
-								<a
-									className="underline"
-									href="https://dashboard.workos.com"
-									rel="noreferrer"
-									target="_blank"
-								>
-									WorkOS Dashboard
-								</a>
-								.
-							</p>
-						</div>
-					) : (
-						<div className="space-y-2">
-							{userOrgs.map(({ membership, organization }) => (
-								<div
-									className="flex items-center justify-between rounded-lg border p-3"
-									key={membership._id}
-								>
-									<div>
-										<p className="font-medium text-sm">
-											{organization?.name ?? membership.organizationName}
-										</p>
-										<p className="font-mono text-muted-foreground text-xs">
-											{membership.organizationWorkosId}
-										</p>
-									</div>
-									<div className="flex items-center gap-2">
-										<Badge variant="secondary">{membership.roleSlug}</Badge>
-										<Badge
-											variant={
-												membership.status === "active" ? "default" : "outline"
-											}
-										>
-											{membership.status}
-										</Badge>
-									</div>
-								</div>
-							))}
-						</div>
-					)}
+					<OrgsList userOrgs={userOrgs} />
 				</CardContent>
 			</Card>
 
@@ -406,6 +358,137 @@ function SessionField({
 	);
 }
 
+function OrgsList({
+	userOrgs,
+}: {
+	userOrgs:
+		| Array<{
+				membership: {
+					_id: string;
+					organizationWorkosId: string;
+					organizationName?: string;
+					roleSlug: string;
+					status: string;
+				};
+				organization: { name: string } | undefined;
+		  }>
+		| undefined;
+}) {
+	if (userOrgs === undefined) {
+		return <p className="text-muted-foreground text-sm">Loading...</p>;
+	}
+	if (userOrgs.length === 0) {
+		return (
+			<div className="rounded-lg border border-dashed p-6 text-center">
+				<Building2 className="mx-auto mb-2 size-8 text-muted-foreground" />
+				<p className="font-medium text-sm">No organizations</p>
+				<p className="mt-1 text-muted-foreground text-xs">
+					This user has no organization memberships. Configure organizations in
+					the{" "}
+					<a
+						className="underline"
+						href="https://dashboard.workos.com"
+						rel="noreferrer"
+						target="_blank"
+					>
+						WorkOS Dashboard
+					</a>
+					.
+				</p>
+			</div>
+		);
+	}
+	return (
+		<div className="space-y-2">
+			{userOrgs.map(({ membership, organization }) => (
+				<div
+					className="flex items-center justify-between rounded-lg border p-3"
+					key={membership._id}
+				>
+					<div>
+						<p className="font-medium text-sm">
+							{organization?.name ?? membership.organizationName}
+						</p>
+						<p className="font-mono text-muted-foreground text-xs">
+							{membership.organizationWorkosId}
+						</p>
+					</div>
+					<div className="flex items-center gap-2">
+						<Badge variant="secondary">{membership.roleSlug}</Badge>
+						<Badge
+							variant={membership.status === "active" ? "default" : "outline"}
+						>
+							{membership.status}
+						</Badge>
+					</div>
+				</div>
+			))}
+		</div>
+	);
+}
+
+function ActionLogsList({
+	actionLogs,
+}: {
+	actionLogs:
+		| Array<{
+				_id: string;
+				actionType: string;
+				email: string;
+				verdict: string;
+				message?: string;
+				timestamp: number;
+		  }>
+		| undefined;
+}) {
+	if (actionLogs === undefined) {
+		return <p className="text-muted-foreground text-sm">Loading...</p>;
+	}
+	if (actionLogs.length === 0) {
+		return (
+			<div className="rounded-lg border border-dashed p-6 text-center">
+				<Zap className="mx-auto mb-2 size-8 text-muted-foreground" />
+				<p className="font-medium text-sm">No action logs yet</p>
+				<p className="mt-1 text-muted-foreground text-xs">
+					Action logs appear here when users sign in or attempt to register.
+				</p>
+			</div>
+		);
+	}
+	return (
+		<div className="space-y-2">
+			{actionLogs.map((log) => (
+				<div
+					className="flex items-center justify-between rounded-lg border p-3"
+					key={log._id}
+				>
+					<div>
+						<div className="flex items-center gap-2">
+							<Badge variant="outline">{log.actionType}</Badge>
+							<span className="text-sm">{log.email}</span>
+						</div>
+						{log.message && (
+							<p className="mt-0.5 text-muted-foreground text-xs">
+								{log.message}
+							</p>
+						)}
+					</div>
+					<div className="flex items-center gap-2">
+						<Badge
+							variant={log.verdict === "Allow" ? "default" : "destructive"}
+						>
+							{log.verdict}
+						</Badge>
+						<span className="text-muted-foreground text-xs">
+							{new Date(log.timestamp).toLocaleTimeString()}
+						</span>
+					</div>
+				</div>
+			))}
+		</div>
+	);
+}
+
 // ── Auth Actions Tab ─────────────────────────────────────────────────
 
 function ActionsTab() {
@@ -453,51 +536,7 @@ function ActionsTab() {
 					</CardDescription>
 				</CardHeader>
 				<CardContent>
-					{actionLogs === undefined ? (
-						<p className="text-muted-foreground text-sm">Loading...</p>
-					) : actionLogs.length === 0 ? (
-						<div className="rounded-lg border border-dashed p-6 text-center">
-							<Zap className="mx-auto mb-2 size-8 text-muted-foreground" />
-							<p className="font-medium text-sm">No action logs yet</p>
-							<p className="mt-1 text-muted-foreground text-xs">
-								Action logs appear here when users sign in or attempt to
-								register.
-							</p>
-						</div>
-					) : (
-						<div className="space-y-2">
-							{actionLogs.map((log) => (
-								<div
-									className="flex items-center justify-between rounded-lg border p-3"
-									key={log._id}
-								>
-									<div>
-										<div className="flex items-center gap-2">
-											<Badge variant="outline">{log.actionType}</Badge>
-											<span className="text-sm">{log.email}</span>
-										</div>
-										{log.message && (
-											<p className="mt-0.5 text-muted-foreground text-xs">
-												{log.message}
-											</p>
-										)}
-									</div>
-									<div className="flex items-center gap-2">
-										<Badge
-											variant={
-												log.verdict === "Allow" ? "default" : "destructive"
-											}
-										>
-											{log.verdict}
-										</Badge>
-										<span className="text-muted-foreground text-xs">
-											{new Date(log.timestamp).toLocaleTimeString()}
-										</span>
-									</div>
-								</div>
-							))}
-						</div>
-					)}
+					<ActionLogsList actionLogs={actionLogs} />
 				</CardContent>
 			</Card>
 		</>

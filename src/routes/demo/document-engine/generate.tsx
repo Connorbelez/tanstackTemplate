@@ -3,7 +3,6 @@ import { useAction, useMutation, useQuery } from "convex/react";
 import { Loader2, Play } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { GenerationResults } from "#/components/document-engine/generation-results";
-import { PLATFORM_ROLE_LABELS } from "#/components/document-engine/signatory-colors";
 import { Badge } from "#/components/ui/badge";
 import { Button } from "#/components/ui/button";
 import {
@@ -23,7 +22,8 @@ import {
 } from "#/components/ui/select";
 import { Switch } from "#/components/ui/switch";
 import { generatePdfInBrowser } from "#/lib/document-engine/client-generation";
-import type { FieldConfig, PlatformRole } from "#/lib/document-engine/types";
+import { getSignatoryLabel } from "#/lib/document-engine/signatory-utils";
+import type { FieldConfig } from "#/lib/document-engine/types";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 
@@ -90,16 +90,12 @@ function GeneratePage() {
 	})();
 
 	// Determine signatories
-	const signatoryRoles: PlatformRole[] = (() => {
+	const signatoryRoles: string[] = (() => {
 		if (mode === "template" && selectedTemplate) {
-			return selectedTemplate.draft.signatories.map(
-				(s) => s.platformRole as PlatformRole
-			);
+			return selectedTemplate.draft.signatories.map((s) => s.platformRole);
 		}
 		if (mode === "group" && selectedGroup) {
-			return selectedGroup.signatories.map(
-				(s) => s.platformRole as PlatformRole
-			);
+			return selectedGroup.signatories.map((s) => s.platformRole);
 		}
 		return [];
 	})();
@@ -324,10 +320,7 @@ function GeneratePage() {
 								className="space-y-2 rounded-md border p-3"
 								key={mapping.platformRole}
 							>
-								<Badge>
-									{PLATFORM_ROLE_LABELS[mapping.platformRole as PlatformRole] ??
-										mapping.platformRole}
-								</Badge>
+								<Badge>{getSignatoryLabel(mapping.platformRole)}</Badge>
 								<div className="grid gap-2 sm:grid-cols-2">
 									<Input
 										onChange={(e) => {

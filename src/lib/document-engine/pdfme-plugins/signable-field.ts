@@ -1,35 +1,17 @@
 import type { Plugin, PropPanel, Schema, UIRenderProps } from "@pdfme/common";
-import type { PlatformRole, SignableType } from "../types";
+import { getSignatoryBgColor, getSignatoryColor } from "../signatory-utils";
+import type { SignableType } from "../types";
 
 // ── Custom schema for signable (Documenso-bound) fields ─────────
 export interface SignableSchema extends Schema {
 	fieldKind: "signable";
 	fieldLabel?: string;
+	fieldReadOnly?: boolean; // "readOnly" is reserved by pdfme's base Schema
+	helpText?: string;
+	placeholder?: string;
 	platformRole?: string;
 	signableType?: string;
 }
-
-// ── Signatory color maps (duplicated to avoid cross-layer import) ──
-const SIGNATORY_COLORS: Record<string, string> = {
-	fairlend_broker: "#d97706",
-	lender_lawyer: "#7c3aed",
-	lender: "#dc2626",
-	seller_lawyer: "#059669",
-	borrower_lawyer: "#0891b2",
-	borrower: "#2563eb",
-};
-
-const SIGNATORY_BG_COLORS: Record<string, string> = {
-	fairlend_broker: "#fef3c7",
-	lender_lawyer: "#ede9fe",
-	lender: "#fee2e2",
-	seller_lawyer: "#d1fae5",
-	borrower_lawyer: "#cffafe",
-	borrower: "#dbeafe",
-};
-
-const DEFAULT_COLOR = "#6b7280"; // gray-500
-const DEFAULT_BG = "#f3f4f6"; // gray-100
 
 const SIGNABLE_TYPE_LABELS: Record<string, string> = {
 	SIGNATURE: "Sig",
@@ -56,11 +38,9 @@ function pdf() {
 function ui(props: UIRenderProps<SignableSchema>) {
 	const { rootElement, schema, mode } = props;
 
-	const role = schema.platformRole as PlatformRole | undefined;
-	const borderColor = role
-		? (SIGNATORY_COLORS[role] ?? DEFAULT_COLOR)
-		: DEFAULT_COLOR;
-	const bgColor = role ? (SIGNATORY_BG_COLORS[role] ?? DEFAULT_BG) : DEFAULT_BG;
+	const role = schema.platformRole ?? "";
+	const borderColor = getSignatoryColor(role);
+	const bgColor = getSignatoryBgColor(role);
 
 	const container = document.createElement("div");
 	container.style.cssText = `
@@ -110,9 +90,17 @@ function ui(props: UIRenderProps<SignableSchema>) {
 	rootElement.appendChild(container);
 }
 
-// ── Property panel: minimal ─────────────────────────────────────
+// ── Module-level state for dynamic signatory options ────────────
+let _signatoryOptions: { value: string; label: string }[] = [];
+export function setSignatoryOptions(
+	options: { value: string; label: string }[]
+) {
+	_signatoryOptions = options;
+}
+
+// ── Property panel: business logic fields + signatory selector ──
 const propPanel: PropPanel<SignableSchema> = {
-	schema: {
+	schema: () => ({
 		signableType: {
 			title: "Field Type",
 			type: "string",
@@ -133,13 +121,46 @@ const propPanel: PropPanel<SignableSchema> = {
 				],
 			},
 		},
+		platformRole: {
+			title: "Signatory",
+			type: "string",
+			widget: "select",
+			span: 24,
+			props: {
+				options: [{ label: "(None)", value: "" }, ..._signatoryOptions],
+			},
+		},
 		fieldLabel: {
 			title: "Label",
 			type: "string",
 			widget: "input",
 			span: 24,
 		},
-	},
+		required: {
+			title: "Required",
+			type: "boolean",
+			widget: "switch",
+			span: 12,
+		},
+		fieldReadOnly: {
+			title: "Read Only",
+			type: "boolean",
+			widget: "switch",
+			span: 12,
+		},
+		placeholder: {
+			title: "Placeholder",
+			type: "string",
+			widget: "input",
+			span: 24,
+		},
+		helpText: {
+			title: "Help Text",
+			type: "string",
+			widget: "textArea",
+			span: 24,
+		},
+	}),
 	defaultSchema: {
 		name: "",
 		type: "signableField",
@@ -151,6 +172,10 @@ const propPanel: PropPanel<SignableSchema> = {
 		signableType: "SIGNATURE",
 		platformRole: "",
 		fieldLabel: "",
+		required: true,
+		placeholder: "",
+		helpText: "",
+		fieldReadOnly: false,
 	},
 };
 

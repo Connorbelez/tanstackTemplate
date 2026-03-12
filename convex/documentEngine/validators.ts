@@ -1,14 +1,7 @@
 import { v } from "convex/values";
 
 // ── Platform roles (who receives a document) ──────────────────────
-export const platformRoleValidator = v.union(
-	v.literal("fairlend_broker"),
-	v.literal("lender_lawyer"),
-	v.literal("lender"),
-	v.literal("seller_lawyer"),
-	v.literal("borrower_lawyer"),
-	v.literal("borrower")
-);
+export const platformRoleValidator = v.string();
 
 // ── Signatory action roles ────────────────────────────────────────
 export const signatoryRoleValidator = v.union(
@@ -95,7 +88,21 @@ export const signatoryConfigValidator = v.object({
 	platformRole: platformRoleValidator,
 	role: signatoryRoleValidator,
 	order: v.number(),
+	label: v.optional(v.string()),
 });
+
+// ── Data model entity field ───────────────────────────────────────
+export const entityFieldValidator = v.object({
+	name: v.string(),
+	label: v.string(),
+	type: v.string(),
+	optional: v.boolean(),
+});
+
+export const entitySourceValidator = v.union(
+	v.literal("schema"),
+	v.literal("custom")
+);
 
 // ── Template draft state (stored on the template + in timeline) ───
 export const draftStateValidator = v.object({

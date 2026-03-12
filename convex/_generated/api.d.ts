@@ -31,6 +31,7 @@ import type * as demo_triggers from "../demo/triggers.js";
 import type * as demo_workflow from "../demo/workflow.js";
 import type * as demo_workosAuth from "../demo/workosAuth.js";
 import type * as documentEngine_basePdfs from "../documentEngine/basePdfs.js";
+import type * as documentEngine_dataModelEntities from "../documentEngine/dataModelEntities.js";
 import type * as documentEngine_generation from "../documentEngine/generation.js";
 import type * as documentEngine_generationHelpers from "../documentEngine/generationHelpers.js";
 import type * as documentEngine_systemVariables from "../documentEngine/systemVariables.js";
@@ -74,6 +75,7 @@ declare const fullApi: ApiFromModules<{
   "demo/workflow": typeof demo_workflow;
   "demo/workosAuth": typeof demo_workosAuth;
   "documentEngine/basePdfs": typeof documentEngine_basePdfs;
+  "documentEngine/dataModelEntities": typeof documentEngine_dataModelEntities;
   "documentEngine/generation": typeof documentEngine_generation;
   "documentEngine/generationHelpers": typeof documentEngine_generationHelpers;
   "documentEngine/systemVariables": typeof documentEngine_systemVariables;

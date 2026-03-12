@@ -10,16 +10,11 @@ import {
 } from "#/components/ui/select";
 import { Switch } from "#/components/ui/switch";
 import { Textarea } from "#/components/ui/textarea";
-import type {
-	FieldConfig,
-	PlatformRole,
-	SignableType,
-} from "#/lib/document-engine/types";
-import { PLATFORM_ROLE_LABELS } from "./signatory-colors";
+import type { FieldConfig, SignableType } from "#/lib/document-engine/types";
 import { VariablePicker } from "./variable-picker";
 
 interface FieldConfigPanelProps {
-	availableRoles: PlatformRole[];
+	availableRoles: Array<{ value: string; label: string }>;
 	field: FieldConfig | null;
 	onDelete: (fieldId: string) => void;
 	onUpdate: (field: FieldConfig) => void;
@@ -98,7 +93,7 @@ export function FieldConfigPanel({
 						</span>
 						<Select
 							onValueChange={(v) =>
-								onUpdate({ ...field, signatoryPlatformRole: v as PlatformRole })
+								onUpdate({ ...field, signatoryPlatformRole: v })
 							}
 							value={field.signatoryPlatformRole ?? ""}
 						>
@@ -107,8 +102,8 @@ export function FieldConfigPanel({
 							</SelectTrigger>
 							<SelectContent>
 								{availableRoles.map((role) => (
-									<SelectItem key={role} value={role}>
-										{PLATFORM_ROLE_LABELS[role]}
+									<SelectItem key={role.value} value={role.value}>
+										{role.label}
 									</SelectItem>
 								))}
 							</SelectContent>

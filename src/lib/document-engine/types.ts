@@ -17,14 +17,32 @@ export type VariableType =
 	| "integer"
 	| "boolean";
 
-// ── Platform roles ────────────────────────────────────────────────
-export type PlatformRole =
-	| "fairlend_broker"
-	| "lender_lawyer"
-	| "lender"
-	| "seller_lawyer"
-	| "borrower_lawyer"
-	| "borrower";
+// ── Domain roles (the known 6) — used for color/label lookup type narrowing ──
+export const DOMAIN_ROLES = [
+	"fairlend_broker",
+	"lender_lawyer",
+	"lender",
+	"seller_lawyer",
+	"borrower_lawyer",
+	"borrower",
+] as const;
+
+export type DomainRole = (typeof DOMAIN_ROLES)[number];
+
+// Keep PlatformRole as alias for backward compat in color maps
+export type PlatformRole = DomainRole;
+
+export function isDomainRole(role: string): role is DomainRole {
+	return (DOMAIN_ROLES as readonly string[]).includes(role);
+}
+
+// Shared signatory config interface (matches validator shape)
+export interface SignatoryConfig {
+	label?: string;
+	order: number;
+	platformRole: string;
+	role: "signatory" | "approver" | "viewer";
+}
 
 // ── Signable field types (Documenso) ──────────────────────────────
 export type SignableType =
@@ -61,7 +79,7 @@ export interface FieldConfig {
 	position: FieldPosition;
 	required?: boolean;
 	signableType?: SignableType;
-	signatoryPlatformRole?: PlatformRole;
+	signatoryPlatformRole?: string;
 	type: "interpolable" | "signable";
 	variableKey?: string;
 }

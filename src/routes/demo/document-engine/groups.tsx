@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery } from "convex/react";
 import { FolderOpen, Plus, Trash2, X } from "lucide-react";
 import { useCallback, useState } from "react";
+import { toast } from "sonner";
 import { SignatoryPanel } from "#/components/document-engine/signatory-panel";
 import { Badge } from "#/components/ui/badge";
 import { Button } from "#/components/ui/button";
@@ -28,10 +29,7 @@ import {
 	SelectValue,
 } from "#/components/ui/select";
 import { Textarea } from "#/components/ui/textarea";
-import type {
-	DocumentTemplate,
-	PlatformRole,
-} from "#/lib/document-engine/types";
+import type { DocumentTemplate } from "#/lib/document-engine/types";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 
@@ -55,12 +53,10 @@ function GroupsPage() {
 	const [createOpen, setCreateOpen] = useState(false);
 	const [name, setName] = useState("");
 	const [description, setDescription] = useState("");
-	const [error, setError] = useState<string | null>(null);
 	const [expandedGroupId, setExpandedGroupId] = useState<string | null>(null);
 	const [addTemplateId, setAddTemplateId] = useState("");
 
 	const handleCreate = useCallback(async () => {
-		setError(null);
 		try {
 			await createGroup({
 				name: name.trim(),
@@ -69,8 +65,11 @@ function GroupsPage() {
 			setCreateOpen(false);
 			setName("");
 			setDescription("");
+			toast.success("Group created");
 		} catch (err) {
-			setError(err instanceof Error ? err.message : "Failed to create");
+			toast.error(
+				err instanceof Error ? err.message : "Failed to create group"
+			);
 		}
 	}, [createGroup, name, description]);
 
@@ -79,7 +78,6 @@ function GroupsPage() {
 			if (!addTemplateId) {
 				return;
 			}
-			setError(null);
 			try {
 				await addTemplate({
 					groupId,
@@ -87,7 +85,9 @@ function GroupsPage() {
 				});
 				setAddTemplateId("");
 			} catch (err) {
-				setError(err instanceof Error ? err.message : "Failed to add");
+				toast.error(
+					err instanceof Error ? err.message : "Failed to add template"
+				);
 			}
 		},
 		[addTemplate, addTemplateId]
@@ -142,7 +142,6 @@ function GroupsPage() {
 									value={description}
 								/>
 							</div>
-							{error && <p className="text-destructive text-sm">{error}</p>}
 							<Button
 								className="w-full"
 								disabled={!name.trim()}
@@ -154,12 +153,6 @@ function GroupsPage() {
 					</DialogContent>
 				</Dialog>
 			</div>
-
-			{error && expandedGroupId && (
-				<div className="rounded-md border border-destructive bg-destructive/10 p-3 text-destructive text-sm">
-					{error}
-				</div>
-			)}
 
 			{groups && groups.length === 0 && (
 				<Card>
@@ -304,13 +297,7 @@ function GroupsPage() {
 												/* read-only */
 											}}
 											readOnly
-											signatories={
-												group.signatories as Array<{
-													platformRole: PlatformRole;
-													role: "signatory" | "approver" | "viewer";
-													order: number;
-												}>
-											}
+											signatories={group.signatories}
 										/>
 									)}
 

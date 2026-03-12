@@ -2,6 +2,8 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery } from "convex/react";
 import { Plus, Trash2, Variable } from "lucide-react";
 import { useCallback, useState } from "react";
+import { toast } from "sonner";
+import { SystemPathBrowser } from "#/components/document-engine/system-path-browser";
 import { Badge } from "#/components/ui/badge";
 import { Button } from "#/components/ui/button";
 import {
@@ -64,10 +66,8 @@ function VariablesPage() {
 	const [type, setType] = useState<VariableType>("string");
 	const [description, setDescription] = useState("");
 	const [systemPath, setSystemPath] = useState("");
-	const [error, setError] = useState<string | null>(null);
 
 	const handleCreate = useCallback(async () => {
-		setError(null);
 		try {
 			await createVariable({
 				key: key.trim(),
@@ -82,8 +82,11 @@ function VariablesPage() {
 			setType("string");
 			setDescription("");
 			setSystemPath("");
+			toast.success("Variable created");
 		} catch (err) {
-			setError(err instanceof Error ? err.message : "Failed to create");
+			toast.error(
+				err instanceof Error ? err.message : "Failed to create variable"
+			);
 		}
 	}, [createVariable, key, label, type, description, systemPath]);
 
@@ -173,20 +176,10 @@ function VariablesPage() {
 									value={description}
 								/>
 							</div>
-							<div>
-								<label
-									className="mb-1 block font-medium text-sm"
-									htmlFor="var-path"
-								>
-									System Path (optional)
-								</label>
-								<Input
-									id="var-path"
-									onChange={(e) => setSystemPath(e.target.value)}
-									placeholder="e.g. loan.principal_amount"
-									value={systemPath}
-								/>
-							</div>
+							<SystemPathBrowser
+								onValueChange={setSystemPath}
+								value={systemPath}
+							/>
 							<div className="rounded-md border bg-muted/50 p-3">
 								<p className="mb-1 font-medium text-muted-foreground text-xs">
 									Preview
@@ -195,7 +188,6 @@ function VariablesPage() {
 									{formatValue(SAMPLE_VALUES[type], type)}
 								</p>
 							</div>
-							{error && <p className="text-destructive text-sm">{error}</p>}
 							<Button
 								className="w-full"
 								disabled={!(key.trim() && label.trim())}
