@@ -27,13 +27,14 @@ export const get = query({
 			return null;
 		}
 
-		// Join template data
-		const templates = await Promise.all(
+		// Join template data, filtering out deleted templates
+		const templatesWithNulls = await Promise.all(
 			group.templateRefs.map(async (ref) => {
 				const template = await ctx.db.get(ref.templateId);
 				return { ...ref, template };
 			})
 		);
+		const templates = templatesWithNulls.filter((t) => t.template !== null);
 
 		return { ...group, templates };
 	},
@@ -71,17 +72,11 @@ export const addTemplate = mutation({
 
 		if (group.templateRefs.length === 0) {
 			// First template: auto-populate group signatories
-			const nextOrder =
-				group.templateRefs.length > 0
-					? Math.max(...group.templateRefs.map((r) => r.order)) + 1
-					: 0;
-
 			await ctx.db.patch(args.groupId, {
 				templateRefs: [
-					...group.templateRefs,
 					{
 						templateId: args.templateId,
-						order: nextOrder,
+						order: 0,
 						pinnedVersion: undefined,
 					},
 				],
@@ -180,6 +175,18 @@ export const reorderTemplates = mutation({
 		const group = await ctx.db.get(args.groupId);
 		if (!group) {
 			throw new ConvexError("Group not found");
+		}
+
+		// Validate: same set of templates, no duplicates
+		const existingIds = new Set(group.templateRefs.map((r) => r.templateId));
+		const newIds = new Set(args.templateRefs.map((r) => r.templateId));
+		if (
+			existingIds.size !== newIds.size ||
+			![...existingIds].every((id) => newIds.has(id))
+		) {
+			throw new ConvexError(
+				"Provided templateRefs must contain exactly the same templates as the group"
+			);
 		}
 
 		await ctx.db.patch(args.groupId, {

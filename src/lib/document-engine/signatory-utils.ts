@@ -55,21 +55,21 @@ const DEFAULT_COLOR = "#6b7280"; // gray-500
 const DEFAULT_BG = "#f3f4f6"; // gray-100
 
 export function getSignatoryColor(role: string): string {
-	if (isDomainRole(role)) {
-		return DOMAIN_SIGNATORY_COLORS[role];
-	}
 	if (!role) {
 		return DEFAULT_COLOR;
+	}
+	if (isDomainRole(role)) {
+		return DOMAIN_SIGNATORY_COLORS[role];
 	}
 	return CUSTOM_PALETTE[hashIndex(role)].color;
 }
 
 export function getSignatoryBgColor(role: string): string {
-	if (isDomainRole(role)) {
-		return DOMAIN_SIGNATORY_BG_COLORS[role];
-	}
 	if (!role) {
 		return DEFAULT_BG;
+	}
+	if (isDomainRole(role)) {
+		return DOMAIN_SIGNATORY_BG_COLORS[role];
 	}
 	return CUSTOM_PALETTE[hashIndex(role)].bg;
 }

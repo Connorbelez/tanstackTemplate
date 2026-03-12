@@ -101,6 +101,8 @@ function GeneratePage() {
 	})();
 
 	// Initialize signatory mapping when selection changes
+	const signatoryRolesKey = signatoryRoles.join(",");
+	// biome-ignore lint/correctness/useExhaustiveDependencies: signatoryRolesKey tracks when roles change
 	useEffect(() => {
 		setSignatoryMapping(
 			signatoryRoles.map((role) => ({
@@ -109,7 +111,7 @@ function GeneratePage() {
 				email: "",
 			}))
 		);
-	}, [signatoryRoles.map]);
+	}, [signatoryRolesKey]);
 
 	const publishedTemplates = templates?.filter(
 		(t) => t.currentPublishedVersion
@@ -153,6 +155,9 @@ function GeneratePage() {
 			headers: { "Content-Type": "application/pdf" },
 			body: pdfBlob,
 		});
+		if (!uploadResponse.ok) {
+			throw new Error(`Upload failed: ${uploadResponse.status}`);
+		}
 		const { storageId } = (await uploadResponse.json()) as {
 			storageId: Id<"_storage">;
 		};

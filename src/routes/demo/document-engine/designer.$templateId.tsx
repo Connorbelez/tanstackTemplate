@@ -100,6 +100,15 @@ function DesignerPage() {
 
 	// Auto-save debounced
 	const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+	// Cleanup auto-save timer on unmount
+	useEffect(() => {
+		return () => {
+			if (saveTimerRef.current) {
+				clearTimeout(saveTimerRef.current);
+			}
+		};
+	}, []);
 	const saveDraft = useCallback(
 		(currentFields: FieldConfig[], currentSignatories: SignatoryConfig[]) => {
 			if (saveTimerRef.current) {
@@ -328,7 +337,6 @@ function DesignerPage() {
 							onFieldsChange={handleFieldsChange}
 							pageDimensions={template.basePdf.pageDimensions}
 							pdfUrl={pdfUrl}
-							selectedFieldId={selectedFieldId}
 						/>
 					)}
 				</div>
@@ -396,10 +404,15 @@ function DesignerPage() {
 
 					<Card>
 						<CardHeader className="pb-2">
-							{/* biome-ignore lint/a11y/useKeyWithClickEvents: Collapsible toggle */}
 							<div
 								className="flex cursor-pointer items-center gap-2"
 								onClick={() => setShowHistory(!showHistory)}
+								onKeyDown={(e) => {
+									if (e.key === "Enter" || e.key === " ") {
+										e.preventDefault();
+										setShowHistory(!showHistory);
+									}
+								}}
 								role="button"
 								tabIndex={0}
 							>

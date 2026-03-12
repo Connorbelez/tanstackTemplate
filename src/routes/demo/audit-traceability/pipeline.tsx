@@ -35,6 +35,8 @@ function PipelinePage() {
 		try {
 			const result = await emitPending({});
 			setLastEmit({ count: result.emittedCount, at: Date.now() });
+		} catch (error) {
+			console.error("Failed to emit pending events:", error);
 		} finally {
 			setEmitting(false);
 		}
@@ -118,14 +120,14 @@ function PipelinePage() {
 				</CardHeader>
 				<CardContent className="space-y-4">
 					{/* Progress bar */}
-					<div className="h-3 w-full overflow-hidden rounded-full bg-muted">
+					<div className="flex h-3 w-full overflow-hidden rounded-full bg-muted">
 						<div
 							className="h-full rounded-l-full bg-green-500 transition-all"
 							style={{ width: `${emittedPct}%` }}
 						/>
 						{failedPct > 0 && (
 							<div
-								className="-mt-3 ml-auto h-3 rounded-r-full bg-red-500 transition-all"
+								className="h-full rounded-r-full bg-red-500 transition-all"
 								style={{ width: `${failedPct}%` }}
 							/>
 						)}

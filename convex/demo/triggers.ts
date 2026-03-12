@@ -72,7 +72,9 @@ async function adjustCount(
 triggers.register("demo_triggers_contacts", async (ctx, change) => {
 	let summary: string;
 	if (change.operation === "insert") {
-		summary = `Added "${change.newDoc.fullName}" (${change.newDoc.category})`;
+		const fullName =
+			`${change.newDoc.firstName} ${change.newDoc.lastName}`.trim();
+		summary = `Added "${fullName}" (${change.newDoc.category})`;
 	} else if (change.operation === "update") {
 		const changes: string[] = [];
 		if (change.oldDoc.firstName !== change.newDoc.firstName) {

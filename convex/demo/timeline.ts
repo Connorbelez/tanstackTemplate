@@ -36,7 +36,12 @@ export const undo = mutation({
 	args: { scope: v.string() },
 	handler: async (ctx, args) => {
 		const result = await timeline.undo(ctx, args.scope);
-		if (result) {
+		if (
+			result &&
+			typeof result === "object" &&
+			"title" in result &&
+			"content" in result
+		) {
 			const state = result as { title: string; content: string };
 			const existing = await ctx.db
 				.query("demo_timeline_notes")
@@ -46,6 +51,12 @@ export const undo = mutation({
 				await ctx.db.patch(existing._id, {
 					title: state.title,
 					content: state.content,
+				});
+			} else {
+				await ctx.db.insert("demo_timeline_notes", {
+					title: state.title,
+					content: state.content,
+					scope: args.scope,
 				});
 			}
 		}
@@ -57,7 +68,12 @@ export const redo = mutation({
 	args: { scope: v.string() },
 	handler: async (ctx, args) => {
 		const result = await timeline.redo(ctx, args.scope);
-		if (result) {
+		if (
+			result &&
+			typeof result === "object" &&
+			"title" in result &&
+			"content" in result
+		) {
 			const state = result as { title: string; content: string };
 			const existing = await ctx.db
 				.query("demo_timeline_notes")
@@ -67,6 +83,12 @@ export const redo = mutation({
 				await ctx.db.patch(existing._id, {
 					title: state.title,
 					content: state.content,
+				});
+			} else {
+				await ctx.db.insert("demo_timeline_notes", {
+					title: state.title,
+					content: state.content,
+					scope: args.scope,
 				});
 			}
 		}

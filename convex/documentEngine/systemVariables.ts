@@ -43,7 +43,7 @@ export const update = mutation({
 		type: v.optional(variableTypeValidator),
 		description: v.optional(v.string()),
 		systemPath: v.optional(v.string()),
-		formatOptions: formatOptionsValidator,
+		formatOptions: v.optional(formatOptionsValidator),
 	},
 	handler: async (ctx, args) => {
 		const existing = await ctx.db.get(args.id);

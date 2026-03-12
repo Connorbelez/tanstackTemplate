@@ -4,6 +4,7 @@ export interface ButtonProps {
 	children: React.ReactNode;
 	className?: string;
 	disabled?: boolean;
+	form?: string;
 	onClick?: () => void;
 	size?: "small" | "medium" | "large";
 	type?: "button" | "submit" | "reset";
@@ -14,6 +15,7 @@ export const Button: React.FC<ButtonProps> = ({
 	variant = "primary",
 	size = "medium",
 	children,
+	form,
 	onClick,
 	disabled = false,
 	type = "button",
@@ -41,6 +43,7 @@ export const Button: React.FC<ButtonProps> = ({
 		<button
 			className={`${baseStyles} ${variantStyles[variant]} ${sizeStyles[size]} ${className}`}
 			disabled={disabled}
+			form={form}
 			onClick={onClick}
 			type={type}
 		>

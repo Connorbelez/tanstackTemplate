@@ -86,20 +86,21 @@ export const insert = mutation({
 	returns: v.id("audit_events"),
 	handler: async (ctx, args) => {
 		// Sanitize all payload fields inside the component
+		const safeParseJSON = (str: string): Record<string, unknown> => {
+			try {
+				return JSON.parse(str) as Record<string, unknown>;
+			} catch {
+				return {};
+			}
+		};
 		const beforeState = args.beforeState
-			? JSON.stringify(
-					sanitizeState(JSON.parse(args.beforeState) as Record<string, unknown>)
-				)
+			? JSON.stringify(sanitizeState(safeParseJSON(args.beforeState)))
 			: undefined;
 		const afterState = args.afterState
-			? JSON.stringify(
-					sanitizeState(JSON.parse(args.afterState) as Record<string, unknown>)
-				)
+			? JSON.stringify(sanitizeState(safeParseJSON(args.afterState)))
 			: undefined;
 		const metadata = args.metadata
-			? JSON.stringify(
-					sanitizeState(JSON.parse(args.metadata) as Record<string, unknown>)
-				)
+			? JSON.stringify(sanitizeState(safeParseJSON(args.metadata)))
 			: undefined;
 
 		// Chain: get previous hash
@@ -317,15 +318,16 @@ export const emitPending = mutation({
 			.withIndex("by_status", (q) => q.eq("status", "pending"))
 			.take(100);
 
+		const emittedAt = Date.now();
 		let emittedCount = 0;
 		for (const entry of pending) {
-			await ctx.db.patch(entry._id, {
-				status: "emitted" as const,
-				emittedAt: Date.now(),
-			});
 			await ctx.db.patch(entry.eventId, {
 				emitted: true,
-				emittedAt: Date.now(),
+				emittedAt,
+			});
+			await ctx.db.patch(entry._id, {
+				status: "emitted" as const,
+				emittedAt,
 			});
 			emittedCount++;
 		}

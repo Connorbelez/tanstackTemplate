@@ -143,18 +143,23 @@ test.describe("Document Engine - Templates", () => {
 	});
 
 	test.afterAll(async ({ browser }) => {
-		// Cleanup the base PDF
+		// Cleanup the base PDF (defensive — PDF may already be deleted)
 		const page = await browser.newPage();
 		await page.goto(`${BASE_URL}/library`);
-		await page.getByText(pdfName).waitFor({ timeout: 10_000 });
-		const card = page
-			.locator("[data-slot='card']")
-			.filter({ hasText: pdfName })
-			.first();
-		await card
-			.getByRole("button")
-			.filter({ has: page.locator("svg") })
-			.click();
+		const pdfVisible = await page
+			.getByText(pdfName)
+			.isVisible()
+			.catch(() => false);
+		if (pdfVisible) {
+			const card = page
+				.locator("[data-slot='card']")
+				.filter({ hasText: pdfName })
+				.first();
+			await card
+				.getByRole("button")
+				.filter({ has: page.locator("svg") })
+				.click();
+		}
 		await page.close();
 	});
 });

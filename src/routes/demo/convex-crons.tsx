@@ -25,12 +25,13 @@ function CronsDemo() {
 	const clearLog = useMutation(api.demo.crons.clearLog);
 
 	const handleRegister = useCallback(async () => {
-		if (!(jobName.trim() && intervalSec)) {
+		const interval = Number(intervalSec);
+		if (!(jobName.trim() && Number.isFinite(interval) && interval > 0)) {
 			return;
 		}
 		await registerJob({
 			name: jobName.trim(),
-			intervalMs: Number(intervalSec) * 1000,
+			intervalMs: interval * 1000,
 		});
 		setJobName("");
 	}, [registerJob, jobName, intervalSec]);

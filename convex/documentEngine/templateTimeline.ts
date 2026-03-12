@@ -30,14 +30,15 @@ export const pushDraftState = mutation({
 export const undoDraft = mutation({
 	args: { templateId: v.id("documentTemplates") },
 	handler: async (ctx, args) => {
+		const template = await ctx.db.get(args.templateId);
+		if (!template) {
+			return null;
+		}
+
 		const result = await timeline.undo(ctx, scopeKey(args.templateId));
 		if (result) {
-			const state = result as {
-				fields: Record<string, unknown>[];
-				signatories: Record<string, unknown>[];
-			};
 			await ctx.db.patch(args.templateId, {
-				draft: state as never,
+				draft: result as typeof template.draft,
 				updatedAt: Date.now(),
 			});
 		}
@@ -48,14 +49,15 @@ export const undoDraft = mutation({
 export const redoDraft = mutation({
 	args: { templateId: v.id("documentTemplates") },
 	handler: async (ctx, args) => {
+		const template = await ctx.db.get(args.templateId);
+		if (!template) {
+			return null;
+		}
+
 		const result = await timeline.redo(ctx, scopeKey(args.templateId));
 		if (result) {
-			const state = result as {
-				fields: Record<string, unknown>[];
-				signatories: Record<string, unknown>[];
-			};
 			await ctx.db.patch(args.templateId, {
-				draft: state as never,
+				draft: result as typeof template.draft,
 				updatedAt: Date.now(),
 			});
 		}

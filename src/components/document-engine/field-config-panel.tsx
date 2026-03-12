@@ -206,7 +206,7 @@ export function FieldConfigPanel({
 								...field,
 								fieldMeta: {
 									...field.fieldMeta,
-									readOnly: checked || undefined,
+									readOnly: checked,
 								},
 							})
 						}

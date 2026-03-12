@@ -225,9 +225,15 @@ async function generatePdfWithPdfLib(
 	const pdfDoc = await PDFDocument.load(pdfBytes);
 	const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
 
+	const pageCount = pdfDoc.getPageCount();
 	for (const field of fields) {
 		if (field.type === "interpolable" && field.variableKey) {
 			const value = formattedValues[field.variableKey] ?? "";
+			if (field.position.page < 0 || field.position.page >= pageCount) {
+				throw new Error(
+					`Field "${field.variableKey}" references invalid page ${field.position.page} (document has ${pageCount} pages)`
+				);
+			}
 			const page = pdfDoc.getPage(field.position.page);
 			const fontSize = Math.min(field.position.height * 0.7, 12);
 

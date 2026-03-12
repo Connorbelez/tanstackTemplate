@@ -14,6 +14,14 @@ import {
 import { useAuditAccessLog } from "#/hooks/use-audit-access-log";
 import { api } from "../../../../convex/_generated/api";
 
+function safeJsonParse(str: string): unknown {
+	try {
+		return JSON.parse(str);
+	} catch {
+		return str;
+	}
+}
+
 interface AuditEvent {
 	_id: string;
 	actorId: string;
@@ -219,7 +227,7 @@ function HashChainPage() {
 															</span>
 															<pre className="mt-0.5 max-h-32 overflow-auto rounded bg-muted/50 p-2 text-xs">
 																{JSON.stringify(
-																	JSON.parse(event.beforeState),
+																	safeJsonParse(event.beforeState),
 																	null,
 																	2
 																)}
@@ -232,7 +240,7 @@ function HashChainPage() {
 														</span>
 														<pre className="mt-0.5 max-h-32 overflow-auto rounded bg-muted/50 p-2 text-xs">
 															{JSON.stringify(
-																JSON.parse(event.afterState),
+																safeJsonParse(event.afterState),
 																null,
 																2
 															)}

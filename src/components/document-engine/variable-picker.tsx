@@ -41,12 +41,14 @@ export function VariablePicker({ value, onValueChange }: VariablePickerProps) {
 	const [newLabel, setNewLabel] = useState("");
 	const [newType, setNewType] = useState<VariableType>("string");
 	const [creating, setCreating] = useState(false);
+	const [createError, setCreateError] = useState<string | null>(null);
 
 	const handleCreate = useCallback(async () => {
 		if (!(newKey.trim() && newLabel.trim())) {
 			return;
 		}
 		setCreating(true);
+		setCreateError(null);
 		try {
 			await createVariable({
 				key: newKey.trim(),
@@ -58,8 +60,10 @@ export function VariablePicker({ value, onValueChange }: VariablePickerProps) {
 			setNewKey("");
 			setNewLabel("");
 			setNewType("string");
-		} catch {
-			// Variable creation failed (e.g. duplicate key)
+		} catch (err) {
+			setCreateError(
+				err instanceof Error ? err.message : "Failed to create variable"
+			);
 		} finally {
 			setCreating(false);
 		}
@@ -120,6 +124,9 @@ export function VariablePicker({ value, onValueChange }: VariablePickerProps) {
 							))}
 						</SelectContent>
 					</Select>
+					{createError && (
+						<p className="text-destructive text-xs">{createError}</p>
+					)}
 					<Button
 						className="w-full"
 						disabled={creating || !newKey.trim() || !newLabel.trim()}

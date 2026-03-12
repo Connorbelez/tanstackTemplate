@@ -13,7 +13,6 @@ interface PdfDesignerProps {
 	onFieldsChange: (fields: FieldConfig[]) => void;
 	pageDimensions: Array<{ page: number; width: number; height: number }>;
 	pdfUrl: string;
-	selectedFieldId: string | null;
 }
 
 /**
@@ -28,7 +27,6 @@ export function PdfDesigner({
 	fields,
 	onFieldsChange,
 	onFieldSelect,
-	selectedFieldId: _selectedFieldId,
 	pageDimensions,
 }: PdfDesignerProps) {
 	const containerRef = useRef<HTMLDivElement>(null);

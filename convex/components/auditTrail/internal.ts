@@ -16,13 +16,15 @@ export const processOutbox = internalMutation({
 			try {
 				// Production: push to SIEM/S3/compliance store using entry.idempotencyKey
 				// Demo: simulate successful emission
-				await ctx.db.patch(entry._id, {
-					status: "emitted" as const,
-					emittedAt: Date.now(),
-				});
+				// Patch event first — if this fails, outbox remains pending (safe retry)
+				const emittedAt = Date.now();
 				await ctx.db.patch(entry.eventId, {
 					emitted: true,
-					emittedAt: Date.now(),
+					emittedAt,
+				});
+				await ctx.db.patch(entry._id, {
+					status: "emitted" as const,
+					emittedAt,
 				});
 				emittedCount++;
 			} catch (error) {

@@ -260,12 +260,12 @@ function TableDemo() {
 					| Go to page:
 					<input
 						className="w-16 rounded-md border border-gray-700 bg-gray-800 px-2 py-1 outline-none focus:border-transparent focus:ring-2 focus:ring-blue-500"
-						defaultValue={table.getState().pagination.pageIndex + 1}
 						onChange={(e) => {
 							const page = e.target.value ? Number(e.target.value) - 1 : 0;
 							table.setPageIndex(page);
 						}}
 						type="number"
+						value={table.getState().pagination.pageIndex + 1}
 					/>
 				</span>
 				<select

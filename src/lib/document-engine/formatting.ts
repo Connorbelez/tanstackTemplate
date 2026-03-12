@@ -5,7 +5,6 @@ import type { FormatOptions, VariableType } from "./types";
  * Format a raw variable value according to its type and optional format config.
  * All values arrive as strings; this function renders them for PDF interpolation.
  */
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: Switch over all variable types with per-type formatting
 export function formatValue(
 	value: string,
 	type: VariableType,
@@ -27,10 +26,7 @@ export function formatValue(
 
 		case "date": {
 			const dateFormatStr = options?.dateFormat ?? "MM/dd/yyyy";
-			const parsed =
-				value.includes("T") || value.includes("-")
-					? parseISO(value)
-					: new Date(value);
+			const parsed = parseISO(value);
 			if (Number.isNaN(parsed.getTime())) {
 				return value;
 			}

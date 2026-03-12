@@ -66,7 +66,11 @@ export function SystemPathBrowser({
 	);
 
 	const handleSeed = useCallback(async () => {
-		await seedEntities();
+		try {
+			await seedEntities();
+		} catch (error) {
+			console.error("Failed to seed entities:", error);
+		}
 	}, [seedEntities]);
 
 	const handleCreateCustom = useCallback(async () => {
@@ -88,19 +92,23 @@ export function SystemPathBrowser({
 				optional: false,
 			}));
 
-		await createCustomEntity({
-			name,
-			label: name
-				.split(WORD_BOUNDARY)
-				.map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-				.join(" "),
-			fields: validFields,
-		});
+		try {
+			await createCustomEntity({
+				name,
+				label: name
+					.split(WORD_BOUNDARY)
+					.map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+					.join(" "),
+				fields: validFields,
+			});
 
-		setCustomName("");
-		setCustomFields([{ name: "", type: "string" }]);
-		setShowCustomForm(false);
-		setSelectedEntityName(name);
+			setCustomName("");
+			setCustomFields([{ name: "", type: "string" }]);
+			setShowCustomForm(false);
+			setSelectedEntityName(name);
+		} catch (error) {
+			console.error("Failed to create custom entity:", error);
+		}
 	}, [createCustomEntity, customName, customFields]);
 
 	const addCustomFieldRow = () => {

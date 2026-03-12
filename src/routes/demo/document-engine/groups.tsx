@@ -176,12 +176,17 @@ function GroupsPage() {
 						<Card key={group._id}>
 							<CardHeader>
 								<div className="flex items-start justify-between">
-									{/* biome-ignore lint/a11y/useKeyWithClickEvents: Expandable section toggle */}
 									<div
 										className="min-w-0 flex-1 cursor-pointer"
 										onClick={() =>
 											setExpandedGroupId(isExpanded ? null : group._id)
 										}
+										onKeyDown={(e) => {
+											if (e.key === "Enter" || e.key === " ") {
+												e.preventDefault();
+												setExpandedGroupId(isExpanded ? null : group._id);
+											}
+										}}
 										role="button"
 										tabIndex={0}
 									>
