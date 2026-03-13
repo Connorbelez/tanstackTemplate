@@ -6,7 +6,6 @@ https://stack.convex.dev/triggers
 ## Schema Relationships
 https://stack.convex.dev/functional-relationships-helpers
 https://stack.convex.dev/relationship-structures-let-s-talk-about-schemas
-https://stack.convex.dev/ents
 
 ## Authentication and Authorization 
 https://stack.convex.dev/authorization
@@ -19,6 +18,7 @@ https://stack.convex.dev/types-cookbook
 https://stack.convex.dev/using-branded-types-in-validators
 
 ## Queries 
+https://docs.convex.dev/client/tanstack/tanstack-query/
 https://stack.convex.dev/complex-filters-in-convex
 https://stack.convex.dev/merging-streams-of-convex-data
 https://stack.convex.dev/high-throughput-mutations-via-precise-queries
