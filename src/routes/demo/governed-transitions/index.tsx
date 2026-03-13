@@ -84,11 +84,16 @@ function CommandCenter() {
 		if (!(label.trim() && loanAmount.trim())) {
 			return;
 		}
+		const amt = Number(loanAmount.trim());
+		if (!Number.isFinite(amt) || amt <= 0) {
+			setError("Loan amount must be a positive number");
+			return;
+		}
 		setError(null);
 		try {
 			await createEntityMut({
 				label: label.trim(),
-				loanAmount: Number(loanAmount),
+				loanAmount: amt,
 				applicantName: applicantName.trim() || undefined,
 			});
 			setLabel("");
@@ -189,12 +194,30 @@ function CommandCenter() {
 					</Card>
 
 					<div className="flex flex-wrap gap-2">
-						<Button onClick={() => seedMut({})} size="sm" variant="outline">
+						<Button
+							onClick={async () => {
+								setError(null);
+								try {
+									await seedMut({});
+								} catch (e) {
+									setError(e instanceof Error ? e.message : String(e));
+								}
+							}}
+							size="sm"
+							variant="outline"
+						>
 							<Sparkles className="mr-1 size-3.5" />
 							Seed Data
 						</Button>
 						<Button
-							onClick={() => runLifecycleMut({})}
+							onClick={async () => {
+								setError(null);
+								try {
+									await runLifecycleMut({});
+								} catch (e) {
+									setError(e instanceof Error ? e.message : String(e));
+								}
+							}}
 							size="sm"
 							variant="outline"
 						>

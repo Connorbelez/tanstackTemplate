@@ -322,8 +322,8 @@ Add more tests for:
 At the top of `governedTransitions.ts`, ensure these imports exist:
 ```typescript
 import { v } from "convex/values";
-import { mutation, query, internalMutation } from "./_generated/server";
-import { internal, components } from "./_generated/api";
+import { mutation, query, internalMutation } from "../_generated/server";
+import { internal, components } from "../_generated/api";
 import { machineRegistry, type EntityType } from "./machines/registry";
 import { AuditTrail } from "../auditTrailClient";
 ```

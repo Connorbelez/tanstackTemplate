@@ -278,10 +278,10 @@ test.describe("Governed Transitions — UC-4: Full Lifecycle Journal", () => {
 			page.getByText(/CLOSE.*funded.*closed/).first(),
 		).toBeVisible({ timeout: DATA_LOAD_TIMEOUT });
 
-		// Verify stats bar shows 5 total transitioned entries
-		await expect(page.getByText("5").first()).toBeVisible({
-			timeout: DATA_LOAD_TIMEOUT,
-		});
+		// Verify stats subtitle shows 5 total transitioned entries
+		await expect(
+			page.getByText(/5 total/).first(),
+		).toBeVisible({ timeout: DATA_LOAD_TIMEOUT });
 	});
 });
 

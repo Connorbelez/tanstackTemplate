@@ -465,6 +465,9 @@ export function InteractiveLogsTable({
                 size="sm"
                 onClick={() => setShowFilters((current) => !current)}
                 className="relative"
+                aria-label={showFilters ? "Hide filters" : "Show filters"}
+                aria-expanded={showFilters}
+                aria-controls="interactive-logs-filters"
               >
                 <Filter className="h-4 w-4" />
                 {activeFilters > 0 && (
@@ -481,6 +484,7 @@ export function InteractiveLogsTable({
           <AnimatePresence initial={false}>
             {showFilters && (
               <motion.div
+                id="interactive-logs-filters"
                 key="filters"
                 initial={{ width: 0, opacity: 0 }}
                 animate={{ width: 280, opacity: 1 }}

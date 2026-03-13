@@ -37,7 +37,7 @@
 
 ## Phase 4: E2E Tests
 
-Use Playwright (project test framework per CLAUDE.md). Place test files at `tests/e2e/governed-transitions.spec.ts`. Tests interact with the demo UI at `/demo/governed-transitions`.
+Use Playwright (project test framework per CLAUDE.md). Place test files at `e2e/governed-transitions.spec.ts`. Tests interact with the demo UI at `/demo/governed-transitions`.
 
 - [x] T-040: Write e2e test for UC-1: Navigate to `/demo/governed-transitions`, fill in label and loan amount, click create, verify entity appears in list with "draft" status badge
 - [x] T-041: Write e2e test for UC-2: Create entity, select it, click a valid transition button (e.g. SUBMIT), verify status changes to "submitted"
