@@ -19,7 +19,10 @@ const demoSections = [
 	},
 	{
 		label: "Convex Core",
-		links: linkOptions([{ to: "/demo/convex", label: "Todos" }]),
+		links: linkOptions([
+			{ to: "/demo/convex", label: "Todos" },
+			{ to: "/demo/convex-ledger", label: "Ownership Ledger" },
+		]),
 	},
 	{
 		label: "Convex Components",

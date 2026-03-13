@@ -1,0 +1,119 @@
+import type { Doc } from "../_generated/dataModel";
+import type { MutationCtx, QueryCtx } from "../_generated/server";
+
+/** Compute balance from cumulative fields: debits received minus credits given */
+export function computeBalance(
+	account: Pick<
+		Doc<"ledger_accounts">,
+		"cumulativeDebits" | "cumulativeCredits"
+	>
+): bigint {
+	return account.cumulativeDebits - account.cumulativeCredits;
+}
+
+/** Get or create the global WORLD singleton account */
+export async function getOrCreateWorldAccount(ctx: MutationCtx) {
+	const existing = await ctx.db
+		.query("ledger_accounts")
+		.withIndex("by_type_and_mortgage", (q) =>
+			q.eq("type", "WORLD").eq("mortgageId", undefined)
+		)
+		.first();
+	if (existing) {
+		return existing;
+	}
+
+	const id = await ctx.db.insert("ledger_accounts", {
+		type: "WORLD",
+		cumulativeDebits: 0n,
+		cumulativeCredits: 0n,
+		createdAt: Date.now(),
+	});
+	const account = await ctx.db.get(id);
+	if (!account) {
+		throw new Error("Failed to create WORLD account");
+	}
+	return account;
+}
+
+/** Find TREASURY account for a mortgage. Throws if not found. */
+export async function getTreasuryAccount(ctx: QueryCtx, mortgageId: string) {
+	const treasury = await ctx.db
+		.query("ledger_accounts")
+		.withIndex("by_type_and_mortgage", (q) =>
+			q.eq("type", "TREASURY").eq("mortgageId", mortgageId)
+		)
+		.first();
+	if (!treasury) {
+		throw new Error(
+			`No TREASURY account for mortgage ${mortgageId}. Mint the mortgage first.`
+		);
+	}
+	return treasury;
+}
+
+/** Find existing POSITION account. Throws if not found. */
+export async function getPositionAccount(
+	ctx: QueryCtx,
+	mortgageId: string,
+	investorId: string
+) {
+	const position = await ctx.db
+		.query("ledger_accounts")
+		.withIndex("by_mortgage_and_investor", (q) =>
+			q.eq("mortgageId", mortgageId).eq("investorId", investorId)
+		)
+		.first();
+	if (!position || position.type !== "POSITION") {
+		throw new Error(
+			`No POSITION account for investor ${investorId} on mortgage ${mortgageId}`
+		);
+	}
+	return position;
+}
+
+/** Find or create POSITION account for an investor×mortgage pair */
+export async function getOrCreatePositionAccount(
+	ctx: MutationCtx,
+	mortgageId: string,
+	investorId: string
+) {
+	const existing = await ctx.db
+		.query("ledger_accounts")
+		.withIndex("by_mortgage_and_investor", (q) =>
+			q.eq("mortgageId", mortgageId).eq("investorId", investorId)
+		)
+		.first();
+	if (existing) {
+		if (existing.type !== "POSITION") {
+			throw new Error(
+				`Account for investor ${investorId} on mortgage ${mortgageId} exists but is type ${existing.type}, not POSITION`
+			);
+		}
+		return existing;
+	}
+
+	const id = await ctx.db.insert("ledger_accounts", {
+		type: "POSITION",
+		mortgageId,
+		investorId,
+		cumulativeDebits: 0n,
+		cumulativeCredits: 0n,
+		createdAt: Date.now(),
+	});
+	const account = await ctx.db.get(id);
+	if (!account) {
+		throw new Error("Failed to create POSITION account");
+	}
+	return account;
+}
+
+/** Get next monotonic gap-free sequence number */
+export async function nextSequenceNumber(ctx: QueryCtx): Promise<bigint> {
+	const latest = await ctx.db
+		.query("ledger_journal_entries")
+		.withIndex("by_sequence")
+		.order("desc")
+		.first();
+	return latest ? latest.sequenceNumber + 1n : 1n;
+}

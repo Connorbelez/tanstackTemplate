@@ -15,7 +15,8 @@
       "!!**/src/data/*",
       "!!src/routes/-auth-redirect.ts",
       "!!src/components/storybook/*",
-      "!!e2e/*"
+      "!!e2e/*",
+      "!!convex/ledger/__tests__/*"
     ]
   },
   "formatter": {
@@ -23,7 +24,11 @@
     "indentStyle": "tab"
   },
   "assist": {
-    "actions": { "source": { "organizeImports": "on" } },
+    "actions": {
+      "source": {
+        "organizeImports": "on"
+      }
+    },
     "enabled": true
   },
   "linter": {

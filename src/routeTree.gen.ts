@@ -26,6 +26,7 @@ import { Route as DemoConvexTimelineRouteImport } from './routes/demo/convex-tim
 import { Route as DemoConvexRateLimiterRouteImport } from './routes/demo/convex-rate-limiter'
 import { Route as DemoConvexPresenceRouteImport } from './routes/demo/convex-presence'
 import { Route as DemoConvexMigrationsRouteImport } from './routes/demo/convex-migrations'
+import { Route as DemoConvexLedgerRouteImport } from './routes/demo/convex-ledger'
 import { Route as DemoConvexGeospatialRouteImport } from './routes/demo/convex-geospatial'
 import { Route as DemoConvexFluentRouteImport } from './routes/demo/convex-fluent'
 import { Route as DemoConvexFileManagementRouteImport } from './routes/demo/convex-file-management'
@@ -139,6 +140,11 @@ const DemoConvexPresenceRoute = DemoConvexPresenceRouteImport.update({
 const DemoConvexMigrationsRoute = DemoConvexMigrationsRouteImport.update({
   id: '/demo/convex-migrations',
   path: '/demo/convex-migrations',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DemoConvexLedgerRoute = DemoConvexLedgerRouteImport.update({
+  id: '/demo/convex-ledger',
+  path: '/demo/convex-ledger',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DemoConvexGeospatialRoute = DemoConvexGeospatialRouteImport.update({
@@ -324,6 +330,7 @@ export interface FileRoutesByFullPath {
   '/demo/convex-file-management': typeof DemoConvexFileManagementRoute
   '/demo/convex-fluent': typeof DemoConvexFluentRoute
   '/demo/convex-geospatial': typeof DemoConvexGeospatialRoute
+  '/demo/convex-ledger': typeof DemoConvexLedgerRoute
   '/demo/convex-migrations': typeof DemoConvexMigrationsRoute
   '/demo/convex-presence': typeof DemoConvexPresenceRoute
   '/demo/convex-rate-limiter': typeof DemoConvexRateLimiterRoute
@@ -370,6 +377,7 @@ export interface FileRoutesByTo {
   '/demo/convex-file-management': typeof DemoConvexFileManagementRoute
   '/demo/convex-fluent': typeof DemoConvexFluentRoute
   '/demo/convex-geospatial': typeof DemoConvexGeospatialRoute
+  '/demo/convex-ledger': typeof DemoConvexLedgerRoute
   '/demo/convex-migrations': typeof DemoConvexMigrationsRoute
   '/demo/convex-presence': typeof DemoConvexPresenceRoute
   '/demo/convex-rate-limiter': typeof DemoConvexRateLimiterRoute
@@ -419,6 +427,7 @@ export interface FileRoutesById {
   '/demo/convex-file-management': typeof DemoConvexFileManagementRoute
   '/demo/convex-fluent': typeof DemoConvexFluentRoute
   '/demo/convex-geospatial': typeof DemoConvexGeospatialRoute
+  '/demo/convex-ledger': typeof DemoConvexLedgerRoute
   '/demo/convex-migrations': typeof DemoConvexMigrationsRoute
   '/demo/convex-presence': typeof DemoConvexPresenceRoute
   '/demo/convex-rate-limiter': typeof DemoConvexRateLimiterRoute
@@ -469,6 +478,7 @@ export interface FileRouteTypes {
     | '/demo/convex-file-management'
     | '/demo/convex-fluent'
     | '/demo/convex-geospatial'
+    | '/demo/convex-ledger'
     | '/demo/convex-migrations'
     | '/demo/convex-presence'
     | '/demo/convex-rate-limiter'
@@ -515,6 +525,7 @@ export interface FileRouteTypes {
     | '/demo/convex-file-management'
     | '/demo/convex-fluent'
     | '/demo/convex-geospatial'
+    | '/demo/convex-ledger'
     | '/demo/convex-migrations'
     | '/demo/convex-presence'
     | '/demo/convex-rate-limiter'
@@ -563,6 +574,7 @@ export interface FileRouteTypes {
     | '/demo/convex-file-management'
     | '/demo/convex-fluent'
     | '/demo/convex-geospatial'
+    | '/demo/convex-ledger'
     | '/demo/convex-migrations'
     | '/demo/convex-presence'
     | '/demo/convex-rate-limiter'
@@ -612,6 +624,7 @@ export interface RootRouteChildren {
   DemoConvexFileManagementRoute: typeof DemoConvexFileManagementRoute
   DemoConvexFluentRoute: typeof DemoConvexFluentRoute
   DemoConvexGeospatialRoute: typeof DemoConvexGeospatialRoute
+  DemoConvexLedgerRoute: typeof DemoConvexLedgerRoute
   DemoConvexMigrationsRoute: typeof DemoConvexMigrationsRoute
   DemoConvexPresenceRoute: typeof DemoConvexPresenceRoute
   DemoConvexRateLimiterRoute: typeof DemoConvexRateLimiterRoute
@@ -747,6 +760,13 @@ declare module '@tanstack/react-router' {
       path: '/demo/convex-migrations'
       fullPath: '/demo/convex-migrations'
       preLoaderRoute: typeof DemoConvexMigrationsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/demo/convex-ledger': {
+      id: '/demo/convex-ledger'
+      path: '/demo/convex-ledger'
+      fullPath: '/demo/convex-ledger'
+      preLoaderRoute: typeof DemoConvexLedgerRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/demo/convex-geospatial': {
@@ -1026,6 +1046,7 @@ const rootRouteChildren: RootRouteChildren = {
   DemoConvexFileManagementRoute: DemoConvexFileManagementRoute,
   DemoConvexFluentRoute: DemoConvexFluentRoute,
   DemoConvexGeospatialRoute: DemoConvexGeospatialRoute,
+  DemoConvexLedgerRoute: DemoConvexLedgerRoute,
   DemoConvexMigrationsRoute: DemoConvexMigrationsRoute,
   DemoConvexPresenceRoute: DemoConvexPresenceRoute,
   DemoConvexRateLimiterRoute: DemoConvexRateLimiterRoute,
