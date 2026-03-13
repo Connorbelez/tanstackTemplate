@@ -188,25 +188,12 @@ Long term maintainability is a core priority. If you add new functionality, firs
 - [Filepath](./docs/convex/convex-dev-crons.md)
 - When to use skill: Whenever working on anything related to dynamic scheduled tasks, recurring jobs, tenant-specific automation, or runtime cron registration.
 
-#### convex-dev-twilio
-- Description: Send and receive SMS messages through Twilio with Convex actions and webhook route registration. Use when working with SMS, phone messaging, notifications, Twilio.
-- [Filepath](./docs/convex/convex-dev-twilio.md)
-- When to use skill: Whenever working on anything related to SMS delivery, phone-based notifications, or Twilio webhook/message flows.
 
 #### convex-dev-launchdarkly
 - Description: Sync LaunchDarkly flags and segments into Convex for backend feature flags and experimentation. Use when working with feature flags, experimentation, rollout control, LaunchDarkly.
 - [Filepath](./docs/convex/convex-dev-launchdarkly.md)
 - When to use skill: Whenever working on anything related to feature flags, experiments, staged rollouts, or LaunchDarkly-backed configuration.
 
-#### convex-api-keys
-- Description: Manage API keys in Convex with creation, validation, rotation, revocation, expiry, idle timeouts, permissions, metadata, and audit-friendly usage patterns. Use when working with API authentication, server-to-server access, machine credentials, or scoped access keys.
-- [Filepath](./docs/convex/convex-api-keys.md)
-- When to use skill: Whenever working on anything related to API key issuance, machine authentication, partner integrations, service credentials, or scoped programmatic access.
-
-#### convex-api-tokens
-- Description: Manage API token issuance, validation, rotation, revocation, and encrypted third-party credential storage in Convex. Use when working with API authentication, machine-to-machine access, token rotation, secure credentials, or protected HTTP endpoints.
-- [Filepath](./docs/convex/convex-api-tokens.md)
-- When to use skill: Whenever working on anything related to API tokens, machine auth, token rotation, encrypted provider credentials, or bearer-token protected endpoints.
 
 #### convex-timeline
 - Description: Manage undo and redo history with scoped state snapshots and named checkpoints in Convex. Use when working with undo/redo flows, draft history, editor state, or restorable application state.
@@ -223,17 +210,8 @@ Long term maintainability is a core priority. If you add new functionality, firs
 - [Filepath](./docs/convex/convex-tracer.md)
 - When to use skill: Whenever working on anything related to tracing backend flows, debugging production issues, inspecting nested operations, or improving Convex observability.
 
-#### convex-smart-tags
-- Description: Add intelligent tagging and categorization to Convex with hierarchical tags, cross-table tagging, trending analytics, and tag-based querying. Use when working with tags, categorization, taxonomy, discovery, or content labeling.
-- [Filepath](./docs/convex/convex-smart-tags.md)
-- When to use skill: Whenever working on anything related to reusable tags, hierarchical taxonomy, tag analytics, cross-table categorization, or discovery and filtering systems.
-
 #### convex-audit-log
 - Description: Track user actions, API calls, and system events in Convex with audit trails, change diffs, PII redaction, querying, anomaly detection, and compliance-oriented retention controls. Use when working with audits, compliance, security logging, or destructive/admin actions.
 - [Filepath](./docs/convex/convex-audit-log.md)
 - When to use skill: Whenever working on anything related to audit trails, compliance evidence, security-sensitive event logging, destructive admin actions, or change tracking.
 
-#### 00akshatsinha00-convex-cascading-delete
-- Description: Configure safe cascading deletes across related Convex documents with atomic or batched deletion modes and progress tracking. Use when working with relational cleanup, dependent records, cascading deletes.
-- [Filepath](./docs/convex/00akshatsinha00-convex-cascading-delete.md)
-- When to use skill: Whenever working on anything related to deleting related data trees, enforcing cleanup of dependent records, or batched cascading deletion flows.
