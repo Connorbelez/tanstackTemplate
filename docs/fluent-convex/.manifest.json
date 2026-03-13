@@ -1,0 +1,38 @@
+[
+  {
+    "path": "index.md",
+    "source_url": "https://friendly-zebra-716.convex.site/",
+    "title": "fluent-convex",
+    "depth": 0
+  },
+  {
+    "path": "zod-plugin.md",
+    "source_url": "https://friendly-zebra-716.convex.site/zod-plugin",
+    "title": "Zod Plugin",
+    "depth": 1
+  },
+  {
+    "path": "validation.md",
+    "source_url": "https://friendly-zebra-716.convex.site/validation",
+    "title": "Validation",
+    "depth": 1
+  },
+  {
+    "path": "reusable-chains.md",
+    "source_url": "https://friendly-zebra-716.convex.site/reusable-chains",
+    "title": "Reusable Chains & Callable Syntax",
+    "depth": 1
+  },
+  {
+    "path": "custom-plugins.md",
+    "source_url": "https://friendly-zebra-716.convex.site/custom-plugins",
+    "title": "Custom Plugins",
+    "depth": 1
+  },
+  {
+    "path": "middleware.md",
+    "source_url": "https://friendly-zebra-716.convex.site/middleware",
+    "title": "Middleware",
+    "depth": 1
+  }
+]
