@@ -1,0 +1,1124 @@
+[
+  {
+    "path": "index.md",
+    "source_url": "https://workos.com/docs/",
+    "title": "AuthKit",
+    "depth": 0
+  },
+  {
+    "path": "authkit.md",
+    "source_url": "https://workos.com/docs/authkit",
+    "title": "Get started with AuthKit",
+    "depth": 1
+  },
+  {
+    "path": "audit-logs.md",
+    "source_url": "https://workos.com/docs/audit-logs",
+    "title": "Audit Logs",
+    "depth": 1
+  },
+  {
+    "path": "blog.md",
+    "source_url": "https://workos.com/blog",
+    "title": "Blog",
+    "depth": 1
+  },
+  {
+    "path": "changelog.md",
+    "source_url": "https://workos.com/changelog",
+    "title": "The Changelog",
+    "depth": 1
+  },
+  {
+    "path": "admin-portal.md",
+    "source_url": "https://workos.com/admin-portal",
+    "title": "Admin Portal",
+    "depth": 1
+  },
+  {
+    "path": "authkit/metadata.md",
+    "source_url": "https://workos.com/docs/authkit/metadata",
+    "title": "Metadata and External IDs",
+    "depth": 1
+  },
+  {
+    "path": "authkit/radar.md",
+    "source_url": "https://workos.com/docs/authkit/radar",
+    "title": "Radar",
+    "depth": 1
+  },
+  {
+    "path": "authkit/hosted-ui.md",
+    "source_url": "https://workos.com/docs/authkit/hosted-ui",
+    "title": "Hosted UI",
+    "depth": 1
+  },
+  {
+    "path": "authkit/connect.md",
+    "source_url": "https://workos.com/docs/authkit/connect",
+    "title": "Connect",
+    "depth": 1
+  },
+  {
+    "path": "authkit/sso.md",
+    "source_url": "https://workos.com/docs/authkit/sso",
+    "title": "Single Sign-On",
+    "depth": 1
+  },
+  {
+    "path": "custom-domains.md",
+    "source_url": "https://workos.com/docs/custom-domains",
+    "title": "Custom Domains",
+    "depth": 1
+  },
+  {
+    "path": "authkit/roles-and-permissions.md",
+    "source_url": "https://workos.com/docs/authkit/roles-and-permissions",
+    "title": "Roles and Permissions",
+    "depth": 1
+  },
+  {
+    "path": "careers.md",
+    "source_url": "https://workos.com/careers",
+    "title": "Careers at WorkOS",
+    "depth": 1
+  },
+  {
+    "path": "directory-sync.md",
+    "source_url": "https://workos.com/docs/directory-sync",
+    "title": "Directory Sync",
+    "depth": 1
+  },
+  {
+    "path": "customers.md",
+    "source_url": "https://workos.com/customers",
+    "title": "Customers",
+    "depth": 1
+  },
+  {
+    "path": "domain-verification.md",
+    "source_url": "https://workos.com/docs/domain-verification",
+    "title": "Domain Verification",
+    "depth": 1
+  },
+  {
+    "path": "about.md",
+    "source_url": "https://workos.com/about",
+    "title": "Build for enterprise on day one",
+    "depth": 1
+  },
+  {
+    "path": "email.md",
+    "source_url": "https://workos.com/docs/email",
+    "title": "Email delivery",
+    "depth": 1
+  },
+  {
+    "path": "pipes.md",
+    "source_url": "https://workos.com/docs/pipes",
+    "title": "Pipes",
+    "depth": 1
+  },
+  {
+    "path": "glossary.md",
+    "source_url": "https://workos.com/docs/glossary",
+    "title": "Glossary",
+    "depth": 1
+  },
+  {
+    "path": "integrations.md",
+    "source_url": "https://workos.com/docs/integrations",
+    "title": "Integrations",
+    "depth": 1
+  },
+  {
+    "path": "migrate.md",
+    "source_url": "https://workos.com/docs/migrate",
+    "title": "Migrate to WorkOS",
+    "depth": 1
+  },
+  {
+    "path": "fga.md",
+    "source_url": "https://workos.com/docs/fga",
+    "title": "Fine-Grained Authorization (FGA)",
+    "depth": 1
+  },
+  {
+    "path": "rbac.md",
+    "source_url": "https://workos.com/docs/rbac",
+    "title": "Role-Based Access Control (RBAC)",
+    "depth": 1
+  },
+  {
+    "path": "sdks.md",
+    "source_url": "https://workos.com/docs/sdks",
+    "title": "SDKs",
+    "depth": 1
+  },
+  {
+    "path": "events/observability/datadog.md",
+    "source_url": "https://workos.com/docs/events/observability/datadog",
+    "title": "Stream events to Datadog",
+    "depth": 1
+  },
+  {
+    "path": "events/data-syncing.md",
+    "source_url": "https://workos.com/docs/events/data-syncing",
+    "title": "Data syncing",
+    "depth": 1
+  },
+  {
+    "path": "feature-flags.md",
+    "source_url": "https://workos.com/docs/feature-flags",
+    "title": "Feature Flags",
+    "depth": 1
+  },
+  {
+    "path": "sso.md",
+    "source_url": "https://workos.com/docs/sso",
+    "title": "Single Sign-On",
+    "depth": 1
+  },
+  {
+    "path": "reference.md",
+    "source_url": "https://workos.com/docs/reference",
+    "title": "Getting started",
+    "depth": 1
+  },
+  {
+    "path": "events.md",
+    "source_url": "https://workos.com/docs/events",
+    "title": "Events",
+    "depth": 1
+  },
+  {
+    "path": "widgets.md",
+    "source_url": "https://workos.com/docs/widgets",
+    "title": "WorkOS Widgets",
+    "depth": 1
+  },
+  {
+    "path": "vault.md",
+    "source_url": "https://workos.com/docs/vault",
+    "title": "Vault",
+    "depth": 1
+  },
+  {
+    "path": "podcast.md",
+    "source_url": "https://workos.com/podcast",
+    "title": "Crossing the",
+    "depth": 1
+  },
+  {
+    "path": "legal/policies.md",
+    "source_url": "https://workos.com/legal/policies",
+    "title": "WorkOS Legal Policies",
+    "depth": 1
+  },
+  {
+    "path": "legal/privacy.md",
+    "source_url": "https://workos.com/legal/privacy",
+    "title": "WorkOS Privacy Policy",
+    "depth": 1
+  },
+  {
+    "path": "fine-grained-authorization.md",
+    "source_url": "https://workos.com/fine-grained-authorization",
+    "title": "Role-Based Access Control",
+    "depth": 1
+  },
+  {
+    "path": "pricing.md",
+    "source_url": "https://workos.com/pricing",
+    "title": "Transparent pricing",
+    "depth": 1
+  },
+  {
+    "path": "single-sign-on.md",
+    "source_url": "https://workos.com/single-sign-on",
+    "title": "Enterprise Single Sign-On",
+    "depth": 1
+  },
+  {
+    "path": "security.md",
+    "source_url": "https://workos.com/security",
+    "title": "Secure, out of the box",
+    "depth": 1
+  },
+  {
+    "path": "user-management.md",
+    "source_url": "https://workos.com/user-management",
+    "title": "User Management",
+    "depth": 1
+  },
+  {
+    "path": "history.md",
+    "source_url": "https://status.workos.com/history",
+    "title": "WorkOS Status - Incident History",
+    "depth": 2
+  },
+  {
+    "path": "app/settings.md",
+    "source_url": "https://explore.workos.com/app/settings",
+    "title": "Single Sign-On",
+    "depth": 2
+  },
+  {
+    "path": "api-keys.md",
+    "source_url": "https://dashboard.workos.com/api-keys",
+    "title": "Sign in to WorkOS",
+    "depth": 2
+  },
+  {
+    "path": "blog/developers-guide-strong-passwords.md",
+    "source_url": "https://workos.com/blog/developers-guide-strong-passwords",
+    "title": "The developer's guide to strong passwords",
+    "depth": 2
+  },
+  {
+    "path": "blog/create-salesforce-leads-from-your-app-without-building-oauth.md",
+    "source_url": "https://workos.com/blog/create-salesforce-leads-from-your-app-without-building-oauth",
+    "title": "Create Salesforce leads from your app without building OAuth",
+    "depth": 2
+  },
+  {
+    "path": "blog/how-to-add-auth-to-your-lovable-app.md",
+    "source_url": "https://workos.com/blog/how-to-add-auth-to-your-lovable-app",
+    "title": "How to add auth to your Lovable app",
+    "depth": 2
+  },
+  {
+    "path": "blog/claude-cowork-workshop-anthropic.md",
+    "source_url": "https://workos.com/blog/claude-cowork-workshop-anthropic",
+    "title": "Claude Cowork workshop with Anthropic: Building a complete GTM pipeline in one session",
+    "depth": 2
+  },
+  {
+    "path": "blog/agents-need-authorization-not-just-authentication.md",
+    "source_url": "https://workos.com/blog/agents-need-authorization-not-just-authentication",
+    "title": "WorkOS FGA: The authorization layer for AI agents",
+    "depth": 2
+  },
+  {
+    "path": "blog/api-security-best-practices-for-ai-agents.md",
+    "source_url": "https://workos.com/blog/api-security-best-practices-for-ai-agents",
+    "title": "API security best practices for the age of AI agents",
+    "depth": 2
+  },
+  {
+    "path": "blog/developers-guide-jwks.md",
+    "source_url": "https://workos.com/blog/developers-guide-jwks",
+    "title": "The developer\u2019s guide to JWKS",
+    "depth": 2
+  },
+  {
+    "path": "blog/add-sign-in-with-apple-nextjs-workos.md",
+    "source_url": "https://workos.com/blog/add-sign-in-with-apple-nextjs-workos",
+    "title": "How to add Sign in with Apple to your app using WorkOS",
+    "depth": 2
+  },
+  {
+    "path": "blog/can-an-ai-agent-set-up-your-product.md",
+    "source_url": "https://workos.com/blog/can-an-ai-agent-set-up-your-product",
+    "title": "Can an AI agent set up your product?",
+    "depth": 2
+  },
+  {
+    "path": "blog/a-developers-guide-to-startup-security-part-2.md",
+    "source_url": "https://workos.com/blog/a-developers-guide-to-startup-security-part-2",
+    "title": "A Developer\u2019s Guide to Startup Security: 15 Ways to Secure Your Startup (Part 2)",
+    "depth": 2
+  },
+  {
+    "path": "uptime.md",
+    "source_url": "https://status.workos.com/uptime",
+    "title": "WorkOS Status - Uptime History",
+    "depth": 2
+  },
+  {
+    "path": "environment/users.md",
+    "source_url": "https://dashboard.workos.com/environment/users",
+    "title": "Sign in to WorkOS",
+    "depth": 2
+  },
+  {
+    "path": "environment/authentication/features.md",
+    "source_url": "https://dashboard.workos.com/environment/authentication/features",
+    "title": "Sign in to WorkOS",
+    "depth": 2
+  },
+  {
+    "path": "redirects.md",
+    "source_url": "https://dashboard.workos.com/redirects",
+    "title": "Sign in to WorkOS",
+    "depth": 2
+  },
+  {
+    "path": "organizations.md",
+    "source_url": "https://dashboard.workos.com/organizations",
+    "title": "Sign in to WorkOS",
+    "depth": 2
+  },
+  {
+    "path": "environment/authorization.md",
+    "source_url": "https://dashboard.workos.com/environment/authorization",
+    "title": "Sign in to WorkOS",
+    "depth": 2
+  },
+  {
+    "path": "environment/events.md",
+    "source_url": "https://dashboard.workos.com/environment/events",
+    "title": "Sign in to WorkOS",
+    "depth": 2
+  },
+  {
+    "path": "signup.md",
+    "source_url": "https://dashboard.workos.com/signup",
+    "title": "Create your WorkOS account",
+    "depth": 2
+  },
+  {
+    "path": "blog/how-to-add-auth-to-your-replit-app.md",
+    "source_url": "https://workos.com/blog/how-to-add-auth-to-your-replit-app",
+    "title": "How to add auth to your Replit app with WorkOS",
+    "depth": 2
+  },
+  {
+    "path": "blog/rails-authentication-guide-2026.md",
+    "source_url": "https://workos.com/blog/rails-authentication-guide-2026",
+    "title": "Building authentication in Rails web applications: The complete guide for 2026",
+    "depth": 2
+  },
+  {
+    "path": "blog/rbac-with-workos-and-node.md",
+    "source_url": "https://workos.com/blog/rbac-with-workos-and-node",
+    "title": "How to build RBAC with WorkOS and Node",
+    "depth": 2
+  },
+  {
+    "path": "changelog/api-keys.md",
+    "source_url": "https://workos.com/changelog/api-keys",
+    "title": "API Keys",
+    "depth": 2
+  },
+  {
+    "path": "changelog/app-logos-in-the-admin-portal.md",
+    "source_url": "https://workos.com/changelog/app-logos-in-the-admin-portal",
+    "title": "App logos in the Admin Portal",
+    "depth": 2
+  },
+  {
+    "path": "blog/top-better-auth-alternatives-secure-authentication-2026.md",
+    "source_url": "https://workos.com/blog/top-better-auth-alternatives-secure-authentication-2026",
+    "title": "Top 5 Better Auth alternatives for secure authentication in 2026",
+    "depth": 2
+  },
+  {
+    "path": "changelog/api-support-for-roles-and-permissions.md",
+    "source_url": "https://workos.com/changelog/api-support-for-roles-and-permissions",
+    "title": "API support for Roles and Permissions",
+    "depth": 2
+  },
+  {
+    "path": "blog/top-authentication-solutions-java-2026.md",
+    "source_url": "https://workos.com/blog/top-authentication-solutions-java-2026",
+    "title": "Top 5 authentication solutions for secure Java apps in 2026",
+    "depth": 2
+  },
+  {
+    "path": "blog/writing-my-first-evals.md",
+    "source_url": "https://workos.com/blog/writing-my-first-evals",
+    "title": "Writing my first evals",
+    "depth": 2
+  },
+  {
+    "path": "changelog/accept-invitation-api.md",
+    "source_url": "https://workos.com/changelog/accept-invitation-api",
+    "title": "Accept invitation API",
+    "depth": 2
+  },
+  {
+    "path": "blog/send-slack-notifications-without-oauth-workos-pipes.md",
+    "source_url": "https://workos.com/blog/send-slack-notifications-without-oauth-workos-pipes",
+    "title": "Send Slack notifications from your app without building OAuth",
+    "depth": 2
+  },
+  {
+    "path": "changelog/ai-branding-assistance.md",
+    "source_url": "https://workos.com/changelog/ai-branding-assistance",
+    "title": "AI Branding Assistant",
+    "depth": 2
+  },
+  {
+    "path": "blog/role-based-access-control-example.md",
+    "source_url": "https://workos.com/blog/role-based-access-control-example",
+    "title": "8 Role-Based Access Control (RBAC) examples in action",
+    "depth": 2
+  },
+  {
+    "path": "blog/workos-pipes-third-party-integrations.md",
+    "source_url": "https://workos.com/blog/workos-pipes-third-party-integrations",
+    "title": "WorkOS Pipes: Third-party integrations without the headache",
+    "depth": 2
+  },
+  {
+    "path": "blog/the-developers-guide-to-sso.md",
+    "source_url": "https://workos.com/blog/the-developers-guide-to-sso",
+    "title": "The developer\u2019s guide to SSO",
+    "depth": 2
+  },
+  {
+    "path": "blog/series-c.md",
+    "source_url": "https://workos.com/blog/series-c",
+    "title": "WorkOS raises $100M Series C, hits $2B valuation",
+    "depth": 2
+  },
+  {
+    "path": "blog/the-developers-guide-to-directory-sync-scim.md",
+    "source_url": "https://workos.com/blog/the-developers-guide-to-directory-sync-scim",
+    "title": "The developer\u2019s guide to Directory Sync and SCIM",
+    "depth": 2
+  },
+  {
+    "path": "changelog/authkit-add-ons.md",
+    "source_url": "https://workos.com/changelog/authkit-add-ons",
+    "title": "AuthKit Add-ons",
+    "depth": 2
+  },
+  {
+    "path": "changelog/authkit-custom-fonts.md",
+    "source_url": "https://workos.com/changelog/authkit-custom-fonts",
+    "title": "AuthKit Custom Fonts",
+    "depth": 2
+  },
+  {
+    "path": "changelog/authkit-as-the-default-auth-in-convex.md",
+    "source_url": "https://workos.com/changelog/authkit-as-the-default-auth-in-convex",
+    "title": "AuthKit is the default auth in Convex",
+    "depth": 2
+  },
+  {
+    "path": "changelog/authkit-for-platforms.md",
+    "source_url": "https://workos.com/changelog/authkit-for-platforms",
+    "title": "AuthKit for Platforms",
+    "depth": 2
+  },
+  {
+    "path": "changelog/custom-logout-uris.md",
+    "source_url": "https://workos.com/changelog/custom-logout-uris",
+    "title": "Custom Logout URIs",
+    "depth": 2
+  },
+  {
+    "path": "changelog/authkit-is-now-localized-in-90-languages.md",
+    "source_url": "https://workos.com/changelog/authkit-is-now-localized-in-90-languages",
+    "title": "AuthKit is now localized in 90 languages",
+    "depth": 2
+  },
+  {
+    "path": "changelog/authkit-sdk-for-tanstack-start.md",
+    "source_url": "https://workos.com/changelog/authkit-sdk-for-tanstack-start",
+    "title": "AuthKit SDK for TanStack Start",
+    "depth": 2
+  },
+  {
+    "path": "changelog/cli-auth.md",
+    "source_url": "https://workos.com/changelog/cli-auth",
+    "title": "CLI Auth",
+    "depth": 2
+  },
+  {
+    "path": "changelog/custom-attributes-in-authkit.md",
+    "source_url": "https://workos.com/changelog/custom-attributes-in-authkit",
+    "title": "Custom Attributes in AuthKit",
+    "depth": 2
+  },
+  {
+    "path": "changelog/custom-email-providers.md",
+    "source_url": "https://workos.com/changelog/custom-email-providers",
+    "title": "Custom email providers",
+    "depth": 2
+  },
+  {
+    "path": "changelog/authkit-role-assignment-via-sso.md",
+    "source_url": "https://workos.com/changelog/authkit-role-assignment-via-sso",
+    "title": "AuthKit role assignment via SSO",
+    "depth": 2
+  },
+  {
+    "path": "changelog/client-id-metadata-support-for-mcp-auth.md",
+    "source_url": "https://workos.com/changelog/client-id-metadata-support-for-mcp-auth",
+    "title": "Client ID Metadata Support for MCP Auth",
+    "depth": 2
+  },
+  {
+    "path": "changelog/convex-now-supports-workos-authkit.md",
+    "source_url": "https://workos.com/changelog/convex-now-supports-workos-authkit",
+    "title": "Convex now supports WorkOS AuthKit",
+    "depth": 2
+  },
+  {
+    "path": "changelog/clever-sso-support.md",
+    "source_url": "https://workos.com/changelog/clever-sso-support",
+    "title": "Clever SSO Support",
+    "depth": 2
+  },
+  {
+    "path": "changelog/copy-docs-as-markdown-for-use-with-llms.md",
+    "source_url": "https://workos.com/changelog/copy-docs-as-markdown-for-use-with-llms",
+    "title": "Copy docs as Markdown for use with LLMs",
+    "depth": 2
+  },
+  {
+    "path": "changelog/country-blocks-with-radar.md",
+    "source_url": "https://workos.com/changelog/country-blocks-with-radar",
+    "title": "Country blocks with Radar",
+    "depth": 2
+  },
+  {
+    "path": "changelog/authkit-starter-kit-for-laravel-cloud.md",
+    "source_url": "https://workos.com/changelog/authkit-starter-kit-for-laravel-cloud",
+    "title": "AuthKit Starter Kit for Laravel Cloud",
+    "depth": 2
+  },
+  {
+    "path": "changelog/branding-email-previews.md",
+    "source_url": "https://workos.com/changelog/branding-email-previews",
+    "title": "Branding email previews",
+    "depth": 2
+  },
+  {
+    "path": "changelog/custom-css-for-authkit.md",
+    "source_url": "https://workos.com/changelog/custom-css-for-authkit",
+    "title": "Custom CSS for AuthKit",
+    "depth": 2
+  },
+  {
+    "path": "changelog/authkit-login-integrations.md",
+    "source_url": "https://workos.com/changelog/authkit-login-integrations",
+    "title": "New enterprise login integrations in AuthKit",
+    "depth": 2
+  },
+  {
+    "path": "changelog/authkit-nextjs-v1-0-0.md",
+    "source_url": "https://workos.com/changelog/authkit-nextjs-v1-0-0",
+    "title": "authkit-nextjs v1.0.0",
+    "depth": 2
+  },
+  {
+    "path": "changelog/custom-metadata-external-id-and-jwt-templates.md",
+    "source_url": "https://workos.com/changelog/custom-metadata-external-id-and-jwt-templates",
+    "title": "Custom Metadata, External ID, and JWT Templates",
+    "depth": 2
+  },
+  {
+    "path": "changelog/custom-oauth-scopes.md",
+    "source_url": "https://workos.com/changelog/custom-oauth-scopes",
+    "title": "Custom OAuth scopes",
+    "depth": 2
+  },
+  {
+    "path": "changelog/cert-renewal-notification-webhooks.md",
+    "source_url": "https://workos.com/changelog/cert-renewal-notification-webhooks",
+    "title": "Cert Renewal Notification Webhooks",
+    "depth": 2
+  },
+  {
+    "path": "changelog/custom-oauth-scopes-dashboard.md",
+    "source_url": "https://workos.com/changelog/custom-oauth-scopes-dashboard",
+    "title": "Custom OAuth scopes in the dashboard",
+    "depth": 2
+  },
+  {
+    "path": "changelog/fine-grained-authorization.md",
+    "source_url": "https://workos.com/changelog/fine-grained-authorization",
+    "title": "Fine-Grained Authorization",
+    "depth": 2
+  },
+  {
+    "path": "changelog/feature-flag-management-api.md",
+    "source_url": "https://workos.com/changelog/feature-flag-management-api",
+    "title": "Feature Flag Management API",
+    "depth": 2
+  },
+  {
+    "path": "changelog/fga-test-command-in-the-workos-cli.md",
+    "source_url": "https://workos.com/changelog/fga-test-command-in-the-workos-cli",
+    "title": "FGA Test Command in the WorkOS CLI",
+    "depth": 2
+  },
+  {
+    "path": "changelog/mailgun-support-for-custom-email-providers.md",
+    "source_url": "https://workos.com/changelog/mailgun-support-for-custom-email-providers",
+    "title": "Mailgun support for custom email providers",
+    "depth": 2
+  },
+  {
+    "path": "changelog/feature-flags-api.md",
+    "source_url": "https://workos.com/changelog/feature-flags-api",
+    "title": "Feature Flags API",
+    "depth": 2
+  },
+  {
+    "path": "changelog/jwt-templates-in-connect-for-mcp-and-oauth-apps.md",
+    "source_url": "https://workos.com/changelog/jwt-templates-in-connect-for-mcp-and-oauth-apps",
+    "title": "JWT Templates in Connect for MCP and OAuth Apps",
+    "depth": 2
+  },
+  {
+    "path": "changelog/feature-flags.md",
+    "source_url": "https://workos.com/changelog/feature-flags",
+    "title": "Feature Flags",
+    "depth": 2
+  },
+  {
+    "path": "changelog/dashboard-search.md",
+    "source_url": "https://workos.com/changelog/dashboard-search",
+    "title": "Dashboard Search",
+    "depth": 2
+  },
+  {
+    "path": "changelog/fga-policy-helpers.md",
+    "source_url": "https://workos.com/changelog/fga-policy-helpers",
+    "title": "FGA Policy Helpers",
+    "depth": 2
+  },
+  {
+    "path": "changelog/fga-development-image.md",
+    "source_url": "https://workos.com/changelog/fga-development-image",
+    "title": "FGA Development Image",
+    "depth": 2
+  },
+  {
+    "path": "changelog/domain-verification-widget.md",
+    "source_url": "https://workos.com/changelog/domain-verification-widget",
+    "title": "Domain Verification Widget",
+    "depth": 2
+  },
+  {
+    "path": "changelog/last-used-login-method-in-authkit.md",
+    "source_url": "https://workos.com/changelog/last-used-login-method-in-authkit",
+    "title": "Last-used login method in AuthKit",
+    "depth": 2
+  },
+  {
+    "path": "changelog/mcp-documentation-server.md",
+    "source_url": "https://workos.com/changelog/mcp-documentation-server",
+    "title": "MCP documentation server",
+    "depth": 2
+  },
+  {
+    "path": "changelog/management-api-for-api-keys.md",
+    "source_url": "https://workos.com/changelog/management-api-for-api-keys",
+    "title": "Management API for API Keys",
+    "depth": 2
+  },
+  {
+    "path": "changelog/impersonation-support-for-frontend-sessions.md",
+    "source_url": "https://workos.com/changelog/impersonation-support-for-frontend-sessions",
+    "title": "Impersonation Support for Frontend Sessions",
+    "depth": 2
+  },
+  {
+    "path": "changelog/mcp-authorization-with-authkit.md",
+    "source_url": "https://workos.com/changelog/mcp-authorization-with-authkit",
+    "title": "MCP Authorization with AuthKit",
+    "depth": 2
+  },
+  {
+    "path": "changelog/feature-flag-notifications-in-slack.md",
+    "source_url": "https://workos.com/changelog/feature-flag-notifications-in-slack",
+    "title": "Feature flag notifications in Slack",
+    "depth": 2
+  },
+  {
+    "path": "changelog/jwt-claims-in-fga-policies.md",
+    "source_url": "https://workos.com/changelog/jwt-claims-in-fga-policies",
+    "title": "Use JWT Claims in FGA Policies",
+    "depth": 2
+  },
+  {
+    "path": "changelog/domain-verification-improvements.md",
+    "source_url": "https://workos.com/changelog/domain-verification-improvements",
+    "title": "Domain Verification Improvements",
+    "depth": 2
+  },
+  {
+    "path": "changelog/fga-playground.md",
+    "source_url": "https://workos.com/changelog/fga-playground",
+    "title": "FGA Playground",
+    "depth": 2
+  },
+  {
+    "path": "changelog/microsoft-sentinel-log-streaming-in-audit-logs.md",
+    "source_url": "https://workos.com/changelog/microsoft-sentinel-log-streaming-in-audit-logs",
+    "title": "Microsoft Sentinel log streaming in Audit Logs",
+    "depth": 2
+  },
+  {
+    "path": "changelog/multiple-roles-for-sso-and-dsync.md",
+    "source_url": "https://workos.com/changelog/multiple-roles-for-sso-and-dsync",
+    "title": "Multiple Roles for SSO and DSync",
+    "depth": 2
+  },
+  {
+    "path": "changelog/multiple-roles-for-authkit.md",
+    "source_url": "https://workos.com/changelog/multiple-roles-for-authkit",
+    "title": "Multiple Roles for AuthKit",
+    "depth": 2
+  },
+  {
+    "path": "changelog/new-oidc-sso-providers.md",
+    "source_url": "https://workos.com/changelog/new-oidc-sso-providers",
+    "title": "Expanded Support for OIDC SSO Providers",
+    "depth": 2
+  },
+  {
+    "path": "changelog/python-authkit-example-app.md",
+    "source_url": "https://workos.com/changelog/python-authkit-example-app",
+    "title": "Python AuthKit example app",
+    "depth": 2
+  },
+  {
+    "path": "changelog/sessions-api.md",
+    "source_url": "https://workos.com/changelog/sessions-api",
+    "title": "Sessions API",
+    "depth": 2
+  },
+  {
+    "path": "changelog/pipes.md",
+    "source_url": "https://workos.com/changelog/pipes",
+    "title": "Pipes",
+    "depth": 2
+  },
+  {
+    "path": "changelog/nine-new-providers-in-workos-pipes.md",
+    "source_url": "https://workos.com/changelog/nine-new-providers-in-workos-pipes",
+    "title": "Nine new providers in WorkOS Pipes",
+    "depth": 2
+  },
+  {
+    "path": "changelog/new-invitation-events.md",
+    "source_url": "https://workos.com/changelog/new-invitation-events",
+    "title": "New Invitation Events",
+    "depth": 2
+  },
+  {
+    "path": "changelog/sign-in-with-vercel.md",
+    "source_url": "https://workos.com/changelog/sign-in-with-vercel",
+    "title": "Sign in with Vercel",
+    "depth": 2
+  },
+  {
+    "path": "changelog/pci-dss-certification.md",
+    "source_url": "https://workos.com/changelog/pci-dss-certification",
+    "title": "PCI DSS Certification",
+    "depth": 2
+  },
+  {
+    "path": "changelog/radar-disposable-email-blocking.md",
+    "source_url": "https://workos.com/changelog/radar-disposable-email-blocking",
+    "title": "Radar disposable email blocking",
+    "depth": 2
+  },
+  {
+    "path": "changelog/oidc-attributes.md",
+    "source_url": "https://workos.com/changelog/oidc-attributes",
+    "title": "OIDC Attributes",
+    "depth": 2
+  },
+  {
+    "path": "changelog/organization-authorization-with-workos-connect.md",
+    "source_url": "https://workos.com/changelog/organization-authorization-with-workos-connect",
+    "title": "Organization Authorization with WorkOS Connect",
+    "depth": 2
+  },
+  {
+    "path": "changelog/password-history.md",
+    "source_url": "https://workos.com/changelog/password-history",
+    "title": "Password History",
+    "depth": 2
+  },
+  {
+    "path": "changelog/oauth-tokens-available-in-standalone-sso-api.md",
+    "source_url": "https://workos.com/changelog/oauth-tokens-available-in-standalone-sso-api",
+    "title": "OAuth tokens available in Standalone SSO API",
+    "depth": 2
+  },
+  {
+    "path": "changelog/session-inactivity-timeouts.md",
+    "source_url": "https://workos.com/changelog/session-inactivity-timeouts",
+    "title": "Session inactivity timeouts",
+    "depth": 2
+  },
+  {
+    "path": "changelog/sign-in-with-intuit.md",
+    "source_url": "https://workos.com/changelog/sign-in-with-intuit",
+    "title": "Sign in with Intuit",
+    "depth": 2
+  },
+  {
+    "path": "changelog/saml-custom-attributes.md",
+    "source_url": "https://workos.com/changelog/saml-custom-attributes",
+    "title": "SAML Custom Attributes",
+    "depth": 2
+  },
+  {
+    "path": "changelog/schema-based-policies-in-fga.md",
+    "source_url": "https://workos.com/changelog/schema-based-policies-in-fga",
+    "title": "Schema-Based Policies in FGA",
+    "depth": 2
+  },
+  {
+    "path": "changelog/nextjs-b2b-starter-kit.md",
+    "source_url": "https://workos.com/changelog/nextjs-b2b-starter-kit",
+    "title": "Next.js B2B Starter Kit",
+    "depth": 2
+  },
+  {
+    "path": "changelog/node-sdk-v8-pkce-support-and-improved-runtime-compatibility.md",
+    "source_url": "https://workos.com/changelog/node-sdk-v8-pkce-support-and-improved-runtime-compatibility",
+    "title": "Node SDK v8: PKCE Support and Improved Runtime Compatibility",
+    "depth": 2
+  },
+  {
+    "path": "changelog/organization-roles.md",
+    "source_url": "https://workos.com/changelog/organization-roles",
+    "title": "Organization roles",
+    "depth": 2
+  },
+  {
+    "path": "changelog/simplified-login-initiation.md",
+    "source_url": "https://workos.com/changelog/simplified-login-initiation",
+    "title": "Simplified Login Initiation",
+    "depth": 2
+  },
+  {
+    "path": "changelog/vault-bring-your-own-key-aws-kms.md",
+    "source_url": "https://workos.com/changelog/vault-bring-your-own-key-aws-kms",
+    "title": "Enterprises can bring their own key to WorkOS Vault",
+    "depth": 2
+  },
+  {
+    "path": "changelog/sso-sessions-lifecycle-improvements.md",
+    "source_url": "https://workos.com/changelog/sso-sessions-lifecycle-improvements",
+    "title": "SSO Sessions Lifecycle Improvements",
+    "depth": 2
+  },
+  {
+    "path": "changelog/token-refresh-remembers-most-recent-organization.md",
+    "source_url": "https://workos.com/changelog/token-refresh-remembers-most-recent-organization",
+    "title": "Token refresh remembers most recent organization",
+    "depth": 2
+  },
+  {
+    "path": "changelog/use-workos-to-secure-remote-mcp-servers-deployed-to-cloudflare.md",
+    "source_url": "https://workos.com/changelog/use-workos-to-secure-remote-mcp-servers-deployed-to-cloudflare",
+    "title": "Use WorkOS to secure remote MCP Servers deployed to Cloudflare",
+    "depth": 2
+  },
+  {
+    "path": "changelog/sso-sign-in-consent-screen.md",
+    "source_url": "https://workos.com/changelog/sso-sign-in-consent-screen",
+    "title": "SSO Sign-in Consent Screen",
+    "depth": 2
+  },
+  {
+    "path": "changelog/vault.md",
+    "source_url": "https://workos.com/changelog/vault",
+    "title": "WorkOS Vault",
+    "depth": 2
+  },
+  {
+    "path": "changelog/social-provider-initiated-email-changes.md",
+    "source_url": "https://workos.com/changelog/social-provider-initiated-email-changes",
+    "title": "Social Provider Initiated Email Changes",
+    "depth": 2
+  },
+  {
+    "path": "changelog/support-for-changing-email-addresses.md",
+    "source_url": "https://workos.com/changelog/support-for-changing-email-addresses",
+    "title": "Support for changing email addresses",
+    "depth": 2
+  },
+  {
+    "path": "changelog/user-level-feature-flags.md",
+    "source_url": "https://workos.com/changelog/user-level-feature-flags",
+    "title": "User Level Feature Flags",
+    "depth": 2
+  },
+  {
+    "path": "changelog/sso-status-widget.md",
+    "source_url": "https://workos.com/changelog/sso-status-widget",
+    "title": "SSO Status Widget",
+    "depth": 2
+  },
+  {
+    "path": "changelog/sms-challenges-with-radar.md",
+    "source_url": "https://workos.com/changelog/sms-challenges-with-radar",
+    "title": "SMS Challenges with Radar",
+    "depth": 2
+  },
+  {
+    "path": "changelog/sso-role-assignment.md",
+    "source_url": "https://workos.com/changelog/sso-role-assignment",
+    "title": "SSO Role Assignment in Admin Portal",
+    "depth": 2
+  },
+  {
+    "path": "changelog/supabase-integration-with-authkit.md",
+    "source_url": "https://workos.com/changelog/supabase-integration-with-authkit",
+    "title": "Supabase Integration with AuthKit",
+    "depth": 2
+  },
+  {
+    "path": "changelog/widgets-user-profile-and-organization-switcher.md",
+    "source_url": "https://workos.com/changelog/widgets-user-profile-and-organization-switcher",
+    "title": "Widgets - User Profile and Organization Switcher",
+    "depth": 2
+  },
+  {
+    "path": "changelog/stripe-billing-seat-sync.md",
+    "source_url": "https://workos.com/changelog/stripe-billing-seat-sync",
+    "title": "Stripe Billing Seat Sync",
+    "depth": 2
+  },
+  {
+    "path": "changelog/vercel-marketplace-integration-support.md",
+    "source_url": "https://workos.com/changelog/vercel-marketplace-integration-support",
+    "title": "Vercel Marketplace Integration Support",
+    "depth": 2
+  },
+  {
+    "path": "changelog/using-workos-with-on-prem-customers.md",
+    "source_url": "https://workos.com/changelog/using-workos-with-on-prem-customers",
+    "title": "Using WorkOS with on-prem customers",
+    "depth": 2
+  },
+  {
+    "path": "changelog/sso-connection-issue-notifications-to-it-admins.md",
+    "source_url": "https://workos.com/changelog/sso-connection-issue-notifications-to-it-admins",
+    "title": "SSO Connection Issue Notifications to IT Admins",
+    "depth": 2
+  },
+  {
+    "path": "changelog/standalone-oauth-for-mcp.md",
+    "source_url": "https://workos.com/changelog/standalone-oauth-for-mcp",
+    "title": "Standalone OAuth for MCP",
+    "depth": 2
+  },
+  {
+    "path": "changelog/trust-center.md",
+    "source_url": "https://workos.com/changelog/trust-center",
+    "title": "Trust Center",
+    "depth": 2
+  },
+  {
+    "path": "changelog/wildcards-in-redirect-uris-for-production-environments.md",
+    "source_url": "https://workos.com/changelog/wildcards-in-redirect-uris-for-production-environments",
+    "title": "Use wildcards in Redirect URIs for production environments",
+    "depth": 2
+  },
+  {
+    "path": "changelog/workos-guides.md",
+    "source_url": "https://workos.com/changelog/workos-guides",
+    "title": "WorkOS Guides",
+    "depth": 2
+  },
+  {
+    "path": "customers/ai21-labs.md",
+    "source_url": "https://workos.com/customers/ai21-labs",
+    "title": "How AI21 implemented SSO in days with WorkOS",
+    "depth": 2
+  },
+  {
+    "path": "customers/cursor.md",
+    "source_url": "https://workos.com/customers/cursor",
+    "title": "What\u2019s your enterprise story?",
+    "depth": 2
+  },
+  {
+    "path": "changelog/workos-dashboard-notifications.md",
+    "source_url": "https://workos.com/changelog/workos-dashboard-notifications",
+    "title": "WorkOS Dashboard Notifications",
+    "depth": 2
+  },
+  {
+    "path": "customers/copy-ai.md",
+    "source_url": "https://workos.com/customers/copy-ai",
+    "title": "Copy.ai picks WorkOS as the sole auth provider for SSO, SCIM, and User Management",
+    "depth": 2
+  },
+  {
+    "path": "customers/chromatic.md",
+    "source_url": "https://workos.com/customers/chromatic",
+    "title": "How Chromatic successfully migrated from Passport.js",
+    "depth": 2
+  },
+  {
+    "path": "customers/cerkl.md",
+    "source_url": "https://workos.com/customers/cerkl",
+    "title": "How Cerkl unblocked enterprise deals by integrating WorkOS SSO in two days",
+    "depth": 2
+  },
+  {
+    "path": "changelog/workos-cli.md",
+    "source_url": "https://workos.com/changelog/workos-cli",
+    "title": "WorkOS CLI",
+    "depth": 2
+  },
+  {
+    "path": "customers/enjoyhq.md",
+    "source_url": "https://workos.com/customers/enjoyhq",
+    "title": "How EnjoyHQ implemented enterprise-level SSO in less than 4 hours",
+    "depth": 2
+  },
+  {
+    "path": "changelog/workos-connect.md",
+    "source_url": "https://workos.com/changelog/workos-connect",
+    "title": "WorkOS Connect",
+    "depth": 2
+  },
+  {
+    "path": "changelog/workos-vault-azure-support-byok.md",
+    "source_url": "https://workos.com/changelog/workos-vault-azure-support-byok",
+    "title": "WorkOS Vault adds Azure support for Bring Your Own Key",
+    "depth": 2
+  },
+  {
+    "path": "customers/magical.md",
+    "source_url": "https://workos.com/customers/magical",
+    "title": "How Magical won enterprise deals with WorkOS SSO",
+    "depth": 2
+  },
+  {
+    "path": "contact.md",
+    "source_url": "https://workos.com/contact",
+    "title": "Contact us",
+    "depth": 2
+  },
+  {
+    "path": "cookies.md",
+    "source_url": "https://workos.com/cookies",
+    "title": "WorkOS Cookie Policy",
+    "depth": 2
+  },
+  {
+    "path": "customers/drata.md",
+    "source_url": "https://workos.com/customers/drata",
+    "title": "What\u2019s your enterprise story?",
+    "depth": 2
+  },
+  {
+    "path": "customers/hopin.md",
+    "source_url": "https://workos.com/customers/hopin",
+    "title": "How Hopin Saved Two Months of Engineering Time with WorkOS",
+    "depth": 2
+  },
+  {
+    "path": "customers/indeed.md",
+    "source_url": "https://workos.com/customers/indeed",
+    "title": "Indeed chooses WorkOS over Auth0 to strengthen their identity infrastructure",
+    "depth": 2
+  }
+]
