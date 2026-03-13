@@ -47,11 +47,17 @@ export const loanApplicationMachine = setup({
 	},
 	guards: {
 		hasCompleteData: ({ context }) => {
+			// POC pattern: reads from context.data (hydrated from the entity at load time).
+			// In production, consider reading from the event payload instead
+			// (e.g. a SUBMIT event that carries the latest form values), which would
+			// require this guard to receive `event` and validate
+			// event.applicantName / event.loanAmount directly.
+			// TODO: revisit this design decision before promoting to production.
 			const data = context.data;
 			return (
 				data != null &&
 				typeof data.applicantName === "string" &&
-				data.applicantName.length > 0 &&
+				data.applicantName.trim().length > 0 &&
 				typeof data.loanAmount === "number" &&
 				data.loanAmount > 0
 			);

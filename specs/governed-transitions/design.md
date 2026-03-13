@@ -13,8 +13,7 @@ interface CommandSource {
   actorId?: string;
   actorType?: "borrower" | "broker" | "admin" | "system";
   sessionId?: string;
-  // Note: production spec includes `ip?: string` — omitted in demo since
-  // the demo runs in a browser context where IP collection isn't meaningful.
+  ip?: string; // Optional — included in demo to show audit context. Seed data uses RFC-5737 TEST-NET addresses.
 }
 
 interface Command {
@@ -155,7 +154,9 @@ The machine file lives at `convex/demo/machines/loanApplication.machine.ts`. It 
 
 #### Guard Definition
 
-`hasCompleteData`: Checks that the event payload contains a non-empty `applicantName` string and a `loanAmount` number greater than 0. This guard runs on `SUBMIT` to prevent incomplete applications from advancing.
+`hasCompleteData`: Checks that `context.data` contains a non-empty `applicantName` string and a `loanAmount` number greater than 0. Reads from `context` (the entity's `data` field, merged during state hydration at load time) — **not** from the event payload. This guard runs on `SUBMIT` to prevent incomplete applications from advancing.
+
+> **POC note:** In this demo, `applicantName` and `loanAmount` are written to the entity at creation time and hydrated into machine context before the guard runs — the `SUBMIT` event itself carries no payload. In a production implementation you may instead want to pass these fields on the `SUBMIT` event payload (e.g. a form submission carries the latest values), which would require the guard to read from `event` rather than `context.data`. Revisit this design decision before promoting to production.
 
 ```typescript
 guards: {

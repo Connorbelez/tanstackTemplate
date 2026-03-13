@@ -115,7 +115,12 @@ async function executeTransition(
 	// The event type is a runtime string from the client; cast to satisfy
 	// xstate's literal-union constraint. Invalid events simply won't match
 	// any transition and the engine will record a rejection.
-	const event = { type: eventType, ...(payload ?? {}) } as Parameters<
+	// Only spread payload if it's a plain object — non-objects would throw at runtime.
+	const safePayload =
+		payload != null && typeof payload === "object" && !Array.isArray(payload)
+			? payload
+			: {};
+	const event = { type: eventType, ...safePayload } as Parameters<
 		(typeof machineDef)["transition"]
 	>[1];
 	const [nextState, executableActions] = xstateTransition(
@@ -133,7 +138,7 @@ async function executeTransition(
 
 	if (!transitioned) {
 		// 5a. Command rejected — log to journal and return
-		await ctx.db.insert("demo_gt_journal", {
+		const rejectedJournalId = await ctx.db.insert("demo_gt_journal", {
 			entityType,
 			entityId,
 			eventType,
@@ -146,6 +151,13 @@ async function executeTransition(
 			machineVersion: machineDef.config.id ?? "unknown",
 			timestamp: Date.now(),
 		});
+
+		// Hash-chain rejected entries too — audit evidence must be complete
+		await ctx.scheduler.runAfter(
+			0,
+			internal.demo.governedTransitions.hashChainJournalEntry,
+			{ journalEntryId: rejectedJournalId }
+		);
 
 		return {
 			success: false,
@@ -421,9 +433,11 @@ export const runFullLifecycle = convex
 export const listEntities = convex
 	.query()
 	.handler(async (ctx) => {
-		const entities = await ctx.db.query("demo_gt_entities").collect();
-		// Order by creation time descending
-		return entities.sort((a, b) => b.createdAt - a.createdAt);
+		return await ctx.db
+			.query("demo_gt_entities")
+			.withIndex("by_created")
+			.order("desc")
+			.take(100);
 	})
 	.public();
 
@@ -444,30 +458,37 @@ export const getJournal = convex
 		),
 	})
 	.handler(async (ctx, { entityId, outcome }) => {
+		if (entityId && outcome) {
+			// Both filters: use by_entity index, then filter by outcome
+			return (
+				await ctx.db
+					.query("demo_gt_journal")
+					.withIndex("by_entity", (q) => q.eq("entityId", entityId))
+					.order("desc")
+					.take(200)
+			).filter((e) => e.outcome === outcome);
+		}
+
 		if (entityId) {
 			// Use by_entity index
-			const entries = await ctx.db
+			return await ctx.db
 				.query("demo_gt_journal")
 				.withIndex("by_entity", (q) => q.eq("entityId", entityId))
-				.collect();
-			const filtered = outcome
-				? entries.filter((e) => e.outcome === outcome)
-				: entries;
-			return filtered.sort((a, b) => b.timestamp - a.timestamp);
+				.order("desc")
+				.take(200);
 		}
 
 		if (outcome) {
 			// Use by_outcome index
-			const entries = await ctx.db
+			return await ctx.db
 				.query("demo_gt_journal")
 				.withIndex("by_outcome", (q) => q.eq("outcome", outcome))
-				.collect();
-			return entries.sort((a, b) => b.timestamp - a.timestamp);
+				.order("desc")
+				.take(200);
 		}
 
 		// No filters — return all, ordered by timestamp desc
-		const entries = await ctx.db.query("demo_gt_journal").collect();
-		return entries.sort((a, b) => b.timestamp - a.timestamp);
+		return await ctx.db.query("demo_gt_journal").order("desc").take(200);
 	})
 	.public();
 
@@ -519,18 +540,19 @@ export const getValidTransitions = convex
 			},
 		});
 
-		// All possible event types for the loanApplication machine
-		const allEventTypes = [
-			"SUBMIT",
-			"ASSIGN_REVIEWER",
-			"APPROVE",
-			"REJECT",
-			"REQUEST_INFO",
-			"RESUBMIT",
-			"REOPEN",
-			"FUND",
-			"CLOSE",
-		];
+		// Derive all event types from the machine's state definitions
+		const allEventTypes = new Set<string>();
+		const statesConfig = machineDef.config.states ?? {};
+		for (const stateDef of Object.values(statesConfig)) {
+			const onConfig = (stateDef as Record<string, unknown>).on as
+				| Record<string, unknown>
+				| undefined;
+			if (onConfig) {
+				for (const eventName of Object.keys(onConfig)) {
+					allEventTypes.add(eventName);
+				}
+			}
+		}
 
 		const validTransitions: Array<{ eventType: string; targetState: string }> =
 			[];
@@ -567,9 +589,9 @@ export const getEffectsLog = convex
 			return await ctx.db
 				.query("demo_gt_effects_log")
 				.withIndex("by_entity", (q) => q.eq("entityId", entityId))
-				.collect();
+				.take(200);
 		}
-		return await ctx.db.query("demo_gt_effects_log").collect();
+		return await ctx.db.query("demo_gt_effects_log").take(200);
 	})
 	.public();
 

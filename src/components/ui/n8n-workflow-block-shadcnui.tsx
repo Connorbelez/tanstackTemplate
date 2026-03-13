@@ -171,6 +171,10 @@ export function N8nWorkflowBlock({
   title = "Workflow Builder",
   activeNodeId,
 }: N8nWorkflowBlockProps) {
+  const hasExternalGraph =
+    propNodes !== undefined || propConnections !== undefined;
+  const canEdit = !readOnly && !hasExternalGraph;
+
   const [internalNodes, setInternalNodes] =
     useState<WorkflowNode[]>(initialNodes);
   const [internalConnections, setInternalConnections] =
@@ -184,6 +188,9 @@ export function N8nWorkflowBlock({
   const [draggingNodeId, setDraggingNodeId] = useState<string | null>(null);
   const [contentSize, setContentSize] = useState(() => {
     const sourceNodes = propNodes ?? initialNodes;
+    if (sourceNodes.length === 0) {
+      return { width: NODE_WIDTH + 50, height: NODE_HEIGHT + 50 };
+    }
     const maxX = Math.max(
       ...sourceNodes.map((n) => n.position.x + NODE_WIDTH)
     );
@@ -209,7 +216,7 @@ export function N8nWorkflowBlock({
 
   // Drag Handlers
   const handleDragStart = (nodeId: string) => {
-    if (readOnly) return;
+    if (!canEdit) return;
     setDraggingNodeId(nodeId);
     const node = nodes.find((n) => n.id === nodeId);
     if (node) {
@@ -218,7 +225,7 @@ export function N8nWorkflowBlock({
   };
 
   const handleDrag = (nodeId: string, { offset }: PanInfo) => {
-    if (readOnly) return;
+    if (!canEdit) return;
     if (draggingNodeId !== nodeId || !dragStartPosition.current) return;
 
     const newX = dragStartPosition.current.x + offset.x;
@@ -250,7 +257,7 @@ export function N8nWorkflowBlock({
 
   // Add Node Handler
   const addNode = () => {
-    if (readOnly) return;
+    if (!canEdit) return;
     const template =
       nodeTemplates[Math.floor(Math.random() * nodeTemplates.length)];
     const lastNode = internalNodes[internalNodes.length - 1];
@@ -304,7 +311,7 @@ export function N8nWorkflowBlock({
             {title}
           </span>
         </div>
-        {!readOnly && (
+        {canEdit && (
           <Button
             variant="outline"
             size="sm"
@@ -362,7 +369,7 @@ export function N8nWorkflowBlock({
             return (
               <motion.div
                 key={node.id}
-                drag={!readOnly}
+                drag={canEdit}
                 dragMomentum={false}
                 dragConstraints={{
                   left: 0,
@@ -379,12 +386,16 @@ export function N8nWorkflowBlock({
                   width: NODE_WIDTH,
                   transformOrigin: "0 0",
                 }}
-                className={readOnly ? "absolute" : "absolute cursor-grab"}
+                className={canEdit ? "absolute cursor-grab" : "absolute"}
                 initial={{ scale: 0.8, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
                 transition={{ duration: 0.2 }}
-                whileHover={readOnly ? undefined : { scale: 1.02 }}
-                whileDrag={readOnly ? undefined : { scale: 1.05, zIndex: 50, cursor: "grabbing" }}
+                whileHover={canEdit ? { scale: 1.02 } : undefined}
+                whileDrag={
+                  canEdit
+                    ? { scale: 1.05, zIndex: 50, cursor: "grabbing" }
+                    : undefined
+                }
                 aria-grabbed={isDragging}
               >
                 <Card
@@ -458,7 +469,7 @@ export function N8nWorkflowBlock({
             </span>
           </div>
         </div>
-        {!readOnly && (
+        {canEdit && (
           <p className="text-[10px] uppercase tracking-[0.2em] text-foreground/40">
             Drag nodes to reposition
           </p>

@@ -109,7 +109,7 @@ Two-column grid on lg screens.
   - Loan amount formatted as currency
   - When selected (clicked), card expands to show:
     - **Valid transitions** from `getValidTransitions`: rendered as green Buttons
-    - **All events** section: all 9 event types shown. Valid ones are green, invalid ones are gray/disabled with `cursor-not-allowed`. Clicking an invalid one still calls `transition` to demonstrate rejection logging.
+    - **All events** section: all 9 event types shown. Valid ones are green; invalid ones are visually muted with `cursor-not-allowed` but remain clickable. Clicking an invalid one still calls `transition` to demonstrate rejection logging.
     - **Source selector**: Select/dropdown with options: borrower_portal, broker_portal, admin_dashboard, api_webhook, scheduler. Default: admin_dashboard.
 
 ### Imports

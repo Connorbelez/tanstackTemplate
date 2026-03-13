@@ -16,7 +16,6 @@ export function GovernedTransitionsJournalView({ entityId, outcome }: Props) {
 		entityId,
 		outcome,
 	});
-	const stats = useQuery(api.demo.governedTransitions.getJournalStats);
 
 	const logs: Log[] = (journal ?? []).map((entry) => ({
 		id: entry._id,
@@ -26,7 +25,7 @@ export function GovernedTransitionsJournalView({ entityId, outcome }: Props) {
 			| "error",
 		service: entry.source.channel,
 		message: `${entry.eventType}: ${entry.previousState} → ${entry.newState}${entry.reason ? ` (${entry.reason})` : ""}`,
-		duration: "",
+		duration: "—",
 		status: entry.outcome,
 		tags: [
 			entry.eventType,
@@ -36,8 +35,16 @@ export function GovernedTransitionsJournalView({ entityId, outcome }: Props) {
 		],
 	}));
 
-	const subtitle = stats
-		? `${stats.total} total · ${stats.transitioned} transitioned · ${stats.rejected} rejected`
+	// Derive stats from the filtered journal data so they match visible rows
+	const subtitle = journal
+		? (() => {
+				const total = journal.length;
+				const transitioned = journal.filter(
+					(e) => e.outcome === "transitioned"
+				).length;
+				const rejected = total - transitioned;
+				return `${total} total · ${transitioned} transitioned · ${rejected} rejected`;
+			})()
 		: undefined;
 
 	return (

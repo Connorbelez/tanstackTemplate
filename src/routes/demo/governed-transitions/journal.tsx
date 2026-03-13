@@ -26,7 +26,20 @@ function JournalViewer() {
 		useState<Id<"demo_gt_entities"> | null>(null);
 	const [outcomeFilter, setOutcomeFilter] = useState<OutcomeFilter>("all");
 
-	const stats = useQuery(api.demo.governedTransitions.getJournalStats);
+	// Fetch journal with the same filters used by GovernedTransitionsJournalView
+	// so stats cards stay in sync with visible rows
+	const journal = useQuery(api.demo.governedTransitions.getJournal, {
+		entityId: entityFilter ?? undefined,
+		outcome: outcomeFilter === "all" ? undefined : outcomeFilter,
+	});
+	const stats = journal
+		? {
+				total: journal.length,
+				transitioned: journal.filter((e) => e.outcome === "transitioned")
+					.length,
+				rejected: journal.filter((e) => e.outcome === "rejected").length,
+			}
+		: undefined;
 	const entities = useQuery(api.demo.governedTransitions.listEntities);
 
 	return (

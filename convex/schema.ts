@@ -1191,7 +1191,8 @@ export default defineSchema({
 		createdAt: v.number(),
 	})
 		.index("by_status", ["status"])
-		.index("by_type", ["entityType"]),
+		.index("by_type", ["entityType"])
+		.index("by_created", ["createdAt"]),
 
 	demo_gt_journal: defineTable({
 		entityType: v.string(),
