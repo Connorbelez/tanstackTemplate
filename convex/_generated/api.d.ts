@@ -22,6 +22,7 @@ import type * as demo_debouncer from "../demo/debouncer.js";
 import type * as demo_fileManagement from "../demo/fileManagement.js";
 import type * as demo_fluentConvex from "../demo/fluentConvex.js";
 import type * as demo_geospatial from "../demo/geospatial.js";
+import type * as demo_ledger from "../demo/ledger.js";
 import type * as demo_migrations from "../demo/migrations.js";
 import type * as demo_presence from "../demo/presence.js";
 import type * as demo_rateLimiter from "../demo/rateLimiter.js";
@@ -42,6 +43,13 @@ import type * as documentEngine_templates from "../documentEngine/templates.js";
 import type * as documentEngine_validators from "../documentEngine/validators.js";
 import type * as fluent from "../fluent.js";
 import type * as http from "../http.js";
+import type * as ledger_constants from "../ledger/constants.js";
+import type * as ledger_cursors from "../ledger/cursors.js";
+import type * as ledger_internal from "../ledger/internal.js";
+import type * as ledger_mutations from "../ledger/mutations.js";
+import type * as ledger_queries from "../ledger/queries.js";
+import type * as ledger_validation from "../ledger/validation.js";
+import type * as ledger_validators from "../ledger/validators.js";
 import type * as numbers from "../numbers.js";
 import type * as todos from "../todos.js";
 
@@ -66,6 +74,7 @@ declare const fullApi: ApiFromModules<{
   "demo/fileManagement": typeof demo_fileManagement;
   "demo/fluentConvex": typeof demo_fluentConvex;
   "demo/geospatial": typeof demo_geospatial;
+  "demo/ledger": typeof demo_ledger;
   "demo/migrations": typeof demo_migrations;
   "demo/presence": typeof demo_presence;
   "demo/rateLimiter": typeof demo_rateLimiter;
@@ -86,6 +95,13 @@ declare const fullApi: ApiFromModules<{
   "documentEngine/validators": typeof documentEngine_validators;
   fluent: typeof fluent;
   http: typeof http;
+  "ledger/constants": typeof ledger_constants;
+  "ledger/cursors": typeof ledger_cursors;
+  "ledger/internal": typeof ledger_internal;
+  "ledger/mutations": typeof ledger_mutations;
+  "ledger/queries": typeof ledger_queries;
+  "ledger/validation": typeof ledger_validation;
+  "ledger/validators": typeof ledger_validators;
   numbers: typeof numbers;
   todos: typeof todos;
 }>;
@@ -2624,7 +2640,12 @@ export declare const components: {
       handleSubscriptionDeleted: FunctionReference<
         "mutation",
         "internal",
-        { stripeSubscriptionId: string },
+        {
+          cancelAt?: number;
+          cancelAtPeriodEnd?: boolean;
+          currentPeriodEnd?: number;
+          stripeSubscriptionId: string;
+        },
         null
       >;
       handleSubscriptionUpdated: FunctionReference<
@@ -2641,6 +2662,17 @@ export declare const components: {
           stripeSubscriptionId: string;
         },
         null
+      >;
+      listSubscriptionsWithCreationTime: FunctionReference<
+        "query",
+        "internal",
+        { stripeCustomerId: string },
+        Array<{
+          _creationTime: number;
+          status: string;
+          stripeCustomerId: string;
+          stripeSubscriptionId: string;
+        }>
       >;
       updatePaymentCustomer: FunctionReference<
         "mutation",
@@ -2667,6 +2699,18 @@ export declare const components: {
         },
         string
       >;
+      getCheckoutSession: FunctionReference<
+        "query",
+        "internal",
+        { stripeCheckoutSessionId: string },
+        {
+          metadata?: any;
+          mode: string;
+          status: string;
+          stripeCheckoutSessionId: string;
+          stripeCustomerId?: string;
+        } | null
+      >;
       getCustomer: FunctionReference<
         "query",
         "internal",
@@ -2676,6 +2720,31 @@ export declare const components: {
           metadata?: any;
           name?: string;
           stripeCustomerId: string;
+          userId?: string;
+        } | null
+      >;
+      getCustomerByEmail: FunctionReference<
+        "query",
+        "internal",
+        { email: string },
+        {
+          email?: string;
+          metadata?: any;
+          name?: string;
+          stripeCustomerId: string;
+          userId?: string;
+        } | null
+      >;
+      getCustomerByUserId: FunctionReference<
+        "query",
+        "internal",
+        { userId: string },
+        {
+          email?: string;
+          metadata?: any;
+          name?: string;
+          stripeCustomerId: string;
+          userId?: string;
         } | null
       >;
       getPayment: FunctionReference<
@@ -2729,6 +2798,18 @@ export declare const components: {
           stripeSubscriptionId: string;
           userId?: string;
         } | null
+      >;
+      listCheckoutSessions: FunctionReference<
+        "query",
+        "internal",
+        { stripeCustomerId: string },
+        Array<{
+          metadata?: any;
+          mode: string;
+          status: string;
+          stripeCheckoutSessionId: string;
+          stripeCustomerId?: string;
+        }>
       >;
       listInvoices: FunctionReference<
         "query",
@@ -2844,6 +2925,24 @@ export declare const components: {
           userId?: string;
         }>
       >;
+      listSubscriptionsByOrgId: FunctionReference<
+        "query",
+        "internal",
+        { orgId: string },
+        Array<{
+          cancelAt?: number;
+          cancelAtPeriodEnd: boolean;
+          currentPeriodEnd: number;
+          metadata?: any;
+          orgId?: string;
+          priceId: string;
+          quantity?: number;
+          status: string;
+          stripeCustomerId: string;
+          stripeSubscriptionId: string;
+          userId?: string;
+        }>
+      >;
       listSubscriptionsByUserId: FunctionReference<
         "query",
         "internal",
@@ -2876,7 +2975,7 @@ export declare const components: {
       updateSubscriptionQuantity: FunctionReference<
         "action",
         "internal",
-        { apiKey: string; quantity: number; stripeSubscriptionId: string },
+        { quantity: number; stripeSubscriptionId: string },
         null
       >;
     };

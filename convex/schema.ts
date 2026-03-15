@@ -2,6 +2,8 @@ import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 import {
 	draftStateValidator,
+	entityFieldValidator,
+	entitySourceValidator,
 	formatOptionsValidator,
 	pageDimensionValidator,
 	signatoryConfigValidator,
@@ -28,7 +30,15 @@ export default defineSchema({
 		lastName: v.string(),
 		phoneNumber: v.optional(v.string()),
 	}).index("authId", ["authId"]),
-
+	dataModelEntities: defineTable({
+		name: v.string(),
+		label: v.string(),
+		source: entitySourceValidator,
+		hidden: v.boolean(),
+		fields: v.array(entityFieldValidator),
+		createdAt: v.number(),
+		updatedAt: v.number(),
+	}).index("by_name", ["name"]),
 	organizations: defineTable({
 		workosId: v.string(),
 		name: v.string(),
