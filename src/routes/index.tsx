@@ -53,6 +53,7 @@ function SignInForm({
 	signInUrl: string;
 	signUpUrl: string;
 }) {
+	console.log("signInUrl", signInUrl);
 	return (
 		<div className="mx-auto flex w-96 flex-col gap-8">
 			<p>Log in to see the numbers</p>

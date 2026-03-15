@@ -10,7 +10,6 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as SignUpRouteImport } from './routes/sign-up'
-import { Route as SignInRouteImport } from './routes/sign-in'
 import { Route as CallbackRouteImport } from './routes/callback'
 import { Route as AboutRouteImport } from './routes/about'
 import { Route as IndexRouteImport } from './routes/index'
@@ -60,11 +59,6 @@ import { Route as DemoDocumentEngineDesignerTemplateIdRouteImport } from './rout
 const SignUpRoute = SignUpRouteImport.update({
   id: '/sign-up',
   path: '/sign-up',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const SignInRoute = SignInRouteImport.update({
-  id: '/sign-in',
-  path: '/sign-in',
   getParentRoute: () => rootRouteImport,
 } as any)
 const CallbackRoute = CallbackRouteImport.update({
@@ -314,7 +308,6 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
   '/callback': typeof CallbackRoute
-  '/sign-in': typeof SignInRoute
   '/sign-up': typeof SignUpRoute
   '/demo/audit-traceability': typeof DemoAuditTraceabilityRouteRouteWithChildren
   '/demo/document-engine': typeof DemoDocumentEngineRouteRouteWithChildren
@@ -363,7 +356,6 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
   '/callback': typeof CallbackRoute
-  '/sign-in': typeof SignInRoute
   '/sign-up': typeof SignUpRoute
   '/authenticated': typeof AuthenticatedAuthenticatedRoute
   '/demo/convex': typeof DemoConvexRoute
@@ -411,7 +403,6 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
   '/callback': typeof CallbackRoute
-  '/sign-in': typeof SignInRoute
   '/sign-up': typeof SignUpRoute
   '/demo/audit-traceability': typeof DemoAuditTraceabilityRouteRouteWithChildren
   '/demo/document-engine': typeof DemoDocumentEngineRouteRouteWithChildren
@@ -462,7 +453,6 @@ export interface FileRouteTypes {
     | '/'
     | '/about'
     | '/callback'
-    | '/sign-in'
     | '/sign-up'
     | '/demo/audit-traceability'
     | '/demo/document-engine'
@@ -511,7 +501,6 @@ export interface FileRouteTypes {
     | '/'
     | '/about'
     | '/callback'
-    | '/sign-in'
     | '/sign-up'
     | '/authenticated'
     | '/demo/convex'
@@ -558,7 +547,6 @@ export interface FileRouteTypes {
     | '/'
     | '/about'
     | '/callback'
-    | '/sign-in'
     | '/sign-up'
     | '/demo/audit-traceability'
     | '/demo/document-engine'
@@ -608,7 +596,6 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AboutRoute: typeof AboutRoute
   CallbackRoute: typeof CallbackRoute
-  SignInRoute: typeof SignInRoute
   SignUpRoute: typeof SignUpRoute
   DemoAuditTraceabilityRouteRoute: typeof DemoAuditTraceabilityRouteRouteWithChildren
   DemoDocumentEngineRouteRoute: typeof DemoDocumentEngineRouteRouteWithChildren
@@ -648,13 +635,6 @@ declare module '@tanstack/react-router' {
       path: '/sign-up'
       fullPath: '/sign-up'
       preLoaderRoute: typeof SignUpRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/sign-in': {
-      id: '/sign-in'
-      path: '/sign-in'
-      fullPath: '/sign-in'
-      preLoaderRoute: typeof SignInRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/callback': {
@@ -1030,7 +1010,6 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AboutRoute: AboutRoute,
   CallbackRoute: CallbackRoute,
-  SignInRoute: SignInRoute,
   SignUpRoute: SignUpRoute,
   DemoAuditTraceabilityRouteRoute: DemoAuditTraceabilityRouteRouteWithChildren,
   DemoDocumentEngineRouteRoute: DemoDocumentEngineRouteRouteWithChildren,
