@@ -47,13 +47,19 @@ import { Route as DemoConvexAggregateRouteImport } from './routes/demo/convex-ag
 import { Route as DemoConvexActionCacheRouteImport } from './routes/demo/convex-action-cache'
 import { Route as DemoConvexRouteImport } from './routes/demo/convex'
 import { Route as AuthenticatedAuthenticatedRouteImport } from './routes/_authenticated/authenticated'
+import { Route as DemoRbacAuthRouteRouteImport } from './routes/demo/rbac-auth/route'
 import { Route as DemoRbacRouteRouteImport } from './routes/demo/rbac/route'
 import { Route as DemoDocumentEngineRouteRouteImport } from './routes/demo/document-engine/route'
 import { Route as DemoAuditTraceabilityRouteRouteImport } from './routes/demo/audit-traceability/route'
 import { Route as AdminUnderwritingRouteRouteImport } from './routes/admin/underwriting/route'
 import { Route as DemoRbacIndexRouteImport } from './routes/demo/rbac/index'
+import { Route as DemoRbacAuthIndexRouteImport } from './routes/demo/rbac-auth/index'
 import { Route as DemoDocumentEngineIndexRouteImport } from './routes/demo/document-engine/index'
 import { Route as DemoAuditTraceabilityIndexRouteImport } from './routes/demo/audit-traceability/index'
+import { Route as DemoRbacAuthRolesRouteImport } from './routes/demo/rbac-auth/roles'
+import { Route as DemoRbacAuthOnboardingRouteImport } from './routes/demo/rbac-auth/onboarding'
+import { Route as DemoRbacAuthAuditRouteImport } from './routes/demo/rbac-auth/audit'
+import { Route as DemoRbacAuthAccessControlRouteImport } from './routes/demo/rbac-auth/access-control'
 import { Route as DemoFormSimpleRouteImport } from './routes/demo/form.simple'
 import { Route as DemoFormAddressRouteImport } from './routes/demo/form.address'
 import { Route as DemoDocumentEngineVariablesRouteImport } from './routes/demo/document-engine/variables'
@@ -268,6 +274,11 @@ const AuthenticatedAuthenticatedRoute =
     path: '/authenticated',
     getParentRoute: () => rootRouteImport,
   } as any)
+const DemoRbacAuthRouteRoute = DemoRbacAuthRouteRouteImport.update({
+  id: '/demo/rbac-auth',
+  path: '/demo/rbac-auth',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const DemoRbacRouteRoute = DemoRbacRouteRouteImport.update({
   id: '/demo/rbac',
   path: '/demo/rbac',
@@ -294,6 +305,11 @@ const DemoRbacIndexRoute = DemoRbacIndexRouteImport.update({
   path: '/',
   getParentRoute: () => DemoRbacRouteRoute,
 } as any)
+const DemoRbacAuthIndexRoute = DemoRbacAuthIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => DemoRbacAuthRouteRoute,
+} as any)
 const DemoDocumentEngineIndexRoute = DemoDocumentEngineIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -304,6 +320,27 @@ const DemoAuditTraceabilityIndexRoute =
     id: '/',
     path: '/',
     getParentRoute: () => DemoAuditTraceabilityRouteRoute,
+  } as any)
+const DemoRbacAuthRolesRoute = DemoRbacAuthRolesRouteImport.update({
+  id: '/roles',
+  path: '/roles',
+  getParentRoute: () => DemoRbacAuthRouteRoute,
+} as any)
+const DemoRbacAuthOnboardingRoute = DemoRbacAuthOnboardingRouteImport.update({
+  id: '/onboarding',
+  path: '/onboarding',
+  getParentRoute: () => DemoRbacAuthRouteRoute,
+} as any)
+const DemoRbacAuthAuditRoute = DemoRbacAuthAuditRouteImport.update({
+  id: '/audit',
+  path: '/audit',
+  getParentRoute: () => DemoRbacAuthRouteRoute,
+} as any)
+const DemoRbacAuthAccessControlRoute =
+  DemoRbacAuthAccessControlRouteImport.update({
+    id: '/access-control',
+    path: '/access-control',
+    getParentRoute: () => DemoRbacAuthRouteRoute,
   } as any)
 const DemoFormSimpleRoute = DemoFormSimpleRouteImport.update({
   id: '/demo/form/simple',
@@ -431,6 +468,7 @@ export interface FileRoutesByFullPath {
   '/demo/audit-traceability': typeof DemoAuditTraceabilityRouteRouteWithChildren
   '/demo/document-engine': typeof DemoDocumentEngineRouteRouteWithChildren
   '/demo/rbac': typeof DemoRbacRouteRouteWithChildren
+  '/demo/rbac-auth': typeof DemoRbacAuthRouteRouteWithChildren
   '/authenticated': typeof AuthenticatedAuthenticatedRoute
   '/demo/convex': typeof DemoConvexRoute
   '/demo/convex-action-cache': typeof DemoConvexActionCacheRoute
@@ -473,8 +511,13 @@ export interface FileRoutesByFullPath {
   '/demo/document-engine/variables': typeof DemoDocumentEngineVariablesRoute
   '/demo/form/address': typeof DemoFormAddressRoute
   '/demo/form/simple': typeof DemoFormSimpleRoute
+  '/demo/rbac-auth/access-control': typeof DemoRbacAuthAccessControlRoute
+  '/demo/rbac-auth/audit': typeof DemoRbacAuthAuditRoute
+  '/demo/rbac-auth/onboarding': typeof DemoRbacAuthOnboardingRoute
+  '/demo/rbac-auth/roles': typeof DemoRbacAuthRolesRoute
   '/demo/audit-traceability/': typeof DemoAuditTraceabilityIndexRoute
   '/demo/document-engine/': typeof DemoDocumentEngineIndexRoute
+  '/demo/rbac-auth/': typeof DemoRbacAuthIndexRoute
   '/demo/rbac/': typeof DemoRbacIndexRoute
   '/demo/rbac/admin/underwriting': typeof DemoRbacAdminUnderwritingRouteRoute
   '/demo/document-engine/designer/$templateId': typeof DemoDocumentEngineDesignerTemplateIdRoute
@@ -536,8 +579,13 @@ export interface FileRoutesByTo {
   '/demo/document-engine/variables': typeof DemoDocumentEngineVariablesRoute
   '/demo/form/address': typeof DemoFormAddressRoute
   '/demo/form/simple': typeof DemoFormSimpleRoute
+  '/demo/rbac-auth/access-control': typeof DemoRbacAuthAccessControlRoute
+  '/demo/rbac-auth/audit': typeof DemoRbacAuthAuditRoute
+  '/demo/rbac-auth/onboarding': typeof DemoRbacAuthOnboardingRoute
+  '/demo/rbac-auth/roles': typeof DemoRbacAuthRolesRoute
   '/demo/audit-traceability': typeof DemoAuditTraceabilityIndexRoute
   '/demo/document-engine': typeof DemoDocumentEngineIndexRoute
+  '/demo/rbac-auth': typeof DemoRbacAuthIndexRoute
   '/demo/rbac': typeof DemoRbacIndexRoute
   '/demo/rbac/admin/underwriting': typeof DemoRbacAdminUnderwritingRouteRoute
   '/demo/document-engine/designer/$templateId': typeof DemoDocumentEngineDesignerTemplateIdRoute
@@ -561,6 +609,7 @@ export interface FileRoutesById {
   '/demo/audit-traceability': typeof DemoAuditTraceabilityRouteRouteWithChildren
   '/demo/document-engine': typeof DemoDocumentEngineRouteRouteWithChildren
   '/demo/rbac': typeof DemoRbacRouteRouteWithChildren
+  '/demo/rbac-auth': typeof DemoRbacAuthRouteRouteWithChildren
   '/_authenticated/authenticated': typeof AuthenticatedAuthenticatedRoute
   '/demo/convex': typeof DemoConvexRoute
   '/demo/convex-action-cache': typeof DemoConvexActionCacheRoute
@@ -603,8 +652,13 @@ export interface FileRoutesById {
   '/demo/document-engine/variables': typeof DemoDocumentEngineVariablesRoute
   '/demo/form/address': typeof DemoFormAddressRoute
   '/demo/form/simple': typeof DemoFormSimpleRoute
+  '/demo/rbac-auth/access-control': typeof DemoRbacAuthAccessControlRoute
+  '/demo/rbac-auth/audit': typeof DemoRbacAuthAuditRoute
+  '/demo/rbac-auth/onboarding': typeof DemoRbacAuthOnboardingRoute
+  '/demo/rbac-auth/roles': typeof DemoRbacAuthRolesRoute
   '/demo/audit-traceability/': typeof DemoAuditTraceabilityIndexRoute
   '/demo/document-engine/': typeof DemoDocumentEngineIndexRoute
+  '/demo/rbac-auth/': typeof DemoRbacAuthIndexRoute
   '/demo/rbac/': typeof DemoRbacIndexRoute
   '/demo/rbac/admin/underwriting': typeof DemoRbacAdminUnderwritingRouteRoute
   '/demo/document-engine/designer/$templateId': typeof DemoDocumentEngineDesignerTemplateIdRoute
@@ -629,6 +683,7 @@ export interface FileRouteTypes {
     | '/demo/audit-traceability'
     | '/demo/document-engine'
     | '/demo/rbac'
+    | '/demo/rbac-auth'
     | '/authenticated'
     | '/demo/convex'
     | '/demo/convex-action-cache'
@@ -671,8 +726,13 @@ export interface FileRouteTypes {
     | '/demo/document-engine/variables'
     | '/demo/form/address'
     | '/demo/form/simple'
+    | '/demo/rbac-auth/access-control'
+    | '/demo/rbac-auth/audit'
+    | '/demo/rbac-auth/onboarding'
+    | '/demo/rbac-auth/roles'
     | '/demo/audit-traceability/'
     | '/demo/document-engine/'
+    | '/demo/rbac-auth/'
     | '/demo/rbac/'
     | '/demo/rbac/admin/underwriting'
     | '/demo/document-engine/designer/$templateId'
@@ -734,8 +794,13 @@ export interface FileRouteTypes {
     | '/demo/document-engine/variables'
     | '/demo/form/address'
     | '/demo/form/simple'
+    | '/demo/rbac-auth/access-control'
+    | '/demo/rbac-auth/audit'
+    | '/demo/rbac-auth/onboarding'
+    | '/demo/rbac-auth/roles'
     | '/demo/audit-traceability'
     | '/demo/document-engine'
+    | '/demo/rbac-auth'
     | '/demo/rbac'
     | '/demo/rbac/admin/underwriting'
     | '/demo/document-engine/designer/$templateId'
@@ -758,6 +823,7 @@ export interface FileRouteTypes {
     | '/demo/audit-traceability'
     | '/demo/document-engine'
     | '/demo/rbac'
+    | '/demo/rbac-auth'
     | '/_authenticated/authenticated'
     | '/demo/convex'
     | '/demo/convex-action-cache'
@@ -800,8 +866,13 @@ export interface FileRouteTypes {
     | '/demo/document-engine/variables'
     | '/demo/form/address'
     | '/demo/form/simple'
+    | '/demo/rbac-auth/access-control'
+    | '/demo/rbac-auth/audit'
+    | '/demo/rbac-auth/onboarding'
+    | '/demo/rbac-auth/roles'
     | '/demo/audit-traceability/'
     | '/demo/document-engine/'
+    | '/demo/rbac-auth/'
     | '/demo/rbac/'
     | '/demo/rbac/admin/underwriting'
     | '/demo/document-engine/designer/$templateId'
@@ -824,6 +895,7 @@ export interface RootRouteChildren {
   DemoAuditTraceabilityRouteRoute: typeof DemoAuditTraceabilityRouteRouteWithChildren
   DemoDocumentEngineRouteRoute: typeof DemoDocumentEngineRouteRouteWithChildren
   DemoRbacRouteRoute: typeof DemoRbacRouteRouteWithChildren
+  DemoRbacAuthRouteRoute: typeof DemoRbacAuthRouteRouteWithChildren
   AuthenticatedAuthenticatedRoute: typeof AuthenticatedAuthenticatedRoute
   DemoConvexRoute: typeof DemoConvexRoute
   DemoConvexActionCacheRoute: typeof DemoConvexActionCacheRoute
@@ -1121,6 +1193,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAuthenticatedRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/demo/rbac-auth': {
+      id: '/demo/rbac-auth'
+      path: '/demo/rbac-auth'
+      fullPath: '/demo/rbac-auth'
+      preLoaderRoute: typeof DemoRbacAuthRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/demo/rbac': {
       id: '/demo/rbac'
       path: '/demo/rbac'
@@ -1156,6 +1235,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DemoRbacIndexRouteImport
       parentRoute: typeof DemoRbacRouteRoute
     }
+    '/demo/rbac-auth/': {
+      id: '/demo/rbac-auth/'
+      path: '/'
+      fullPath: '/demo/rbac-auth/'
+      preLoaderRoute: typeof DemoRbacAuthIndexRouteImport
+      parentRoute: typeof DemoRbacAuthRouteRoute
+    }
     '/demo/document-engine/': {
       id: '/demo/document-engine/'
       path: '/'
@@ -1169,6 +1255,34 @@ declare module '@tanstack/react-router' {
       fullPath: '/demo/audit-traceability/'
       preLoaderRoute: typeof DemoAuditTraceabilityIndexRouteImport
       parentRoute: typeof DemoAuditTraceabilityRouteRoute
+    }
+    '/demo/rbac-auth/roles': {
+      id: '/demo/rbac-auth/roles'
+      path: '/roles'
+      fullPath: '/demo/rbac-auth/roles'
+      preLoaderRoute: typeof DemoRbacAuthRolesRouteImport
+      parentRoute: typeof DemoRbacAuthRouteRoute
+    }
+    '/demo/rbac-auth/onboarding': {
+      id: '/demo/rbac-auth/onboarding'
+      path: '/onboarding'
+      fullPath: '/demo/rbac-auth/onboarding'
+      preLoaderRoute: typeof DemoRbacAuthOnboardingRouteImport
+      parentRoute: typeof DemoRbacAuthRouteRoute
+    }
+    '/demo/rbac-auth/audit': {
+      id: '/demo/rbac-auth/audit'
+      path: '/audit'
+      fullPath: '/demo/rbac-auth/audit'
+      preLoaderRoute: typeof DemoRbacAuthAuditRouteImport
+      parentRoute: typeof DemoRbacAuthRouteRoute
+    }
+    '/demo/rbac-auth/access-control': {
+      id: '/demo/rbac-auth/access-control'
+      path: '/access-control'
+      fullPath: '/demo/rbac-auth/access-control'
+      preLoaderRoute: typeof DemoRbacAuthAccessControlRouteImport
+      parentRoute: typeof DemoRbacAuthRouteRoute
     }
     '/demo/form/simple': {
       id: '/demo/form/simple'
@@ -1402,6 +1516,25 @@ const DemoRbacRouteRouteWithChildren = DemoRbacRouteRoute._addFileChildren(
   DemoRbacRouteRouteChildren,
 )
 
+interface DemoRbacAuthRouteRouteChildren {
+  DemoRbacAuthAccessControlRoute: typeof DemoRbacAuthAccessControlRoute
+  DemoRbacAuthAuditRoute: typeof DemoRbacAuthAuditRoute
+  DemoRbacAuthOnboardingRoute: typeof DemoRbacAuthOnboardingRoute
+  DemoRbacAuthRolesRoute: typeof DemoRbacAuthRolesRoute
+  DemoRbacAuthIndexRoute: typeof DemoRbacAuthIndexRoute
+}
+
+const DemoRbacAuthRouteRouteChildren: DemoRbacAuthRouteRouteChildren = {
+  DemoRbacAuthAccessControlRoute: DemoRbacAuthAccessControlRoute,
+  DemoRbacAuthAuditRoute: DemoRbacAuthAuditRoute,
+  DemoRbacAuthOnboardingRoute: DemoRbacAuthOnboardingRoute,
+  DemoRbacAuthRolesRoute: DemoRbacAuthRolesRoute,
+  DemoRbacAuthIndexRoute: DemoRbacAuthIndexRoute,
+}
+
+const DemoRbacAuthRouteRouteWithChildren =
+  DemoRbacAuthRouteRoute._addFileChildren(DemoRbacAuthRouteRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AdminRouteRoute: AdminRouteRouteWithChildren,
@@ -1419,6 +1552,7 @@ const rootRouteChildren: RootRouteChildren = {
   DemoAuditTraceabilityRouteRoute: DemoAuditTraceabilityRouteRouteWithChildren,
   DemoDocumentEngineRouteRoute: DemoDocumentEngineRouteRouteWithChildren,
   DemoRbacRouteRoute: DemoRbacRouteRouteWithChildren,
+  DemoRbacAuthRouteRoute: DemoRbacAuthRouteRouteWithChildren,
   AuthenticatedAuthenticatedRoute: AuthenticatedAuthenticatedRoute,
   DemoConvexRoute: DemoConvexRoute,
   DemoConvexActionCacheRoute: DemoConvexActionCacheRoute,

@@ -30,8 +30,8 @@ export default function SignInButton({ large }: { large?: boolean }) {
 				</div>
 				<button
 					className={buttonClasses}
-					onClick={() =>
-						signOut().catch((error) => {
+					onClick={() => {
+						void signOut().catch((error) => {
 							// AuthKitProvider's post-signOut navigate() crashes when
 							// the router context tears down. Session is already cleared
 							// server-side — just force a full page reload.
@@ -39,9 +39,9 @@ export default function SignInButton({ large }: { large?: boolean }) {
 								window.location.href = "/";
 								return;
 							}
-							throw error;
-						})
-					}
+							console.error("Sign out failed:", error);
+						});
+					}}
 					type="button"
 				>
 					Sign Out

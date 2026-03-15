@@ -31,6 +31,7 @@ import type * as demo_ledger from "../demo/ledger.js";
 import type * as demo_migrations from "../demo/migrations.js";
 import type * as demo_presence from "../demo/presence.js";
 import type * as demo_rateLimiter from "../demo/rateLimiter.js";
+import type * as demo_rbacAuth from "../demo/rbacAuth.js";
 import type * as demo_timeline from "../demo/timeline.js";
 import type * as demo_tracer from "../demo/tracer.js";
 import type * as demo_triggers from "../demo/triggers.js";
@@ -102,6 +103,7 @@ declare const fullApi: ApiFromModules<{
   "demo/migrations": typeof demo_migrations;
   "demo/presence": typeof demo_presence;
   "demo/rateLimiter": typeof demo_rateLimiter;
+  "demo/rbacAuth": typeof demo_rbacAuth;
   "demo/timeline": typeof demo_timeline;
   "demo/tracer": typeof demo_tracer;
   "demo/triggers": typeof demo_triggers;

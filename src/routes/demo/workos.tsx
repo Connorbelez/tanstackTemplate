@@ -182,15 +182,15 @@ function ProfileTab({
 
 			<Button
 				className="w-full"
-				onClick={() =>
-					signOut().catch((error) => {
+				onClick={() => {
+					void signOut().catch((error) => {
 						if (isRouterTeardownSignOutError(error)) {
 							window.location.href = "/";
 							return;
 						}
-						throw error;
-					})
-				}
+						console.error("Sign out failed:", error);
+					});
+				}}
 				variant="outline"
 			>
 				<LogOut className="size-4" />

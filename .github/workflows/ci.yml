@@ -10,6 +10,8 @@ jobs:
   check:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      contents: read
 
     env:
       WORKOS_CLIENT_ID: ${{ secrets.WORKOS_CLIENT_ID }}
@@ -43,4 +45,4 @@ jobs:
         run: bun typecheck
 
       - name: Run unit tests
-        run: bunx vitest run
+        run: bun run test

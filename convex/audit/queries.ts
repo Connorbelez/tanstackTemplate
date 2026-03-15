@@ -1,9 +1,9 @@
 import { v } from "convex/values";
 import { auditLog } from "../auditLog";
-import { adminMutation, requirePermission } from "../fluent";
+import { adminQuery, requirePermission } from "../fluent";
 
 /** Query auth-related audit events for a specific user. */
-export const getAuthEventsByActor = adminMutation
+export const getAuthEventsByActor = adminQuery
 	.use(requirePermission("platform:view_audit"))
 	.input({ actorId: v.string(), limit: v.optional(v.number()) })
 	.handler(async (ctx, args) => {
@@ -15,7 +15,7 @@ export const getAuthEventsByActor = adminMutation
 	.public();
 
 /** Query audit events for a specific onboarding request. */
-export const getAuditTrailForRequest = adminMutation
+export const getAuditTrailForRequest = adminQuery
 	.use(requirePermission("platform:view_audit"))
 	.input({ requestId: v.string() })
 	.handler(async (ctx, args) => {
@@ -28,7 +28,7 @@ export const getAuditTrailForRequest = adminMutation
 	.public();
 
 /** Watch critical auth events in realtime (security dashboard). */
-export const watchCriticalAuthEvents = adminMutation
+export const watchCriticalAuthEvents = adminQuery
 	.use(requirePermission("platform:view_audit"))
 	.handler(async (ctx) => {
 		return auditLog.watchCritical(ctx, {

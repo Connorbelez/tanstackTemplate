@@ -25,6 +25,23 @@ export interface RouteAuthContext {
 }
 
 /**
+ * Guard that requires authentication only. Redirects to /sign-in if not authenticated.
+ */
+export function guardAuthenticated() {
+	return ({
+		context,
+		location,
+	}: {
+		context: RouteAuthContext;
+		location: { href: string };
+	}) => {
+		if (!context.userId) {
+			throw redirect(buildSignInRedirect(location.href));
+		}
+	};
+}
+
+/**
  * Creates a TanStack Router `beforeLoad` guard that checks for a required permission.
  * Redirects to /sign-in if not authenticated, /unauthorized if missing permission.
  */

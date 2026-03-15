@@ -31,8 +31,10 @@ import {
 } from "../fluent";
 
 function assertTestEndpointsEnabled() {
-	if (process.env.NODE_ENV === "production") {
-		throw new Error("Test auth endpoints are disabled in production");
+	// Require explicit opt-in via Convex env var. NODE_ENV is unreliable in Convex.
+	// Set ALLOW_TEST_AUTH_ENDPOINTS=true in dev deployment dashboard only.
+	if (process.env.ALLOW_TEST_AUTH_ENDPOINTS !== "true") {
+		throw new Error("Test auth endpoints are disabled");
 	}
 }
 
