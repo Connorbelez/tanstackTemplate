@@ -140,10 +140,11 @@ export function lookupPermissions(roles: string[]): string[] {
 	const merged = new Set<string>();
 	for (const role of roles) {
 		const perms = ROLE_PERMISSIONS[role];
-		if (perms) {
-			for (const permission of perms) {
-				merged.add(permission);
-			}
+		if (!perms) {
+			throw new Error(`Unknown role: ${role}`);
+		}
+		for (const permission of perms) {
+			merged.add(permission);
 		}
 	}
 	return [...merged];

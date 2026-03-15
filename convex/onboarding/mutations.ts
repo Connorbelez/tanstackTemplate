@@ -89,13 +89,19 @@ export const requestRole = authedMutation
 		let invitingBrokerOrgId: string | undefined;
 		const { invitedByBrokerId } = args;
 		if (args.referralSource === "broker_invite" && invitedByBrokerId) {
-			const brokerMembership = await ctx.db
+			const brokerMemberships = await ctx.db
 				.query("organizationMemberships")
 				.withIndex("byUser", (q) => q.eq("userWorkosId", invitedByBrokerId))
-				.first();
+				.collect();
+			const brokerMembership = brokerMemberships.find(
+				(membership) =>
+					membership.status === "active" &&
+					(membership.roleSlug === "broker" ||
+						membership.roleSlugs?.includes("broker"))
+			);
 			if (!brokerMembership) {
 				throw new ConvexError(
-					`Inviting broker "${invitedByBrokerId}" has no organization membership`
+					`Inviting broker "${invitedByBrokerId}" is not an active broker`
 				);
 			}
 			invitingBrokerOrgId = brokerMembership.organizationWorkosId;

@@ -92,12 +92,24 @@ export const completeRoleAssignmentProcessing = internalMutation({
 		}
 
 		const processed = request.processedRoleAssignmentJournalIds ?? [];
+		if (
+			request.activeRoleAssignmentJournalId &&
+			request.activeRoleAssignmentJournalId !== args.journalEntryId &&
+			!processed.includes(args.journalEntryId)
+		) {
+			throw new Error(
+				`Cannot complete ${args.journalEntryId}; active journal is ${request.activeRoleAssignmentJournalId}`
+			);
+		}
 		if (!processed.includes(args.journalEntryId)) {
 			processed.push(args.journalEntryId);
 		}
 
 		await ctx.db.patch(args.requestId, {
-			activeRoleAssignmentJournalId: undefined,
+			activeRoleAssignmentJournalId:
+				request.activeRoleAssignmentJournalId === args.journalEntryId
+					? undefined
+					: request.activeRoleAssignmentJournalId,
 			processedRoleAssignmentJournalIds: processed,
 		});
 	},

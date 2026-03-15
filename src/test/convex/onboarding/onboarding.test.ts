@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { api } from "../../../../convex/_generated/api";
+import type { Id } from "../../../../convex/_generated/dataModel";
 import {
 	FAIRLEND_BROKERAGE_ORG_ID,
 	FAIRLEND_LAWYERS_ORG_ID,
@@ -20,13 +21,13 @@ interface OnboardingAuditEvent {
 
 async function getOnboardingAuditEvents(
 	t: ReturnType<typeof createTestConvex>,
-	requestId: string
+	requestId: Id<"onboardingRequests">
 ) {
 	await seedFromIdentity(t, FAIRLEND_ADMIN);
 	return t
 		.withIdentity(FAIRLEND_ADMIN)
 		.mutation(api.onboarding.queries.getRequestHistory, {
-			requestId: requestId as never,
+			requestId,
 		}) as Promise<OnboardingAuditEvent[]>;
 }
 
@@ -167,10 +168,7 @@ describe("onboarding mutations", () => {
 				}
 			);
 
-			const auditEvents = await getOnboardingAuditEvents(
-				t,
-				requestId as string
-			);
+			const auditEvents = await getOnboardingAuditEvents(t, requestId);
 			const createdEvent = auditEvents.find(
 				(event: OnboardingAuditEvent) =>
 					event.action === "transition.onboardingRequest.created"
@@ -300,10 +298,7 @@ describe("onboarding mutations", () => {
 				requestId,
 			});
 
-			const auditEvents = await getOnboardingAuditEvents(
-				t,
-				requestId as string
-			);
+			const auditEvents = await getOnboardingAuditEvents(t, requestId);
 			expect(
 				auditEvents.some(
 					(event: OnboardingAuditEvent) =>

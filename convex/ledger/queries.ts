@@ -40,12 +40,12 @@ export const getPositions = query({
 			(a) => a.type === "POSITION" && computeBalance(a) > 0n
 		);
 
-		const accountMissingInvestor = positionAccounts.find(
+		const accountMissingLender = positionAccounts.find(
 			(a) => getAccountLenderId(a) == null
 		);
-		if (accountMissingInvestor) {
+		if (accountMissingLender) {
 			throw new Error(
-				`POSITION account ${accountMissingInvestor._id} is missing lenderId`
+				`POSITION account ${accountMissingLender._id} is missing lenderId`
 			);
 		}
 
@@ -64,14 +64,21 @@ export const getLenderPositions = query({
 			.query("ledger_accounts")
 			.withIndex("by_lender", (q) => q.eq("lenderId", args.lenderId))
 			.collect();
-		const legacyAccounts = indexedAccounts.length
-			? []
-			: (await ctx.db.query("ledger_accounts").collect()).filter(
-					(account) =>
-						account.type === "POSITION" &&
-						getAccountLenderId(account) === args.lenderId
-				);
-		const accounts = [...indexedAccounts, ...legacyAccounts];
+		const legacyAccounts = (
+			await ctx.db.query("ledger_accounts").collect()
+		).filter(
+			(account) =>
+				account.type === "POSITION" &&
+				getAccountLenderId(account) === args.lenderId
+		);
+		const accounts = Array.from(
+			new Map(
+				[...indexedAccounts, ...legacyAccounts].map((account) => [
+					account._id,
+					account,
+				])
+			).values()
+		);
 
 		return accounts
 			.filter((a) => a.type === "POSITION" && computeBalance(a) > 0n)

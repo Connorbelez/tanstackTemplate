@@ -57,50 +57,54 @@ For testing: EXTERNAL_ORG_ADMIN should fail `approveRequest` because they don't 
 
 ## T-016: audit-auth-failure.test.ts
 
-### Test that `auditAuthFailure` correctly logs in mutation context and is no-op in query context.
+### Test that `auditAuthFailure` writes audit events for mutation-backed denials.
 
 **`auditAuthFailure` behavior (from `convex/auth/auditAuth.ts`):**
-- Uses `isMutationContext(ctx)` guard — only writes if ctx has `runMutation`
+- Uses an internal mutation when the current context can call `runMutation`
+- Query-only contexts still need message assertions because they don't have a write path in this test setup
 - Calls `auditLog.log()` with action `"auth.{middleware}_denied"`, severity `"warning"`
 - Graceful failure — catches errors without rethrowing
 
 **Test cases:**
 
 1. **`auditAuthFailure` writes in mutation context**
-   - Call a mutation endpoint that requires FairLend admin (e.g., `testAdminMutation`) with a BROKER identity
-   - Wait briefly for audit log processing
-   - Actually, since `adminMutation` uses `requireAdmin` and throws, the audit log should be written before the throw
-   - Query audit log entries to verify an auth denial was logged
+   - Keep the denial-path test that asserts the correct error message
+   - Add a focused mutation-context test that invokes `auditAuthFailure` directly with a real Convex mutation ctx and a broker-shaped viewer
+   - Query audit log entries to verify the expected auth denial event was persisted
 
    Note: `adminMutation` uses `requireAdmin` middleware which calls `auditAuthFailure()` on denial.
 
-2. **`auditAuthFailure` is no-op in query context**
+2. **Query denials still verify the error surface**
    - Call a query endpoint that fails auth (e.g., `testAdminQuery` with BROKER identity)
-   - Verify NO audit log entry was created
-   - This is because queries don't have mutation context, so `isMutationContext` returns false
+   - Verify the thrown error message identifies the middleware that denied access
 
 3. **Audit entry contains correct metadata**
-   - On a mutation auth failure, verify the audit log entry has:
+   - On a mutation-backed denial, verify the audit log entry has:
      - action matching `"auth.*_denied"` pattern
      - severity: `"warning"`
      - metadata including: middleware name, reason, viewer roles/permissions, orgId
 
-### Querying audit log entries:
-The `convex-audit-log` component stores entries. In tests, query via `ctx.db.query("auditLog_logs")` or use the component's query API. For onboarding transition history, filter rows by `resourceType === "onboardingRequests"` and the request ID:
+### Querying audit log entries
+Prefer the typed audit query API over broad table scans. Scope assertions to the denied actor and expected action/resource:
 ```typescript
-const auditEntries = await ctx.db
-  .query("auditLog_logs")
-  .collect();
+const auditEntries = await t
+  .withIdentity(FAIRLEND_ADMIN)
+  .query(api.audit.queries.getAuthEventsByActor, {
+    actorId: BROKER.subject,
+    limit: 20,
+  });
 ```
 
-However, `auditAuthFailure` also uses `auditLog.log()` (the same convex-audit-log component), so the same table/query strategy applies.
+When you need a request-specific onboarding audit assertion, filter by the exact request rather than collecting everything:
+```typescript
+const auditEntries = await t
+  .withIdentity(FAIRLEND_ADMIN)
+  .query(api.audit.queries.getAuditTrailForRequest, {
+    requestId,
+  });
+```
 
-**Alternative approach:** Instead of querying component internals, verify the behavior indirectly:
-- Verify the mutation THROWS with the correct error message
-- The fact that the throw happens confirms `auditAuthFailure` was called (it's called in the same code path)
-- For the query case, prefer mutation-backed reads or other write-capable auth chains when you need the denial itself to be audit-verified
-
-Actually, the simplest approach is to test that auth denials produce the expected errors and trust that `auditAuthFailure` is called (since it's in the middleware code path). The unit test for `isMutationContext` itself can be a simple pure function test.
+Then assert against the specific denial or transition metadata you expect instead of treating the thrown error as sufficient proof that auditing happened.
 
 ## T-017 & T-018: Quality Gates
 

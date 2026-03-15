@@ -64,6 +64,7 @@ export const MeetingScheduler: React.FC<MeetingSchedulerProps> = ({
   const [startDate, setStartDate] = useState<Date | null>(initialStartDate || null);
   const [endDate, setEndDate] = useState<Date | null>(initialEndDate || null);
   const [aiNotes, setAiNotes] = useState(false);
+  const aiNotesId = React.useId();
   const today = useMemo(() => new Date(), []);
 
   // Calendar logic
@@ -154,8 +155,10 @@ export const MeetingScheduler: React.FC<MeetingSchedulerProps> = ({
 
                 return (
                   <motion.button
+                    type="button"
                     key={day.toString()}
                     onClick={() => handleDateClick(day)}
+                    aria-label={format(day, "MMMM d, yyyy")}
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
                     className={cn(
@@ -197,8 +200,8 @@ export const MeetingScheduler: React.FC<MeetingSchedulerProps> = ({
 
               {/* AI Notes Toggle */}
               <div className="flex items-center justify-between pt-4">
-                <Label htmlFor="ai-notes" className="font-medium">Enable AI notes</Label>
-                <Switch id="ai-notes" checked={aiNotes} onCheckedChange={setAiNotes} />
+                <Label htmlFor={aiNotesId} className="font-medium">Enable AI notes</Label>
+                <Switch id={aiNotesId} checked={aiNotes} onCheckedChange={setAiNotes} />
               </div>
             </div>
 

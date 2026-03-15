@@ -189,15 +189,21 @@ export const assignRoleToUser = internalAction({
 			});
 
 			// 6. On success — send ASSIGN_ROLE to complete lifecycle
-			await ctx.runMutation(
+			const transitionResult = await ctx.runMutation(
 				internal.engine.transitionMutation.transitionMutation,
 				{
 					entityType: "onboardingRequest",
 					entityId: args.entityId,
 					eventType: "ASSIGN_ROLE",
-					source: { channel: "system", actorType: "system" },
+					source: { channel: "scheduler", actorType: "system" },
 				}
 			);
+
+			if (!transitionResult.success) {
+				throw new Error(
+					`[assignRoleToUser] ASSIGN_ROLE transition failed for ${args.entityId}: ${transitionResult.reason}`
+				);
+			}
 
 			await completeRoleAssignmentProcessing(
 				ctx,

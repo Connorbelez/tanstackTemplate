@@ -1,23 +1,71 @@
 /**
  * T-016: Audit auth failure integration tests.
  *
- * Verifies that middleware rejections throw ConvexErrors with the expected
- * error messages. The `auditAuthFailure` function is called in the same
- * code path, so if the throw happens, audit was attempted.
- *
- * Also verifies that different middleware layers produce distinct error
- * messages, confirming the correct middleware denied access.
+ * Verifies that middleware rejections throw the expected error messages
+ * and emit the corresponding auth audit events.
  */
 
 import { describe, expect, it } from "vitest";
 import { api } from "../../../../convex/_generated/api";
+import { auditAuthFailure } from "../../../../convex/auth/auditAuth";
 import {
 	createMockViewer,
 	createTestConvex,
 	seedFromIdentity,
 } from "../helpers";
-import { BROKER, MEMBER } from "../identities";
+import { BROKER, FAIRLEND_ADMIN, MEMBER } from "../identities";
 import { lookupPermissions } from "../permissions";
+
+async function getAuthEventsByActor(
+	t: ReturnType<typeof createTestConvex>,
+	actorId: string
+) {
+	return t
+		.withIdentity(FAIRLEND_ADMIN)
+		.query(api.audit.queries.getAuthEventsByActor, {
+			actorId,
+			limit: 20,
+		});
+}
+
+type AuthAuditEvent = Awaited<ReturnType<typeof getAuthEventsByActor>>[number];
+
+async function expectAuthFailureEvent(
+	t: ReturnType<typeof createTestConvex>,
+	args: {
+		action: string;
+		actorId: string;
+		middleware: string;
+		orgId?: string;
+		required?: string;
+		reason: string;
+		userPermissions: string[];
+		userRoles: string[];
+	}
+) {
+	const events = await getAuthEventsByActor(t, args.actorId);
+	const matchingEvent = events.find(
+		(event: AuthAuditEvent) =>
+			event.action === args.action &&
+			event.actorId === args.actorId &&
+			event.resourceId === args.middleware &&
+			event.resourceType === "auth_check" &&
+			event.severity === "warning" &&
+			event.metadata?.middleware === args.middleware &&
+			event.metadata?.orgId === args.orgId &&
+			event.metadata?.reason === args.reason &&
+			event.metadata?.required === args.required &&
+			JSON.stringify(event.metadata?.userPermissions ?? []) ===
+				JSON.stringify(args.userPermissions) &&
+			JSON.stringify(event.metadata?.userRoles ?? []) ===
+				JSON.stringify(args.userRoles)
+	);
+	if (!matchingEvent) {
+		throw new Error(
+			`Expected auth failure event ${args.action} for actor ${args.actorId}. Events: ${JSON.stringify(events)}`
+		);
+	}
+}
 
 describe("audit auth failure", () => {
 	describe("mutation auth failure", () => {
@@ -30,6 +78,37 @@ describe("audit auth failure", () => {
 					.withIdentity(BROKER)
 					.mutation(api.test.authTestEndpoints.testRequireAdminMutation)
 			).rejects.toThrow("Forbidden: admin role required");
+		});
+
+		it("writes a persisted auth audit event when the audit helper runs", async () => {
+			const t = createTestConvex();
+			await seedFromIdentity(t, FAIRLEND_ADMIN);
+
+			await t.run(async (ctx) => {
+				await auditAuthFailure(
+					ctx,
+					{
+						authId: BROKER.subject,
+						orgId: BROKER.org_id,
+						permissions: new Set(JSON.parse(BROKER.permissions) as string[]),
+						roles: new Set(JSON.parse(BROKER.roles) as string[]),
+					},
+					{
+						middleware: "requireAdmin",
+						reason: "User does not have admin role",
+					}
+				);
+			});
+
+			await expectAuthFailureEvent(t, {
+				action: "auth.requireAdmin_denied",
+				actorId: BROKER.subject,
+				middleware: "requireAdmin",
+				orgId: BROKER.org_id,
+				reason: "User does not have admin role",
+				userPermissions: JSON.parse(BROKER.permissions),
+				userRoles: JSON.parse(BROKER.roles),
+			});
 		});
 	});
 
