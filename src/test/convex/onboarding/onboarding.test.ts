@@ -1,11 +1,43 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { api } from "../../../../convex/_generated/api";
+import {
+	FAIRLEND_BROKERAGE_ORG_ID,
+	FAIRLEND_LAWYERS_ORG_ID,
+	FAIRLEND_STAFF_ORG_ID,
+} from "../../../../convex/constants";
 import { createTestConvex, seedFromIdentity } from "../../auth/helpers";
 import { FAIRLEND_ADMIN, MEMBER } from "../../auth/identities";
 
+interface OnboardingAuditEvent {
+	action?: string;
+	metadata?: {
+		eventType?: string;
+		newState?: string;
+		outcome?: string;
+		previousState?: string;
+	};
+}
+
+async function getOnboardingAuditEvents(
+	t: ReturnType<typeof createTestConvex>,
+	requestId: string
+) {
+	await seedFromIdentity(t, FAIRLEND_ADMIN);
+	return t
+		.withIdentity(FAIRLEND_ADMIN)
+		.mutation(api.onboarding.queries.getRequestHistory, {
+			requestId: requestId as never,
+		}) as Promise<OnboardingAuditEvent[]>;
+}
+
 describe("onboarding mutations", () => {
+	beforeEach(() => {
+		vi.useFakeTimers();
+	});
+
 	afterEach(() => {
-		// convex-test cleanup is handled automatically
+		vi.clearAllTimers();
+		vi.useRealTimers();
 	});
 
 	describe("requestRole", () => {
@@ -31,9 +63,7 @@ describe("onboarding mutations", () => {
 			expect(request?.status).toBe("pending_review");
 			expect(request?.requestedRole).toBe("lender");
 			expect(request?.referralSource).toBe("self_signup");
-			expect(request?.targetOrganizationId).toBe(
-				"org_01KKKKGXEBW1MA5NFEZVHZS7WG"
-			);
+			expect(request?.targetOrganizationId).toBe(FAIRLEND_BROKERAGE_ORG_ID);
 		});
 
 		it("assigns correct target org for lawyer", async () => {
@@ -52,9 +82,7 @@ describe("onboarding mutations", () => {
 			const request = await t.run(async (ctx) => {
 				return ctx.db.get(requestId);
 			});
-			expect(request?.targetOrganizationId).toBe(
-				"org_01KKRSS95YC96QA7M42C2ERVSM"
-			);
+			expect(request?.targetOrganizationId).toBe(FAIRLEND_LAWYERS_ORG_ID);
 		});
 
 		it("assigns FairLend Staff org for underwriter roles", async () => {
@@ -73,9 +101,7 @@ describe("onboarding mutations", () => {
 			const request = await t.run(async (ctx) => {
 				return ctx.db.get(requestId);
 			});
-			expect(request?.targetOrganizationId).toBe(
-				"org_01KKF56VABM4NYFFSR039RTJBM"
-			);
+			expect(request?.targetOrganizationId).toBe(FAIRLEND_STAFF_ORG_ID);
 		});
 
 		it("sets null targetOrganizationId for broker requests", async () => {
@@ -141,22 +167,20 @@ describe("onboarding mutations", () => {
 				}
 			);
 
-			const journalEntries = await t.run(async (ctx) => {
-				return ctx.db
-					.query("auditJournal")
-					.withIndex("by_entity", (q) =>
-						q
-							.eq("entityType", "onboardingRequest")
-							.eq("entityId", requestId as string)
-					)
-					.collect();
-			});
+			const auditEvents = await getOnboardingAuditEvents(
+				t,
+				requestId as string
+			);
+			const createdEvent = auditEvents.find(
+				(event: OnboardingAuditEvent) =>
+					event.action === "transition.onboardingRequest.created"
+			);
 
-			expect(journalEntries).toHaveLength(1);
-			expect(journalEntries[0].eventType).toBe("CREATED");
-			expect(journalEntries[0].previousState).toBe("none");
-			expect(journalEntries[0].newState).toBe("pending_review");
-			expect(journalEntries[0].outcome).toBe("transitioned");
+			expect(createdEvent).toBeDefined();
+			expect(createdEvent?.metadata?.eventType).toBe("CREATED");
+			expect(createdEvent?.metadata?.previousState).toBe("none");
+			expect(createdEvent?.metadata?.newState).toBe("pending_review");
+			expect(createdEvent?.metadata?.outcome).toBe("transitioned");
 		});
 	});
 
@@ -276,22 +300,22 @@ describe("onboarding mutations", () => {
 				requestId,
 			});
 
-			const journalEntries = await t.run(async (ctx) => {
-				return ctx.db
-					.query("auditJournal")
-					.withIndex("by_entity", (q) =>
-						q
-							.eq("entityType", "onboardingRequest")
-							.eq("entityId", requestId as string)
-					)
-					.collect();
-			});
-
-			expect(journalEntries).toHaveLength(2);
-			expect(journalEntries[0].eventType).toBe("CREATED");
-			expect(journalEntries[1].eventType).toBe("APPROVE");
-			expect(journalEntries[1].previousState).toBe("pending_review");
-			expect(journalEntries[1].newState).toBe("approved");
+			const auditEvents = await getOnboardingAuditEvents(
+				t,
+				requestId as string
+			);
+			expect(
+				auditEvents.some(
+					(event: OnboardingAuditEvent) =>
+						event.action === "transition.onboardingRequest.created"
+				)
+			).toBe(true);
+			const approveEvent = auditEvents.find(
+				(event: OnboardingAuditEvent) =>
+					event.action === "transition.onboardingRequest.approve"
+			);
+			expect(approveEvent?.metadata?.previousState).toBe("pending_review");
+			expect(approveEvent?.metadata?.newState).toBe("approved");
 		});
 	});
 

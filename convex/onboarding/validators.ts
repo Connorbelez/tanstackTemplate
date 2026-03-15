@@ -1,13 +1,24 @@
 import { v } from "convex/values";
+import { REQUESTABLE_ROLES } from "../constants";
+
+const [
+	brokerRole,
+	lenderRole,
+	lawyerRole,
+	adminRole,
+	jrUnderwriterRole,
+	underwriterRole,
+	srUnderwriterRole,
+] = REQUESTABLE_ROLES;
 
 export const requestedRoleValidator = v.union(
-	v.literal("broker"),
-	v.literal("lender"),
-	v.literal("lawyer"),
-	v.literal("admin"),
-	v.literal("jr_underwriter"),
-	v.literal("underwriter"),
-	v.literal("sr_underwriter")
+	v.literal(brokerRole),
+	v.literal(lenderRole),
+	v.literal(lawyerRole),
+	v.literal(adminRole),
+	v.literal(jrUnderwriterRole),
+	v.literal(underwriterRole),
+	v.literal(srUnderwriterRole)
 );
 
 export const referralSourceValidator = v.union(

@@ -6,6 +6,7 @@ import {
 	seedFromIdentity,
 } from "../helpers";
 import { BROKER, JR_UNDERWRITER, SR_UNDERWRITER } from "../identities";
+import { lookupPermissions } from "../permissions";
 
 describe("requireOrgContext middleware", () => {
 	it("allows user with org_id present", async () => {
@@ -44,6 +45,7 @@ describe("requireOrgContext middleware", () => {
 	it("rejects non-underwriter without org_id", async () => {
 		const identity = createMockViewer({
 			roles: ["broker"],
+			permissions: lookupPermissions(["broker"]),
 		});
 		const t = createTestConvex();
 		await seedFromIdentity(t, identity);

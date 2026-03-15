@@ -113,45 +113,33 @@ export const requestRole = authedMutation
 			userId: user._id,
 			requestedRole,
 			status: "pending_review",
-			machineContext: { requestId: "" },
 			referralSource: args.referralSource,
 			invitedByBrokerId: args.invitedByBrokerId,
 			targetOrganizationId,
 			createdAt: Date.now(),
 		});
 
-		// Patch machineContext with the new ID
-		await ctx.db.patch(requestId, {
-			machineContext: { requestId: requestId as string },
-		});
-
-		// Write creation journal entry
-		await ctx.db.insert("auditJournal", {
-			entityType: "onboardingRequest",
-			entityId: requestId as string,
-			eventType: "CREATED",
-			previousState: "none",
-			newState: "pending_review",
-			outcome: "transitioned",
-			source: {
-				channel: "onboarding_portal",
-				actorId: ctx.viewer.authId,
-				actorType: "member",
-			},
-			timestamp: Date.now(),
-		});
-
 		await auditLog.log(ctx, {
-			action: "onboarding.role_requested",
+			action: "transition.onboardingRequest.created",
 			actorId: ctx.viewer.authId,
 			resourceType: "onboardingRequests",
 			resourceId: requestId,
 			severity: "info",
 			metadata: {
+				entityType: "onboardingRequest",
+				eventType: "CREATED",
+				previousState: "none",
+				newState: "pending_review",
+				outcome: "transitioned",
 				requestedRole,
 				referralSource: args.referralSource,
 				targetOrganizationId,
 				invitedByBrokerId: args.invitedByBrokerId,
+				source: {
+					channel: "onboarding_portal",
+					actorId: ctx.viewer.authId,
+					actorType: "member",
+				},
 			},
 		});
 
@@ -164,12 +152,6 @@ export const approveRequest = adminMutation
 	.use(requirePermission("onboarding:review"))
 	.input({ requestId: v.id("onboardingRequests") })
 	.handler(async (ctx, args) => {
-		// Patch domain fields
-		await ctx.db.patch(args.requestId, {
-			reviewedBy: ctx.viewer.authId,
-			reviewedAt: Date.now(),
-		});
-
 		// Call transition engine
 		const result = await transitionEntity(
 			ctx,
@@ -187,6 +169,11 @@ export const approveRequest = adminMutation
 		if (!result.success) {
 			throw new ConvexError(result.reason ?? "Transition failed");
 		}
+
+		await ctx.db.patch(args.requestId, {
+			reviewedBy: ctx.viewer.authId,
+			reviewedAt: Date.now(),
+		});
 
 		await auditLog.log(ctx, {
 			action: "onboarding.request_approved",
@@ -212,13 +199,6 @@ export const rejectRequest = adminMutation
 		rejectionReason: v.string(),
 	})
 	.handler(async (ctx, args) => {
-		// Patch domain fields
-		await ctx.db.patch(args.requestId, {
-			reviewedBy: ctx.viewer.authId,
-			reviewedAt: Date.now(),
-			rejectionReason: args.rejectionReason,
-		});
-
 		// Call transition engine
 		const result = await transitionEntity(
 			ctx,
@@ -236,6 +216,12 @@ export const rejectRequest = adminMutation
 		if (!result.success) {
 			throw new ConvexError(result.reason ?? "Transition failed");
 		}
+
+		await ctx.db.patch(args.requestId, {
+			reviewedBy: ctx.viewer.authId,
+			reviewedAt: Date.now(),
+			rejectionReason: args.rejectionReason,
+		});
 
 		await auditLog.log(ctx, {
 			action: "onboarding.request_rejected",

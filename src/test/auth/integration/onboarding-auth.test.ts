@@ -83,10 +83,10 @@ describe("onboarding auth integration", () => {
 				t
 					.withIdentity(BROKER)
 					.mutation(api.onboarding.mutations.approveRequest, { requestId })
-			).rejects.toThrow("Forbidden: admin role required");
+			).rejects.toThrow("Forbidden: fair lend admin role required");
 		});
 
-		it("rejects external org admin (missing onboarding:review)", async () => {
+		it("rejects external org admin (not a FairLend admin)", async () => {
 			const t = createTestConvex();
 			await seedFromIdentity(t, MEMBER);
 			await seedFromIdentity(t, EXTERNAL_ORG_ADMIN);
@@ -102,7 +102,7 @@ describe("onboarding auth integration", () => {
 				t
 					.withIdentity(EXTERNAL_ORG_ADMIN)
 					.mutation(api.onboarding.mutations.approveRequest, { requestId })
-			).rejects.toThrow('Forbidden: permission "onboarding:review" required');
+			).rejects.toThrow("Forbidden: fair lend admin role required");
 		});
 	});
 
@@ -148,7 +148,7 @@ describe("onboarding auth integration", () => {
 						requestId,
 						rejectionReason: "test rejection",
 					})
-			).rejects.toThrow("Forbidden: admin role required");
+			).rejects.toThrow("Forbidden: fair lend admin role required");
 		});
 	});
 });

@@ -7,7 +7,7 @@ export const Route = createFileRoute("/demo/rbac")({
 	component: RBACRoute,
 });
 
-export default function RBACRoute() {
+function RBACRoute() {
 	const { data: viewer } = useSuspenseQuery(convexQuery(api.fluent.whoAmI, {}));
 
 	return (

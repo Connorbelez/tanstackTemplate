@@ -15,18 +15,10 @@ import type {
 import { ConvexBuilderWithFunctionKind, createBuilder } from "fluent-convex";
 import type { DataModel } from "./_generated/dataModel";
 import { auditAuthFailure } from "./auth/auditAuth";
-
-// ── Type guard: can this db handle writes? ──────────────────────────
-// function isDatabaseWriter(
-// 	db: GenericDatabaseReader<DataModel>
-// ): db is GenericDatabaseWriter<DataModel> {
-// 	return "insert" in db;
-// }
+import { FAIRLEND_STAFF_ORG_ID } from "./constants";
 
 // ── Builder ─────────────────────────────────────────────────────────
 export const convex = createBuilder<DataModel>();
-
-import { FAIRLEND_STAFF_ORG_ID } from "./constants";
 
 export interface Viewer {
 	authId: string;
@@ -45,12 +37,14 @@ export interface Viewer {
 // an already-parsed array, undefined, or empty string — normalise to string[].
 function parseClaimArray(value: unknown): string[] {
 	if (Array.isArray(value)) {
-		return value as string[];
+		return value.filter((entry): entry is string => typeof entry === "string");
 	}
 	if (typeof value === "string" && value.length > 0) {
 		try {
 			const parsed: unknown = JSON.parse(value);
-			return Array.isArray(parsed) ? (parsed as string[]) : [];
+			return Array.isArray(parsed)
+				? parsed.filter((entry): entry is string => typeof entry === "string")
+				: [];
 		} catch {
 			return [];
 		}
@@ -145,7 +139,7 @@ export const requireOrgContext = convex
 		viewer: Viewer;
 	}>()
 	.createMiddleware(async (context, next) => {
-		const org_id = context.viewer?.orgId;
+		const org_id = context.viewer.orgId;
 
 		if (!(org_id || hasUnderwriterRole(context.viewer).hasRole)) {
 			await auditAuthFailure(context, context.viewer, {
@@ -180,9 +174,8 @@ export const requireAdmin = convex
 	});
 
 // ── RBAC: requirePermission(permission) factory ─────────────────────
-// Returns middleware that checks if ANY of the user's roles grant the
-// specified permission string. Collects role slugs from memberships,
-// then looks them up in the `roles` table.
+// Returns middleware that checks whether the authenticated viewer already has
+// the required permission in their JWT-derived permission set.
 export function requirePermission(permission: string) {
 	return convex
 		.$context<{ db: GenericDatabaseReader<DataModel>; viewer: Viewer }>()
@@ -294,7 +287,7 @@ export const authedMutation = convex.mutation().use(authMiddleware);
 export const adminMutation = convex
 	.mutation()
 	.use(authMiddleware)
-	.use(requireAdmin);
+	.use(requireFairLendAdmin);
 export const brokerQuery = authedQuery
 	.use(requireOrgContext)
 	.use(requirePermission("broker:access"));
@@ -328,10 +321,12 @@ export const lawyerMutation = authedMutation
 
 export const adminQuery = authedQuery.use(requireFairLendAdmin);
 // Underwriting
-export const uwQuery = authedQuery.use(requirePermission("underwriter:access"));
-export const uwMutation = authedMutation.use(
-	requirePermission("underwriter:access")
-);
+export const uwQuery = authedQuery
+	.use(requireOrgContext)
+	.use(requirePermission("underwriter:access"));
+export const uwMutation = authedMutation
+	.use(requireOrgContext)
+	.use(requirePermission("underwriter:access"));
 
 // Domain-specific (for downstream projects)
 export const dealQuery = authedQuery.use(requirePermission("deal:view"));

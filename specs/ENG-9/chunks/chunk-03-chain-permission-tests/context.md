@@ -87,18 +87,15 @@ const ALL_PERMISSIONS = [...new Set(Object.values(ROLE_PERMISSIONS).flat())];
 
 describe.each(Object.entries(ROLE_PERMISSIONS))("Role: %s", (role, expectedPermissions) => {
   it("has all expected permissions", () => {
-    // Verify every permission in expectedPermissions is present
-    for (const perm of expectedPermissions) {
-      expect(expectedPermissions).toContain(perm);
-    }
+    const actualPermissions = lookupPermissions([role]);
+    expect(new Set(actualPermissions)).toEqual(new Set(expectedPermissions));
   });
 
   it("does not have permissions exclusively belonging to other roles", () => {
-    // For each permission NOT in expectedPermissions,
-    // verify this role doesn't have it
+    const actualPermissions = lookupPermissions([role]);
     const unexpectedPermissions = ALL_PERMISSIONS.filter(p => !expectedPermissions.includes(p));
     for (const perm of unexpectedPermissions) {
-      expect(expectedPermissions).not.toContain(perm);
+      expect(actualPermissions).not.toContain(perm);
     }
   });
 });

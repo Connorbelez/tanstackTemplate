@@ -1,6 +1,7 @@
 import { getNextSnapshot } from "xstate";
 import type { Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
+import { auditLog } from "../auditLog";
 import { effectRegistry } from "./effects/registry";
 import { type EntityType, machineRegistry } from "./machines/registry";
 
@@ -17,12 +18,86 @@ export interface TransitionResult {
 	success: boolean;
 }
 
+interface ScheduledEffectDescriptor {
+	actionType: string;
+	params?: Record<string, unknown>;
+}
+
+function getAuditResourceType(entityType: EntityType): string {
+	return entityType === "onboardingRequest" ? "onboardingRequests" : entityType;
+}
+
+function normalizeActionDescriptors(
+	actions: unknown
+): ScheduledEffectDescriptor[] {
+	if (!actions) {
+		return [];
+	}
+
+	const actionList = Array.isArray(actions) ? actions : [actions];
+	const descriptors: ScheduledEffectDescriptor[] = [];
+
+	for (const action of actionList) {
+		if (typeof action === "string") {
+			descriptors.push({ actionType: action });
+			continue;
+		}
+
+		if (action && typeof action === "object" && "type" in action) {
+			const actionType = action.type;
+			if (typeof actionType === "string") {
+				const params =
+					"params" in action &&
+					action.params &&
+					typeof action.params === "object" &&
+					!Array.isArray(action.params)
+						? (action.params as Record<string, unknown>)
+						: undefined;
+				descriptors.push({ actionType, params });
+			}
+		}
+	}
+
+	return descriptors;
+}
+
+function extractScheduledEffects(
+	machine: (typeof machineRegistry)[keyof typeof machineRegistry],
+	previousState: string,
+	eventType: string
+): ScheduledEffectDescriptor[] {
+	const stateNode =
+		machine.config.states?.[
+			previousState as keyof typeof machine.config.states
+		];
+	const eventConfig =
+		stateNode && "on" in stateNode
+			? (stateNode.on as Record<string, unknown>)?.[eventType]
+			: undefined;
+	let candidates: unknown[] = [];
+	if (eventConfig) {
+		candidates = Array.isArray(eventConfig) ? eventConfig : [eventConfig];
+	}
+
+	return candidates.flatMap((candidate) => {
+		if (!candidate || typeof candidate !== "object") {
+			return [];
+		}
+
+		if (!("actions" in candidate)) {
+			return [];
+		}
+
+		return normalizeActionDescriptors(candidate.actions);
+	});
+}
+
 /**
  * Core GT transition engine — called within mutations to maintain atomicity.
  *
  * Hydrates the entity's current state into an XState snapshot, computes the
  * next state via `getNextSnapshot()`, persists the change, writes to the
- * audit journal, and schedules any declared effects.
+ * shared audit log, and schedules any declared effects.
  */
 export async function transitionEntity(
 	ctx: MutationCtx,
@@ -49,32 +124,39 @@ export async function transitionEntity(
 	const currentSnapshot = machine.resolveState({
 		value: previousState,
 		context: (entity.machineContext as { requestId: string }) ?? {
-			requestId: "",
+			requestId: entityId as string,
 		},
 	});
 
 	// 4. Compute next state (pure — no side effects)
-	const event = { type: eventType, ...payload } as Parameters<
+	const event = { ...(payload ?? {}), type: eventType } as Parameters<
 		typeof getNextSnapshot<typeof machine>
 	>[2];
 	const nextSnapshot = getNextSnapshot(machine, currentSnapshot, event);
 	const newState = nextSnapshot.value as string;
+	const resourceType = getAuditResourceType(entityType);
+	const journalEntryId = `${entityType}:${entityId}:${eventType}:${Date.now()}`;
 
 	// 5. Check if transition occurred
 	if (newState === previousState) {
-		// Transition rejected — log to journal
-		await ctx.db.insert("auditJournal", {
-			entityType,
-			entityId: entityId as string,
-			eventType,
-			payload: payload as Record<string, unknown> | undefined,
-			previousState,
-			newState,
-			outcome: "rejected",
-			reason: `Event "${eventType}" not valid in state "${previousState}"`,
-			source: source ?? { channel: "unknown" },
-			machineVersion: machine.id,
-			timestamp: Date.now(),
+		await auditLog.log(ctx, {
+			action: `transition.${entityType}.rejected`,
+			actorId: source?.actorId ?? "system",
+			resourceType,
+			resourceId: entityId as string,
+			severity: "warning",
+			metadata: {
+				journalEntryId,
+				entityType,
+				eventType,
+				payload,
+				previousState,
+				newState,
+				outcome: "rejected",
+				reason: `Event "${eventType}" not valid in state "${previousState}"`,
+				source: source ?? { channel: "unknown" },
+				machineVersion: machine.id,
+			},
 		});
 		return {
 			success: false,
@@ -91,49 +173,44 @@ export async function transitionEntity(
 		lastTransitionAt: Date.now(),
 	});
 
-	// 7. Write journal entry
-	const journalEntryId = await ctx.db.insert("auditJournal", {
-		entityType,
-		entityId: entityId as string,
-		eventType,
-		payload: payload as Record<string, unknown> | undefined,
-		previousState,
-		newState,
-		outcome: "transitioned",
-		source: source ?? { channel: "unknown" },
-		machineVersion: machine.id,
-		timestamp: Date.now(),
+	// 7. Write audit entry
+	await auditLog.log(ctx, {
+		action: `transition.${entityType}.${eventType.toLowerCase()}`,
+		actorId: source?.actorId ?? "system",
+		resourceType,
+		resourceId: entityId as string,
+		severity: "info",
+		metadata: {
+			journalEntryId,
+			entityType,
+			eventType,
+			payload,
+			previousState,
+			newState,
+			outcome: "transitioned",
+			source: source ?? { channel: "unknown" },
+			machineVersion: machine.id,
+		},
 	});
 
-	// 8. Schedule effects — extract action names from the snapshot's output
-	// XState v5: nextSnapshot.output contains the actions that were executed
-	// We look at the machine definition's transition actions instead
-	const stateNode =
-		machine.config.states?.[
-			previousState as keyof typeof machine.config.states
-		];
-	const eventConfig =
-		stateNode && "on" in stateNode
-			? (stateNode.on as Record<string, unknown>)?.[eventType]
-			: undefined;
-	const actions =
-		eventConfig && typeof eventConfig === "object" && "actions" in eventConfig
-			? (eventConfig.actions as string[])
-			: undefined;
+	// 8. Schedule effects
+	for (const actionDescriptor of extractScheduledEffects(
+		machine,
+		previousState,
+		eventType
+	)) {
+		if (actionDescriptor.actionType.startsWith("xstate.")) {
+			continue;
+		}
 
-	if (actions) {
-		for (const actionName of actions) {
-			if (actionName.startsWith("xstate.")) {
-				continue;
-			}
-			const handler = effectRegistry[actionName];
-			if (handler) {
-				await ctx.scheduler.runAfter(0, handler, {
-					entityId: entityId as string,
-					journalEntryId,
-					effectName: actionName,
-				});
-			}
+		const handler = effectRegistry[actionDescriptor.actionType];
+		if (handler) {
+			await ctx.scheduler.runAfter(0, handler, {
+				entityId: entityId as string,
+				journalEntryId,
+				effectName: actionDescriptor.actionType,
+				params: actionDescriptor.params,
+			});
 		}
 	}
 

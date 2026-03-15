@@ -1,7 +1,21 @@
 import { v } from "convex/values";
 import type { Id } from "../_generated/dataModel";
 import { query } from "../_generated/server";
+import { getAccountLenderId } from "./accountOwnership";
 import { computeBalance } from "./internal";
+
+function compareSequenceNumbers(
+	left: { sequenceNumber: bigint },
+	right: { sequenceNumber: bigint }
+) {
+	if (left.sequenceNumber < right.sequenceNumber) {
+		return -1;
+	}
+	if (left.sequenceNumber > right.sequenceNumber) {
+		return 1;
+	}
+	return 0;
+}
 
 export const getBalance = query({
 	args: { accountId: v.id("ledger_accounts") },
@@ -27,7 +41,7 @@ export const getPositions = query({
 		);
 
 		const accountMissingInvestor = positionAccounts.find(
-			(a) => a.lenderId == null
+			(a) => getAccountLenderId(a) == null
 		);
 		if (accountMissingInvestor) {
 			throw new Error(
@@ -36,7 +50,7 @@ export const getPositions = query({
 		}
 
 		return positionAccounts.map((a) => ({
-			lenderId: a.lenderId as string,
+			lenderId: getAccountLenderId(a) as string,
 			accountId: a._id,
 			balance: computeBalance(a),
 		}));
@@ -46,10 +60,18 @@ export const getPositions = query({
 export const getLenderPositions = query({
 	args: { lenderId: v.string() },
 	handler: async (ctx, args) => {
-		const accounts = await ctx.db
+		const indexedAccounts = await ctx.db
 			.query("ledger_accounts")
 			.withIndex("by_lender", (q) => q.eq("lenderId", args.lenderId))
 			.collect();
+		const legacyAccounts = indexedAccounts.length
+			? []
+			: (await ctx.db.query("ledger_accounts").collect()).filter(
+					(account) =>
+						account.type === "POSITION" &&
+						getAccountLenderId(account) === args.lenderId
+				);
+		const accounts = [...indexedAccounts, ...legacyAccounts];
 
 		return accounts
 			.filter((a) => a.type === "POSITION" && computeBalance(a) > 0n)
@@ -124,7 +146,10 @@ export const getPositionsAt = query({
 		const accountFetches = [...accountIds].map(async (id) => {
 			const acc = await ctx.db.get(id as Id<"ledger_accounts">);
 			if (acc) {
-				accountInfo.set(id, { lenderId: acc.lenderId, type: acc.type });
+				accountInfo.set(id, {
+					lenderId: getAccountLenderId(acc),
+					type: acc.type,
+				});
 			}
 		});
 		await Promise.all(accountFetches);
@@ -190,13 +215,7 @@ export const getAccountHistory = query({
 			seen.add(e._id);
 			return true;
 		});
-		unique.sort((a, b) =>
-			a.sequenceNumber < b.sequenceNumber
-				? -1
-				: a.sequenceNumber > b.sequenceNumber
-					? 1
-					: 0
-		);
+		unique.sort(compareSequenceNumbers);
 
 		if (args.limit) {
 			return unique.slice(0, args.limit);
@@ -226,13 +245,7 @@ export const getMortgageHistory = query({
 			)
 			.collect();
 
-		entries.sort((a, b) =>
-			a.sequenceNumber < b.sequenceNumber
-				? -1
-				: a.sequenceNumber > b.sequenceNumber
-					? 1
-					: 0
-		);
+		entries.sort(compareSequenceNumbers);
 		if (args.limit) {
 			return entries.slice(0, args.limit);
 		}

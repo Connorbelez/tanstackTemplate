@@ -122,7 +122,7 @@ Add `import { auditLog } from "../auditLog";` at the top.
 
 These mutations already run in mutation context, so `auditLog.log()` works directly — no `isMutationContext` detection needed.
 
-### T-008: requestRole — after the auditJournal insert (after line 138, before `return requestId`)
+### T-008: requestRole — after the shared audit log entry is written (before `return requestId`)
 ```typescript
 await auditLog.log(ctx, {
   action: "onboarding.role_requested",

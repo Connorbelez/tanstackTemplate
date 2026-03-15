@@ -24,6 +24,8 @@ import {
 } from "#/components/ui/card";
 import { Separator } from "#/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "#/components/ui/tabs";
+import { buildSignInRedirect } from "#/lib/auth-redirect";
+import { isRouterTeardownSignOutError } from "#/lib/workos-auth";
 import { api } from "../../../convex/_generated/api";
 
 export const Route = createFileRoute("/demo/workos")({
@@ -56,8 +58,8 @@ function WorkOSDemo() {
 }
 
 function UnauthenticatedView() {
-	const pathname = useLocation({
-		select: (location) => location.pathname,
+	const href = useLocation({
+		select: (location) => location.href,
 	});
 
 	return (
@@ -77,9 +79,7 @@ function UnauthenticatedView() {
 				</CardHeader>
 				<CardContent className="flex justify-center">
 					<Button asChild>
-						<Link search={{ redirectTo: pathname }} to="/sign-in">
-							Sign In with AuthKit
-						</Link>
+						<Link {...buildSignInRedirect(href)}>Sign In with AuthKit</Link>
 					</Button>
 				</CardContent>
 			</Card>
@@ -88,7 +88,7 @@ function UnauthenticatedView() {
 }
 
 interface AuthenticatedViewProps {
-	signOut: () => void;
+	signOut: () => Promise<void>;
 	user: {
 		id: string;
 		email: string;
@@ -144,7 +144,7 @@ function ProfileTab({
 	signOut,
 }: {
 	user: AuthenticatedViewProps["user"];
-	signOut: () => void;
+	signOut: () => Promise<void>;
 }) {
 	const initials = [user.firstName?.[0], user.lastName?.[0]]
 		.filter(Boolean)
@@ -180,7 +180,19 @@ function ProfileTab({
 				<InfoCard label="User ID" mono value={user.id} />
 			</div>
 
-			<Button className="w-full" onClick={() => signOut()} variant="outline">
+			<Button
+				className="w-full"
+				onClick={() =>
+					signOut().catch((error) => {
+						if (isRouterTeardownSignOutError(error)) {
+							window.location.href = "/";
+							return;
+						}
+						throw error;
+					})
+				}
+				variant="outline"
+			>
 				<LogOut className="size-4" />
 				Sign Out
 			</Button>

@@ -1,10 +1,12 @@
 import { Link, useLocation } from "@tanstack/react-router";
 import { useAuth } from "@workos/authkit-tanstack-react-start/client";
+import { buildSignInRedirect, buildSignUpRedirect } from "#/lib/auth-redirect";
+import { isRouterTeardownSignOutError } from "#/lib/workos-auth";
 
 export default function SignInButton({ large }: { large?: boolean }) {
 	const { user, signOut } = useAuth();
-	const pathname = useLocation({
-		select: (location) => location.pathname,
+	const href = useLocation({
+		select: (location) => location.href,
 	});
 
 	const buttonClasses = `${
@@ -29,11 +31,15 @@ export default function SignInButton({ large }: { large?: boolean }) {
 				<button
 					className={buttonClasses}
 					onClick={() =>
-						signOut().catch(() => {
+						signOut().catch((error) => {
 							// AuthKitProvider's post-signOut navigate() crashes when
 							// the router context tears down. Session is already cleared
 							// server-side — just force a full page reload.
-							window.location.href = "/";
+							if (isRouterTeardownSignOutError(error)) {
+								window.location.href = "/";
+								return;
+							}
+							throw error;
 						})
 					}
 					type="button"
@@ -48,15 +54,13 @@ export default function SignInButton({ large }: { large?: boolean }) {
 		<>
 			<Link
 				className="rounded-md bg-foreground px-4 py-2 text-background"
-				search={{ redirectTo: pathname }}
-				to="/sign-in"
+				{...buildSignInRedirect(href)}
 			>
 				Sign in
 			</Link>
 			<Link
 				className="rounded-md bg-foreground px-4 py-2 text-background"
-				search={{ redirectTo: pathname }}
-				to="/sign-up"
+				{...buildSignUpRedirect(href)}
 			>
 				Sign up
 			</Link>

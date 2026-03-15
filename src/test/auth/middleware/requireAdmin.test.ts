@@ -10,7 +10,7 @@ describe("requireAdmin middleware", () => {
 
 		const result = await t
 			.withIdentity(EXTERNAL_ORG_ADMIN)
-			.mutation(api.test.authTestEndpoints.testAdminMutation);
+			.mutation(api.test.authTestEndpoints.testRequireAdminMutation);
 
 		expect(result).toEqual({ ok: true });
 	});
@@ -22,7 +22,7 @@ describe("requireAdmin middleware", () => {
 		await expect(
 			t
 				.withIdentity(BROKER)
-				.mutation(api.test.authTestEndpoints.testAdminMutation)
+				.mutation(api.test.authTestEndpoints.testRequireAdminMutation)
 		).rejects.toThrow("Forbidden: admin role required");
 	});
 });

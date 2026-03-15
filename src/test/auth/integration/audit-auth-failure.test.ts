@@ -17,6 +17,7 @@ import {
 	seedFromIdentity,
 } from "../helpers";
 import { BROKER, MEMBER } from "../identities";
+import { lookupPermissions } from "../permissions";
 
 describe("audit auth failure", () => {
 	describe("mutation auth failure", () => {
@@ -27,7 +28,7 @@ describe("audit auth failure", () => {
 			await expect(
 				t
 					.withIdentity(BROKER)
-					.mutation(api.test.authTestEndpoints.testAdminMutation)
+					.mutation(api.test.authTestEndpoints.testRequireAdminMutation)
 			).rejects.toThrow("Forbidden: admin role required");
 		});
 	});
@@ -48,7 +49,7 @@ describe("audit auth failure", () => {
 			const t = createTestConvex();
 
 			await expect(
-				t.mutation(api.test.authTestEndpoints.testAdminMutation)
+				t.mutation(api.test.authTestEndpoints.testRequireAdminMutation)
 			).rejects.toThrow("Unauthorized: sign in required");
 		});
 
@@ -68,7 +69,7 @@ describe("audit auth failure", () => {
 			await expect(
 				t
 					.withIdentity(BROKER)
-					.mutation(api.test.authTestEndpoints.testAdminMutation)
+					.mutation(api.test.authTestEndpoints.testRequireAdminMutation)
 			).rejects.toThrow("Forbidden: admin role required");
 		});
 
@@ -88,6 +89,7 @@ describe("audit auth failure", () => {
 		it("requireOrgContext throws org context required", async () => {
 			const identity = createMockViewer({
 				roles: ["broker"],
+				permissions: lookupPermissions(["broker"]),
 			});
 			const t = createTestConvex();
 			await seedFromIdentity(t, identity);

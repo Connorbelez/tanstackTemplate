@@ -136,17 +136,13 @@ export const ROLE_PERMISSIONS: Record<string, string[]> = {
 	member: ["onboarding:access"],
 };
 
-/**
- * Look up the union of permissions for one or more roles.
- * Duplicates are removed; unknown roles are silently skipped.
- */
 export function lookupPermissions(roles: string[]): string[] {
 	const merged = new Set<string>();
 	for (const role of roles) {
 		const perms = ROLE_PERMISSIONS[role];
 		if (perms) {
-			for (const p of perms) {
-				merged.add(p);
+			for (const permission of perms) {
+				merged.add(permission);
 			}
 		}
 	}

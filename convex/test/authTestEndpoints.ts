@@ -22,94 +22,130 @@ import {
 	ledgerQuery,
 	lenderMutation,
 	lenderQuery,
+	requireAdmin,
+	requirePermission,
 	underwriterMutation,
 	underwriterQuery,
 	uwMutation,
 	uwQuery,
 } from "../fluent";
 
+function assertTestEndpointsEnabled() {
+	if (process.env.NODE_ENV === "production") {
+		throw new Error("Test auth endpoints are disabled in production");
+	}
+}
+
+function okResponse() {
+	assertTestEndpointsEnabled();
+	return { ok: true as const };
+}
+
 // ── authed (authenticated, no role/permission check) ─────────────────
 export const testAuthedQuery = authedQuery
-	.handler(async () => ({ ok: true as const }))
+	.handler(async () => okResponse())
 	.public();
 
 export const testAuthedMutation = authedMutation
-	.handler(async () => ({ ok: true as const }))
+	.handler(async () => okResponse())
 	.public();
 
 // ── admin ────────────────────────────────────────────────────────────
 export const testAdminQuery = adminQuery
-	.handler(async () => ({ ok: true as const }))
+	.handler(async () => okResponse())
 	.public();
 
 export const testAdminMutation = adminMutation
-	.handler(async () => ({ ok: true as const }))
+	.handler(async () => okResponse())
+	.public();
+
+export const testRequireAdminMutation = authedMutation
+	.use(requireAdmin)
+	.handler(async () => okResponse())
 	.public();
 
 // ── broker ───────────────────────────────────────────────────────────
 export const testBrokerQuery = brokerQuery
-	.handler(async () => ({ ok: true as const }))
+	.handler(async () => okResponse())
 	.public();
 
 export const testBrokerMutation = brokerMutation
-	.handler(async () => ({ ok: true as const }))
+	.handler(async () => okResponse())
 	.public();
 
 // ── borrower ─────────────────────────────────────────────────────────
 export const testBorrowerQuery = borrowerQuery
-	.handler(async () => ({ ok: true as const }))
+	.handler(async () => okResponse())
 	.public();
 
 export const testBorrowerMutation = borrowerMutation
-	.handler(async () => ({ ok: true as const }))
+	.handler(async () => okResponse())
 	.public();
 
 // ── lender ───────────────────────────────────────────────────────────
 export const testLenderQuery = lenderQuery
-	.handler(async () => ({ ok: true as const }))
+	.handler(async () => okResponse())
 	.public();
 
 export const testLenderMutation = lenderMutation
-	.handler(async () => ({ ok: true as const }))
+	.handler(async () => okResponse())
 	.public();
 
 // ── underwriter (org-scoped) ─────────────────────────────────────────
 export const testUnderwriterQuery = underwriterQuery
-	.handler(async () => ({ ok: true as const }))
+	.handler(async () => okResponse())
 	.public();
 
 export const testUnderwriterMutation = underwriterMutation
-	.handler(async () => ({ ok: true as const }))
+	.handler(async () => okResponse())
 	.public();
 
 // ── lawyer ───────────────────────────────────────────────────────────
 export const testLawyerQuery = lawyerQuery
-	.handler(async () => ({ ok: true as const }))
+	.handler(async () => okResponse())
 	.public();
 
 export const testLawyerMutation = lawyerMutation
-	.handler(async () => ({ ok: true as const }))
+	.handler(async () => okResponse())
 	.public();
 
 // ── uw (underwriter:access, no org context required) ─────────────────
-export const testUwQuery = uwQuery
-	.handler(async () => ({ ok: true as const }))
-	.public();
+export const testUwQuery = uwQuery.handler(async () => okResponse()).public();
 
 export const testUwMutation = uwMutation
-	.handler(async () => ({ ok: true as const }))
+	.handler(async () => okResponse())
 	.public();
 
 // ── deal ─────────────────────────────────────────────────────────────
 export const testDealQuery = dealQuery
-	.handler(async () => ({ ok: true as const }))
+	.handler(async () => okResponse())
 	.public();
 
 export const testDealMutation = dealMutation
-	.handler(async () => ({ ok: true as const }))
+	.handler(async () => okResponse())
 	.public();
 
 // ── ledger ───────────────────────────────────────────────────────────
 export const testLedgerQuery = ledgerQuery
-	.handler(async () => ({ ok: true as const }))
+	.handler(async () => okResponse())
+	.public();
+
+export const testLedgerCorrectionMutation = authedMutation
+	.use(requirePermission("ledger:correct"))
+	.handler(async () => okResponse())
+	.public();
+
+export const testAccrualQuery = authedQuery
+	.use(requirePermission("accrual:view"))
+	.handler(async () => okResponse())
+	.public();
+
+export const testDispersalQuery = authedQuery
+	.use(requirePermission("dispersal:view"))
+	.handler(async () => okResponse())
+	.public();
+
+export const testObligationWaiveMutation = authedMutation
+	.use(requirePermission("obligation:waive"))
+	.handler(async () => okResponse())
 	.public();

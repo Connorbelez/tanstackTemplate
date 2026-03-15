@@ -1,6 +1,7 @@
 import { useLocation, useNavigate } from "@tanstack/react-router";
 import { useAuth } from "@workos/authkit-tanstack-react-start/client";
 import { useEffect } from "react";
+import { buildSignInRedirect } from "#/lib/auth-redirect";
 
 type UserOrNull = ReturnType<typeof useAuth>["user"];
 
@@ -15,11 +16,8 @@ export const useUser = (): UserOrNull => {
 			return;
 		}
 
-		void navigate({
-			to: "/sign-in",
-			search: { redirectTo: location.pathname + location.search },
-		});
-	}, [loading, user, location.pathname, location.search, navigate]);
+		void navigate(buildSignInRedirect(location.href));
+	}, [loading, user, location.href, navigate]);
 
 	return user;
 };

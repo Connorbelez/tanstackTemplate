@@ -1,4 +1,10 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import {
+	createFileRoute,
+	Link,
+	useCanGoBack,
+	useNavigate,
+	useRouter,
+} from "@tanstack/react-router";
 import { ArrowLeft, Home, ShieldAlert } from "lucide-react";
 import { Button } from "#/components/ui/button";
 
@@ -7,6 +13,10 @@ export const Route = createFileRoute("/unauthorized")({
 });
 
 function UnauthorizedPage() {
+	const canGoBack = useCanGoBack();
+	const navigate = useNavigate();
+	const router = useRouter();
+
 	return (
 		<div className="flex min-h-[60vh] items-center justify-center px-4 py-16">
 			<div className="w-full max-w-md text-center">
@@ -28,7 +38,13 @@ function UnauthorizedPage() {
 						</Link>
 					</Button>
 					<Button
-						onClick={() => window.history.back()}
+						onClick={() => {
+							if (canGoBack) {
+								router.history.back();
+								return;
+							}
+							void navigate({ to: "/" });
+						}}
 						size="sm"
 						variant="outline"
 					>

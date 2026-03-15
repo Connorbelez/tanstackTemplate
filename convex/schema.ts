@@ -336,6 +336,8 @@ export default defineSchema({
 		status: v.string(),
 		machineContext: v.optional(v.any()),
 		lastTransitionAt: v.optional(v.number()),
+		activeRoleAssignmentJournalId: v.optional(v.string()),
+		processedRoleAssignmentJournalIds: v.optional(v.array(v.string())),
 		referralSource: v.union(
 			v.literal("self_signup"),
 			v.literal("broker_invite")
@@ -350,29 +352,6 @@ export default defineSchema({
 		.index("by_user", ["userId"])
 		.index("by_status", ["status"])
 		.index("by_user_and_status", ["userId", "status"]),
-
-	auditJournal: defineTable({
-		entityType: v.string(),
-		entityId: v.string(),
-		eventType: v.string(),
-		payload: v.optional(v.any()),
-		previousState: v.string(),
-		newState: v.string(),
-		outcome: v.union(v.literal("transitioned"), v.literal("rejected")),
-		reason: v.optional(v.string()),
-		source: v.object({
-			channel: v.string(),
-			actorId: v.optional(v.string()),
-			actorType: v.optional(v.string()),
-			ip: v.optional(v.string()),
-			sessionId: v.optional(v.string()),
-		}),
-		machineVersion: v.optional(v.string()),
-		timestamp: v.number(),
-	})
-		.index("by_entity", ["entityType", "entityId", "timestamp"])
-		.index("by_actor", ["source.actorId", "timestamp"])
-		.index("by_type_and_time", ["entityType", "timestamp"]),
 
 	documentTemplateGroups: defineTable({
 		name: v.string(),

@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   format,
   addMonths,
@@ -45,8 +45,8 @@ interface MeetingSchedulerProps {
   onCancel: () => void;
 }
 
-// Helper to format time for display
-const formatTime = (date: Date | null) => (date ? format(date, "h:mm a") : "Select time");
+const formatDateLabel = (date: Date | null) =>
+	date ? format(date, "MMMM d, yyyy") : "Select date";
 
 // Main component
 export const MeetingScheduler: React.FC<MeetingSchedulerProps> = ({
@@ -64,11 +64,12 @@ export const MeetingScheduler: React.FC<MeetingSchedulerProps> = ({
   const [startDate, setStartDate] = useState<Date | null>(initialStartDate || null);
   const [endDate, setEndDate] = useState<Date | null>(initialEndDate || null);
   const [aiNotes, setAiNotes] = useState(false);
+  const today = useMemo(() => new Date(), []);
 
   // Calendar logic
   const days = eachDayOfInterval({
-    start: startOfWeek(startOfMonth(currentMonth)),
-    end: endOfWeek(endOfMonth(currentMonth)),
+    start: startOfWeek(startOfMonth(currentMonth), { weekStartsOn: 1 }),
+    end: endOfWeek(endOfMonth(currentMonth), { weekStartsOn: 1 }),
   });
 
   const handleDateClick = (day: Date) => {
@@ -91,7 +92,7 @@ export const MeetingScheduler: React.FC<MeetingSchedulerProps> = ({
     const startFormatted = format(startDate, "MMM d");
     if (!endDate) return `Event: ${startFormatted}`;
     const endFormatted = format(endDate, "MMM d");
-    return `Event: ${startFormatted} - ${endFormatted}, from ${formatTime(startDate)} - ${formatTime(endDate)}`;
+    return `Event: ${startFormatted} - ${endFormatted}`;
   };
 
   // Handlers
@@ -160,9 +161,9 @@ export const MeetingScheduler: React.FC<MeetingSchedulerProps> = ({
                     className={cn(
                       "relative h-10 w-10 rounded-full flex items-center justify-center transition-colors duration-200",
                       !isSameMonth(day, currentMonth) && "text-muted-foreground/50",
-                      isSameDay(day, new Date()) && "text-primary font-bold",
+                      isSameDay(day, today) && "text-primary font-bold",
                       isSelected && "bg-primary text-primary-foreground",
-                      isInRange && "bg-primary/10 text-primary-foreground rounded-none",
+                      isInRange && "bg-primary/10 text-primary rounded-none",
                       startDate && isSameDay(day, startDate) && "rounded-r-none",
                       endDate && isSameDay(day, endDate) && "rounded-l-none"
                     )}
@@ -180,19 +181,17 @@ export const MeetingScheduler: React.FC<MeetingSchedulerProps> = ({
             <div className="space-y-4">
               {/* Start Date */}
               <div>
-                <Label htmlFor="start-date" className="text-sm font-medium">Start date*</Label>
+                <Label className="text-sm font-medium">Start date*</Label>
                 <div className="flex items-center mt-2 p-3 rounded-md border bg-background">
-                  <span className="text-sm flex-grow">{startDate ? format(startDate, "MMMM d, yyyy") : "Select date"}</span>
-                  <span className="text-sm text-primary font-medium bg-primary/10 px-3 py-1 rounded-md">{formatTime(startDate)}</span>
+                  <span className="text-sm flex-grow">{formatDateLabel(startDate)}</span>
                 </div>
               </div>
 
               {/* End Date */}
               <div>
-                <Label htmlFor="end-date" className="text-sm font-medium">End date*</Label>
+                <Label className="text-sm font-medium">End date*</Label>
                 <div className="flex items-center mt-2 p-3 rounded-md border bg-background">
-                  <span className="text-sm flex-grow">{endDate ? format(endDate, "MMMM d, yyyy") : "Select date"}</span>
-                  <span className="text-sm text-primary font-medium bg-primary/10 px-3 py-1 rounded-md">{formatTime(endDate)}</span>
+                  <span className="text-sm flex-grow">{formatDateLabel(endDate)}</span>
                 </div>
               </div>
 

@@ -8,6 +8,7 @@ import {
 	seedFromIdentity,
 } from "../helpers";
 import { BROKER, EXTERNAL_ORG_ADMIN, FAIRLEND_ADMIN } from "../identities";
+import { lookupPermissions } from "../permissions";
 
 describe("authMiddleware (whoAmI)", () => {
 	it("rejects unauthenticated access", async () => {
@@ -34,6 +35,7 @@ describe("authMiddleware (whoAmI)", () => {
 	it("parses roles from JSON string", async () => {
 		const identity = createMockViewer({
 			roles: ["admin", "broker"],
+			permissions: lookupPermissions(["admin", "broker"]),
 			orgId: FAIRLEND_STAFF_ORG_ID,
 		});
 		const t = createTestConvex();
@@ -97,6 +99,7 @@ describe("authMiddleware (whoAmI)", () => {
 	it("sets isFairLendAdmin false for non-admin in FairLend Staff org", async () => {
 		const identity = createMockViewer({
 			roles: ["broker"],
+			permissions: lookupPermissions(["broker"]),
 			orgId: FAIRLEND_STAFF_ORG_ID,
 		});
 		const t = createTestConvex();

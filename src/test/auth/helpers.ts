@@ -10,7 +10,17 @@ import { convexTest } from "convex-test";
 import schema from "../../../convex/schema";
 import { lookupPermissions } from "./permissions";
 
-const modules = import.meta.glob("../../../convex/**/*.*s");
+const modules = {
+	...import.meta.glob("../../../convex/_generated/**/*.*s"),
+	...import.meta.glob("../../../convex/audit/**/*.*s"),
+	...import.meta.glob("../../../convex/auth/**/*.*s"),
+	...import.meta.glob("../../../convex/engine/**/*.*s"),
+	...import.meta.glob("../../../convex/onboarding/**/*.*s"),
+	...import.meta.glob("../../../convex/test/**/*.*s"),
+	...import.meta.glob("../../../convex/auditLog.ts"),
+	...import.meta.glob("../../../convex/constants.ts"),
+	...import.meta.glob("../../../convex/fluent.ts"),
+};
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -69,18 +79,22 @@ export function createMockIdentity(
  * resolved via `lookupPermissions` unless explicitly provided.
  */
 export function createMockViewer(options: MockViewerOptions): MockIdentity {
+	if (options.roles.length === 0) {
+		throw new Error("MockViewerOptions.roles must contain at least one role");
+	}
+	const primaryRole = options.roles[0];
 	const resolvedPermissions =
 		options.permissions ?? lookupPermissions(options.roles);
 
 	return {
-		subject: options.subject ?? `user_${options.roles[0]}_test`,
+		subject: options.subject ?? `user_${primaryRole}_test`,
 		issuer: "https://api.workos.com",
 		org_id: options.orgId,
 		organization_name: options.orgName,
-		role: options.roles[0],
+		role: primaryRole,
 		roles: JSON.stringify(options.roles),
 		permissions: JSON.stringify(resolvedPermissions),
-		user_email: options.email ?? `${options.roles[0]}@test.fairlend.ca`,
+		user_email: options.email ?? `${primaryRole}@test.fairlend.ca`,
 		user_first_name: options.firstName ?? "Test",
 		user_last_name: options.lastName ?? "User",
 	};

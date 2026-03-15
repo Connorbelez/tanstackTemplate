@@ -1,4 +1,5 @@
 import { redirect } from "@tanstack/react-router";
+import { buildSignInRedirect } from "./auth-redirect";
 
 /** Permissions that control island-level route access. */
 export const ISLAND_PERMISSIONS = {
@@ -27,19 +28,16 @@ export interface RouteAuthContext {
  * Creates a TanStack Router `beforeLoad` guard that checks for a required permission.
  * Redirects to /sign-in if not authenticated, /unauthorized if missing permission.
  */
-export function guardPermission(permission: string) {
+export function guardPermission(permission: IslandPermission) {
 	return ({
 		context,
 		location,
 	}: {
 		context: RouteAuthContext;
-		location: { pathname: string };
+		location: { href: string };
 	}) => {
 		if (!context.userId) {
-			throw redirect({
-				to: "/sign-in",
-				search: { redirectTo: location.pathname },
-			});
+			throw redirect(buildSignInRedirect(location.href));
 		}
 		if (!context.permissions.includes(permission)) {
 			throw redirect({ to: "/unauthorized" });

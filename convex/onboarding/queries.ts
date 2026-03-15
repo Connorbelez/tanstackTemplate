@@ -1,8 +1,9 @@
 import { v } from "convex/values";
-import { adminQuery, authedQuery, requirePermission } from "../fluent";
+import { auditLog } from "../auditLog";
+import { adminMutation, authedQuery, requirePermission } from "../fluent";
 
 /** List onboarding requests by status. Defaults to pending_review. Admin only. */
-export const listPendingRequests = adminQuery
+export const listPendingRequests = adminMutation
 	.use(requirePermission("onboarding:review"))
 	.input({ status: v.optional(v.string()) })
 	.handler(async (ctx, args) => {
@@ -44,19 +45,14 @@ export const getMyOnboardingRequest = authedQuery
 	.public();
 
 /** Get the full audit journal history for a request. Admin only. */
-export const getRequestHistory = adminQuery
+export const getRequestHistory = adminMutation
 	.use(requirePermission("onboarding:review"))
 	.input({ requestId: v.id("onboardingRequests") })
 	.handler(async (ctx, args) => {
-		const entries = await ctx.db
-			.query("auditJournal")
-			.withIndex("by_entity", (q) =>
-				q
-					.eq("entityType", "onboardingRequest")
-					.eq("entityId", args.requestId as string)
-			)
-			.collect();
-
-		return entries;
+		return auditLog.queryByResource(ctx, {
+			resourceType: "onboardingRequests",
+			resourceId: args.requestId as string,
+			limit: 100,
+		});
 	})
 	.public();

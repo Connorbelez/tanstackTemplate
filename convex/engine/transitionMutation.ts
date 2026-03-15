@@ -13,7 +13,11 @@ export const transitionMutation = internalMutation({
 		entityType: v.string(),
 		entityId: v.string(),
 		eventType: v.string(),
-		payload: v.optional(v.any()),
+		payload: v.optional(
+			v.object({
+				reason: v.optional(v.string()),
+			})
+		),
 		source: v.optional(
 			v.object({
 				channel: v.string(),

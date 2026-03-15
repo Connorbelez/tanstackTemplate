@@ -86,20 +86,19 @@ For testing: EXTERNAL_ORG_ADMIN should fail `approveRequest` because they don't 
      - metadata including: middleware name, reason, viewer roles/permissions, orgId
 
 ### Querying audit log entries:
-The `convex-audit-log` component stores entries. In tests, query via `ctx.db.query("auditLog_logs")` or use the component's query API. Based on existing test patterns in `onboarding.test.ts`, audit journal entries are queried via:
+The `convex-audit-log` component stores entries. In tests, query via `ctx.db.query("auditLog_logs")` or use the component's query API. For onboarding transition history, filter rows by `resourceType === "onboardingRequests"` and the request ID:
 ```typescript
 const auditEntries = await ctx.db
-  .query("auditJournal")
-  .withIndex("by_entity", (q) => q.eq("entityType", "..."))
+  .query("auditLog_logs")
   .collect();
 ```
 
-However, `auditAuthFailure` uses `auditLog.log()` (the convex-audit-log component), not the auditJournal table. The component has its own internal table structure.
+However, `auditAuthFailure` also uses `auditLog.log()` (the same convex-audit-log component), so the same table/query strategy applies.
 
 **Alternative approach:** Instead of querying component internals, verify the behavior indirectly:
 - Verify the mutation THROWS with the correct error message
 - The fact that the throw happens confirms `auditAuthFailure` was called (it's called in the same code path)
-- For the query case, verify the query also throws (but without audit logging — we can't directly verify the absence)
+- For the query case, prefer mutation-backed reads or other write-capable auth chains when you need the denial itself to be audit-verified
 
 Actually, the simplest approach is to test that auth denials produce the expected errors and trust that `auditAuthFailure` is called (since it's in the middleware code path). The unit test for `isMutationContext` itself can be a simple pure function test.
 

@@ -24,8 +24,81 @@ export const patchTargetOrg = internalMutation({
 		targetOrganizationId: v.string(),
 	},
 	handler: async (ctx, args) => {
+		const targetOrganizationId = args.targetOrganizationId.trim();
+		if (!targetOrganizationId) {
+			throw new Error("targetOrganizationId cannot be empty");
+		}
 		await ctx.db.patch(args.requestId, {
-			targetOrganizationId: args.targetOrganizationId,
+			targetOrganizationId,
+		});
+	},
+});
+
+export const beginRoleAssignmentProcessing = internalMutation({
+	args: {
+		requestId: v.id("onboardingRequests"),
+		journalEntryId: v.string(),
+	},
+	handler: async (ctx, args) => {
+		const request = await ctx.db.get(args.requestId);
+		if (!request) {
+			throw new Error(`Request not found: ${args.requestId}`);
+		}
+
+		const processed = request.processedRoleAssignmentJournalIds ?? [];
+		if (processed.includes(args.journalEntryId)) {
+			return {
+				status: "processed" as const,
+				targetOrganizationId: request.targetOrganizationId,
+			};
+		}
+
+		if (request.activeRoleAssignmentJournalId === args.journalEntryId) {
+			return {
+				status: "in_progress" as const,
+				targetOrganizationId: request.targetOrganizationId,
+			};
+		}
+
+		if (
+			request.activeRoleAssignmentJournalId &&
+			request.activeRoleAssignmentJournalId !== args.journalEntryId
+		) {
+			throw new Error(
+				`Role assignment already in progress for request ${args.requestId}`
+			);
+		}
+
+		await ctx.db.patch(args.requestId, {
+			activeRoleAssignmentJournalId: args.journalEntryId,
+		});
+
+		return {
+			status: "started" as const,
+			targetOrganizationId: request.targetOrganizationId,
+		};
+	},
+});
+
+export const completeRoleAssignmentProcessing = internalMutation({
+	args: {
+		requestId: v.id("onboardingRequests"),
+		journalEntryId: v.string(),
+	},
+	handler: async (ctx, args) => {
+		const request = await ctx.db.get(args.requestId);
+		if (!request) {
+			throw new Error(`Request not found: ${args.requestId}`);
+		}
+
+		const processed = request.processedRoleAssignmentJournalIds ?? [];
+		if (!processed.includes(args.journalEntryId)) {
+			processed.push(args.journalEntryId);
+		}
+
+		await ctx.db.patch(args.requestId, {
+			activeRoleAssignmentJournalId: undefined,
+			processedRoleAssignmentJournalIds: processed,
 		});
 	},
 });

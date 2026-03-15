@@ -3,8 +3,8 @@
  *
  * Tests the 7 new permissions (deal:view, deal:manage, ledger:view,
  * ledger:correct, accrual:view, dispersal:view, obligation:waive) against
- * every role. Permissions with dedicated chain endpoints are tested via
- * the endpoint; the rest are verified against the ROLE_PERMISSIONS map.
+ * every role using real auth endpoints, with ROLE_PERMISSIONS only used for
+ * secondary cross-checks.
  */
 
 import { describe, expect, it } from "vitest";
@@ -77,7 +77,7 @@ describe("deal:view (via dealQuery endpoint)", () => {
 
 			await expect(
 				t.withIdentity(identity).query(api.test.authTestEndpoints.testDealQuery)
-			).rejects.toThrow();
+			).rejects.toThrow('Forbidden: permission "deal:view" required');
 		});
 	}
 });
@@ -119,7 +119,7 @@ describe("deal:manage (via dealMutation endpoint)", () => {
 				t
 					.withIdentity(identity)
 					.mutation(api.test.authTestEndpoints.testDealMutation)
-			).rejects.toThrow();
+			).rejects.toThrow('Forbidden: permission "deal:manage" required');
 		});
 	}
 });
@@ -159,88 +159,137 @@ describe("ledger:view (via ledgerQuery endpoint)", () => {
 				t
 					.withIdentity(identity)
 					.query(api.test.authTestEndpoints.testLedgerQuery)
-			).rejects.toThrow();
+			).rejects.toThrow('Forbidden: permission "ledger:view" required');
 		});
 	}
 });
 
-// ── Permissions WITHOUT dedicated chain endpoints ────────────────────
-// Verified against the ROLE_PERMISSIONS truth table directly.
-
-interface TruthTableEntry {
-	allowedRoles: string[];
-	deniedRoles: string[];
+interface QueryPermissionEndpointTest {
+	allowed: string[];
+	denied: string[];
+	endpoint:
+		| typeof api.test.authTestEndpoints.testAccrualQuery
+		| typeof api.test.authTestEndpoints.testDispersalQuery;
+	errorMessage: string;
+	mode: "query";
 	permission: string;
 }
 
-const TRUTH_TABLE_ONLY: TruthTableEntry[] = [
+interface MutationPermissionEndpointTest {
+	allowed: string[];
+	denied: string[];
+	endpoint:
+		| typeof api.test.authTestEndpoints.testLedgerCorrectionMutation
+		| typeof api.test.authTestEndpoints.testObligationWaiveMutation;
+	errorMessage: string;
+	mode: "mutation";
+	permission: string;
+}
+
+type PermissionEndpointTest =
+	| QueryPermissionEndpointTest
+	| MutationPermissionEndpointTest;
+
+const PERMISSION_ENDPOINT_TESTS: PermissionEndpointTest[] = [
 	{
 		permission: "ledger:correct",
-		allowedRoles: ["admin"],
-		deniedRoles: [
-			"broker",
-			"lender",
-			"borrower",
-			"lawyer",
-			"jr_underwriter",
-			"underwriter",
-			"sr_underwriter",
-			"member",
+		endpoint: api.test.authTestEndpoints.testLedgerCorrectionMutation,
+		mode: "mutation",
+		errorMessage: 'Forbidden: permission "ledger:correct" required',
+		allowed: ["FAIRLEND_ADMIN"],
+		denied: [
+			"EXTERNAL_ORG_ADMIN",
+			"BROKER",
+			"LENDER",
+			"BORROWER",
+			"LAWYER",
+			"JR_UNDERWRITER",
+			"UNDERWRITER",
+			"SR_UNDERWRITER",
+			"MEMBER",
 		],
 	},
 	{
 		permission: "accrual:view",
-		allowedRoles: ["admin", "broker", "lender"],
-		deniedRoles: [
-			"borrower",
-			"lawyer",
-			"jr_underwriter",
-			"underwriter",
-			"sr_underwriter",
-			"member",
+		endpoint: api.test.authTestEndpoints.testAccrualQuery,
+		mode: "query",
+		errorMessage: 'Forbidden: permission "accrual:view" required',
+		allowed: ["FAIRLEND_ADMIN", "BROKER", "LENDER"],
+		denied: [
+			"EXTERNAL_ORG_ADMIN",
+			"BORROWER",
+			"LAWYER",
+			"JR_UNDERWRITER",
+			"UNDERWRITER",
+			"SR_UNDERWRITER",
+			"MEMBER",
 		],
 	},
 	{
 		permission: "dispersal:view",
-		allowedRoles: ["admin", "lender"],
-		deniedRoles: [
-			"broker",
-			"borrower",
-			"lawyer",
-			"jr_underwriter",
-			"underwriter",
-			"sr_underwriter",
-			"member",
+		endpoint: api.test.authTestEndpoints.testDispersalQuery,
+		mode: "query",
+		errorMessage: 'Forbidden: permission "dispersal:view" required',
+		allowed: ["FAIRLEND_ADMIN", "LENDER"],
+		denied: [
+			"EXTERNAL_ORG_ADMIN",
+			"BROKER",
+			"BORROWER",
+			"LAWYER",
+			"JR_UNDERWRITER",
+			"UNDERWRITER",
+			"SR_UNDERWRITER",
+			"MEMBER",
 		],
 	},
 	{
 		permission: "obligation:waive",
-		allowedRoles: ["admin"],
-		deniedRoles: [
-			"broker",
-			"lender",
-			"borrower",
-			"lawyer",
-			"jr_underwriter",
-			"underwriter",
-			"sr_underwriter",
-			"member",
+		endpoint: api.test.authTestEndpoints.testObligationWaiveMutation,
+		mode: "mutation",
+		errorMessage: 'Forbidden: permission "obligation:waive" required',
+		allowed: ["FAIRLEND_ADMIN"],
+		denied: [
+			"EXTERNAL_ORG_ADMIN",
+			"BROKER",
+			"LENDER",
+			"BORROWER",
+			"LAWYER",
+			"JR_UNDERWRITER",
+			"UNDERWRITER",
+			"SR_UNDERWRITER",
+			"MEMBER",
 		],
 	},
 ];
 
-describe("permissions without dedicated endpoints (truth table verification)", () => {
-	for (const entry of TRUTH_TABLE_ONLY) {
+describe("permissions without dedicated endpoints", () => {
+	for (const entry of PERMISSION_ENDPOINT_TESTS) {
 		describe(entry.permission, () => {
-			for (const role of entry.allowedRoles) {
-				it(`${role} has ${entry.permission}`, () => {
-					expect(ROLE_PERMISSIONS[role]).toContain(entry.permission);
+			for (const name of entry.allowed) {
+				it(`allows ${name}`, async () => {
+					const t = createTestConvex();
+					const identity = ALL_IDENTITIES[name];
+					await seedFromIdentity(t, identity);
+
+					const result =
+						entry.mode === "query"
+							? await t.withIdentity(identity).query(entry.endpoint)
+							: await t.withIdentity(identity).mutation(entry.endpoint);
+					expect(result).toEqual({ ok: true });
 				});
 			}
 
-			for (const role of entry.deniedRoles) {
-				it(`${role} does NOT have ${entry.permission}`, () => {
-					expect(ROLE_PERMISSIONS[role]).not.toContain(entry.permission);
+			for (const name of entry.denied) {
+				it(`denies ${name}`, async () => {
+					const t = createTestConvex();
+					const identity = ALL_IDENTITIES[name];
+					await seedFromIdentity(t, identity);
+
+					const promise =
+						entry.mode === "query"
+							? t.withIdentity(identity).query(entry.endpoint)
+							: t.withIdentity(identity).mutation(entry.endpoint);
+					await expect(promise).rejects.toThrow(entry.errorMessage);
 				});
 			}
 		});

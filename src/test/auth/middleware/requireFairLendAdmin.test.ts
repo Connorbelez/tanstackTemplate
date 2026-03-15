@@ -7,6 +7,7 @@ import {
 	seedFromIdentity,
 } from "../helpers";
 import { EXTERNAL_ORG_ADMIN, FAIRLEND_ADMIN } from "../identities";
+import { lookupPermissions } from "../permissions";
 
 describe("requireFairLendAdmin middleware", () => {
 	it("allows FairLend Staff admin", async () => {
@@ -34,6 +35,7 @@ describe("requireFairLendAdmin middleware", () => {
 	it("rejects non-admin with FairLend Staff org", async () => {
 		const identity = createMockViewer({
 			roles: ["broker"],
+			permissions: lookupPermissions(["broker"]),
 			orgId: FAIRLEND_STAFF_ORG_ID,
 		});
 		const t = createTestConvex();
@@ -47,6 +49,7 @@ describe("requireFairLendAdmin middleware", () => {
 	it("rejects admin with no org context", async () => {
 		const identity = createMockViewer({
 			roles: ["admin"],
+			permissions: lookupPermissions(["admin"]),
 		});
 		const t = createTestConvex();
 		await seedFromIdentity(t, identity);

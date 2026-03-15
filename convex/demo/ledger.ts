@@ -1,6 +1,7 @@
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 import { mutation, query } from "../_generated/server";
+import { getAccountLenderId } from "../ledger/accountOwnership";
 import { UNITS_PER_MORTGAGE } from "../ledger/constants";
 import {
 	computeBalance,
@@ -295,12 +296,15 @@ export const getDemoState = query({
 						a.mortgageId === mortgageId &&
 						computeBalance(a) > 0n
 				)
-				.map((a) => ({
-					lenderId: a.lenderId ?? "",
-					displayName: lenderDisplayName(a.lenderId ?? ""),
-					accountId: a._id,
-					balance: Number(computeBalance(a)),
-				}));
+				.map((a) => {
+					const lenderId = getAccountLenderId(a) ?? "";
+					return {
+						lenderId,
+						displayName: lenderDisplayName(lenderId),
+						accountId: a._id,
+						balance: Number(computeBalance(a)),
+					};
+				});
 
 			// Count entries
 			const entries = await ctx.db
@@ -362,7 +366,7 @@ export const getDemoJournal = query({
 		for (const account of allAccounts) {
 			accountTypeMap.set(account._id, {
 				type: account.type,
-				lenderId: account.lenderId,
+				lenderId: getAccountLenderId(account),
 			});
 		}
 

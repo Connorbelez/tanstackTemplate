@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, "03-*"]
   pull_request:
-    branches: [main]
+    branches: [main, "03-*"]
 
 jobs:
   check:
@@ -43,4 +43,4 @@ jobs:
         run: bun typecheck
 
       - name: Run unit tests
-        run: npx vitest run
+        run: bunx vitest run

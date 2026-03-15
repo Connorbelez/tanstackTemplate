@@ -61,8 +61,12 @@ export const deleteWidget = convex
 export const getMyProfile = authedQuery
 	.input({})
 	.handler(async (ctx) => {
+		const name =
+			`${ctx.viewer.firstName ?? ""} ${ctx.viewer.lastName ?? ""}`.trim() ||
+			ctx.viewer.email ||
+			"Unknown";
 		return {
-			name: `${ctx.viewer.firstName} ${ctx.viewer.lastName}`,
+			name,
 			email: ctx.viewer.email,
 			authId: ctx.viewer.authId,
 		};

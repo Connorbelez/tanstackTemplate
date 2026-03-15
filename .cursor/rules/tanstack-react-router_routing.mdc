@@ -1,6 +1,6 @@
 ---
 description: TanStack Router routing guide for route files, layouts, params, route trees, and route matching when working on route definitions or router configuration
-globs: src/routes/**/*.ts,src/routes/**/*.tsx,src/router.tsx,src/routeTree.gen.ts,test/routes/**/*.ts,test/routes/**/*.tsx
+globs: src/routes/**/*.ts,src/routes/**/*.tsx,src/router.tsx,test/routes/**/*.ts,test/routes/**/*.tsx
 alwaysApply: false
 ---
 

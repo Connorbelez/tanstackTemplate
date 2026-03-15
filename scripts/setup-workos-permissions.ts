@@ -278,6 +278,26 @@ const PERMISSIONS: PermissionDefinition[] = [
 		description: "View ledger entries and balances",
 	},
 	{
+		slug: "ledger:correct",
+		name: "Correct Ledger",
+		description: "Correct ledger entries",
+	},
+	{
+		slug: "accrual:view",
+		name: "View Accruals",
+		description: "View accrual records",
+	},
+	{
+		slug: "dispersal:view",
+		name: "View Dispersals",
+		description: "View dispersal records",
+	},
+	{
+		slug: "obligation:waive",
+		name: "Waive Obligations",
+		description: "Waive borrower obligations",
+	},
+	{
 		slug: "renewal:signal",
 		name: "Signal Renewal",
 		description: "Signal borrower renewal intent",
@@ -525,6 +545,13 @@ async function main() {
 
 main().catch((error: unknown) => {
 	console.error("Failed to seed WorkOS permissions.");
-	console.error(error);
+	if (error instanceof Error) {
+		console.error({
+			name: error.name,
+			message: error.message,
+		});
+	} else {
+		console.error({ message: String(error) });
+	}
 	process.exit(1);
 });

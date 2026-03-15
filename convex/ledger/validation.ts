@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { query } from "../_generated/server";
+import { getAccountLenderId } from "./accountOwnership";
 import { UNITS_PER_MORTGAGE } from "./constants";
 import { computeBalance } from "./internal";
 
@@ -37,10 +38,18 @@ export const validateSupplyInvariant = query({
 
 		const positions = accounts
 			.filter((a) => a.type === "POSITION")
-			.map((a) => ({
-				lenderId: a.lenderId ?? "",
-				balance: computeBalance(a),
-			}));
+			.map((a) => {
+				const lenderId = getAccountLenderId(a);
+				if (!lenderId) {
+					throw new Error(
+						`POSITION account ${a._id} is missing lenderId for mortgage ${args.mortgageId}`
+					);
+				}
+				return {
+					lenderId,
+					balance: computeBalance(a),
+				};
+			});
 
 		const positionSum = positions.reduce((sum, p) => sum + p.balance, 0n);
 		const total = treasuryBalance + positionSum;
