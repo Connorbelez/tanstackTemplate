@@ -374,8 +374,6 @@ export default defineSchema({
 		.index("by_actor", ["source.actorId", "timestamp"])
 		.index("by_type_and_time", ["entityType", "timestamp"]),
 
-	// ── Document Engine ──────────────────────────────────────────────
-
 	documentTemplateGroups: defineTable({
 		name: v.string(),
 		description: v.optional(v.string()),

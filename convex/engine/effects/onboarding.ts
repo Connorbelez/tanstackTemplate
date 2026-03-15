@@ -24,8 +24,7 @@ export const assignRoleToUser = internalAction({
 			{ id: args.entityId as Id<"onboardingRequests"> }
 		);
 		if (!request) {
-			console.error(`[assignRoleToUser] Request not found: ${args.entityId}`);
-			return;
+			throw new Error(`[assignRoleToUser] Request not found: ${args.entityId}`);
 		}
 
 		// 2. Load the user
@@ -33,8 +32,9 @@ export const assignRoleToUser = internalAction({
 			id: request.userId,
 		});
 		if (!user) {
-			console.error(`[assignRoleToUser] User not found: ${request.userId}`);
-			return;
+			throw new Error(
+				`[assignRoleToUser] User not found for request ${args.entityId}: ${request.userId}`
+			);
 		}
 
 		let targetOrgId = request.targetOrganizationId;
@@ -56,10 +56,9 @@ export const assignRoleToUser = internalAction({
 			}
 
 			if (!targetOrgId) {
-				console.error(
-					`[assignRoleToUser] No target org for request ${args.entityId}`
+				throw new Error(
+					`[assignRoleToUser] No target org for non-broker request ${args.entityId} (role: ${request.requestedRole})`
 				);
-				return;
 			}
 
 			// 4. Create org membership with role in target org

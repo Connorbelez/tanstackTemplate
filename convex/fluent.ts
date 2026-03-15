@@ -60,10 +60,9 @@ function parseClaimArray(value: unknown): string[] {
 
 // ── Auth Middleware (context enrichment) ─────────────────────────────
 // Uses $context so it works with queries AND mutations (both have auth + db).
-// Looks up the user doc and enriches context with `user` + `identity`.
-// Resilient: if user is authenticated but missing from DB (race condition /
-// missed webhook), auto-creates them in mutation context and schedules a
-// backfill for orgs/memberships/roles.
+// Extracts JWT identity claims and builds a `Viewer` with roles, permissions,
+// and org context. Downstream mutations (e.g. onboarding) query the `users`
+// table separately — a missing user row will surface as a ConvexError there.
 export const authMiddleware = convex
 	.$context<{ auth: Auth; db: GenericDatabaseReader<DataModel> }>()
 	.createMiddleware(async (context, next) => {
@@ -86,8 +85,6 @@ export const authMiddleware = convex
 			user_first_name,
 			user_last_name,
 		} = identity;
-		console.log("identity", identity);
-
 		const permissionsSet = new Set(parseClaimArray(permissions));
 		const roleSet = new Set(parseClaimArray(roles));
 		return next({
@@ -133,12 +130,11 @@ const UNDERWRITER_ROLES = new Set([
 ] as const);
 
 function hasUnderwriterRole(viewer: Viewer) {
-	const roles = new Set([...viewer.roles]);
-	//@ts-ignore intersection is a func
-	if (UNDERWRITER_ROLES.intersection(roles).size > 0) {
-		return { hasRole: true, role: viewer.role };
+	for (const role of viewer.roles) {
+		if ((UNDERWRITER_ROLES as ReadonlySet<string>).has(role)) {
+			return { hasRole: true, role: viewer.role };
+		}
 	}
-
 	return { hasRole: false, role: viewer.role };
 }
 

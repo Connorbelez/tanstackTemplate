@@ -263,6 +263,21 @@ const PERMISSIONS: PermissionDefinition[] = [
 		description: "Export tax documents",
 	},
 	{
+		slug: "deal:view",
+		name: "View Deals",
+		description: "View deal records",
+	},
+	{
+		slug: "deal:manage",
+		name: "Manage Deals",
+		description: "Create and manage deal records",
+	},
+	{
+		slug: "ledger:view",
+		name: "View Ledger",
+		description: "View ledger entries and balances",
+	},
+	{
 		slug: "renewal:signal",
 		name: "Signal Renewal",
 		description: "Signal borrower renewal intent",

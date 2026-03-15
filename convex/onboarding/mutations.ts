@@ -39,7 +39,7 @@ function computeTargetOrg(
 	}
 }
 
-/** Request a role — any authenticated user with onboarding:access. */
+/** Request a role — any authenticated user (no permission required for first role request). */
 export const requestRole = authedMutation
 	.input({
 		requestedRole: requestedRoleValidator,
@@ -93,9 +93,12 @@ export const requestRole = authedMutation
 				.query("organizationMemberships")
 				.withIndex("byUser", (q) => q.eq("userWorkosId", invitedByBrokerId))
 				.first();
-			if (brokerMembership) {
-				invitingBrokerOrgId = brokerMembership.organizationWorkosId;
+			if (!brokerMembership) {
+				throw new ConvexError(
+					`Inviting broker "${invitedByBrokerId}" has no organization membership`
+				);
 			}
+			invitingBrokerOrgId = brokerMembership.organizationWorkosId;
 		}
 
 		// Compute target org
