@@ -18,33 +18,33 @@ const DEMO_MORTGAGES = [
 	{
 		mortgageId: "demo-mtg-greenfield",
 		label: "123 Greenfield Rd — Residential",
-		investors: [
-			{ investorId: "demo-inv-alice", amount: 5_000n },
-			{ investorId: "demo-inv-bob", amount: 3_000n },
-			{ investorId: "demo-inv-charlie", amount: 2_000n },
+		lenders: [
+			{ lenderId: "demo-inv-alice", amount: 5_000n },
+			{ lenderId: "demo-inv-bob", amount: 3_000n },
+			{ lenderId: "demo-inv-charlie", amount: 2_000n },
 		],
 	},
 	{
 		mortgageId: "demo-mtg-riverside",
 		label: "456 Riverside Dr — Commercial",
-		investors: [
-			{ investorId: "demo-inv-alice", amount: 7_000n },
-			{ investorId: "demo-inv-dave", amount: 3_000n },
+		lenders: [
+			{ lenderId: "demo-inv-alice", amount: 7_000n },
+			{ lenderId: "demo-inv-dave", amount: 3_000n },
 		],
 	},
 ] as const;
 
-// ── Investor display names ───────────────────────────────────────
+// ── Lender display names ───────────────────────────────────────
 
-const INVESTOR_NAMES: Record<string, string> = {
+const LENDER_NAMES: Record<string, string> = {
 	"demo-inv-alice": "Alice",
 	"demo-inv-bob": "Bob",
 	"demo-inv-charlie": "Charlie",
 	"demo-inv-dave": "Dave",
 };
 
-function investorDisplayName(id: string): string {
-	return INVESTOR_NAMES[id] ?? id.replace("demo-inv-", "");
+function lenderDisplayName(id: string): string {
+	return LENDER_NAMES[id] ?? id.replace("demo-inv-", "");
 }
 
 // ── Seed helpers ─────────────────────────────────────────────────
@@ -141,12 +141,12 @@ export const seedData = mutation({
 				idempotencyKey: `demo-seed-mint-${mortgage.mortgageId}`,
 			});
 
-			// 3. Issue shares to each investor
-			for (const inv of mortgage.investors) {
+			// 3. Issue shares to each lender
+			for (const inv of mortgage.lenders) {
 				const positionId = await ctx.db.insert("ledger_accounts", {
 					type: "POSITION",
 					mortgageId: mortgage.mortgageId,
-					investorId: inv.investorId,
+					lenderId: inv.lenderId,
 					cumulativeDebits: 0n,
 					cumulativeCredits: 0n,
 					createdAt: Date.now(),
@@ -158,14 +158,14 @@ export const seedData = mutation({
 					debitAccountId: positionId,
 					creditAccountId: treasuryId,
 					amount: inv.amount,
-					idempotencyKey: `demo-seed-issue-${mortgage.mortgageId}-${inv.investorId}`,
+					idempotencyKey: `demo-seed-issue-${mortgage.mortgageId}-${inv.lenderId}`,
 				});
 			}
 		}
 
 		return {
 			seeded: true,
-			message: `Seeded ${DEMO_MORTGAGES.length} mortgages with investors.`,
+			message: `Seeded ${DEMO_MORTGAGES.length} mortgages with lenders.`,
 		};
 	},
 });
@@ -269,7 +269,7 @@ export const getDemoState = query({
 			label: string;
 			treasuryBalance: number;
 			positions: Array<{
-				investorId: string;
+				lenderId: string;
 				displayName: string;
 				accountId: string;
 				balance: number;
@@ -296,8 +296,8 @@ export const getDemoState = query({
 						computeBalance(a) > 0n
 				)
 				.map((a) => ({
-					investorId: a.investorId ?? "",
-					displayName: investorDisplayName(a.investorId ?? ""),
+					lenderId: a.lenderId ?? "",
+					displayName: lenderDisplayName(a.lenderId ?? ""),
 					accountId: a._id,
 					balance: Number(computeBalance(a)),
 				}));
@@ -357,12 +357,12 @@ export const getDemoJournal = query({
 		// Build account type lookup
 		const accountTypeMap = new Map<
 			string,
-			{ type: string; investorId?: string }
+			{ type: string; lenderId?: string }
 		>();
 		for (const account of allAccounts) {
 			accountTypeMap.set(account._id, {
 				type: account.type,
-				investorId: account.investorId,
+				lenderId: account.lenderId,
 			});
 		}
 
@@ -395,11 +395,11 @@ export const getDemoJournal = query({
 
 			const debitLabel =
 				debitInfo?.type === "POSITION"
-					? investorDisplayName(debitInfo.investorId ?? "")
+					? lenderDisplayName(debitInfo.lenderId ?? "")
 					: (debitInfo?.type ?? "?");
 			const creditLabel =
 				creditInfo?.type === "POSITION"
-					? investorDisplayName(creditInfo.investorId ?? "")
+					? lenderDisplayName(creditInfo.lenderId ?? "")
 					: (creditInfo?.type ?? "?");
 
 			const meta = entry.metadata as

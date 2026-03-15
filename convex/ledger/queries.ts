@@ -27,28 +27,28 @@ export const getPositions = query({
 		);
 
 		const accountMissingInvestor = positionAccounts.find(
-			(a) => a.investorId == null
+			(a) => a.lenderId == null
 		);
 		if (accountMissingInvestor) {
 			throw new Error(
-				`POSITION account ${accountMissingInvestor._id} is missing investorId`
+				`POSITION account ${accountMissingInvestor._id} is missing lenderId`
 			);
 		}
 
 		return positionAccounts.map((a) => ({
-			investorId: a.investorId as string,
+			lenderId: a.lenderId as string,
 			accountId: a._id,
 			balance: computeBalance(a),
 		}));
 	},
 });
 
-export const getInvestorPositions = query({
-	args: { investorId: v.string() },
+export const getLenderPositions = query({
+	args: { lenderId: v.string() },
 	handler: async (ctx, args) => {
 		const accounts = await ctx.db
 			.query("ledger_accounts")
-			.withIndex("by_investor", (q) => q.eq("investorId", args.investorId))
+			.withIndex("by_lender", (q) => q.eq("lenderId", args.lenderId))
 			.collect();
 
 		return accounts
@@ -119,12 +119,12 @@ export const getPositionsAt = query({
 		}
 		const accountInfo = new Map<
 			string,
-			{ investorId: string | undefined; type: string }
+			{ lenderId: string | undefined; type: string }
 		>();
 		const accountFetches = [...accountIds].map(async (id) => {
 			const acc = await ctx.db.get(id as Id<"ledger_accounts">);
 			if (acc) {
-				accountInfo.set(id, { investorId: acc.investorId, type: acc.type });
+				accountInfo.set(id, { lenderId: acc.lenderId, type: acc.type });
 			}
 		});
 		await Promise.all(accountFetches);
@@ -139,11 +139,11 @@ export const getPositionsAt = query({
 			balances.set(entry.creditAccountId, prevCredit - entry.amount);
 		}
 
-		const results: Array<{ investorId: string; balance: bigint }> = [];
+		const results: Array<{ lenderId: string; balance: bigint }> = [];
 		for (const [accountId, balance] of balances) {
 			const info = accountInfo.get(accountId);
-			if (info?.type === "POSITION" && info.investorId && balance > 0n) {
-				results.push({ investorId: info.investorId, balance });
+			if (info?.type === "POSITION" && info.lenderId && balance > 0n) {
+				results.push({ lenderId: info.lenderId, balance });
 			}
 		}
 		return results;

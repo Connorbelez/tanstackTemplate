@@ -49,6 +49,13 @@ function skipPdfmeBabelTransform(): Plugin {
 const config = defineConfig({
 	test: {
 		exclude: [...configDefaults.exclude, "e2e/**"],
+		server: {
+			deps: {
+				// fluent-convex uses extensionless ESM imports internally
+				// which fail under Node strict ESM resolution in convex-test
+				inline: ["fluent-convex", "convex-audit-log"],
+			},
+		},
 	},
 	plugins: [
 		skipPdfmeBabelTransform(),

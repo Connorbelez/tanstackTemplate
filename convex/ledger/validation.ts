@@ -19,7 +19,7 @@ export const validateSupplyInvariant = query({
 				valid: false as const,
 				treasuryBalance: 0n,
 				positions: [] as Array<{
-					investorId: string;
+					lenderId: string;
 					balance: bigint;
 				}>,
 				total: 0n,
@@ -38,7 +38,7 @@ export const validateSupplyInvariant = query({
 		const positions = accounts
 			.filter((a) => a.type === "POSITION")
 			.map((a) => ({
-				investorId: a.investorId ?? "",
+				lenderId: a.lenderId ?? "",
 				balance: computeBalance(a),
 			}));
 

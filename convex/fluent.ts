@@ -14,6 +14,7 @@ import type {
 } from "fluent-convex";
 import { ConvexBuilderWithFunctionKind, createBuilder } from "fluent-convex";
 import type { DataModel } from "./_generated/dataModel";
+import { auditAuthFailure } from "./auth/auditAuth";
 
 // ── Type guard: can this db handle writes? ──────────────────────────
 // function isDatabaseWriter(
@@ -25,7 +26,7 @@ import type { DataModel } from "./_generated/dataModel";
 // ── Builder ─────────────────────────────────────────────────────────
 export const convex = createBuilder<DataModel>();
 
-const FAIRLEND_STAFF_ORG_ID = "org_01KKF56VABM4NYFFSR039RTJBM"; // env var or constant
+import { FAIRLEND_STAFF_ORG_ID } from "./constants";
 
 export interface Viewer {
 	authId: string;
@@ -68,6 +69,10 @@ export const authMiddleware = convex
 	.createMiddleware(async (context, next) => {
 		const identity = await context.auth.getUserIdentity();
 		if (!identity) {
+			await auditAuthFailure(context, undefined, {
+				middleware: "authMiddleware",
+				reason: "No identity found — unauthenticated access attempt",
+			});
 			throw new ConvexError("Unauthorized: sign in required");
 		}
 		const {
@@ -112,6 +117,10 @@ export const requireFairLendAdmin = convex
 	.createMiddleware(async (context, next) => {
 		const isFairLendAdmin = context.viewer.isFairLendAdmin;
 		if (!isFairLendAdmin) {
+			await auditAuthFailure(context, context.viewer, {
+				middleware: "requireFairLendAdmin",
+				reason: "User is not a FairLend Staff admin",
+			});
 			throw new ConvexError("Forbidden: fair lend admin role required");
 		}
 		return next(context);
@@ -143,6 +152,10 @@ export const requireOrgContext = convex
 		const org_id = context.viewer?.orgId;
 
 		if (!(org_id || hasUnderwriterRole(context.viewer).hasRole)) {
+			await auditAuthFailure(context, context.viewer, {
+				middleware: "requireOrgContext",
+				reason: "Missing org context and not an underwriter",
+			});
 			throw new ConvexError("Forbidden: org context required");
 		}
 		return next(context);
@@ -160,6 +173,10 @@ export const requireAdmin = convex
 	.createMiddleware(async (context, next) => {
 		const isAdmin = context.viewer.roles.has("admin");
 		if (!isAdmin) {
+			await auditAuthFailure(context, context.viewer, {
+				middleware: "requireAdmin",
+				reason: "User does not have admin role",
+			});
 			throw new ConvexError("Forbidden: admin role required");
 		}
 
@@ -175,6 +192,11 @@ export function requirePermission(permission: string) {
 		.$context<{ db: GenericDatabaseReader<DataModel>; viewer: Viewer }>()
 		.createMiddleware(async (context, next) => {
 			if (!context.viewer.permissions.has(permission)) {
+				await auditAuthFailure(context, context.viewer, {
+					middleware: "requirePermission",
+					required: permission,
+					reason: `Missing permission: ${permission}`,
+				});
 				throw new ConvexError(`Forbidden: permission "${permission}" required`);
 			}
 			return next({ ...context, permission });

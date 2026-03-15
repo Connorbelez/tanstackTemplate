@@ -398,7 +398,7 @@ export const burnMortgage = mutation({
 		for (const pos of positions) {
 			if (pos.type === "POSITION" && computeBalance(pos) !== 0n) {
 				throw new Error(
-					`Cannot burn: POSITION ${pos._id} (investor ${pos.investorId}) has non-zero balance`
+					`Cannot burn: POSITION ${pos._id} (lender ${pos.lenderId}) has non-zero balance`
 				);
 			}
 		}
@@ -430,7 +430,7 @@ export const issueShares = mutation({
 		const position = await getOrCreatePositionAccount(
 			ctx,
 			args.mortgageId,
-			args.investorId
+			args.lenderId
 		);
 
 		// SHARES_ISSUED: TREASURY gives → POSITION receives
@@ -456,12 +456,12 @@ export const transferShares = mutation({
 		const sellerPosition = await getPositionAccount(
 			ctx,
 			args.mortgageId,
-			args.sellerInvestorId
+			args.sellerLenderId
 		);
 		const buyerPosition = await getOrCreatePositionAccount(
 			ctx,
 			args.mortgageId,
-			args.buyerInvestorId
+			args.buyerLenderId
 		);
 
 		// SHARES_TRANSFERRED: seller gives → buyer receives
@@ -487,7 +487,7 @@ export const redeemShares = mutation({
 		const position = await getPositionAccount(
 			ctx,
 			args.mortgageId,
-			args.investorId
+			args.lenderId
 		);
 		const treasury = await getTreasuryAccount(ctx, args.mortgageId);
 

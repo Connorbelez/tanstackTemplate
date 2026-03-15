@@ -15,7 +15,6 @@ import {
   isSameDay,
   isAfter,
   isBefore,
-  parse,
 } from "date-fns";
 import { motion, AnimatePresence } from "framer-motion";
 import { ChevronLeft, ChevronRight, Clock } from "lucide-react";
@@ -94,7 +93,7 @@ export const MeetingScheduler: React.FC<MeetingSchedulerProps> = ({
     const endFormatted = format(endDate, "MMM d");
     return `Event: ${startFormatted} - ${endFormatted}, from ${formatTime(startDate)} - ${formatTime(endDate)}`;
   };
-  
+
   // Handlers
   const handleSchedule = () => {
     // In a real app, you'd likely parse time from inputs and combine with date
@@ -169,17 +168,17 @@ export const MeetingScheduler: React.FC<MeetingSchedulerProps> = ({
                     )}
                   >
                     {format(day, "d")}
-                     {isInRange && <div className="absolute inset-0 bg-primary/20" />}
+                    {isInRange && <div className="absolute inset-0 bg-primary/20" />}
                   </motion.button>
                 );
               })}
             </div>
           </div>
-          
+
           {/* Right Side: Inputs */}
           <div className="flex flex-col justify-between space-y-6">
             <div className="space-y-4">
-               {/* Start Date */}
+              {/* Start Date */}
               <div>
                 <Label htmlFor="start-date" className="text-sm font-medium">Start date*</Label>
                 <div className="flex items-center mt-2 p-3 rounded-md border bg-background">
@@ -188,7 +187,7 @@ export const MeetingScheduler: React.FC<MeetingSchedulerProps> = ({
                 </div>
               </div>
 
-               {/* End Date */}
+              {/* End Date */}
               <div>
                 <Label htmlFor="end-date" className="text-sm font-medium">End date*</Label>
                 <div className="flex items-center mt-2 p-3 rounded-md border bg-background">
@@ -203,14 +202,14 @@ export const MeetingScheduler: React.FC<MeetingSchedulerProps> = ({
                 <Switch id="ai-notes" checked={aiNotes} onCheckedChange={setAiNotes} />
               </div>
             </div>
-            
+
             {/* Footer section */}
             <div className="pt-4 border-t">
-                <p className="text-sm text-muted-foreground mb-4">{getEventSummary()}</p>
-                <div className="flex justify-end gap-3">
-                    <Button variant="outline" onClick={onCancel}>{cancelButtonText}</Button>
-                    <Button onClick={handleSchedule} disabled={!startDate || !endDate}>{scheduleButtonText}</Button>
-                </div>
+              <p className="text-sm text-muted-foreground mb-4">{getEventSummary()}</p>
+              <div className="flex justify-end gap-3">
+                <Button variant="outline" onClick={onCancel}>{cancelButtonText}</Button>
+                <Button onClick={handleSchedule} disabled={!startDate || !endDate}>{scheduleButtonText}</Button>
+              </div>
             </div>
           </div>
         </CardContent>

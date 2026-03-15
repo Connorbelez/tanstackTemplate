@@ -9,7 +9,7 @@ export interface MortgagePosition {
 	accountId: string;
 	balance: number;
 	displayName: string;
-	investorId: string;
+	lenderId: string;
 }
 
 export interface MortgageCardProps {

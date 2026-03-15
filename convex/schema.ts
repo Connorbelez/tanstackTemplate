@@ -56,7 +56,6 @@ export default defineSchema({
 		permissions: v.array(v.string()),
 	}).index("slug", ["slug"]),
 
-	// ── Demo tables (prefixed demo_) ──────────────────────────────────
 	demo_auth_action_logs: defineTable({
 		actionType: v.string(),
 		email: v.string(),
@@ -205,15 +204,15 @@ export default defineSchema({
 			v.literal("POSITION")
 		),
 		mortgageId: v.optional(v.string()),
-		investorId: v.optional(v.string()),
+		lenderId: v.optional(v.string()),
 		cumulativeDebits: v.int64(),
 		cumulativeCredits: v.int64(),
 		createdAt: v.float64(),
 		metadata: v.optional(v.record(v.string(), v.any())),
 	})
 		.index("by_mortgage", ["mortgageId"])
-		.index("by_investor", ["investorId"])
-		.index("by_mortgage_and_investor", ["mortgageId", "investorId"])
+		.index("by_lender", ["lenderId"])
+		.index("by_mortgage_and_lender", ["mortgageId", "lenderId"])
 		.index("by_type_and_mortgage", ["type", "mortgageId"]),
 
 	ledger_journal_entries: defineTable({
@@ -320,6 +319,62 @@ export default defineSchema({
 		createdAt: v.number(),
 		updatedAt: v.number(),
 	}).index("by_name", ["name"]),
+
+	// ── Onboarding & GT (Governed Transitions) ─────────────────────────
+
+	onboardingRequests: defineTable({
+		userId: v.id("users"),
+		requestedRole: v.union(
+			v.literal("broker"),
+			v.literal("lender"),
+			v.literal("lawyer"),
+			v.literal("admin"),
+			v.literal("jr_underwriter"),
+			v.literal("underwriter"),
+			v.literal("sr_underwriter")
+		),
+		status: v.string(),
+		machineContext: v.optional(v.any()),
+		lastTransitionAt: v.optional(v.number()),
+		referralSource: v.union(
+			v.literal("self_signup"),
+			v.literal("broker_invite")
+		),
+		invitedByBrokerId: v.optional(v.string()),
+		targetOrganizationId: v.optional(v.string()),
+		reviewedBy: v.optional(v.string()),
+		reviewedAt: v.optional(v.number()),
+		rejectionReason: v.optional(v.string()),
+		createdAt: v.number(),
+	})
+		.index("by_user", ["userId"])
+		.index("by_status", ["status"])
+		.index("by_user_and_status", ["userId", "status"]),
+
+	auditJournal: defineTable({
+		entityType: v.string(),
+		entityId: v.string(),
+		eventType: v.string(),
+		payload: v.optional(v.any()),
+		previousState: v.string(),
+		newState: v.string(),
+		outcome: v.union(v.literal("transitioned"), v.literal("rejected")),
+		reason: v.optional(v.string()),
+		source: v.object({
+			channel: v.string(),
+			actorId: v.optional(v.string()),
+			actorType: v.optional(v.string()),
+			ip: v.optional(v.string()),
+			sessionId: v.optional(v.string()),
+		}),
+		machineVersion: v.optional(v.string()),
+		timestamp: v.number(),
+	})
+		.index("by_entity", ["entityType", "entityId", "timestamp"])
+		.index("by_actor", ["source.actorId", "timestamp"])
+		.index("by_type_and_time", ["entityType", "timestamp"]),
+
+	// ── Document Engine ──────────────────────────────────────────────
 
 	documentTemplateGroups: defineTable({
 		name: v.string(),

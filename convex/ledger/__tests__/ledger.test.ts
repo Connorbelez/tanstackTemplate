@@ -21,7 +21,7 @@ const ADMIN_SOURCE = {
 async function mintAndIssue(
 	t: ReturnType<typeof createTestHarness>,
 	mortgageId: string,
-	investorId: string,
+	lenderId: string,
 	amount = 10_000n
 ) {
 	const mintResult = await t.mutation(api.ledger.mutations.mintMortgage, {
@@ -32,10 +32,10 @@ async function mintAndIssue(
 	});
 	const issueResult = await t.mutation(api.ledger.mutations.issueShares, {
 		mortgageId,
-		investorId,
+		lenderId,
 		amount,
 		effectiveDate: "2026-01-01",
-		idempotencyKey: `issue-${mortgageId}-${investorId}`,
+		idempotencyKey: `issue-${mortgageId}-${lenderId}`,
 		source: SYS_SOURCE,
 	});
 	return { mintResult, issueResult };
@@ -64,12 +64,12 @@ describe("Ledger Full Lifecycle", () => {
 		});
 		expect(treasuryBalance).toBe(10_000n);
 
-		// 2. Issue all to investor A
+		// 2. Issue all to lender A
 		const { positionAccountId: posA } = await t.mutation(
 			api.ledger.mutations.issueShares,
 			{
 				mortgageId: "m1",
-				investorId: "investor-a",
+				lenderId: "lender-a",
 				amount: 10_000n,
 				effectiveDate: "2026-01-01",
 				idempotencyKey: "issue-a",
@@ -93,8 +93,8 @@ describe("Ledger Full Lifecycle", () => {
 			api.ledger.mutations.transferShares,
 			{
 				mortgageId: "m1",
-				sellerInvestorId: "investor-a",
-				buyerInvestorId: "investor-b",
+				sellerLenderId: "lender-a",
+				buyerLenderId: "lender-b",
 				amount: 5_000n,
 				effectiveDate: "2026-01-02",
 				idempotencyKey: "transfer-a-b",
@@ -119,7 +119,7 @@ describe("Ledger Full Lifecycle", () => {
 		// 4. Redeem B's 5,000
 		await t.mutation(api.ledger.mutations.redeemShares, {
 			mortgageId: "m1",
-			investorId: "investor-b",
+			lenderId: "lender-b",
 			amount: 5_000n,
 			effectiveDate: "2026-01-03",
 			idempotencyKey: "redeem-b",
@@ -133,7 +133,7 @@ describe("Ledger Full Lifecycle", () => {
 		// 5. Redeem A's 5,000
 		await t.mutation(api.ledger.mutations.redeemShares, {
 			mortgageId: "m1",
-			investorId: "investor-a",
+			lenderId: "lender-a",
 			amount: 5_000n,
 			effectiveDate: "2026-01-03",
 			idempotencyKey: "redeem-a",
@@ -175,8 +175,8 @@ describe("Transfer Validation", () => {
 			api.ledger.mutations.transferShares,
 			{
 				mortgageId: "m1",
-				sellerInvestorId: "seller",
-				buyerInvestorId: "new-buyer",
+				sellerLenderId: "seller",
+				buyerLenderId: "new-buyer",
 				amount: 5_000n,
 				effectiveDate: "2026-01-02",
 				idempotencyKey: "transfer-1",
@@ -194,15 +194,15 @@ describe("Transfer Validation", () => {
 
 	it("T-043: transferShares rejects cross-mortgage transfer", async () => {
 		const t = createTestHarness();
-		await mintAndIssue(t, "m1", "investor-a");
-		await mintAndIssue(t, "m2", "investor-b");
+		await mintAndIssue(t, "m1", "lender-a");
+		await mintAndIssue(t, "m2", "lender-b");
 
-		// Try to transfer from investor-a on m1 to investor-b, but seller has no position on m2
+		// Try to transfer from lender-a on m1 to lender-b, but seller has no position on m2
 		await expect(
 			t.mutation(api.ledger.mutations.transferShares, {
 				mortgageId: "m2",
-				sellerInvestorId: "investor-a",
-				buyerInvestorId: "investor-c",
+				sellerLenderId: "lender-a",
+				buyerLenderId: "lender-c",
 				amount: 1_000n,
 				effectiveDate: "2026-01-02",
 				idempotencyKey: "cross-transfer",
@@ -218,8 +218,8 @@ describe("Transfer Validation", () => {
 		// Transfer all 10,000 — full exit is allowed
 		await t.mutation(api.ledger.mutations.transferShares, {
 			mortgageId: "m1",
-			sellerInvestorId: "seller",
-			buyerInvestorId: "buyer",
+			sellerLenderId: "seller",
+			buyerLenderId: "buyer",
 			amount: 10_000n,
 			effectiveDate: "2026-01-02",
 			idempotencyKey: "full-exit",
@@ -231,7 +231,7 @@ describe("Transfer Validation", () => {
 			mortgageId: "m1",
 		});
 		expect(positions).toHaveLength(1);
-		expect(positions[0].investorId).toBe("buyer");
+		expect(positions[0].lenderId).toBe("buyer");
 		expect(positions[0].balance).toBe(10_000n);
 	});
 
@@ -243,8 +243,8 @@ describe("Transfer Validation", () => {
 		await expect(
 			t.mutation(api.ledger.mutations.transferShares, {
 				mortgageId: "m1",
-				sellerInvestorId: "seller",
-				buyerInvestorId: "buyer",
+				sellerLenderId: "seller",
+				buyerLenderId: "buyer",
 				amount: 9_500n,
 				effectiveDate: "2026-01-02",
 				idempotencyKey: "bad-remainder",
@@ -261,8 +261,8 @@ describe("Transfer Validation", () => {
 		await expect(
 			t.mutation(api.ledger.mutations.transferShares, {
 				mortgageId: "m1",
-				sellerInvestorId: "seller",
-				buyerInvestorId: "buyer",
+				sellerLenderId: "seller",
+				buyerLenderId: "buyer",
 				amount: 500n,
 				effectiveDate: "2026-01-02",
 				idempotencyKey: "tiny-buy",
@@ -278,8 +278,8 @@ describe("Transfer Validation", () => {
 		await expect(
 			t.mutation(api.ledger.mutations.transferShares, {
 				mortgageId: "m1",
-				sellerInvestorId: "seller",
-				buyerInvestorId: "buyer",
+				sellerLenderId: "seller",
+				buyerLenderId: "buyer",
 				amount: 6_000n,
 				effectiveDate: "2026-01-02",
 				idempotencyKey: "oversell",
@@ -304,8 +304,8 @@ describe("Transfer Validation", () => {
 		await expect(
 			t.mutation(api.ledger.mutations.transferShares, {
 				mortgageId: "m1",
-				sellerInvestorId: "seller",
-				buyerInvestorId: "buyer",
+				sellerLenderId: "seller",
+				buyerLenderId: "buyer",
 				amount: 6_000n,
 				effectiveDate: "2026-01-02",
 				idempotencyKey: "oversell-rollback",
@@ -334,8 +334,8 @@ describe("Transfer Validation", () => {
 			api.ledger.mutations.transferShares,
 			{
 				mortgageId: "m1",
-				sellerInvestorId: "seller",
-				buyerInvestorId: "buyer",
+				sellerLenderId: "seller",
+				buyerLenderId: "buyer",
 				amount: 5_000n,
 				effectiveDate: "2026-01-02",
 				idempotencyKey: "t1",
@@ -346,8 +346,8 @@ describe("Transfer Validation", () => {
 		// Transfer back to seller (full exit for buyer)
 		await t.mutation(api.ledger.mutations.transferShares, {
 			mortgageId: "m1",
-			sellerInvestorId: "buyer",
-			buyerInvestorId: "seller",
+			sellerLenderId: "buyer",
+			buyerLenderId: "seller",
 			amount: 5_000n,
 			effectiveDate: "2026-01-03",
 			idempotencyKey: "t2",
@@ -359,8 +359,8 @@ describe("Transfer Validation", () => {
 			api.ledger.mutations.transferShares,
 			{
 				mortgageId: "m1",
-				sellerInvestorId: "seller",
-				buyerInvestorId: "buyer",
+				sellerLenderId: "seller",
+				buyerLenderId: "buyer",
 				amount: 3_000n,
 				effectiveDate: "2026-01-04",
 				idempotencyKey: "t3",
@@ -388,7 +388,7 @@ describe("Issuance & Redemption", () => {
 			api.ledger.mutations.issueShares,
 			{
 				mortgageId: "m1",
-				investorId: "investor-a",
+				lenderId: "lender-a",
 				amount: 5_000n,
 				effectiveDate: "2026-01-01",
 				idempotencyKey: "issue-a",
@@ -406,13 +406,13 @@ describe("Issuance & Redemption", () => {
 
 	it("T-050: issueShares rejects when TREASURY balance insufficient", async () => {
 		const t = createTestHarness();
-		await mintAndIssue(t, "m1", "investor-a");
+		await mintAndIssue(t, "m1", "lender-a");
 
 		// Treasury is now 0 — can't issue more
 		await expect(
 			t.mutation(api.ledger.mutations.issueShares, {
 				mortgageId: "m1",
-				investorId: "investor-b",
+				lenderId: "lender-b",
 				amount: 1_000n,
 				effectiveDate: "2026-01-02",
 				idempotencyKey: "over-issue",
@@ -433,7 +433,7 @@ describe("Issuance & Redemption", () => {
 		await expect(
 			t.mutation(api.ledger.mutations.issueShares, {
 				mortgageId: "m1",
-				investorId: "investor-a",
+				lenderId: "lender-a",
 				amount: 500n,
 				effectiveDate: "2026-01-01",
 				idempotencyKey: "tiny-issue",
@@ -444,11 +444,11 @@ describe("Issuance & Redemption", () => {
 
 	it("T-052: redeemShares full exit (position → 0) allowed", async () => {
 		const t = createTestHarness();
-		await mintAndIssue(t, "m1", "investor-a", 5_000n);
+		await mintAndIssue(t, "m1", "lender-a", 5_000n);
 
 		await t.mutation(api.ledger.mutations.redeemShares, {
 			mortgageId: "m1",
-			investorId: "investor-a",
+			lenderId: "lender-a",
 			amount: 5_000n,
 			effectiveDate: "2026-01-02",
 			idempotencyKey: "full-redeem",
@@ -464,12 +464,12 @@ describe("Issuance & Redemption", () => {
 
 	it("T-053: redeemShares rejects remainder between 1-999", async () => {
 		const t = createTestHarness();
-		await mintAndIssue(t, "m1", "investor-a", 5_000n);
+		await mintAndIssue(t, "m1", "lender-a", 5_000n);
 
 		await expect(
 			t.mutation(api.ledger.mutations.redeemShares, {
 				mortgageId: "m1",
-				investorId: "investor-a",
+				lenderId: "lender-a",
 				amount: 4_500n,
 				effectiveDate: "2026-01-02",
 				idempotencyKey: "bad-redeem",
@@ -478,7 +478,7 @@ describe("Issuance & Redemption", () => {
 		).rejects.toThrow(/Position post-redemption.*violates minimum position/);
 	});
 
-	it("T-054: redeemShares throws if investor has no POSITION", async () => {
+	it("T-054: redeemShares throws if lender has no POSITION", async () => {
 		const t = createTestHarness();
 		await t.mutation(api.ledger.mutations.mintMortgage, {
 			mortgageId: "m1",
@@ -490,7 +490,7 @@ describe("Issuance & Redemption", () => {
 		await expect(
 			t.mutation(api.ledger.mutations.redeemShares, {
 				mortgageId: "m1",
-				investorId: "ghost",
+				lenderId: "ghost",
 				amount: 1_000n,
 				effectiveDate: "2026-01-02",
 				idempotencyKey: "ghost-redeem",
@@ -535,7 +535,7 @@ describe("Tier 1 postEntry Strict Behavior", () => {
 		const { mintResult, issueResult } = await mintAndIssue(
 			t,
 			"m1",
-			"investor-a"
+			"lender-a"
 		);
 
 		// Use Tier 1 postEntry directly to redeem 1,000 shares
@@ -627,7 +627,7 @@ describe("Mint & Burn", () => {
 
 	it("T-059: burnMortgage rejects when POSITION accounts still have balance", async () => {
 		const t = createTestHarness();
-		await mintAndIssue(t, "m1", "investor-a");
+		await mintAndIssue(t, "m1", "lender-a");
 
 		await expect(
 			t.mutation(api.ledger.mutations.burnMortgage, {
@@ -642,7 +642,7 @@ describe("Mint & Burn", () => {
 
 	it("T-060: burnMortgage rejects when TREASURY != 10,000", async () => {
 		const t = createTestHarness();
-		await mintAndIssue(t, "m1", "investor-a", 5_000n);
+		await mintAndIssue(t, "m1", "lender-a", 5_000n);
 
 		await expect(
 			t.mutation(api.ledger.mutations.burnMortgage, {
@@ -664,7 +664,7 @@ describe("CORRECTION", () => {
 		const { mintResult, issueResult } = await mintAndIssue(
 			t,
 			"m1",
-			"investor-a"
+			"lender-a"
 		);
 
 		await expect(
@@ -688,7 +688,7 @@ describe("CORRECTION", () => {
 		const { mintResult, issueResult } = await mintAndIssue(
 			t,
 			"m1",
-			"investor-a"
+			"lender-a"
 		);
 
 		await expect(
@@ -711,7 +711,7 @@ describe("CORRECTION", () => {
 		const { mintResult, issueResult } = await mintAndIssue(
 			t,
 			"m1",
-			"investor-a"
+			"lender-a"
 		);
 
 		await expect(
@@ -734,7 +734,7 @@ describe("CORRECTION", () => {
 		const { mintResult, issueResult } = await mintAndIssue(
 			t,
 			"m1",
-			"investor-a"
+			"lender-a"
 		);
 
 		// Correction: move 1,000 units from POSITION back to TREASURY
@@ -783,7 +783,7 @@ describe("CORRECTION", () => {
 		const { mintResult, issueResult } = await mintAndIssue(
 			t,
 			"m1",
-			"investor-a"
+			"lender-a"
 		);
 
 		// Try correction that would make position negative (taking 11,000 from a 10,000 position)
@@ -805,8 +805,8 @@ describe("CORRECTION", () => {
 
 	it("T-064c: CORRECTION rejects cross-mortgage unit movement", async () => {
 		const t = createTestHarness();
-		const m1 = await mintAndIssue(t, "m1", "investor-a");
-		const m2 = await mintAndIssue(t, "m2", "investor-b");
+		const m1 = await mintAndIssue(t, "m1", "lender-a");
+		const m2 = await mintAndIssue(t, "m2", "lender-b");
 
 		// Attempt CORRECTION moving units from m1 POSITION to m2 TREASURY
 		await expect(
@@ -840,7 +840,7 @@ describe("Idempotency & Sequencing", () => {
 
 		const first = await t.mutation(api.ledger.mutations.issueShares, {
 			mortgageId: "m1",
-			investorId: "investor-a",
+			lenderId: "lender-a",
 			amount: 5_000n,
 			effectiveDate: "2026-01-01",
 			idempotencyKey: "issue-idem",
@@ -849,7 +849,7 @@ describe("Idempotency & Sequencing", () => {
 
 		const second = await t.mutation(api.ledger.mutations.issueShares, {
 			mortgageId: "m1",
-			investorId: "investor-a",
+			lenderId: "lender-a",
 			amount: 5_000n,
 			effectiveDate: "2026-01-01",
 			idempotencyKey: "issue-idem",
@@ -878,7 +878,7 @@ describe("Idempotency & Sequencing", () => {
 
 		await t.mutation(api.ledger.mutations.issueShares, {
 			mortgageId: "m1",
-			investorId: "investor-a",
+			lenderId: "lender-a",
 			amount: 5_000n,
 			effectiveDate: "2026-01-01",
 			idempotencyKey: "issue-1",
@@ -887,7 +887,7 @@ describe("Idempotency & Sequencing", () => {
 
 		await t.mutation(api.ledger.mutations.issueShares, {
 			mortgageId: "m1",
-			investorId: "investor-b",
+			lenderId: "lender-b",
 			amount: 5_000n,
 			effectiveDate: "2026-01-01",
 			idempotencyKey: "issue-2",
@@ -905,26 +905,26 @@ describe("Idempotency & Sequencing", () => {
 	});
 });
 
-// ── getInvestorPositions tests ────────────────────────────────────
+// ── getLenderPositions tests ────────────────────────────────────
 
-describe("Investor Position Queries", () => {
-	it("T-022b: getInvestorPositions returns positions across multiple mortgages", async () => {
+describe("Lender Position Queries", () => {
+	it("T-022b: getLenderPositions returns positions across multiple mortgages", async () => {
 		const t = createTestHarness();
-		await mintAndIssue(t, "m1", "investor-a", 5_000n);
-		await mintAndIssue(t, "m2", "investor-a", 3_000n);
+		await mintAndIssue(t, "m1", "lender-a", 5_000n);
+		await mintAndIssue(t, "m2", "lender-a", 3_000n);
 
-		// Also issue to investor-b on m1 so investor-a doesn't hold everything
+		// Also issue to lender-b on m1 so lender-a doesn't hold everything
 		await t.mutation(api.ledger.mutations.issueShares, {
 			mortgageId: "m1",
-			investorId: "investor-b",
+			lenderId: "lender-b",
 			amount: 5_000n,
 			effectiveDate: "2026-01-01",
 			idempotencyKey: "issue-m1-b",
 			source: SYS_SOURCE,
 		});
 
-		const positions = await t.query(api.ledger.queries.getInvestorPositions, {
-			investorId: "investor-a",
+		const positions = await t.query(api.ledger.queries.getLenderPositions, {
+			lenderId: "lender-a",
 		});
 
 		expect(positions).toHaveLength(2);
@@ -937,23 +937,23 @@ describe("Investor Position Queries", () => {
 		expect(m2Pos?.balance).toBe(3_000n);
 	});
 
-	it("T-022b-zero: getInvestorPositions excludes zero-balance positions", async () => {
+	it("T-022b-zero: getLenderPositions excludes zero-balance positions", async () => {
 		const t = createTestHarness();
-		await mintAndIssue(t, "m1", "investor-a");
+		await mintAndIssue(t, "m1", "lender-a");
 
-		// Transfer all away — investor-a has 0 balance
+		// Transfer all away — lender-a has 0 balance
 		await t.mutation(api.ledger.mutations.transferShares, {
 			mortgageId: "m1",
-			sellerInvestorId: "investor-a",
-			buyerInvestorId: "investor-b",
+			sellerLenderId: "lender-a",
+			buyerLenderId: "lender-b",
 			amount: 10_000n,
 			effectiveDate: "2026-01-02",
 			idempotencyKey: "transfer-all",
 			source: SYS_SOURCE,
 		});
 
-		const positions = await t.query(api.ledger.queries.getInvestorPositions, {
-			investorId: "investor-a",
+		const positions = await t.query(api.ledger.queries.getLenderPositions, {
+			lenderId: "lender-a",
 		});
 		expect(positions).toHaveLength(0);
 	});
@@ -964,7 +964,7 @@ describe("Investor Position Queries", () => {
 describe("Point-in-Time & History", () => {
 	it("T-067: getPositionsAt shows pre-transfer state", async () => {
 		const t = createTestHarness();
-		await mintAndIssue(t, "m1", "investor-a");
+		await mintAndIssue(t, "m1", "lender-a");
 
 		// Record time before transfer
 		const beforeTransfer = Date.now();
@@ -974,21 +974,21 @@ describe("Point-in-Time & History", () => {
 
 		await t.mutation(api.ledger.mutations.transferShares, {
 			mortgageId: "m1",
-			sellerInvestorId: "investor-a",
-			buyerInvestorId: "investor-b",
+			sellerLenderId: "lender-a",
+			buyerLenderId: "lender-b",
 			amount: 5_000n,
 			effectiveDate: "2026-01-02",
 			idempotencyKey: "transfer-1",
 			source: SYS_SOURCE,
 		});
 
-		// Query at time before transfer — should show only investor-a with 10,000
+		// Query at time before transfer — should show only lender-a with 10,000
 		const positionsBefore = await t.query(api.ledger.queries.getPositionsAt, {
 			mortgageId: "m1",
 			asOf: beforeTransfer,
 		});
 		expect(positionsBefore).toHaveLength(1);
-		expect(positionsBefore[0].investorId).toBe("investor-a");
+		expect(positionsBefore[0].lenderId).toBe("lender-a");
 		expect(positionsBefore[0].balance).toBe(10_000n);
 	});
 
@@ -1011,7 +1011,7 @@ describe("Point-in-Time & History", () => {
 			api.ledger.mutations.issueShares,
 			{
 				mortgageId: "m1",
-				investorId: "investor-a",
+				lenderId: "lender-a",
 				amount: 6_000n,
 				effectiveDate: "2026-01-01",
 				idempotencyKey: "issue-a",
@@ -1044,7 +1044,7 @@ describe("Point-in-Time & History", () => {
 
 	it("T-069: getMortgageHistory returns entries in sequence order", async () => {
 		const t = createTestHarness();
-		await mintAndIssue(t, "m1", "investor-a");
+		await mintAndIssue(t, "m1", "lender-a");
 
 		const history = await t.query(api.ledger.queries.getMortgageHistory, {
 			mortgageId: "m1",
@@ -1060,12 +1060,12 @@ describe("Point-in-Time & History", () => {
 
 	it("T-070: getAccountHistory returns entries touching an account", async () => {
 		const t = createTestHarness();
-		const { issueResult } = await mintAndIssue(t, "m1", "investor-a");
+		const { issueResult } = await mintAndIssue(t, "m1", "lender-a");
 
 		await t.mutation(api.ledger.mutations.transferShares, {
 			mortgageId: "m1",
-			sellerInvestorId: "investor-a",
-			buyerInvestorId: "investor-b",
+			sellerLenderId: "lender-a",
+			buyerLenderId: "lender-b",
 			amount: 5_000n,
 			effectiveDate: "2026-01-02",
 			idempotencyKey: "transfer-1",
@@ -1082,15 +1082,15 @@ describe("Point-in-Time & History", () => {
 
 	it("T-069b: getMortgageHistory filters by from/to date range", async () => {
 		const t = createTestHarness();
-		await mintAndIssue(t, "m1", "investor-a");
+		await mintAndIssue(t, "m1", "lender-a");
 
 		const afterIssue = Date.now();
 		await new Promise((r) => setTimeout(r, 10));
 
 		await t.mutation(api.ledger.mutations.transferShares, {
 			mortgageId: "m1",
-			sellerInvestorId: "investor-a",
-			buyerInvestorId: "investor-b",
+			sellerLenderId: "lender-a",
+			buyerLenderId: "lender-b",
 			amount: 5_000n,
 			effectiveDate: "2026-01-02",
 			idempotencyKey: "transfer-1",
@@ -1118,12 +1118,12 @@ describe("Point-in-Time & History", () => {
 
 	it("T-069c: getMortgageHistory respects limit", async () => {
 		const t = createTestHarness();
-		await mintAndIssue(t, "m1", "investor-a");
+		await mintAndIssue(t, "m1", "lender-a");
 
 		await t.mutation(api.ledger.mutations.transferShares, {
 			mortgageId: "m1",
-			sellerInvestorId: "investor-a",
-			buyerInvestorId: "investor-b",
+			sellerLenderId: "lender-a",
+			buyerLenderId: "lender-b",
 			amount: 5_000n,
 			effectiveDate: "2026-01-02",
 			idempotencyKey: "transfer-1",
@@ -1143,22 +1143,22 @@ describe("Point-in-Time & History", () => {
 
 	it("T-070b: getAccountHistory filters by from/to date range", async () => {
 		const t = createTestHarness();
-		const { issueResult } = await mintAndIssue(t, "m1", "investor-a");
+		const { issueResult } = await mintAndIssue(t, "m1", "lender-a");
 
 		const afterIssue = Date.now();
 		await new Promise((r) => setTimeout(r, 10));
 
 		await t.mutation(api.ledger.mutations.transferShares, {
 			mortgageId: "m1",
-			sellerInvestorId: "investor-a",
-			buyerInvestorId: "investor-b",
+			sellerLenderId: "lender-a",
+			buyerLenderId: "lender-b",
 			amount: 5_000n,
 			effectiveDate: "2026-01-02",
 			idempotencyKey: "transfer-1",
 			source: SYS_SOURCE,
 		});
 
-		// investor-a's account: issuance (before afterIssue) + transfer (after afterIssue)
+		// lender-a's account: issuance (before afterIssue) + transfer (after afterIssue)
 		// Filter to only entries after issuance
 		const filtered = await t.query(api.ledger.queries.getAccountHistory, {
 			accountId: issueResult.positionAccountId,
@@ -1174,7 +1174,7 @@ describe("Point-in-Time & History", () => {
 describe("Validation & Cursors", () => {
 	it("T-071: validateSupplyInvariant returns valid=true for healthy mortgage", async () => {
 		const t = createTestHarness();
-		await mintAndIssue(t, "m1", "investor-a", 5_000n);
+		await mintAndIssue(t, "m1", "lender-a", 5_000n);
 
 		const result = await t.query(
 			api.ledger.validation.validateSupplyInvariant,
@@ -1225,7 +1225,7 @@ describe("Common Rejections", () => {
 		const { mintResult, issueResult } = await mintAndIssue(
 			t,
 			"m1",
-			"investor-a"
+			"lender-a"
 		);
 
 		await expect(
@@ -1246,7 +1246,7 @@ describe("Common Rejections", () => {
 
 	it("T-074: self-transfer (debit == credit) is rejected", async () => {
 		const t = createTestHarness();
-		const { issueResult } = await mintAndIssue(t, "m1", "investor-a");
+		const { issueResult } = await mintAndIssue(t, "m1", "lender-a");
 
 		await expect(
 			t.mutation(api.ledger.mutations.postEntry, {
@@ -1269,14 +1269,14 @@ describe("Common Rejections", () => {
 		const { mintResult, issueResult } = await mintAndIssue(
 			t,
 			"m1",
-			"investor-a",
+			"lender-a",
 			5_000n
 		);
 
-		// Issue to a second investor so we have two different POSITION accounts
+		// Issue to a second lender so we have two different POSITION accounts
 		await t.mutation(api.ledger.mutations.issueShares, {
 			mortgageId: "m1",
-			investorId: "investor-b",
+			lenderId: "lender-b",
 			amount: 5_000n,
 			effectiveDate: "2026-01-01",
 			idempotencyKey: "issue-b",
@@ -1304,7 +1304,7 @@ describe("Common Rejections", () => {
 		const { mintResult, issueResult } = await mintAndIssue(
 			t,
 			"m1",
-			"investor-a"
+			"lender-a"
 		);
 
 		// MORTGAGE_MINTED expects debit=TREASURY, credit=WORLD
@@ -1328,7 +1328,7 @@ describe("Common Rejections", () => {
 		const { mintResult, issueResult } = await mintAndIssue(
 			t,
 			"m1",
-			"investor-a"
+			"lender-a"
 		);
 
 		// SHARES_REDEEMED expects debit=TREASURY, credit=POSITION

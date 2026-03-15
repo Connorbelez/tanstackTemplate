@@ -63,7 +63,7 @@ export const burnMortgageArgsValidator = {
 
 export const issueSharesArgsValidator = {
 	mortgageId: v.string(),
-	investorId: v.string(),
+	lenderId: v.string(),
 	amount: v.int64(),
 	effectiveDate: v.string(),
 	idempotencyKey: v.string(),
@@ -73,8 +73,8 @@ export const issueSharesArgsValidator = {
 
 export const transferSharesArgsValidator = {
 	mortgageId: v.string(),
-	sellerInvestorId: v.string(),
-	buyerInvestorId: v.string(),
+	sellerLenderId: v.string(),
+	buyerLenderId: v.string(),
 	amount: v.int64(),
 	effectiveDate: v.string(),
 	idempotencyKey: v.string(),
@@ -84,7 +84,7 @@ export const transferSharesArgsValidator = {
 
 export const redeemSharesArgsValidator = {
 	mortgageId: v.string(),
-	investorId: v.string(),
+	lenderId: v.string(),
 	amount: v.int64(),
 	effectiveDate: v.string(),
 	idempotencyKey: v.string(),
