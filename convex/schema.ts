@@ -30,15 +30,6 @@ export default defineSchema({
 		lastName: v.string(),
 		phoneNumber: v.optional(v.string()),
 	}).index("authId", ["authId"]),
-	dataModelEntities: defineTable({
-		name: v.string(),
-		label: v.string(),
-		source: entitySourceValidator,
-		hidden: v.boolean(),
-		fields: v.array(entityFieldValidator),
-		createdAt: v.number(),
-		updatedAt: v.number(),
-	}).index("by_name", ["name"]),
 	organizations: defineTable({
 		workosId: v.string(),
 		name: v.string(),
@@ -319,6 +310,16 @@ export default defineSchema({
 		publishedBy: v.optional(v.string()),
 		publishedAt: v.number(),
 	}).index("by_template", ["templateId", "version"]),
+
+	dataModelEntities: defineTable({
+		name: v.string(),
+		label: v.string(),
+		source: entitySourceValidator,
+		hidden: v.boolean(),
+		fields: v.array(entityFieldValidator),
+		createdAt: v.number(),
+		updatedAt: v.number(),
+	}).index("by_name", ["name"]),
 
 	documentTemplateGroups: defineTable({
 		name: v.string(),

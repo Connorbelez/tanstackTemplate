@@ -1,8 +1,9 @@
 ---
-description: TanStack Router: API
-globs: src/**/*.ts,src/**/*.tsx
+description: TanStack Router API reference for route classes, navigation, redirects, link options, and router types when working on routing or navigation-related code
+globs: src/routes/**/*.ts,src/routes/**/*.tsx,src/router.tsx,src/routeTree.gen.ts,test/routes/**/*.ts,test/routes/**/*.tsx
 alwaysApply: false
 ---
+
 # ActiveLinkOptions type
 
 The `ActiveLinkOptions` type extends the [`LinkOptions`](./LinkOptionsType.md) type and contains additional options that can be used to describe how a link should be styled when it is active.
@@ -4613,4 +4614,3 @@ function Component() {
   // ...
 }
 ```
-

@@ -1,9 +1,7 @@
 import type {
 	Auth,
 	GenericDatabaseReader,
-	GenericDatabaseWriter,
 	GenericDataModel,
-	Scheduler,
 } from "convex/server";
 import { ConvexError } from "convex/values";
 import type {
@@ -15,18 +13,49 @@ import type {
 	FunctionType,
 } from "fluent-convex";
 import { ConvexBuilderWithFunctionKind, createBuilder } from "fluent-convex";
-import { internal } from "./_generated/api";
-import type { DataModel, Doc } from "./_generated/dataModel";
+import type { DataModel } from "./_generated/dataModel";
 
 // ── Type guard: can this db handle writes? ──────────────────────────
-function isDatabaseWriter(
-	db: GenericDatabaseReader<DataModel>
-): db is GenericDatabaseWriter<DataModel> {
-	return "insert" in db;
-}
+// function isDatabaseWriter(
+// 	db: GenericDatabaseReader<DataModel>
+// ): db is GenericDatabaseWriter<DataModel> {
+// 	return "insert" in db;
+// }
 
 // ── Builder ─────────────────────────────────────────────────────────
 export const convex = createBuilder<DataModel>();
+
+const FAIRLEND_STAFF_ORG_ID = "org_01KKF56VABM4NYFFSR039RTJBM"; // env var or constant
+
+export interface Viewer {
+	authId: string;
+	email: string | undefined;
+	firstName: string | undefined;
+	isFairLendAdmin: boolean; // role === "admin" && orgId === FAIRLEND_STAFF_ORG_ID
+	lastName: string | undefined;
+	orgId: string | undefined;
+	orgName: string | undefined;
+	permissions: Set<string>;
+	role: string | undefined;
+	roles: Set<string>;
+}
+// ── Helpers ──────────────────────────────────────────────────────────
+// Identity claims like `permissions` / `roles` may arrive as a JSON string,
+// an already-parsed array, undefined, or empty string — normalise to string[].
+function parseClaimArray(value: unknown): string[] {
+	if (Array.isArray(value)) {
+		return value as string[];
+	}
+	if (typeof value === "string" && value.length > 0) {
+		try {
+			const parsed: unknown = JSON.parse(value);
+			return Array.isArray(parsed) ? (parsed as string[]) : [];
+		} catch {
+			return [];
+		}
+	}
+	return [];
+}
 
 // ── Auth Middleware (context enrichment) ─────────────────────────────
 // Uses $context so it works with queries AND mutations (both have auth + db).
@@ -41,60 +70,94 @@ export const authMiddleware = convex
 		if (!identity) {
 			throw new ConvexError("Unauthorized: sign in required");
 		}
+		const {
+			subject,
+			org_id,
+			organization_name,
+			permissions,
+			role,
+			roles,
+			user_email,
+			user_first_name,
+			user_last_name,
+		} = identity;
+		console.log("identity", identity);
 
-		let user = await context.db
-			.query("users")
-			.withIndex("authId", (q) => q.eq("authId", identity.subject))
-			.unique();
-
-		if (!user && isDatabaseWriter(context.db)) {
-			// User is authenticated but missing from DB — auto-create from
-			// identity token since we have write access (mutation context).
-			console.log(
-				`Auto-creating missing user ${identity.subject} from identity token`
-			);
-			const id = await context.db.insert("users", {
-				authId: identity.subject,
-				email: identity.email ?? "",
-				firstName: identity.givenName ?? "",
-				lastName: identity.familyName ?? "",
-			});
-			user = await context.db.get(id);
-
-			// Schedule backfill for org memberships and roles
-			const ctx = context as Record<string, unknown>;
-			if ("scheduler" in ctx && ctx.scheduler != null) {
-				await (ctx.scheduler as Scheduler).runAfter(
-					0,
-					internal.auth.syncUserRelatedData,
-					{ userId: identity.subject }
-				);
-			}
-		}
-
-		if (!user) {
-			throw new ConvexError("User not found in database");
-		}
-
+		const permissionsSet = new Set(parseClaimArray(permissions));
+		const roleSet = new Set(parseClaimArray(roles));
 		return next({
 			...context,
-			user,
-			identity,
+			viewer: {
+				authId: subject,
+				email: user_email,
+				orgId: org_id,
+				orgName: organization_name,
+				firstName: user_first_name,
+				lastName: user_last_name,
+				role,
+				roles: roleSet,
+				permissions: permissionsSet,
+				isFairLendAdmin:
+					org_id === FAIRLEND_STAFF_ORG_ID && roleSet.has("admin"),
+			} as Viewer,
 		});
+	});
+
+export const requireFairLendAdmin = convex
+	.$context<{
+		db: GenericDatabaseReader<DataModel>;
+		auth: Auth;
+		viewer: Viewer;
+	}>()
+	.createMiddleware(async (context, next) => {
+		const isFairLendAdmin = context.viewer.isFairLendAdmin;
+		if (!isFairLendAdmin) {
+			throw new ConvexError("Forbidden: fair lend admin role required");
+		}
+		return next(context);
+	});
+
+const UNDERWRITER_ROLES = new Set([
+	"sr_underwriter",
+	"jr_underwriter",
+	"underwriter",
+] as const);
+
+function hasUnderwriterRole(viewer: Viewer) {
+	const roles = new Set([...viewer.roles]);
+	if (UNDERWRITER_ROLES.intersection(roles).size > 0) {
+		return { hasRole: true, role: viewer.role };
+	}
+
+	return { hasRole: false, role: viewer.role };
+}
+
+export const requireOrgContext = convex
+	.$context<{
+		db: GenericDatabaseReader<DataModel>;
+		auth: Auth;
+		viewer: Viewer;
+	}>()
+	.createMiddleware(async (context, next) => {
+		const org_id = context.viewer?.orgId;
+
+		if (!(org_id || hasUnderwriterRole(context.viewer).hasRole)) {
+			throw new ConvexError("Forbidden: org context required");
+		}
+		return next(context);
 	});
 
 // ── RBAC: requireAdmin ──────────────────────────────────────────────
 // Checks if the authenticated user has at least one membership with
 // roleSlug === "admin". Must be used AFTER authMiddleware.
 export const requireAdmin = convex
-	.$context<{ db: GenericDatabaseReader<DataModel>; user: Doc<"users"> }>()
+	.$context<{
+		db: GenericDatabaseReader<DataModel>;
+		auth: Auth;
+		viewer: Viewer;
+	}>()
 	.createMiddleware(async (context, next) => {
-		const memberships = await context.db
-			.query("organizationMemberships")
-			.withIndex("byUser", (q) => q.eq("userWorkosId", context.user.authId))
-			.collect();
-
-		const isAdmin = memberships.some((m) => m.roleSlug === "admin");
+		const isAdmin = context.viewer.roles.has("admin");
 		if (!isAdmin) {
 			throw new ConvexError("Forbidden: admin role required");
 		}
@@ -108,39 +171,11 @@ export const requireAdmin = convex
 // then looks them up in the `roles` table.
 export function requirePermission(permission: string) {
 	return convex
-		.$context<{ db: GenericDatabaseReader<DataModel>; user: Doc<"users"> }>()
+		.$context<{ db: GenericDatabaseReader<DataModel>; viewer: Viewer }>()
 		.createMiddleware(async (context, next) => {
-			const memberships = await context.db
-				.query("organizationMemberships")
-				.withIndex("byUser", (q) => q.eq("userWorkosId", context.user.authId))
-				.collect();
-
-			const uniqueSlugs = new Set<string>();
-			for (const m of memberships) {
-				uniqueSlugs.add(m.roleSlug);
-				if (m.roleSlugs) {
-					for (const s of m.roleSlugs) {
-						uniqueSlugs.add(s);
-					}
-				}
-			}
-
-			let hasPermission = false;
-			for (const slug of uniqueSlugs) {
-				const role = await context.db
-					.query("roles")
-					.withIndex("slug", (q) => q.eq("slug", slug))
-					.unique();
-				if (role?.permissions.includes(permission)) {
-					hasPermission = true;
-					break;
-				}
-			}
-
-			if (!hasPermission) {
+			if (!context.viewer.permissions.has(permission)) {
 				throw new ConvexError(`Forbidden: permission "${permission}" required`);
 			}
-
 			return next({ ...context, permission });
 		});
 }
@@ -241,3 +276,59 @@ export const adminMutation = convex
 	.mutation()
 	.use(authMiddleware)
 	.use(requireAdmin);
+export const brokerQuery = authedQuery
+	.use(requireOrgContext)
+	.use(requirePermission("broker:access"));
+export const brokerMutation = authedMutation
+	.use(requireOrgContext)
+	.use(requirePermission("broker:access"));
+export const borrowerQuery = authedQuery
+	.use(requireOrgContext)
+	.use(requirePermission("borrower:access"));
+export const borrowerMutation = authedMutation
+	.use(requireOrgContext)
+	.use(requirePermission("borrower:access"));
+export const lenderQuery = authedQuery
+	.use(requireOrgContext)
+	.use(requirePermission("lender:access"));
+export const lenderMutation = authedMutation
+	.use(requireOrgContext)
+	.use(requirePermission("lender:access"));
+export const underwriterQuery = authedQuery
+	.use(requireOrgContext)
+	.use(requirePermission("underwriter:access"));
+export const underwriterMutation = authedMutation
+	.use(requireOrgContext)
+	.use(requirePermission("underwriter:access"));
+export const lawyerQuery = authedQuery
+	.use(requireOrgContext)
+	.use(requirePermission("lawyer:access"));
+export const lawyerMutation = authedMutation
+	.use(requireOrgContext)
+	.use(requirePermission("lawyer:access"));
+
+export const adminQuery = authedQuery.use(requireFairLendAdmin);
+// Underwriting
+export const uwQuery = authedQuery.use(requirePermission("underwriter:access"));
+export const uwMutation = authedMutation.use(
+	requirePermission("underwriter:access")
+);
+
+// Domain-specific (for downstream projects)
+export const dealQuery = authedQuery.use(requirePermission("deal:view"));
+export const dealMutation = authedMutation.use(
+	requirePermission("deal:manage")
+);
+export const ledgerQuery = authedQuery.use(requirePermission("ledger:view"));
+
+export const whoAmI = convex
+	.query()
+	.use(authMiddleware)
+	.handler(async (ctx) => {
+		return {
+			...ctx.viewer,
+			roles: [...ctx.viewer.roles],
+			permissions: [...ctx.viewer.permissions],
+		};
+	})
+	.public();

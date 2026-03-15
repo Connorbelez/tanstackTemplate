@@ -1,0 +1,16 @@
+import { createFileRoute } from "@tanstack/react-router";
+import { useAuth } from "@workos/authkit-tanstack-react-start/client";
+import { Button } from "#/components/ui/button";
+
+export const Route = createFileRoute("/sign-out")({
+	component: RouteComponent,
+});
+
+function RouteComponent() {
+	const { signOut } = useAuth();
+	return (
+		<div>
+			<Button onClick={() => signOut()}>SignOut</Button>
+		</div>
+	);
+}
