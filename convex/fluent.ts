@@ -125,6 +125,7 @@ const UNDERWRITER_ROLES = new Set([
 
 function hasUnderwriterRole(viewer: Viewer) {
 	const roles = new Set([...viewer.roles]);
+	//@ts-ignore intersection is a func
 	if (UNDERWRITER_ROLES.intersection(roles).size > 0) {
 		return { hasRole: true, role: viewer.role };
 	}

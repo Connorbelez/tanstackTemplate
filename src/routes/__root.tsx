@@ -24,9 +24,7 @@ const THEME_INIT_SCRIPT = `(function(){try{var stored=window.localStorage.getIte
 
 const fetchWorkosAuth = createServerFn({ method: "GET" }).handler(async () => {
 	const auth = await getAuth();
-	console.log("auth", auth);
 	const { user } = auth;
-	console.log("user", user);
 	if (!user) {
 		return {
 			userId: null as string | null,
