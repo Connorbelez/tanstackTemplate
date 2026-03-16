@@ -9,5 +9,8 @@ export const effectRegistry: Record<
 	string,
 	FunctionReference<"action", "internal">
 > = {
-	assignRoleToUser: internal.engine.effects.onboarding.assignRoleToUser,
+	// onboardingRequest machine effects
+	assignRole: internal.engine.effects.onboarding.assignRoleToUser,
+	// notifyApplicantApproved — TODO: implement notification effect
+	// notifyApplicantRejected — TODO: implement notification effect
 };

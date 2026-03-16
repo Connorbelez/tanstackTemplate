@@ -109,7 +109,7 @@ export async function startHashChain(
 ) {
 	if (
 		typeof process !== "undefined" &&
-		process.env.ALLOW_TEST_AUTH_ENDPOINTS === "true"
+		process.env.DISABLE_HASH_CHAIN === "true"
 	) {
 		return;
 	}

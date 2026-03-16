@@ -131,8 +131,8 @@ describe("hash-chain and reconciliation", () => {
 		const startSpy = vi
 			.spyOn(WorkflowManager.prototype, "start")
 			.mockResolvedValue("workflow_test" as never);
-		const previousEnv = process.env.ALLOW_TEST_AUTH_ENDPOINTS;
-		process.env.ALLOW_TEST_AUTH_ENDPOINTS = "false";
+		const previousEnv = process.env.DISABLE_HASH_CHAIN;
+		process.env.DISABLE_HASH_CHAIN = "false";
 
 		try {
 			await startHashChain(
@@ -143,7 +143,7 @@ describe("hash-chain and reconciliation", () => {
 				"10000;auditJournal" as Id<"auditJournal">
 			);
 		} finally {
-			process.env.ALLOW_TEST_AUTH_ENDPOINTS = previousEnv;
+			process.env.DISABLE_HASH_CHAIN = previousEnv;
 		}
 
 		expect(startSpy).toHaveBeenCalledWith(

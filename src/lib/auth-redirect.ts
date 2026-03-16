@@ -30,7 +30,7 @@ export function buildSignInRedirect(
 ): Pick<LinkProps, "search" | "to"> {
 	return {
 		to: "/sign-in",
-		search: { redirect: redirectTarget },
+		search: { redirect: getReturnPathname(redirectTarget) },
 	};
 }
 
@@ -39,6 +39,6 @@ export function buildSignUpRedirect(
 ): Pick<LinkProps, "search" | "to"> {
 	return {
 		to: "/sign-up",
-		search: { redirect: redirectTarget },
+		search: { redirect: getReturnPathname(redirectTarget) },
 	};
 }
