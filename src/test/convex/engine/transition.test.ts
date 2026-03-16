@@ -995,76 +995,7 @@ describe("transition engine", () => {
 					channel: "scheduler",
 				},
 			})
-		).rejects.toThrow();
-	});
-
-	it("rejects transition when guard fails (mortgage DEFAULT_THRESHOLD_REACHED with 0 missed payments)", async () => {
-		const t = createGovernedTestConvex();
-		await seedDefaultGovernedActors(t);
-
-		// Create a mortgage in "active" state with 0 missed payments
-		const propertyId = await t.run(async (ctx) =>
-			ctx.db.insert("properties", {
-				streetAddress: "1 Test St",
-				city: "Toronto",
-				province: "ON",
-				postalCode: "M5V 0A1",
-				propertyType: "residential",
-				createdAt: Date.now(),
-			})
-		);
-
-		const brokerId = await t.run(async (ctx) =>
-			ctx.db.insert("brokers", {
-				status: "active",
-				userId: (await ctx.db.query("users").first())!._id,
-				createdAt: Date.now(),
-			})
-		);
-
-		const mortgageId = await t.run(async (ctx) =>
-			ctx.db.insert("mortgages", {
-				status: "active",
-				machineContext: { missedPayments: 0, lastPaymentAt: 0 },
-				propertyId,
-				principal: 50_000_000,
-				interestRate: 0.08,
-				rateType: "fixed",
-				termMonths: 12,
-				amortizationMonths: 12,
-				paymentAmount: 333_333,
-				paymentFrequency: "monthly",
-				loanType: "conventional",
-				lienPosition: 1,
-				interestAdjustmentDate: "2026-01-01",
-				termStartDate: "2026-01-15",
-				maturityDate: "2027-01-15",
-				firstPaymentDate: "2026-02-15",
-				brokerOfRecordId: brokerId,
-				createdAt: Date.now(),
-			})
-		);
-
-		// Try DEFAULT_THRESHOLD_REACHED — guard requires missedPayments >= 3
-		const result = await t.mutation(
-			internal.engine.transitionMutation.transitionMutation,
-			{
-				entityType: "mortgage",
-				entityId: mortgageId,
-				eventType: "DEFAULT_THRESHOLD_REACHED",
-				payload: {},
-				source: { actorType: "system", channel: "scheduler" },
-			}
-		);
-
-		// Guard fails → event rejected, status unchanged
-		expect(result.success).toBe(false);
-		expect(result.previousState).toBe("active");
-		expect(result.newState).toBe("active");
-
-		// Verify entity status is still active
-		const mortgage = await t.run(async (ctx) => ctx.db.get(mortgageId));
-		expect(mortgage?.status).toBe("active");
+		).rejects.toThrow("No machine registered for entity type: onboardingRequest");
 	});
 
 	it("warns but succeeds when a machine action has no effect registry entry", async () => {

@@ -1,6 +1,12 @@
+import { v } from "convex/values";
 import type { Id } from "../_generated/dataModel";
 import type { QueryCtx } from "../_generated/server";
-import { internalAction, internalQuery } from "../_generated/server";
+import {
+	internalAction,
+	internalMutation,
+	internalQuery,
+} from "../_generated/server";
+import { auditLog } from "../auditLog";
 import { ENTITY_TABLE_MAP } from "./types";
 
 const RECONCILIATION_PAGE_SIZE = 128;
@@ -26,7 +32,6 @@ async function collectLatestEntries(
 ) {
 	const latestByEntity = new Map<string, LatestJournalEntry>();
 	let cursor: string | null = null;
-	let consecutiveEmptyPages = 0;
 
 	while (true) {
 		const { continueCursor, isDone, page } = await ctx.db
@@ -35,7 +40,6 @@ async function collectLatestEntries(
 			.order("desc")
 			.paginate({ cursor, numItems: RECONCILIATION_PAGE_SIZE });
 
-		let foundNew = false;
 		for (const entry of page) {
 			if (
 				entry.outcome === "transitioned" &&
@@ -45,15 +49,10 @@ async function collectLatestEntries(
 					_id: entry._id,
 					newState: entry.newState,
 				});
-				foundNew = true;
 			}
 		}
 
 		if (isDone) {
-			return latestByEntity;
-		}
-		consecutiveEmptyPages = foundNew ? 0 : consecutiveEmptyPages + 1;
-		if (consecutiveEmptyPages >= 3) {
 			return latestByEntity;
 		}
 		cursor = continueCursor;
@@ -145,6 +144,41 @@ export const reconcileInternal = internalQuery({
 });
 
 /**
+ * Internal mutation to persist reconciliation discrepancies through the audit pipeline.
+ * Actions cannot call auditLog.log() directly (it requires MutationCtx),
+ * so dailyReconciliation schedules this mutation via ctx.runMutation.
+ */
+export const logReconciliationDiscrepancies = internalMutation({
+	args: {
+		discrepancyCount: v.number(),
+		discrepancies: v.array(
+			v.object({
+				entityId: v.string(),
+				entityStatus: v.string(),
+				entityType: v.string(),
+				journalEntryId: v.string(),
+				journalNewState: v.string(),
+			})
+		),
+		checkedAt: v.number(),
+	},
+	handler: async (ctx, args) => {
+		await auditLog.log(ctx, {
+			action: "reconciliation.discrepancies_found",
+			actorId: "system",
+			resourceType: "reconciliation",
+			resourceId: "daily-check",
+			severity: "error",
+			metadata: {
+				checkedAt: args.checkedAt,
+				discrepancyCount: args.discrepancyCount,
+				discrepancies: args.discrepancies,
+			},
+		});
+	},
+});
+
+/**
  * Daily reconciliation cron action.
  * Runs Layer 1 (status vs journal) and logs discrepancies as P0 errors.
  */
@@ -163,6 +197,16 @@ export const dailyReconciliation = internalAction({
 			console.error(
 				`[RECONCILIATION P0] ${result.discrepancies.length} discrepancies found:`,
 				JSON.stringify(result.discrepancies, null, 2)
+			);
+
+			await ctx.runMutation(
+				// @ts-expect-error — resolves after `convex codegen` (new file not yet in generated API)
+				internal.engine.reconciliationAction.logReconciliationDiscrepancies,
+				{
+					discrepancyCount: result.discrepancies.length,
+					discrepancies: result.discrepancies,
+					checkedAt: result.checkedAt,
+				}
 			);
 		}
 

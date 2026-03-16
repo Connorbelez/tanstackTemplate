@@ -111,6 +111,7 @@ export const transitionMortgageInternal = internalMutation({
 	handler: async (ctx, args) => {
 		const source = (args.source as CommandSource | undefined) ?? {
 			channel: "scheduler" as const,
+			actorType: "system" as const,
 		};
 		return executeTransition(ctx, {
 			entityType: "mortgage",
