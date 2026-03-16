@@ -958,21 +958,550 @@ describe("canAccessDispersal", () => {
 // canAccessDocument
 // ═══════════════════════════════════════════════════════════════════
 
+async function insertDocumentPrereqs(ctx: MutationCtx) {
+	// convex-test supports storage.store() at runtime but the mutation type
+	// definition (StorageWriter) doesn't expose it — cast through unknown.
+	const storageId = await (
+		ctx.storage as unknown as {
+			store: (blob: Blob) => Promise<Id<"_storage">>;
+		}
+	).store(new Blob(["fake"]));
+	const basePdfId = await ctx.db.insert("documentBasePdfs", {
+		name: "test-base.pdf",
+		fileRef: storageId,
+		fileHash: "abc123",
+		fileSize: 1024,
+		pageCount: 1,
+		pageDimensions: [{ page: 1, width: 612, height: 792 }],
+		uploadedAt: NOW,
+	});
+	const templateId = await ctx.db.insert("documentTemplates", {
+		name: "Test Template",
+		basePdfId,
+		basePdfHash: "abc123",
+		draft: { fields: [], signatories: [] },
+		hasDraftChanges: false,
+		createdAt: NOW,
+		updatedAt: NOW,
+	});
+	return { storageId, templateId };
+}
+
+async function insertGeneratedDocument(
+	ctx: MutationCtx,
+	templateId: Id<"documentTemplates">,
+	pdfStorageId: Id<"_storage">,
+	entityType:
+		| "mortgage"
+		| "deal"
+		| "applicationPackage"
+		| "provisionalApplication",
+	entityId: string,
+	sensitivityTier: "public" | "private" | "sensitive"
+) {
+	return ctx.db.insert("generatedDocuments", {
+		name: "Test Document",
+		templateId,
+		templateVersionUsed: 1,
+		pdfStorageId,
+		entityType,
+		entityId,
+		sensitivityTier,
+		signingStatus: "not_applicable",
+		generatedBy: "system",
+		generatedAt: NOW,
+		updatedAt: NOW,
+	});
+}
+
 describe("canAccessDocument", () => {
 	it("admin — always true", async () => {
 		const t = convexTest(schema, modules);
 		await t.run(async (ctx) => {
+			const { templateId, storageId } = await insertDocumentPrereqs(ctx);
+			const brokerUserId = await insertUser(ctx, { authId: "broker-auth" });
+			const brokerId = await insertBroker(ctx, brokerUserId);
+			const propId = await insertProperty(ctx);
+			const mortgageId = await insertMortgage(ctx, propId, brokerId);
+			const docId = await insertGeneratedDocument(
+				ctx,
+				templateId,
+				storageId,
+				"mortgage",
+				mortgageId,
+				"sensitive"
+			);
+
 			const viewer = adminViewer();
-			const result = await canAccessDocument(ctx, viewer, "any-doc-id");
+			const result = await canAccessDocument(ctx, viewer, docId);
 			expect(result).toBe(true);
 		});
 	});
 
-	it("non-admin — always false (stub pending ENG-144)", async () => {
+	it("non-existent document — false", async () => {
 		const t = convexTest(schema, modules);
 		await t.run(async (ctx) => {
-			const viewer = makeViewer({ authId: "regular-user-auth" });
-			const result = await canAccessDocument(ctx, viewer, "any-doc-id");
+			const { templateId, storageId } = await insertDocumentPrereqs(ctx);
+			const brokerUserId = await insertUser(ctx, { authId: "broker-auth" });
+			const brokerId = await insertBroker(ctx, brokerUserId);
+			const propId = await insertProperty(ctx);
+			const mortgageId = await insertMortgage(ctx, propId, brokerId);
+			const docId = await insertGeneratedDocument(
+				ctx,
+				templateId,
+				storageId,
+				"mortgage",
+				mortgageId,
+				"public"
+			);
+			await ctx.db.delete(docId);
+
+			const viewer = makeViewer({ authId: "broker-auth" });
+			const result = await canAccessDocument(ctx, viewer, docId);
+			expect(result).toBe(false);
+		});
+	});
+
+	// ── Public tier: entity access is sufficient ──────────────────
+
+	it("public + mortgage — broker assigned — true", async () => {
+		const t = convexTest(schema, modules);
+		await t.run(async (ctx) => {
+			const { templateId, storageId } = await insertDocumentPrereqs(ctx);
+			const brokerUserId = await insertUser(ctx, { authId: "broker-auth" });
+			const brokerId = await insertBroker(ctx, brokerUserId);
+			const propId = await insertProperty(ctx);
+			const mortgageId = await insertMortgage(ctx, propId, brokerId);
+			const docId = await insertGeneratedDocument(
+				ctx,
+				templateId,
+				storageId,
+				"mortgage",
+				mortgageId,
+				"public"
+			);
+
+			const viewer = makeViewer({ authId: "broker-auth" });
+			const result = await canAccessDocument(ctx, viewer, docId);
+			expect(result).toBe(true);
+		});
+	});
+
+	it("public + mortgage — random user — false", async () => {
+		const t = convexTest(schema, modules);
+		await t.run(async (ctx) => {
+			const { templateId, storageId } = await insertDocumentPrereqs(ctx);
+			const brokerUserId = await insertUser(ctx, { authId: "broker-auth" });
+			const brokerId = await insertBroker(ctx, brokerUserId);
+			const propId = await insertProperty(ctx);
+			const mortgageId = await insertMortgage(ctx, propId, brokerId);
+			const docId = await insertGeneratedDocument(
+				ctx,
+				templateId,
+				storageId,
+				"mortgage",
+				mortgageId,
+				"public"
+			);
+
+			const viewer = makeViewer({ authId: "random-user" });
+			const result = await canAccessDocument(ctx, viewer, docId);
+			expect(result).toBe(false);
+		});
+	});
+
+	it("public + deal — buyer — true", async () => {
+		const t = convexTest(schema, modules);
+		await t.run(async (ctx) => {
+			const { templateId, storageId } = await insertDocumentPrereqs(ctx);
+			const brokerUserId = await insertUser(ctx, { authId: "broker-auth" });
+			const brokerId = await insertBroker(ctx, brokerUserId);
+			const propId = await insertProperty(ctx);
+			const mortgageId = await insertMortgage(ctx, propId, brokerId);
+			const dealId = await insertDeal(
+				ctx,
+				mortgageId,
+				"buyer-auth",
+				"seller-auth"
+			);
+			const docId = await insertGeneratedDocument(
+				ctx,
+				templateId,
+				storageId,
+				"deal",
+				dealId,
+				"public"
+			);
+
+			const viewer = makeViewer({ authId: "buyer-auth" });
+			const result = await canAccessDocument(ctx, viewer, docId);
+			expect(result).toBe(true);
+		});
+	});
+
+	it("public + applicationPackage — sr_underwriter — true", async () => {
+		const t = convexTest(schema, modules);
+		await t.run(async (ctx) => {
+			const { templateId, storageId } = await insertDocumentPrereqs(ctx);
+			const brokerUserId = await insertUser(ctx, {
+				authId: "setup-broker-auth",
+			});
+			const brokerId = await insertBroker(ctx, brokerUserId);
+			const borrowerUserId = await insertUser(ctx, {
+				authId: "setup-borrower-auth",
+			});
+			const borrowerId = await insertBorrower(ctx, borrowerUserId);
+			const sourceAppId = await insertProvisionalApplication(
+				ctx,
+				brokerId,
+				borrowerId
+			);
+			const packageId = await insertApplicationPackage(
+				ctx,
+				sourceAppId,
+				borrowerId,
+				brokerId
+			);
+			const docId = await insertGeneratedDocument(
+				ctx,
+				templateId,
+				storageId,
+				"applicationPackage",
+				packageId,
+				"public"
+			);
+
+			const viewer = makeViewer({
+				authId: "sr-uw-auth",
+				roles: new Set(["sr_underwriter"]),
+			});
+			const result = await canAccessDocument(ctx, viewer, docId);
+			expect(result).toBe(true);
+		});
+	});
+
+	it("public + provisionalApplication — owning broker — true", async () => {
+		const t = convexTest(schema, modules);
+		await t.run(async (ctx) => {
+			const { templateId, storageId } = await insertDocumentPrereqs(ctx);
+			const brokerUserId = await insertUser(ctx, { authId: "broker-auth" });
+			const brokerId = await insertBroker(ctx, brokerUserId);
+			const borrowerUserId = await insertUser(ctx, {
+				authId: "borrower-auth",
+			});
+			const borrowerId = await insertBorrower(ctx, borrowerUserId);
+			const appId = await insertProvisionalApplication(
+				ctx,
+				brokerId,
+				borrowerId
+			);
+			const docId = await insertGeneratedDocument(
+				ctx,
+				templateId,
+				storageId,
+				"provisionalApplication",
+				appId,
+				"public"
+			);
+
+			const viewer = makeViewer({ authId: "broker-auth" });
+			const result = await canAccessDocument(ctx, viewer, docId);
+			expect(result).toBe(true);
+		});
+	});
+
+	it("public + provisionalApplication — random user — false", async () => {
+		const t = convexTest(schema, modules);
+		await t.run(async (ctx) => {
+			const { templateId, storageId } = await insertDocumentPrereqs(ctx);
+			const brokerUserId = await insertUser(ctx, { authId: "broker-auth" });
+			const brokerId = await insertBroker(ctx, brokerUserId);
+			const borrowerUserId = await insertUser(ctx, {
+				authId: "borrower-auth",
+			});
+			const borrowerId = await insertBorrower(ctx, borrowerUserId);
+			const appId = await insertProvisionalApplication(
+				ctx,
+				brokerId,
+				borrowerId
+			);
+			const docId = await insertGeneratedDocument(
+				ctx,
+				templateId,
+				storageId,
+				"provisionalApplication",
+				appId,
+				"public"
+			);
+
+			const viewer = makeViewer({ authId: "random-user" });
+			const result = await canAccessDocument(ctx, viewer, docId);
+			expect(result).toBe(false);
+		});
+	});
+
+	// ── Private tier: entity access + dealAccess ──────────────────
+
+	it("private + deal — has active dealAccess — true", async () => {
+		const t = convexTest(schema, modules);
+		await t.run(async (ctx) => {
+			const { templateId, storageId } = await insertDocumentPrereqs(ctx);
+			const brokerUserId = await insertUser(ctx, { authId: "broker-auth" });
+			const brokerId = await insertBroker(ctx, brokerUserId);
+			const propId = await insertProperty(ctx);
+			const mortgageId = await insertMortgage(ctx, propId, brokerId);
+			const dealId = await insertDeal(
+				ctx,
+				mortgageId,
+				"buyer-auth",
+				"seller-auth"
+			);
+			await insertDealAccess(ctx, "lawyer-auth", dealId, "platform_lawyer");
+			const docId = await insertGeneratedDocument(
+				ctx,
+				templateId,
+				storageId,
+				"deal",
+				dealId,
+				"private"
+			);
+
+			// Lawyer has dealAccess + canAccessDeal (via dealAccess)
+			const viewer = makeViewer({ authId: "lawyer-auth" });
+			const result = await canAccessDocument(ctx, viewer, docId);
+			expect(result).toBe(true);
+		});
+	});
+
+	it("private + deal — entity access but no dealAccess — false", async () => {
+		const t = convexTest(schema, modules);
+		await t.run(async (ctx) => {
+			const { templateId, storageId } = await insertDocumentPrereqs(ctx);
+			const brokerUserId = await insertUser(ctx, { authId: "broker-auth" });
+			const brokerId = await insertBroker(ctx, brokerUserId);
+			const propId = await insertProperty(ctx);
+			const mortgageId = await insertMortgage(ctx, propId, brokerId);
+			const dealId = await insertDeal(
+				ctx,
+				mortgageId,
+				"buyer-auth",
+				"seller-auth"
+			);
+			const docId = await insertGeneratedDocument(
+				ctx,
+				templateId,
+				storageId,
+				"deal",
+				dealId,
+				"private"
+			);
+
+			// Buyer can access the deal entity, but has no dealAccess record
+			const viewer = makeViewer({ authId: "buyer-auth" });
+			const result = await canAccessDocument(ctx, viewer, docId);
+			expect(result).toBe(false);
+		});
+	});
+
+	it("private + mortgage — has dealAccess on related deal — true", async () => {
+		const t = convexTest(schema, modules);
+		await t.run(async (ctx) => {
+			const { templateId, storageId } = await insertDocumentPrereqs(ctx);
+			const brokerUserId = await insertUser(ctx, { authId: "broker-auth" });
+			const brokerId = await insertBroker(ctx, brokerUserId);
+			const propId = await insertProperty(ctx);
+			const mortgageId = await insertMortgage(ctx, propId, brokerId);
+			const dealId = await insertDeal(
+				ctx,
+				mortgageId,
+				"buyer-auth",
+				"seller-auth"
+			);
+			await insertDealAccess(ctx, "lawyer-auth", dealId, "platform_lawyer");
+			// Lawyer needs mortgage access too — assign via closingTeam
+			await insertClosingTeamAssignment(ctx, mortgageId, "lawyer-auth");
+			const docId = await insertGeneratedDocument(
+				ctx,
+				templateId,
+				storageId,
+				"mortgage",
+				mortgageId,
+				"private"
+			);
+
+			const viewer = makeViewer({ authId: "lawyer-auth" });
+			const result = await canAccessDocument(ctx, viewer, docId);
+			expect(result).toBe(true);
+		});
+	});
+
+	it("private + mortgage — no dealAccess on any deal — false", async () => {
+		const t = convexTest(schema, modules);
+		await t.run(async (ctx) => {
+			const { templateId, storageId } = await insertDocumentPrereqs(ctx);
+			const brokerUserId = await insertUser(ctx, { authId: "broker-auth" });
+			const brokerId = await insertBroker(ctx, brokerUserId);
+			const propId = await insertProperty(ctx);
+			const mortgageId = await insertMortgage(ctx, propId, brokerId);
+			await insertDeal(ctx, mortgageId, "buyer-auth", "seller-auth");
+			const docId = await insertGeneratedDocument(
+				ctx,
+				templateId,
+				storageId,
+				"mortgage",
+				mortgageId,
+				"private"
+			);
+
+			// Broker has entity access to mortgage but no dealAccess
+			const viewer = makeViewer({ authId: "broker-auth" });
+			const result = await canAccessDocument(ctx, viewer, docId);
+			expect(result).toBe(false);
+		});
+	});
+
+	it("private + applicationPackage — entity access sufficient (pre-deal)", async () => {
+		const t = convexTest(schema, modules);
+		await t.run(async (ctx) => {
+			const { templateId, storageId } = await insertDocumentPrereqs(ctx);
+			const brokerUserId = await insertUser(ctx, {
+				authId: "setup-broker-auth",
+			});
+			const brokerId = await insertBroker(ctx, brokerUserId);
+			const borrowerUserId = await insertUser(ctx, {
+				authId: "setup-borrower-auth",
+			});
+			const borrowerId = await insertBorrower(ctx, borrowerUserId);
+			const sourceAppId = await insertProvisionalApplication(
+				ctx,
+				brokerId,
+				borrowerId
+			);
+			const packageId = await insertApplicationPackage(
+				ctx,
+				sourceAppId,
+				borrowerId,
+				brokerId
+			);
+			const docId = await insertGeneratedDocument(
+				ctx,
+				templateId,
+				storageId,
+				"applicationPackage",
+				packageId,
+				"private"
+			);
+
+			const viewer = makeViewer({
+				authId: "sr-uw-auth",
+				roles: new Set(["sr_underwriter"]),
+			});
+			const result = await canAccessDocument(ctx, viewer, docId);
+			expect(result).toBe(true);
+		});
+	});
+
+	// ── Sensitive tier: entity + dealAccess + permission ──────────
+
+	it("sensitive + deal — dealAccess + permission — true", async () => {
+		const t = convexTest(schema, modules);
+		await t.run(async (ctx) => {
+			const { templateId, storageId } = await insertDocumentPrereqs(ctx);
+			const brokerUserId = await insertUser(ctx, { authId: "broker-auth" });
+			const brokerId = await insertBroker(ctx, brokerUserId);
+			const propId = await insertProperty(ctx);
+			const mortgageId = await insertMortgage(ctx, propId, brokerId);
+			const dealId = await insertDeal(
+				ctx,
+				mortgageId,
+				"buyer-auth",
+				"seller-auth"
+			);
+			await insertDealAccess(ctx, "lawyer-auth", dealId, "platform_lawyer");
+			const docId = await insertGeneratedDocument(
+				ctx,
+				templateId,
+				storageId,
+				"deal",
+				dealId,
+				"sensitive"
+			);
+
+			const viewer = makeViewer({
+				authId: "lawyer-auth",
+				permissions: new Set(["documents:sensitive_access"]),
+			});
+			const result = await canAccessDocument(ctx, viewer, docId);
+			expect(result).toBe(true);
+		});
+	});
+
+	it("sensitive + deal — dealAccess but NO permission — false", async () => {
+		const t = convexTest(schema, modules);
+		await t.run(async (ctx) => {
+			const { templateId, storageId } = await insertDocumentPrereqs(ctx);
+			const brokerUserId = await insertUser(ctx, { authId: "broker-auth" });
+			const brokerId = await insertBroker(ctx, brokerUserId);
+			const propId = await insertProperty(ctx);
+			const mortgageId = await insertMortgage(ctx, propId, brokerId);
+			const dealId = await insertDeal(
+				ctx,
+				mortgageId,
+				"buyer-auth",
+				"seller-auth"
+			);
+			await insertDealAccess(ctx, "lawyer-auth", dealId, "platform_lawyer");
+			const docId = await insertGeneratedDocument(
+				ctx,
+				templateId,
+				storageId,
+				"deal",
+				dealId,
+				"sensitive"
+			);
+
+			// Has dealAccess but no documents:sensitive_access permission
+			const viewer = makeViewer({ authId: "lawyer-auth" });
+			const result = await canAccessDocument(ctx, viewer, docId);
+			expect(result).toBe(false);
+		});
+	});
+
+	it("sensitive + deal — revoked dealAccess — false", async () => {
+		const t = convexTest(schema, modules);
+		await t.run(async (ctx) => {
+			const { templateId, storageId } = await insertDocumentPrereqs(ctx);
+			const brokerUserId = await insertUser(ctx, { authId: "broker-auth" });
+			const brokerId = await insertBroker(ctx, brokerUserId);
+			const propId = await insertProperty(ctx);
+			const mortgageId = await insertMortgage(ctx, propId, brokerId);
+			const dealId = await insertDeal(
+				ctx,
+				mortgageId,
+				"buyer-auth",
+				"seller-auth"
+			);
+			await insertDealAccess(
+				ctx,
+				"lawyer-auth",
+				dealId,
+				"platform_lawyer",
+				"revoked"
+			);
+			const docId = await insertGeneratedDocument(
+				ctx,
+				templateId,
+				storageId,
+				"deal",
+				dealId,
+				"sensitive"
+			);
+
+			const viewer = makeViewer({
+				authId: "lawyer-auth",
+				permissions: new Set(["documents:sensitive_access"]),
+			});
+			const result = await canAccessDocument(ctx, viewer, docId);
 			expect(result).toBe(false);
 		});
 	});
