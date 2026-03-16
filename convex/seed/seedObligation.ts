@@ -54,6 +54,12 @@ async function resolveMortgageBorrowerPairs(
 		);
 	}
 
+	if (borrowerPool.length === 0) {
+		throw new ConvexError(
+			"No borrowers available. Seed borrowers first or pass borrowerIds / mortgageBorrowers."
+		);
+	}
+
 	const pairs: MortgageBorrowerPair[] = [];
 	for (let index = 0; index < mortgages.length; index += 1) {
 		const mortgage = mortgages[index];
@@ -148,6 +154,32 @@ function obligationDates(
 		default:
 			throw new ConvexError(`Unsupported obligation date state: ${state}`);
 	}
+}
+
+/**
+ * Sync parent mortgage machineContext.missedPayments with seeded overdue obligations.
+ * Only patches delinquent mortgages — other statuses don't track missedPayments.
+ */
+async function syncMortgageMissedPayments(
+	ctx: Pick<MutationCtx, "db">,
+	mortgage: Doc<"mortgages">,
+	states: readonly ObligationState[]
+) {
+	const overdueCount = states.filter((s) => s === "overdue").length;
+	if (overdueCount === 0 || mortgage.status !== "delinquent") {
+		return;
+	}
+
+	const existingContext = (mortgage.machineContext ?? {
+		missedPayments: 0,
+		lastPaymentAt: 0,
+	}) as { missedPayments: number; lastPaymentAt: number };
+	await ctx.db.patch(mortgage._id, {
+		machineContext: {
+			...existingContext,
+			missedPayments: Math.max(existingContext.missedPayments, overdueCount),
+		},
+	});
 }
 
 export const seedObligation = adminMutation
@@ -269,6 +301,8 @@ export const seedObligation = adminMutation
 				createdObligations += 1;
 				obligationIds.push(obligationId);
 			}
+
+			await syncMortgageMissedPayments(ctx, mortgage, states);
 		}
 
 		return {

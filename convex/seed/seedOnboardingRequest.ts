@@ -135,6 +135,9 @@ export const seedOnboardingRequest = adminMutation
 				fixture.request.status === "pending_review"
 					? undefined
 					: createdAt + 60_000;
+			const reviewedBy = reviewTimestamp
+				? (fixture.request.reviewedBy ?? args.reviewerId)
+				: undefined;
 			const requestId = await ctx.db.insert("onboardingRequests", {
 				userId,
 				requestedRole: fixture.request.requestedRole,
@@ -143,7 +146,7 @@ export const seedOnboardingRequest = adminMutation
 				lastTransitionAt: reviewTimestamp ?? createdAt,
 				referralSource: fixture.request.referralSource,
 				targetOrganizationId: fixture.request.targetOrganizationId,
-				reviewedBy: fixture.request.reviewedBy ?? args.reviewerId,
+				reviewedBy,
 				reviewedAt: reviewTimestamp,
 				rejectionReason: fixture.request.rejectionReason,
 				createdAt,
