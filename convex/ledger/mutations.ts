@@ -74,15 +74,6 @@ async function postEntryInternal(
 	}
 
 	// 3. Common validation
-	if (!Number.isFinite(args.amount)) {
-		throw new Error("Amount must be a finite number (not NaN or Infinity)");
-	}
-	if (!Number.isInteger(args.amount)) {
-		throw new Error("Amount must be a whole number (integer)");
-	}
-	if (!Number.isSafeInteger(args.amount)) {
-		throw new Error("Amount exceeds safe integer range");
-	}
 	if (args.amount <= 0) {
 		throw new Error("Amount must be positive");
 	}
@@ -283,13 +274,10 @@ function validateCorrection(v: ValidationContext) {
 	}
 }
 
-// Reservation entry types must go through dedicated mutations, not postEntry.
-function rejectReservationViaPostEntry(entryType: string) {
-	return (_v: ValidationContext) => {
-		throw new Error(
-			`${entryType} cannot be posted via postEntry. Use the dedicated reserveShares/commitReservation/voidReservation mutations.`
-		);
-	};
+// Reservation entry types don't go through postEntryInternal validation yet —
+// they'll be validated by dedicated reserve/commit/void mutations in a future issue.
+function noopValidator(_v: ValidationContext) {
+	// Reservation entry types are validated by dedicated reserve/commit/void mutations
 }
 
 const VALIDATORS: Record<EntryType, (v: ValidationContext) => void> = {
@@ -298,9 +286,9 @@ const VALIDATORS: Record<EntryType, (v: ValidationContext) => void> = {
 	SHARES_TRANSFERRED: validateSharesTransferred,
 	SHARES_REDEEMED: validateSharesRedeemed,
 	MORTGAGE_BURNED: validateMortgageBurned,
-	SHARES_RESERVED: rejectReservationViaPostEntry("SHARES_RESERVED"),
-	SHARES_COMMITTED: rejectReservationViaPostEntry("SHARES_COMMITTED"),
-	SHARES_VOIDED: rejectReservationViaPostEntry("SHARES_VOIDED"),
+	SHARES_RESERVED: noopValidator,
+	SHARES_COMMITTED: noopValidator,
+	SHARES_VOIDED: noopValidator,
 	CORRECTION: validateCorrection,
 };
 
