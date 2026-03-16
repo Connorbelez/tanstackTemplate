@@ -123,12 +123,11 @@ export async function transitionEntity(
 	// 1. Load entity
 	// Internal cast: only onboardingRequests exists today.
 	// ENG-12 generalizes this with a table lookup from entityType.
-	if (entityType !== "onboardingRequests") {
+	if (entityType !== "onboardingRequest") {
 		throw new Error(
 			`Entity type ${entityType} is not yet supported by transitionEntity`
 		);
 	}
-
 	const entity = await ctx.db.get(entityId as Id<"onboardingRequests">);
 	if (!entity) {
 		throw new Error(`Entity ${entityType}/${entityId} not found`);
@@ -142,9 +141,14 @@ export async function transitionEntity(
 
 	// 3. Hydrate current state
 	const previousState = entity.status as string;
+	// machineContext is v.optional(v.any()) in schema — cast to satisfy resolveState.
+	// Today the onboardingRequest machine has an empty context; ENG-12 will generalize.
+	const hydratedContext = (entity.machineContext ?? {}) as Parameters<
+		typeof machine.resolveState
+	>[0]["context"];
 	const currentSnapshot = machine.resolveState({
 		value: previousState,
-		context: (entity.machineContext as Record<string, never>) ?? {},
+		context: hydratedContext,
 	});
 
 	// 4. Compute next state (pure — no side effects)
