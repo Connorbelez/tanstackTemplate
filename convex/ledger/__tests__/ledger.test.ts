@@ -40,6 +40,15 @@ const ADMIN_SOURCE = {
 	channel: "admin",
 };
 
+/** Initialize the sequence counter — must be called before any ledger mutation. */
+async function initCounter(t: ReturnType<typeof createTestHarness>) {
+	const auth = asLedgerUser(t);
+	await auth.mutation(
+		api.ledger.sequenceCounter.initializeSequenceCounter,
+		{},
+	);
+}
+
 async function mintAndIssue(
 	t: ReturnType<typeof createTestHarness>,
 	mortgageId: string,
@@ -69,6 +78,7 @@ async function mintAndIssue(
 describe("Ledger Full Lifecycle", () => {
 	it("T-041: mintMortgage → issueShares → transferShares → redeemShares → burnMortgage", async () => {
 		const t = createTestHarness();
+		await initCounter(t);
 		const auth = asLedgerUser(t);
 
 		// 1. Mint mortgage
@@ -193,6 +203,7 @@ describe("Ledger Full Lifecycle", () => {
 describe("Transfer Validation", () => {
 	it("T-042: transferShares creates buyer POSITION on first purchase", async () => {
 		const t = createTestHarness();
+		await initCounter(t);
 		const auth = asLedgerUser(t);
 		await mintAndIssue(t, "m1", "seller");
 
@@ -219,6 +230,7 @@ describe("Transfer Validation", () => {
 
 	it("T-043: transferShares rejects cross-mortgage transfer", async () => {
 		const t = createTestHarness();
+		await initCounter(t);
 		const auth = asLedgerUser(t);
 		await mintAndIssue(t, "m1", "lender-a");
 		await mintAndIssue(t, "m2", "lender-b");
@@ -239,6 +251,7 @@ describe("Transfer Validation", () => {
 
 	it("T-044: transferShares allows seller full exit (balance → 0)", async () => {
 		const t = createTestHarness();
+		await initCounter(t);
 		const auth = asLedgerUser(t);
 		await mintAndIssue(t, "m1", "seller");
 
@@ -264,6 +277,7 @@ describe("Transfer Validation", () => {
 
 	it("T-045: transferShares rejects seller remainder between 1-999", async () => {
 		const t = createTestHarness();
+		await initCounter(t);
 		const auth = asLedgerUser(t);
 		await mintAndIssue(t, "m1", "seller");
 
@@ -283,6 +297,7 @@ describe("Transfer Validation", () => {
 
 	it("T-046: transferShares rejects buyer position below 1,000", async () => {
 		const t = createTestHarness();
+		await initCounter(t);
 		const auth = asLedgerUser(t);
 		await mintAndIssue(t, "m1", "seller");
 
@@ -302,6 +317,7 @@ describe("Transfer Validation", () => {
 
 	it("T-047: transferShares rejects insufficient seller balance", async () => {
 		const t = createTestHarness();
+		await initCounter(t);
 		const auth = asLedgerUser(t);
 		await mintAndIssue(t, "m1", "seller", 5_000n);
 
@@ -320,6 +336,7 @@ describe("Transfer Validation", () => {
 
 	it("T-047b: rejected transfer leaves state unchanged", async () => {
 		const t = createTestHarness();
+		await initCounter(t);
 		const auth = asLedgerUser(t);
 		const { issueResult } = await mintAndIssue(t, "m1", "seller", 5_000n);
 
@@ -364,6 +381,7 @@ describe("Transfer Validation", () => {
 
 	it("T-048: transferShares reuses existing buyer POSITION on buy-back", async () => {
 		const t = createTestHarness();
+		await initCounter(t);
 		const auth = asLedgerUser(t);
 		await mintAndIssue(t, "m1", "seller");
 
@@ -415,6 +433,7 @@ describe("Transfer Validation", () => {
 describe("Issuance & Redemption", () => {
 	it("T-049: issueShares creates POSITION account on first purchase", async () => {
 		const t = createTestHarness();
+		await initCounter(t);
 		const auth = asLedgerUser(t);
 		await auth.mutation(api.ledger.mutations.mintMortgage, {
 			mortgageId: "m1",
@@ -445,6 +464,7 @@ describe("Issuance & Redemption", () => {
 
 	it("T-050: issueShares rejects when TREASURY balance insufficient", async () => {
 		const t = createTestHarness();
+		await initCounter(t);
 		const auth = asLedgerUser(t);
 		await mintAndIssue(t, "m1", "lender-a");
 
@@ -463,6 +483,7 @@ describe("Issuance & Redemption", () => {
 
 	it("T-051: issueShares rejects resulting position < 1,000", async () => {
 		const t = createTestHarness();
+		await initCounter(t);
 		const auth = asLedgerUser(t);
 		await auth.mutation(api.ledger.mutations.mintMortgage, {
 			mortgageId: "m1",
@@ -485,6 +506,7 @@ describe("Issuance & Redemption", () => {
 
 	it("T-052: redeemShares full exit (position → 0) allowed", async () => {
 		const t = createTestHarness();
+		await initCounter(t);
 		const auth = asLedgerUser(t);
 		await mintAndIssue(t, "m1", "lender-a", 5_000n);
 
@@ -506,6 +528,7 @@ describe("Issuance & Redemption", () => {
 
 	it("T-053: redeemShares rejects remainder between 1-999", async () => {
 		const t = createTestHarness();
+		await initCounter(t);
 		const auth = asLedgerUser(t);
 		await mintAndIssue(t, "m1", "lender-a", 5_000n);
 
@@ -523,6 +546,7 @@ describe("Issuance & Redemption", () => {
 
 	it("T-054: redeemShares throws if lender has no POSITION", async () => {
 		const t = createTestHarness();
+		await initCounter(t);
 		const auth = asLedgerUser(t);
 		await auth.mutation(api.ledger.mutations.mintMortgage, {
 			mortgageId: "m1",
@@ -549,6 +573,7 @@ describe("Issuance & Redemption", () => {
 describe("Tier 1 postEntry Strict Behavior", () => {
 	it("T-055: postEntry throws when debitAccountId doesn't exist", async () => {
 		const t = createTestHarness();
+		await initCounter(t);
 		const auth = asLedgerUser(t);
 		const { treasuryAccountId } = await auth.mutation(
 			api.ledger.mutations.mintMortgage,
@@ -577,6 +602,7 @@ describe("Tier 1 postEntry Strict Behavior", () => {
 
 	it("T-057: postEntry works with pre-resolved account IDs and returns correct journal entry", async () => {
 		const t = createTestHarness();
+		await initCounter(t);
 		const auth = asLedgerUser(t);
 		const { mintResult, issueResult } = await mintAndIssue(
 			t,
@@ -623,6 +649,7 @@ describe("Tier 1 postEntry Strict Behavior", () => {
 
 	it("T-056: postEntry throws when creditAccountId doesn't exist", async () => {
 		const t = createTestHarness();
+		await initCounter(t);
 		const auth = asLedgerUser(t);
 		const { treasuryAccountId } = await auth.mutation(
 			api.ledger.mutations.mintMortgage,
@@ -655,6 +682,7 @@ describe("Tier 1 postEntry Strict Behavior", () => {
 describe("Mint & Burn", () => {
 	it("T-058: mintMortgage rejects double-mint", async () => {
 		const t = createTestHarness();
+		await initCounter(t);
 		const auth = asLedgerUser(t);
 		await auth.mutation(api.ledger.mutations.mintMortgage, {
 			mortgageId: "m1",
@@ -675,6 +703,7 @@ describe("Mint & Burn", () => {
 
 	it("T-059: burnMortgage rejects when POSITION accounts still have balance", async () => {
 		const t = createTestHarness();
+		await initCounter(t);
 		const auth = asLedgerUser(t);
 		await mintAndIssue(t, "m1", "lender-a");
 
@@ -691,6 +720,7 @@ describe("Mint & Burn", () => {
 
 	it("T-060: burnMortgage rejects when TREASURY != 10,000", async () => {
 		const t = createTestHarness();
+		await initCounter(t);
 		const auth = asLedgerUser(t);
 		await mintAndIssue(t, "m1", "lender-a", 5_000n);
 
@@ -711,6 +741,7 @@ describe("Mint & Burn", () => {
 describe("CORRECTION", () => {
 	it("T-061: CORRECTION requires source.type == 'user' with actor", async () => {
 		const t = createTestHarness();
+		await initCounter(t);
 		const auth = asLedgerUser(t);
 		const { mintResult, issueResult } = await mintAndIssue(
 			t,
@@ -736,6 +767,7 @@ describe("CORRECTION", () => {
 
 	it("T-062: CORRECTION requires causedBy reference", async () => {
 		const t = createTestHarness();
+		await initCounter(t);
 		const auth = asLedgerUser(t);
 		const { mintResult, issueResult } = await mintAndIssue(
 			t,
@@ -760,6 +792,7 @@ describe("CORRECTION", () => {
 
 	it("T-063: CORRECTION requires reason string", async () => {
 		const t = createTestHarness();
+		await initCounter(t);
 		const auth = asLedgerUser(t);
 		const { mintResult, issueResult } = await mintAndIssue(
 			t,
@@ -784,6 +817,7 @@ describe("CORRECTION", () => {
 
 	it("T-064b: valid CORRECTION updates balances and preserves supply invariant", async () => {
 		const t = createTestHarness();
+		await initCounter(t);
 		const auth = asLedgerUser(t);
 		const { mintResult, issueResult } = await mintAndIssue(
 			t,
@@ -837,6 +871,7 @@ describe("CORRECTION", () => {
 
 	it("T-064: CORRECTION enforces balance checks", async () => {
 		const t = createTestHarness();
+		await initCounter(t);
 		const auth = asLedgerUser(t);
 		const { mintResult, issueResult } = await mintAndIssue(
 			t,
@@ -863,6 +898,7 @@ describe("CORRECTION", () => {
 
 	it("T-064c: CORRECTION rejects cross-mortgage unit movement", async () => {
 		const t = createTestHarness();
+		await initCounter(t);
 		const auth = asLedgerUser(t);
 		const m1 = await mintAndIssue(t, "m1", "lender-a");
 		const m2 = await mintAndIssue(t, "m2", "lender-b");
@@ -890,6 +926,7 @@ describe("CORRECTION", () => {
 describe("Idempotency & Sequencing", () => {
 	it("T-065: same idempotencyKey returns existing entry, no double-post", async () => {
 		const t = createTestHarness();
+		await initCounter(t);
 		const auth = asLedgerUser(t);
 		await auth.mutation(api.ledger.mutations.mintMortgage, {
 			mortgageId: "m1",
@@ -929,6 +966,7 @@ describe("Idempotency & Sequencing", () => {
 
 	it("T-066: sequence numbers are monotonic and gap-free", async () => {
 		const t = createTestHarness();
+		await initCounter(t);
 		const auth = asLedgerUser(t);
 		await auth.mutation(api.ledger.mutations.mintMortgage, {
 			mortgageId: "m1",
@@ -971,6 +1009,7 @@ describe("Idempotency & Sequencing", () => {
 describe("Lender Position Queries", () => {
 	it("T-022b: getLenderPositions returns positions across multiple mortgages", async () => {
 		const t = createTestHarness();
+		await initCounter(t);
 		const auth = asLedgerUser(t);
 		await mintAndIssue(t, "m1", "lender-a", 5_000n);
 		await mintAndIssue(t, "m2", "lender-a", 3_000n);
@@ -1004,6 +1043,7 @@ describe("Lender Position Queries", () => {
 
 	it("T-022b-zero: getLenderPositions excludes zero-balance positions", async () => {
 		const t = createTestHarness();
+		await initCounter(t);
 		const auth = asLedgerUser(t);
 		await mintAndIssue(t, "m1", "lender-a");
 
@@ -1033,6 +1073,7 @@ describe("Lender Position Queries", () => {
 describe("Point-in-Time & History", () => {
 	it("T-067: getPositionsAt shows pre-transfer state", async () => {
 		const t = createTestHarness();
+		await initCounter(t);
 		const auth = asLedgerUser(t);
 		await mintAndIssue(t, "m1", "lender-a");
 
@@ -1067,6 +1108,7 @@ describe("Point-in-Time & History", () => {
 
 	it("T-068: getBalanceAt reconstructs balance at various timestamps", async () => {
 		const t = createTestHarness();
+		await initCounter(t);
 		const auth = asLedgerUser(t);
 		const { treasuryAccountId } = await auth.mutation(
 			api.ledger.mutations.mintMortgage,
@@ -1127,6 +1169,7 @@ describe("Point-in-Time & History", () => {
 
 	it("T-069: getMortgageHistory returns entries in sequence order", async () => {
 		const t = createTestHarness();
+		await initCounter(t);
 		const auth = asLedgerUser(t);
 		await mintAndIssue(t, "m1", "lender-a");
 
@@ -1144,6 +1187,7 @@ describe("Point-in-Time & History", () => {
 
 	it("T-070: getAccountHistory returns entries touching an account", async () => {
 		const t = createTestHarness();
+		await initCounter(t);
 		const auth = asLedgerUser(t);
 		const { issueResult } = await mintAndIssue(t, "m1", "lender-a");
 
@@ -1167,6 +1211,7 @@ describe("Point-in-Time & History", () => {
 
 	it("T-069b: getMortgageHistory filters by from/to date range", async () => {
 		const t = createTestHarness();
+		await initCounter(t);
 		const auth = asLedgerUser(t);
 		await mintAndIssue(t, "m1", "lender-a");
 
@@ -1204,6 +1249,7 @@ describe("Point-in-Time & History", () => {
 
 	it("T-069c: getMortgageHistory respects limit", async () => {
 		const t = createTestHarness();
+		await initCounter(t);
 		const auth = asLedgerUser(t);
 		await mintAndIssue(t, "m1", "lender-a");
 
@@ -1230,6 +1276,7 @@ describe("Point-in-Time & History", () => {
 
 	it("T-070b: getAccountHistory filters by from/to date range", async () => {
 		const t = createTestHarness();
+		await initCounter(t);
 		const auth = asLedgerUser(t);
 		const { issueResult } = await mintAndIssue(t, "m1", "lender-a");
 
@@ -1262,6 +1309,7 @@ describe("Point-in-Time & History", () => {
 describe("Validation & Cursors", () => {
 	it("T-071: validateSupplyInvariant returns valid=true for healthy mortgage", async () => {
 		const t = createTestHarness();
+		await initCounter(t);
 		const auth = asLedgerUser(t);
 		await mintAndIssue(t, "m1", "lender-a", 5_000n);
 
@@ -1276,6 +1324,7 @@ describe("Validation & Cursors", () => {
 
 	it("T-072: consumer cursor lifecycle: create, advance, reset", async () => {
 		const t = createTestHarness();
+		await initCounter(t);
 		const auth = asLedgerUser(t);
 
 		// Get cursor — should be null initially
@@ -1312,6 +1361,7 @@ describe("Validation & Cursors", () => {
 describe("Common Rejections", () => {
 	it("T-073: amount <= 0 is rejected", async () => {
 		const t = createTestHarness();
+		await initCounter(t);
 		const auth = asLedgerUser(t);
 		const { mintResult, issueResult } = await mintAndIssue(
 			t,
@@ -1337,6 +1387,7 @@ describe("Common Rejections", () => {
 
 	it("T-074: self-transfer (debit == credit) is rejected", async () => {
 		const t = createTestHarness();
+		await initCounter(t);
 		const auth = asLedgerUser(t);
 		const { issueResult } = await mintAndIssue(t, "m1", "lender-a");
 
@@ -1358,6 +1409,7 @@ describe("Common Rejections", () => {
 
 	it("T-075: SHARES_ISSUED rejects wrong account types (POSITION as credit instead of TREASURY)", async () => {
 		const t = createTestHarness();
+		await initCounter(t);
 		const auth = asLedgerUser(t);
 		const { mintResult, issueResult } = await mintAndIssue(
 			t,
@@ -1394,6 +1446,7 @@ describe("Common Rejections", () => {
 
 	it("T-075b: MORTGAGE_MINTED rejects wrong account types", async () => {
 		const t = createTestHarness();
+		await initCounter(t);
 		const auth = asLedgerUser(t);
 		const { mintResult, issueResult } = await mintAndIssue(
 			t,
@@ -1419,6 +1472,7 @@ describe("Common Rejections", () => {
 
 	it("T-075c: SHARES_REDEEMED rejects wrong account types", async () => {
 		const t = createTestHarness();
+		await initCounter(t);
 		const auth = asLedgerUser(t);
 		const { mintResult, issueResult } = await mintAndIssue(
 			t,

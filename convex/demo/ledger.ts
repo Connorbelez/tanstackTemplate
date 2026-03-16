@@ -3,11 +3,8 @@ import type { MutationCtx } from "../_generated/server";
 import { authedMutation, authedQuery } from "../fluent";
 import { getAccountLenderId } from "../ledger/accountOwnership";
 import { UNITS_PER_MORTGAGE } from "../ledger/constants";
-import {
-	computeBalance,
-	getOrCreateWorldAccount,
-	nextSequenceNumber,
-} from "../ledger/internal";
+import { computeBalance, getOrCreateWorldAccount } from "../ledger/internal";
+import { getNextSequenceNumber } from "../ledger/sequenceCounter";
 
 // ── Constants ────────────────────────────────────────────────────
 
@@ -67,7 +64,7 @@ async function postSeedEntry(
 		idempotencyKey: string;
 	}
 ) {
-	const seqNum = await nextSequenceNumber(ctx);
+	const seqNum = await getNextSequenceNumber(ctx);
 	const entryId = await ctx.db.insert("ledger_journal_entries", {
 		sequenceNumber: seqNum,
 		entryType: args.entryType,

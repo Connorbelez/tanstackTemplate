@@ -74,6 +74,7 @@ import type * as ledger_internal from "../ledger/internal.js";
 import type * as ledger_migrations from "../ledger/migrations.js";
 import type * as ledger_mutations from "../ledger/mutations.js";
 import type * as ledger_queries from "../ledger/queries.js";
+import type * as ledger_sequenceCounter from "../ledger/sequenceCounter.js";
 import type * as ledger_validation from "../ledger/validation.js";
 import type * as ledger_validators from "../ledger/validators.js";
 import type * as numbers from "../numbers.js";
@@ -161,6 +162,7 @@ declare const fullApi: ApiFromModules<{
   "ledger/migrations": typeof ledger_migrations;
   "ledger/mutations": typeof ledger_mutations;
   "ledger/queries": typeof ledger_queries;
+  "ledger/sequenceCounter": typeof ledger_sequenceCounter;
   "ledger/validation": typeof ledger_validation;
   "ledger/validators": typeof ledger_validators;
   numbers: typeof numbers;
