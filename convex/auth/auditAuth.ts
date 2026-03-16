@@ -7,15 +7,17 @@ import { internal } from "../_generated/api";
 import { auditLog } from "../auditLog";
 import type { Viewer } from "../fluent";
 
-const recordAuthFailureReference = (
-	internal as unknown as {
-		auth: {
-			internal: {
-				recordAuthFailure: FunctionReference<"mutation", "internal">;
+const recordAuthFailureReference =
+	// @ts-expect-error — deep generic instantiation on `internal` exceeds TS depth limit
+	(
+		internal as unknown as {
+			auth: {
+				internal: {
+					recordAuthFailure: FunctionReference<"mutation", "internal">;
+				};
 			};
-		};
-	}
-).auth.internal.recordAuthFailure;
+		}
+	).auth.internal.recordAuthFailure;
 
 export function isMutationContext(
 	ctx: unknown

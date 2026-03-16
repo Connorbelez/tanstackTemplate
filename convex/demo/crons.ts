@@ -23,7 +23,6 @@ export const registerJob = authedMutation
 		return await crons.register(
 			ctx,
 			{ kind: "interval", ms: args.intervalMs },
-			// @ts-expect-error — fluent-convex deep generics exceed TS instantiation depth
 			internal.demo.crons.cronTick,
 			{ jobName: args.name },
 			args.name

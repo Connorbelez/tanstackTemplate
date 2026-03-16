@@ -6,7 +6,6 @@ import type { DataModel } from "./_generated/dataModel";
 import { internalAction, internalMutation } from "./_generated/server";
 import { convex } from "./fluent";
 
-// @ts-expect-error — fluent-convex deep generics exceed TS instantiation depth
 const authFunctions: AuthFunctions = internal.auth;
 
 export const authKit = new AuthKit<DataModel>(components.workOSAuthKit, {

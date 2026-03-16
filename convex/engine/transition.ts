@@ -13,7 +13,7 @@ interface ScheduledEffectDescriptor {
 }
 
 function normalizeActionDescriptors(
-	actions: unknown,
+	actions: unknown
 ): ScheduledEffectDescriptor[] {
 	if (!actions) {
 		return [];
@@ -49,7 +49,7 @@ function normalizeActionDescriptors(
 function extractScheduledEffects(
 	machine: NonNullable<(typeof machineRegistry)[keyof typeof machineRegistry]>,
 	previousState: string,
-	eventType: string,
+	eventType: string
 ): ScheduledEffectDescriptor[] {
 	const stateNode =
 		machine.config.states?.[
@@ -81,7 +81,7 @@ async function scheduleEffects(
 	ctx: MutationCtx,
 	entityId: string,
 	journalEntryId: string,
-	scheduledEffects: ScheduledEffectDescriptor[],
+	scheduledEffects: ScheduledEffectDescriptor[]
 ): Promise<string[]> {
 	const effectNames: string[] = [];
 	for (const actionDescriptor of scheduledEffects) {
@@ -115,14 +115,14 @@ export async function transitionEntity(
 	entityId: string,
 	eventType: string,
 	payload?: Record<string, unknown>,
-	source?: CommandSource,
+	source?: CommandSource
 ): Promise<TransitionResult> {
 	// 1. Load entity
 	// Internal cast: only onboardingRequests exists today.
 	// ENG-12 generalizes this with a table lookup from entityType.
 	if (entityType !== "onboardingRequest") {
 		throw new Error(
-			`Entity type ${entityType} is not yet supported by transitionEntity`,
+			`Entity type ${entityType} is not yet supported by transitionEntity`
 		);
 	}
 	const entity = await ctx.db.get(entityId as Id<"onboardingRequests">);
@@ -164,7 +164,7 @@ export async function transitionEntity(
 	const scheduledEffects = extractScheduledEffects(
 		machine,
 		previousState,
-		eventType,
+		eventType
 	);
 	const hasEffects = scheduledEffects.length > 0;
 
@@ -238,7 +238,7 @@ export async function transitionEntity(
 			ctx,
 			entityId,
 			journalEntryId,
-			scheduledEffects,
+			scheduledEffects
 		);
 		await auditLog.log(ctx, {
 			action: `transition.${entityType}.${eventType.toLowerCase()}`,
@@ -316,7 +316,7 @@ export async function transitionEntity(
 		ctx,
 		entityId,
 		journalEntryId,
-		scheduledEffects,
+		scheduledEffects
 	);
 
 	// 9. Return

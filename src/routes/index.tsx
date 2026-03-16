@@ -77,7 +77,6 @@ function Content() {
 	const {
 		data: { viewer, numbers },
 	} = useSuspenseQuery(
-		// @ts-expect-error — fluent-convex deep generics exceed TS instantiation depth
 		convexQuery(api.numbers.listNumbers, {
 			count: 10,
 		})
