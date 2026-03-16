@@ -6,6 +6,7 @@ import schema from "../../schema";
 import {
 	getAvailableBalance,
 	getOrCreatePositionAccount,
+	getPositionAccount,
 	getPostedBalance,
 	getTreasuryAccount,
 	getWorldAccount,
@@ -213,6 +214,43 @@ describe("getOrCreatePositionAccount", () => {
 				"lender-2",
 			);
 			expect(second._id).toBe(firstId);
+		});
+	});
+});
+
+describe("getPositionAccount", () => {
+	it("throws when no POSITION exists for the given mortgageId/lenderId pair", async () => {
+		const t = createTestHarness();
+		await t.run(async (ctx) => {
+			await expect(
+				getPositionAccount(ctx, "m-nonexistent", "lender-nonexistent"),
+			).rejects.toThrow(
+				"No POSITION account for lender lender-nonexistent on mortgage m-nonexistent",
+			);
+		});
+	});
+
+	it("returns the correct account when it exists", async () => {
+		const t = createTestHarness();
+		let createdId: string | undefined;
+		await t.run(async (ctx) => {
+			const created = await getOrCreatePositionAccount(
+				ctx,
+				"m-pos-read-test",
+				"lender-read",
+			);
+			createdId = created._id;
+		});
+		await t.run(async (ctx) => {
+			const found = await getPositionAccount(
+				ctx,
+				"m-pos-read-test",
+				"lender-read",
+			);
+			expect(found._id).toBe(createdId);
+			expect(found.type).toBe("POSITION");
+			expect(found.mortgageId).toBe("m-pos-read-test");
+			expect(found.lenderId).toBe("lender-read");
 		});
 	});
 });

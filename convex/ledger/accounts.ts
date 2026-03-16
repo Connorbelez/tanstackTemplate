@@ -88,20 +88,26 @@ export async function getTreasuryAccount(
 
 // ── POSITION Account ──────────────────────────────────────────
 
-/** Find existing POSITION account. Throws if not found. */
-export async function getPositionAccount(
+/**
+ * Shared lookup: indexed `by_mortgage_and_lender` first, then fallback
+ * scan via `by_mortgage` for legacy rows that used `investorId`.
+ */
+async function findExistingPosition(
 	ctx: QueryCtx,
 	mortgageId: string,
 	lenderId: string
-) {
-	const indexedPosition = await ctx.db
+): Promise<Doc<"ledger_accounts"> | null> {
+	const indexed = await ctx.db
 		.query("ledger_accounts")
 		.withIndex("by_mortgage_and_lender", (q) =>
 			q.eq("mortgageId", mortgageId).eq("lenderId", lenderId)
 		)
 		.first();
-	const position =
-		(indexedPosition?.type === "POSITION" ? indexedPosition : null) ??
+	if (indexed?.type === "POSITION") {
+		return indexed;
+	}
+
+	return (
 		(
 			await ctx.db
 				.query("ledger_accounts")
@@ -110,8 +116,18 @@ export async function getPositionAccount(
 		).find(
 			(account) =>
 				account.type === "POSITION" && getAccountLenderId(account) === lenderId
-		);
-	if (!position || position.type !== "POSITION") {
+		) ?? null
+	);
+}
+
+/** Find existing POSITION account. Throws if not found. */
+export async function getPositionAccount(
+	ctx: QueryCtx,
+	mortgageId: string,
+	lenderId: string
+) {
+	const position = await findExistingPosition(ctx, mortgageId, lenderId);
+	if (!position) {
 		throw new Error(
 			`No POSITION account for lender ${lenderId} on mortgage ${mortgageId}`
 		);
@@ -125,23 +141,7 @@ export async function getOrCreatePositionAccount(
 	mortgageId: string,
 	lenderId: string
 ) {
-	const indexedExisting = await ctx.db
-		.query("ledger_accounts")
-		.withIndex("by_mortgage_and_lender", (q) =>
-			q.eq("mortgageId", mortgageId).eq("lenderId", lenderId)
-		)
-		.first();
-	const existing =
-		(indexedExisting?.type === "POSITION" ? indexedExisting : null) ??
-		(
-			await ctx.db
-				.query("ledger_accounts")
-				.withIndex("by_mortgage", (q) => q.eq("mortgageId", mortgageId))
-				.collect()
-		).find(
-			(account) =>
-				account.type === "POSITION" && getAccountLenderId(account) === lenderId
-		);
+	const existing = await findExistingPosition(ctx, mortgageId, lenderId);
 	if (existing) {
 		return existing;
 	}

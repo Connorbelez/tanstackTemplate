@@ -6,6 +6,7 @@ import {
 	getPositionAccount,
 	getPostedBalance,
 	getTreasuryAccount,
+	getWorldAccount,
 	initializeWorldAccount,
 } from "./accounts";
 import { MIN_POSITION_UNITS, UNITS_PER_MORTGAGE } from "./constants";
@@ -438,7 +439,7 @@ export const burnMortgage = ledgerMutation
 			}
 		}
 
-		const worldAccount = await initializeWorldAccount(ctx);
+		const worldAccount = await getWorldAccount(ctx);
 
 		// MORTGAGE_BURNED: TREASURY gives → WORLD receives
 		return postEntryInternal(ctx, {
