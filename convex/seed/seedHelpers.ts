@@ -225,9 +225,7 @@ export async function findPropertyByAddress(
 ): Promise<Doc<"properties"> | null> {
 	return ctx.db
 		.query("properties")
-		.withIndex("by_postal_code", (q) =>
-			q.eq("postalCode", address.postalCode)
-		)
+		.withIndex("by_postal_code", (q) => q.eq("postalCode", address.postalCode))
 		.filter((q) =>
 			q.and(
 				q.eq(q.field("streetAddress"), address.streetAddress),
