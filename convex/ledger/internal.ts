@@ -28,6 +28,8 @@ export async function getOrCreateWorldAccount(ctx: MutationCtx) {
 		type: "WORLD",
 		cumulativeDebits: 0n,
 		cumulativeCredits: 0n,
+		pendingDebits: 0n,
+		pendingCredits: 0n,
 		createdAt: Date.now(),
 	});
 	const account = await ctx.db.get(id);
@@ -117,6 +119,8 @@ export async function getOrCreatePositionAccount(
 		lenderId,
 		cumulativeDebits: 0n,
 		cumulativeCredits: 0n,
+		pendingDebits: 0n,
+		pendingCredits: 0n,
 		createdAt: Date.now(),
 	});
 	const account = await ctx.db.get(id);

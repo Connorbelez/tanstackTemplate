@@ -53,7 +53,7 @@ async function mintAndIssue(
 	t: ReturnType<typeof createTestHarness>,
 	mortgageId: string,
 	lenderId: string,
-	amount = 10_000n
+	amount = 10_000
 ) {
 	const auth = asLedgerUser(t);
 	const mintResult = await auth.mutation(api.ledger.mutations.mintMortgage, {
@@ -104,7 +104,7 @@ describe("Ledger Full Lifecycle", () => {
 			{
 				mortgageId: "m1",
 				lenderId: "lender-a",
-				amount: 10_000n,
+				amount: 10_000,
 				effectiveDate: "2026-01-01",
 				idempotencyKey: "issue-a",
 				source: SYS_SOURCE,
@@ -129,7 +129,7 @@ describe("Ledger Full Lifecycle", () => {
 				mortgageId: "m1",
 				sellerLenderId: "lender-a",
 				buyerLenderId: "lender-b",
-				amount: 5_000n,
+				amount: 5_000,
 				effectiveDate: "2026-01-02",
 				idempotencyKey: "transfer-a-b",
 				source: SYS_SOURCE,
@@ -154,7 +154,7 @@ describe("Ledger Full Lifecycle", () => {
 		await auth.mutation(api.ledger.mutations.redeemShares, {
 			mortgageId: "m1",
 			lenderId: "lender-b",
-			amount: 5_000n,
+			amount: 5_000,
 			effectiveDate: "2026-01-03",
 			idempotencyKey: "redeem-b",
 			source: SYS_SOURCE,
@@ -168,7 +168,7 @@ describe("Ledger Full Lifecycle", () => {
 		await auth.mutation(api.ledger.mutations.redeemShares, {
 			mortgageId: "m1",
 			lenderId: "lender-a",
-			amount: 5_000n,
+			amount: 5_000,
 			effectiveDate: "2026-01-03",
 			idempotencyKey: "redeem-a",
 			source: SYS_SOURCE,
@@ -213,7 +213,7 @@ describe("Transfer Validation", () => {
 				mortgageId: "m1",
 				sellerLenderId: "seller",
 				buyerLenderId: "new-buyer",
-				amount: 5_000n,
+				amount: 5_000,
 				effectiveDate: "2026-01-02",
 				idempotencyKey: "transfer-1",
 				source: SYS_SOURCE,
@@ -241,7 +241,7 @@ describe("Transfer Validation", () => {
 				mortgageId: "m2",
 				sellerLenderId: "lender-a",
 				buyerLenderId: "lender-c",
-				amount: 1_000n,
+				amount: 1_000,
 				effectiveDate: "2026-01-02",
 				idempotencyKey: "cross-transfer",
 				source: SYS_SOURCE,
@@ -260,7 +260,7 @@ describe("Transfer Validation", () => {
 			mortgageId: "m1",
 			sellerLenderId: "seller",
 			buyerLenderId: "buyer",
-			amount: 10_000n,
+			amount: 10_000,
 			effectiveDate: "2026-01-02",
 			idempotencyKey: "full-exit",
 			source: SYS_SOURCE,
@@ -287,7 +287,7 @@ describe("Transfer Validation", () => {
 				mortgageId: "m1",
 				sellerLenderId: "seller",
 				buyerLenderId: "buyer",
-				amount: 9_500n,
+				amount: 9_500,
 				effectiveDate: "2026-01-02",
 				idempotencyKey: "bad-remainder",
 				source: SYS_SOURCE,
@@ -307,7 +307,7 @@ describe("Transfer Validation", () => {
 				mortgageId: "m1",
 				sellerLenderId: "seller",
 				buyerLenderId: "buyer",
-				amount: 500n,
+				amount: 500,
 				effectiveDate: "2026-01-02",
 				idempotencyKey: "tiny-buy",
 				source: SYS_SOURCE,
@@ -319,14 +319,14 @@ describe("Transfer Validation", () => {
 		const t = createTestHarness();
 		await initCounter(t);
 		const auth = asLedgerUser(t);
-		await mintAndIssue(t, "m1", "seller", 5_000n);
+		await mintAndIssue(t, "m1", "seller", 5_000);
 
 		await expect(
 			auth.mutation(api.ledger.mutations.transferShares, {
 				mortgageId: "m1",
 				sellerLenderId: "seller",
 				buyerLenderId: "buyer",
-				amount: 6_000n,
+				amount: 6_000,
 				effectiveDate: "2026-01-02",
 				idempotencyKey: "oversell",
 				source: SYS_SOURCE,
@@ -338,7 +338,7 @@ describe("Transfer Validation", () => {
 		const t = createTestHarness();
 		await initCounter(t);
 		const auth = asLedgerUser(t);
-		const { issueResult } = await mintAndIssue(t, "m1", "seller", 5_000n);
+		const { issueResult } = await mintAndIssue(t, "m1", "seller", 5_000);
 
 		// Record state before rejection
 		const balanceBefore = await auth.query(api.ledger.queries.getBalance, {
@@ -357,7 +357,7 @@ describe("Transfer Validation", () => {
 				mortgageId: "m1",
 				sellerLenderId: "seller",
 				buyerLenderId: "buyer",
-				amount: 6_000n,
+				amount: 6_000,
 				effectiveDate: "2026-01-02",
 				idempotencyKey: "oversell-rollback",
 				source: SYS_SOURCE,
@@ -392,7 +392,7 @@ describe("Transfer Validation", () => {
 				mortgageId: "m1",
 				sellerLenderId: "seller",
 				buyerLenderId: "buyer",
-				amount: 5_000n,
+				amount: 5_000,
 				effectiveDate: "2026-01-02",
 				idempotencyKey: "t1",
 				source: SYS_SOURCE,
@@ -404,7 +404,7 @@ describe("Transfer Validation", () => {
 			mortgageId: "m1",
 			sellerLenderId: "buyer",
 			buyerLenderId: "seller",
-			amount: 5_000n,
+			amount: 5_000,
 			effectiveDate: "2026-01-03",
 			idempotencyKey: "t2",
 			source: SYS_SOURCE,
@@ -417,7 +417,7 @@ describe("Transfer Validation", () => {
 				mortgageId: "m1",
 				sellerLenderId: "seller",
 				buyerLenderId: "buyer",
-				amount: 3_000n,
+				amount: 3_000,
 				effectiveDate: "2026-01-04",
 				idempotencyKey: "t3",
 				source: SYS_SOURCE,
@@ -447,7 +447,7 @@ describe("Issuance & Redemption", () => {
 			{
 				mortgageId: "m1",
 				lenderId: "lender-a",
-				amount: 5_000n,
+				amount: 5_000,
 				effectiveDate: "2026-01-01",
 				idempotencyKey: "issue-a",
 				source: SYS_SOURCE,
@@ -473,7 +473,7 @@ describe("Issuance & Redemption", () => {
 			auth.mutation(api.ledger.mutations.issueShares, {
 				mortgageId: "m1",
 				lenderId: "lender-b",
-				amount: 1_000n,
+				amount: 1_000,
 				effectiveDate: "2026-01-02",
 				idempotencyKey: "over-issue",
 				source: SYS_SOURCE,
@@ -496,7 +496,7 @@ describe("Issuance & Redemption", () => {
 			auth.mutation(api.ledger.mutations.issueShares, {
 				mortgageId: "m1",
 				lenderId: "lender-a",
-				amount: 500n,
+				amount: 500,
 				effectiveDate: "2026-01-01",
 				idempotencyKey: "tiny-issue",
 				source: SYS_SOURCE,
@@ -508,12 +508,12 @@ describe("Issuance & Redemption", () => {
 		const t = createTestHarness();
 		await initCounter(t);
 		const auth = asLedgerUser(t);
-		await mintAndIssue(t, "m1", "lender-a", 5_000n);
+		await mintAndIssue(t, "m1", "lender-a", 5_000);
 
 		await auth.mutation(api.ledger.mutations.redeemShares, {
 			mortgageId: "m1",
 			lenderId: "lender-a",
-			amount: 5_000n,
+			amount: 5_000,
 			effectiveDate: "2026-01-02",
 			idempotencyKey: "full-redeem",
 			source: SYS_SOURCE,
@@ -530,13 +530,13 @@ describe("Issuance & Redemption", () => {
 		const t = createTestHarness();
 		await initCounter(t);
 		const auth = asLedgerUser(t);
-		await mintAndIssue(t, "m1", "lender-a", 5_000n);
+		await mintAndIssue(t, "m1", "lender-a", 5_000);
 
 		await expect(
 			auth.mutation(api.ledger.mutations.redeemShares, {
 				mortgageId: "m1",
 				lenderId: "lender-a",
-				amount: 4_500n,
+				amount: 4_500,
 				effectiveDate: "2026-01-02",
 				idempotencyKey: "bad-redeem",
 				source: SYS_SOURCE,
@@ -559,7 +559,7 @@ describe("Issuance & Redemption", () => {
 			auth.mutation(api.ledger.mutations.redeemShares, {
 				mortgageId: "m1",
 				lenderId: "ghost",
-				amount: 1_000n,
+				amount: 1_000,
 				effectiveDate: "2026-01-02",
 				idempotencyKey: "ghost-redeem",
 				source: SYS_SOURCE,
@@ -592,7 +592,7 @@ describe("Tier 1 postEntry Strict Behavior", () => {
 				debitAccountId:
 					"kh7ab0000000000000000000000000000" as typeof treasuryAccountId,
 				creditAccountId: treasuryAccountId,
-				amount: 1_000n,
+				amount: 1_000,
 				effectiveDate: "2026-01-01",
 				idempotencyKey: "bad-debit",
 				source: SYS_SOURCE,
@@ -616,7 +616,7 @@ describe("Tier 1 postEntry Strict Behavior", () => {
 			mortgageId: "m1",
 			debitAccountId: mintResult.treasuryAccountId,
 			creditAccountId: issueResult.positionAccountId,
-			amount: 1_000n,
+			amount: 1_000,
 			effectiveDate: "2026-02-15",
 			idempotencyKey: "direct-redeem-1",
 			source: SYS_SOURCE,
@@ -624,7 +624,7 @@ describe("Tier 1 postEntry Strict Behavior", () => {
 
 		// Verify journal entry fields
 		expect(entry.entryType).toBe("SHARES_REDEEMED");
-		expect(entry.amount).toBe(1_000n);
+		expect(entry.amount).toBe(1_000);
 		expect(entry.debitAccountId).toBe(mintResult.treasuryAccountId);
 		expect(entry.creditAccountId).toBe(issueResult.positionAccountId);
 		expect(entry.mortgageId).toBe("m1");
@@ -668,7 +668,7 @@ describe("Tier 1 postEntry Strict Behavior", () => {
 				debitAccountId: treasuryAccountId,
 				creditAccountId:
 					"kh7ab0000000000000000000000000000" as typeof treasuryAccountId,
-				amount: 1_000n,
+				amount: 1_000,
 				effectiveDate: "2026-01-01",
 				idempotencyKey: "bad-credit",
 				source: SYS_SOURCE,
@@ -722,7 +722,7 @@ describe("Mint & Burn", () => {
 		const t = createTestHarness();
 		await initCounter(t);
 		const auth = asLedgerUser(t);
-		await mintAndIssue(t, "m1", "lender-a", 5_000n);
+		await mintAndIssue(t, "m1", "lender-a", 5_000);
 
 		await expect(
 			auth.mutation(api.ledger.mutations.burnMortgage, {
@@ -755,7 +755,7 @@ describe("CORRECTION", () => {
 				mortgageId: "m1",
 				debitAccountId: issueResult.positionAccountId,
 				creditAccountId: mintResult.treasuryAccountId,
-				amount: 1_000n,
+				amount: 1_000,
 				effectiveDate: "2026-01-02",
 				idempotencyKey: "correction-1",
 				source: { type: "system" },
@@ -781,7 +781,7 @@ describe("CORRECTION", () => {
 				mortgageId: "m1",
 				debitAccountId: issueResult.positionAccountId,
 				creditAccountId: mintResult.treasuryAccountId,
-				amount: 1_000n,
+				amount: 1_000,
 				effectiveDate: "2026-01-02",
 				idempotencyKey: "correction-2",
 				source: ADMIN_SOURCE,
@@ -806,7 +806,7 @@ describe("CORRECTION", () => {
 				mortgageId: "m1",
 				debitAccountId: issueResult.positionAccountId,
 				creditAccountId: mintResult.treasuryAccountId,
-				amount: 1_000n,
+				amount: 1_000,
 				effectiveDate: "2026-01-02",
 				idempotencyKey: "correction-3",
 				source: ADMIN_SOURCE,
@@ -833,7 +833,7 @@ describe("CORRECTION", () => {
 				mortgageId: "m1",
 				debitAccountId: mintResult.treasuryAccountId,
 				creditAccountId: issueResult.positionAccountId,
-				amount: 1_000n,
+				amount: 1_000,
 				effectiveDate: "2026-01-02",
 				idempotencyKey: "correction-happy",
 				source: ADMIN_SOURCE,
@@ -844,7 +844,7 @@ describe("CORRECTION", () => {
 
 		// Verify the correction entry was written
 		expect(correctionEntry.entryType).toBe("CORRECTION");
-		expect(correctionEntry.amount).toBe(1_000n);
+		expect(correctionEntry.amount).toBe(1_000);
 		expect(correctionEntry.reason).toBe("Over-issuance correction");
 		expect(correctionEntry.causedBy).toBe(issueResult.journalEntry._id);
 
@@ -886,7 +886,7 @@ describe("CORRECTION", () => {
 				mortgageId: "m1",
 				debitAccountId: mintResult.treasuryAccountId,
 				creditAccountId: issueResult.positionAccountId,
-				amount: 11_000n,
+				amount: 11_000,
 				effectiveDate: "2026-01-02",
 				idempotencyKey: "correction-4",
 				source: ADMIN_SOURCE,
@@ -910,7 +910,7 @@ describe("CORRECTION", () => {
 				mortgageId: "m1",
 				debitAccountId: m2.mintResult.treasuryAccountId,
 				creditAccountId: m1.issueResult.positionAccountId,
-				amount: 1_000n,
+				amount: 1_000,
 				effectiveDate: "2026-01-02",
 				idempotencyKey: "correction-cross",
 				source: ADMIN_SOURCE,
@@ -938,7 +938,7 @@ describe("Idempotency & Sequencing", () => {
 		const first = await auth.mutation(api.ledger.mutations.issueShares, {
 			mortgageId: "m1",
 			lenderId: "lender-a",
-			amount: 5_000n,
+			amount: 5_000,
 			effectiveDate: "2026-01-01",
 			idempotencyKey: "issue-idem",
 			source: SYS_SOURCE,
@@ -947,7 +947,7 @@ describe("Idempotency & Sequencing", () => {
 		const second = await auth.mutation(api.ledger.mutations.issueShares, {
 			mortgageId: "m1",
 			lenderId: "lender-a",
-			amount: 5_000n,
+			amount: 5_000,
 			effectiveDate: "2026-01-01",
 			idempotencyKey: "issue-idem",
 			source: SYS_SOURCE,
@@ -995,7 +995,7 @@ describe("Idempotency & Sequencing", () => {
 		await auth.mutation(api.ledger.mutations.issueShares, {
 			mortgageId: "m1",
 			lenderId: "lender-a",
-			amount: 5_000n,
+			amount: 5_000,
 			effectiveDate: "2026-01-01",
 			idempotencyKey: "issue-1",
 			source: SYS_SOURCE,
@@ -1004,7 +1004,7 @@ describe("Idempotency & Sequencing", () => {
 		await auth.mutation(api.ledger.mutations.issueShares, {
 			mortgageId: "m1",
 			lenderId: "lender-b",
-			amount: 5_000n,
+			amount: 5_000,
 			effectiveDate: "2026-01-01",
 			idempotencyKey: "issue-2",
 			source: SYS_SOURCE,
@@ -1028,14 +1028,14 @@ describe("Lender Position Queries", () => {
 		const t = createTestHarness();
 		await initCounter(t);
 		const auth = asLedgerUser(t);
-		await mintAndIssue(t, "m1", "lender-a", 5_000n);
-		await mintAndIssue(t, "m2", "lender-a", 3_000n);
+		await mintAndIssue(t, "m1", "lender-a", 5_000);
+		await mintAndIssue(t, "m2", "lender-a", 3_000);
 
 		// Also issue to lender-b on m1 so lender-a doesn't hold everything
 		await auth.mutation(api.ledger.mutations.issueShares, {
 			mortgageId: "m1",
 			lenderId: "lender-b",
-			amount: 5_000n,
+			amount: 5_000,
 			effectiveDate: "2026-01-01",
 			idempotencyKey: "issue-m1-b",
 			source: SYS_SOURCE,
@@ -1069,7 +1069,7 @@ describe("Lender Position Queries", () => {
 			mortgageId: "m1",
 			sellerLenderId: "lender-a",
 			buyerLenderId: "lender-b",
-			amount: 10_000n,
+			amount: 10_000,
 			effectiveDate: "2026-01-02",
 			idempotencyKey: "transfer-all",
 			source: SYS_SOURCE,
@@ -1104,7 +1104,7 @@ describe("Point-in-Time & History", () => {
 			mortgageId: "m1",
 			sellerLenderId: "lender-a",
 			buyerLenderId: "lender-b",
-			amount: 5_000n,
+			amount: 5_000,
 			effectiveDate: "2026-01-02",
 			idempotencyKey: "transfer-1",
 			source: SYS_SOURCE,
@@ -1145,7 +1145,7 @@ describe("Point-in-Time & History", () => {
 			{
 				mortgageId: "m1",
 				lenderId: "lender-a",
-				amount: 6_000n,
+				amount: 6_000,
 				effectiveDate: "2026-01-01",
 				idempotencyKey: "issue-a",
 				source: SYS_SOURCE,
@@ -1212,7 +1212,7 @@ describe("Point-in-Time & History", () => {
 			mortgageId: "m1",
 			sellerLenderId: "lender-a",
 			buyerLenderId: "lender-b",
-			amount: 5_000n,
+			amount: 5_000,
 			effectiveDate: "2026-01-02",
 			idempotencyKey: "transfer-1",
 			source: SYS_SOURCE,
@@ -1239,7 +1239,7 @@ describe("Point-in-Time & History", () => {
 			mortgageId: "m1",
 			sellerLenderId: "lender-a",
 			buyerLenderId: "lender-b",
-			amount: 5_000n,
+			amount: 5_000,
 			effectiveDate: "2026-01-02",
 			idempotencyKey: "transfer-1",
 			source: SYS_SOURCE,
@@ -1274,7 +1274,7 @@ describe("Point-in-Time & History", () => {
 			mortgageId: "m1",
 			sellerLenderId: "lender-a",
 			buyerLenderId: "lender-b",
-			amount: 5_000n,
+			amount: 5_000,
 			effectiveDate: "2026-01-02",
 			idempotencyKey: "transfer-1",
 			source: SYS_SOURCE,
@@ -1304,7 +1304,7 @@ describe("Point-in-Time & History", () => {
 			mortgageId: "m1",
 			sellerLenderId: "lender-a",
 			buyerLenderId: "lender-b",
-			amount: 5_000n,
+			amount: 5_000,
 			effectiveDate: "2026-01-02",
 			idempotencyKey: "transfer-1",
 			source: SYS_SOURCE,
@@ -1328,7 +1328,7 @@ describe("Validation & Cursors", () => {
 		const t = createTestHarness();
 		await initCounter(t);
 		const auth = asLedgerUser(t);
-		await mintAndIssue(t, "m1", "lender-a", 5_000n);
+		await mintAndIssue(t, "m1", "lender-a", 5_000);
 
 		const result = await auth.query(
 			api.ledger.validation.validateSupplyInvariant,
@@ -1392,7 +1392,7 @@ describe("Common Rejections", () => {
 				mortgageId: "m1",
 				debitAccountId: issueResult.positionAccountId,
 				creditAccountId: mintResult.treasuryAccountId,
-				amount: 0n,
+				amount: 0,
 				effectiveDate: "2026-01-02",
 				idempotencyKey: "zero-amount",
 				source: ADMIN_SOURCE,
@@ -1400,6 +1400,56 @@ describe("Common Rejections", () => {
 				reason: "test",
 			})
 		).rejects.toThrow(/Amount must be positive/);
+	});
+
+	it("T-073b: fractional amount is rejected", async () => {
+		const t = createTestHarness();
+		const auth = asLedgerUser(t);
+		const { mintResult, issueResult } = await mintAndIssue(
+			t,
+			"m1",
+			"lender-a"
+		);
+
+		await expect(
+			auth.mutation(api.ledger.mutations.postEntry, {
+				entryType: "CORRECTION",
+				mortgageId: "m1",
+				debitAccountId: issueResult.positionAccountId,
+				creditAccountId: mintResult.treasuryAccountId,
+				amount: 0.5,
+				effectiveDate: "2026-01-02",
+				idempotencyKey: "fractional-amount",
+				source: ADMIN_SOURCE,
+				causedBy: issueResult.journalEntry._id,
+				reason: "test",
+			})
+		).rejects.toThrow(/whole number/i);
+	});
+
+	it("T-073c: amount exceeding Number.MAX_SAFE_INTEGER is rejected", async () => {
+		const t = createTestHarness();
+		const auth = asLedgerUser(t);
+		const { mintResult, issueResult } = await mintAndIssue(
+			t,
+			"m1",
+			"lender-a"
+		);
+
+		await expect(
+			auth.mutation(api.ledger.mutations.postEntry, {
+				entryType: "CORRECTION",
+				mortgageId: "m1",
+				debitAccountId: issueResult.positionAccountId,
+				creditAccountId: mintResult.treasuryAccountId,
+				amount: Number.MAX_SAFE_INTEGER + 1,
+				effectiveDate: "2026-01-02",
+				idempotencyKey: "unsafe-integer-amount",
+				source: ADMIN_SOURCE,
+				causedBy: issueResult.journalEntry._id,
+				reason: "test",
+			})
+		).rejects.toThrow(/safe integer/i);
 	});
 
 	it("T-074: self-transfer (debit == credit) is rejected", async () => {
@@ -1414,7 +1464,7 @@ describe("Common Rejections", () => {
 				mortgageId: "m1",
 				debitAccountId: issueResult.positionAccountId,
 				creditAccountId: issueResult.positionAccountId,
-				amount: 1_000n,
+				amount: 1_000,
 				effectiveDate: "2026-01-02",
 				idempotencyKey: "self-transfer",
 				source: ADMIN_SOURCE,
@@ -1432,14 +1482,14 @@ describe("Common Rejections", () => {
 			t,
 			"m1",
 			"lender-a",
-			5_000n
+			5_000
 		);
 
 		// Issue to a second lender so we have two different POSITION accounts
 		await auth.mutation(api.ledger.mutations.issueShares, {
 			mortgageId: "m1",
 			lenderId: "lender-b",
-			amount: 5_000n,
+			amount: 5_000,
 			effectiveDate: "2026-01-01",
 			idempotencyKey: "issue-b",
 			source: SYS_SOURCE,
@@ -1453,7 +1503,7 @@ describe("Common Rejections", () => {
 				mortgageId: "m1",
 				debitAccountId: mintResult.treasuryAccountId,
 				creditAccountId: issueResult.positionAccountId,
-				amount: 1_000n,
+				amount: 1_000,
 				effectiveDate: "2026-01-02",
 				idempotencyKey: "wrong-types-1",
 				source: SYS_SOURCE,
@@ -1479,7 +1529,7 @@ describe("Common Rejections", () => {
 				mortgageId: "m1",
 				debitAccountId: issueResult.positionAccountId,
 				creditAccountId: mintResult.treasuryAccountId,
-				amount: 10_000n,
+				amount: 10_000,
 				effectiveDate: "2026-01-02",
 				idempotencyKey: "wrong-types-2",
 				source: SYS_SOURCE,
@@ -1505,7 +1555,7 @@ describe("Common Rejections", () => {
 				mortgageId: "m1",
 				debitAccountId: issueResult.positionAccountId,
 				creditAccountId: mintResult.treasuryAccountId,
-				amount: 1_000n,
+				amount: 1_000,
 				effectiveDate: "2026-01-02",
 				idempotencyKey: "wrong-types-3",
 				source: SYS_SOURCE,

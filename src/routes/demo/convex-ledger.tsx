@@ -27,14 +27,22 @@ const INTERACTIVE_SOURCE = {
 	channel: "demo-ui",
 };
 const INTERACTIVE_META = { demo: true, source: "interactive" };
-const POSITIVE_INTEGER_RE = /^\d+$/;
+const POSITIVE_INTEGER_RE = /^[1-9]\d*$/;
 
-function parseIntegerAmount(value: string): bigint {
+function parseIntegerAmount(value: string): number {
 	const trimmed = value.trim();
 	if (!POSITIVE_INTEGER_RE.test(trimmed)) {
-		throw new Error("Amount must be a positive whole number");
+		throw new Error(
+			"Amount must be a positive whole number (zero not allowed)"
+		);
 	}
-	return BigInt(trimmed);
+	const result = Number(trimmed);
+	if (!Number.isSafeInteger(result)) {
+		throw new Error(
+			"Amount exceeds safe integer range (max 9,007,199,254,740,991)"
+		);
+	}
+	return result;
 }
 
 // ── Component ────────────────────────────────────────────────────

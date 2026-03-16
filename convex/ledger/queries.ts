@@ -4,6 +4,21 @@ import { ledgerQuery } from "../fluent";
 import { getAccountLenderId } from "./accountOwnership";
 import { computeBalance } from "./internal";
 
+/**
+ * Safely convert a journal entry amount to BigInt.
+ * Throws a descriptive error if the amount is not a safe integer,
+ * preventing opaque BigInt conversion failures on bad data.
+ */
+function safeBigIntAmount(amount: number, entryId: string): bigint {
+	if (!Number.isSafeInteger(amount)) {
+		throw new Error(
+			`Journal entry ${entryId} has non-integer amount (${amount}). ` +
+				"Ledger amounts must be whole numbers (safe integers)."
+		);
+	}
+	return BigInt(amount);
+}
+
 function compareSequenceNumbers(
 	left: { sequenceNumber: bigint },
 	right: { sequenceNumber: bigint }
@@ -93,7 +108,7 @@ export const getLenderPositions = ledgerQuery
 export const getBalanceAt = ledgerQuery
 	.input({
 		accountId: v.id("ledger_accounts"),
-		asOf: v.float64(),
+		asOf: v.number(),
 	})
 	.handler(async (ctx, args) => {
 		const account = await ctx.db.get(args.accountId);
@@ -118,10 +133,10 @@ export const getBalanceAt = ledgerQuery
 
 		let balance = 0n;
 		for (const e of debits) {
-			balance += e.amount;
+			balance += safeBigIntAmount(e.amount, e._id);
 		}
 		for (const e of credits) {
-			balance -= e.amount;
+			balance -= safeBigIntAmount(e.amount, e._id);
 		}
 		return balance;
 	})
@@ -130,7 +145,7 @@ export const getBalanceAt = ledgerQuery
 export const getPositionsAt = ledgerQuery
 	.input({
 		mortgageId: v.string(),
-		asOf: v.float64(),
+		asOf: v.number(),
 	})
 	.handler(async (ctx, args) => {
 		const entries = await ctx.db
@@ -164,11 +179,12 @@ export const getPositionsAt = ledgerQuery
 		// Replay all entries tracking per-account balances
 		const balances = new Map<string, bigint>();
 		for (const entry of entries) {
+			const amt = safeBigIntAmount(entry.amount, entry._id);
 			const prevDebit = balances.get(entry.debitAccountId) ?? 0n;
-			balances.set(entry.debitAccountId, prevDebit + entry.amount);
+			balances.set(entry.debitAccountId, prevDebit + amt);
 
 			const prevCredit = balances.get(entry.creditAccountId) ?? 0n;
-			balances.set(entry.creditAccountId, prevCredit - entry.amount);
+			balances.set(entry.creditAccountId, prevCredit - amt);
 		}
 
 		const results: Array<{ lenderId: string; balance: bigint }> = [];
@@ -185,8 +201,8 @@ export const getPositionsAt = ledgerQuery
 export const getAccountHistory = ledgerQuery
 	.input({
 		accountId: v.id("ledger_accounts"),
-		from: v.optional(v.float64()),
-		to: v.optional(v.float64()),
+		from: v.optional(v.number()),
+		to: v.optional(v.number()),
 		limit: v.optional(v.number()),
 	})
 	.handler(async (ctx, args) => {
@@ -234,8 +250,8 @@ export const getAccountHistory = ledgerQuery
 export const getMortgageHistory = ledgerQuery
 	.input({
 		mortgageId: v.string(),
-		from: v.optional(v.float64()),
-		to: v.optional(v.float64()),
+		from: v.optional(v.number()),
+		to: v.optional(v.number()),
 		limit: v.optional(v.number()),
 	})
 	.handler(async (ctx, args) => {

@@ -25,7 +25,7 @@ type EntryType = Doc<"ledger_journal_entries">["entryType"];
 type AccountType = Doc<"ledger_accounts">["type"];
 
 interface PostEntryInput {
-	amount: bigint;
+	amount: number;
 	causedBy?: Id<"ledger_journal_entries">;
 	creditAccountId: Id<"ledger_accounts">;
 	debitAccountId: Id<"ledger_accounts">;
@@ -74,9 +74,19 @@ async function postEntryInternal(
 	}
 
 	// 3. Common validation
-	if (args.amount <= 0n) {
+	if (!Number.isFinite(args.amount)) {
+		throw new Error("Amount must be a finite number (not NaN or Infinity)");
+	}
+	if (!Number.isInteger(args.amount)) {
+		throw new Error("Amount must be a whole number (integer)");
+	}
+	if (!Number.isSafeInteger(args.amount)) {
+		throw new Error("Amount exceeds safe integer range");
+	}
+	if (args.amount <= 0) {
 		throw new Error("Amount must be positive");
 	}
+	const amountBigInt = BigInt(args.amount);
 	if (args.debitAccountId === args.creditAccountId) {
 		throw new Error("Debit and credit accounts must be different");
 	}
@@ -104,10 +114,10 @@ async function postEntryInternal(
 
 	// 6. Update cumulative balances atomically with the entry
 	await ctx.db.patch(args.debitAccountId, {
-		cumulativeDebits: debitAccount.cumulativeDebits + args.amount,
+		cumulativeDebits: debitAccount.cumulativeDebits + amountBigInt,
 	});
 	await ctx.db.patch(args.creditAccountId, {
-		cumulativeCredits: creditAccount.cumulativeCredits + args.amount,
+		cumulativeCredits: creditAccount.cumulativeCredits + amountBigInt,
 	});
 
 	const entry = await ctx.db.get(entryId);
@@ -150,6 +160,8 @@ function checkMinPosition(balance: bigint, label: string) {
 }
 
 interface ValidationContext {
+	/** Pre-converted BigInt of args.amount for bigint arithmetic with cumulative fields */
+	amountBigInt: bigint;
 	args: PostEntryInput;
 	creditAccount: Doc<"ledger_accounts">;
 	creditBalance: bigint;
@@ -160,9 +172,9 @@ interface ValidationContext {
 function validateMortgageMinted(v: ValidationContext) {
 	assertAccountType(v.debitAccount, "TREASURY", "Receiving account");
 	assertAccountType(v.creditAccount, "WORLD", "Source account");
-	if (v.args.amount !== UNITS_PER_MORTGAGE) {
+	if (v.amountBigInt !== UNITS_PER_MORTGAGE) {
 		throw new Error(
-			`MORTGAGE_MINTED must be exactly ${UNITS_PER_MORTGAGE} units, got ${v.args.amount}`
+			`MORTGAGE_MINTED must be exactly ${UNITS_PER_MORTGAGE} units, got ${v.amountBigInt}`
 		);
 	}
 }
@@ -172,12 +184,12 @@ function validateSharesIssued(v: ValidationContext) {
 	assertAccountType(v.creditAccount, "TREASURY", "Issuing treasury");
 	assertMortgageMatch(v.debitAccount, v.args.mortgageId, "Position");
 	assertMortgageMatch(v.creditAccount, v.args.mortgageId, "Treasury");
-	if (v.creditBalance < v.args.amount) {
+	if (v.creditBalance < v.amountBigInt) {
 		throw new Error(
-			`Treasury balance ${v.creditBalance} < issuance amount ${v.args.amount}`
+			`Treasury balance ${v.creditBalance} < issuance amount ${v.amountBigInt}`
 		);
 	}
-	checkMinPosition(v.debitBalance + v.args.amount, "Position post-issuance");
+	checkMinPosition(v.debitBalance + v.amountBigInt, "Position post-issuance");
 }
 
 function validateSharesTransferred(v: ValidationContext) {
@@ -185,13 +197,13 @@ function validateSharesTransferred(v: ValidationContext) {
 	assertAccountType(v.creditAccount, "POSITION", "Seller account");
 	assertMortgageMatch(v.debitAccount, v.args.mortgageId, "Buyer position");
 	assertMortgageMatch(v.creditAccount, v.args.mortgageId, "Seller position");
-	if (v.creditBalance < v.args.amount) {
+	if (v.creditBalance < v.amountBigInt) {
 		throw new Error(
-			`Seller balance ${v.creditBalance} < transfer amount ${v.args.amount}`
+			`Seller balance ${v.creditBalance} < transfer amount ${v.amountBigInt}`
 		);
 	}
-	checkMinPosition(v.creditBalance - v.args.amount, "Seller post-transfer");
-	checkMinPosition(v.debitBalance + v.args.amount, "Buyer post-transfer");
+	checkMinPosition(v.creditBalance - v.amountBigInt, "Seller post-transfer");
+	checkMinPosition(v.debitBalance + v.amountBigInt, "Buyer post-transfer");
 }
 
 function validateSharesRedeemed(v: ValidationContext) {
@@ -199,20 +211,23 @@ function validateSharesRedeemed(v: ValidationContext) {
 	assertAccountType(v.creditAccount, "POSITION", "Redeeming position");
 	assertMortgageMatch(v.debitAccount, v.args.mortgageId, "Treasury");
 	assertMortgageMatch(v.creditAccount, v.args.mortgageId, "Position");
-	if (v.creditBalance < v.args.amount) {
+	if (v.creditBalance < v.amountBigInt) {
 		throw new Error(
-			`Position balance ${v.creditBalance} < redemption amount ${v.args.amount}`
+			`Position balance ${v.creditBalance} < redemption amount ${v.amountBigInt}`
 		);
 	}
-	checkMinPosition(v.creditBalance - v.args.amount, "Position post-redemption");
+	checkMinPosition(
+		v.creditBalance - v.amountBigInt,
+		"Position post-redemption"
+	);
 }
 
 function validateMortgageBurned(v: ValidationContext) {
 	assertAccountType(v.debitAccount, "WORLD", "Receiving account");
 	assertAccountType(v.creditAccount, "TREASURY", "Burning treasury");
-	if (v.args.amount !== UNITS_PER_MORTGAGE) {
+	if (v.amountBigInt !== UNITS_PER_MORTGAGE) {
 		throw new Error(
-			`MORTGAGE_BURNED must be exactly ${UNITS_PER_MORTGAGE} units, got ${v.args.amount}`
+			`MORTGAGE_BURNED must be exactly ${UNITS_PER_MORTGAGE} units, got ${v.amountBigInt}`
 		);
 	}
 	if (v.creditBalance !== UNITS_PER_MORTGAGE) {
@@ -245,27 +260,36 @@ function validateCorrection(v: ValidationContext) {
 	}
 	if (v.debitAccount.type === "POSITION") {
 		checkMinPosition(
-			v.debitBalance + v.args.amount,
+			v.debitBalance + v.amountBigInt,
 			"Corrected debit position"
 		);
 	}
 	if (v.creditAccount.type === "POSITION") {
-		if (v.creditBalance < v.args.amount) {
+		if (v.creditBalance < v.amountBigInt) {
 			throw new Error(
-				`CORRECTION would make position balance negative: ${v.creditBalance} - ${v.args.amount}`
+				`CORRECTION would make position balance negative: ${v.creditBalance} - ${v.amountBigInt}`
 			);
 		}
 		checkMinPosition(
-			v.creditBalance - v.args.amount,
+			v.creditBalance - v.amountBigInt,
 			"Corrected credit position"
 		);
 	}
 	if (
 		v.creditAccount.type === "TREASURY" &&
-		v.creditBalance - v.args.amount < 0n
+		v.creditBalance - v.amountBigInt < 0n
 	) {
 		throw new Error("CORRECTION would make TREASURY balance negative");
 	}
+}
+
+// Reservation entry types must go through dedicated mutations, not postEntry.
+function rejectReservationViaPostEntry(entryType: string) {
+	return (_v: ValidationContext) => {
+		throw new Error(
+			`${entryType} cannot be posted via postEntry. Use the dedicated reserveShares/commitReservation/voidReservation mutations.`
+		);
+	};
 }
 
 const VALIDATORS: Record<EntryType, (v: ValidationContext) => void> = {
@@ -274,6 +298,9 @@ const VALIDATORS: Record<EntryType, (v: ValidationContext) => void> = {
 	SHARES_TRANSFERRED: validateSharesTransferred,
 	SHARES_REDEEMED: validateSharesRedeemed,
 	MORTGAGE_BURNED: validateMortgageBurned,
+	SHARES_RESERVED: rejectReservationViaPostEntry("SHARES_RESERVED"),
+	SHARES_COMMITTED: rejectReservationViaPostEntry("SHARES_COMMITTED"),
+	SHARES_VOIDED: rejectReservationViaPostEntry("SHARES_VOIDED"),
 	CORRECTION: validateCorrection,
 };
 
@@ -284,6 +311,7 @@ function validateEntryType(
 ) {
 	const ctx: ValidationContext = {
 		args,
+		amountBigInt: BigInt(args.amount),
 		debitAccount,
 		creditAccount,
 		debitBalance: computeBalance(debitAccount),
@@ -347,6 +375,8 @@ export const mintMortgage = ledgerMutation
 			mortgageId: args.mortgageId,
 			cumulativeDebits: 0n,
 			cumulativeCredits: 0n,
+			pendingDebits: 0n,
+			pendingCredits: 0n,
 			createdAt: Date.now(),
 		});
 
@@ -356,7 +386,7 @@ export const mintMortgage = ledgerMutation
 			mortgageId: args.mortgageId,
 			debitAccountId: treasuryId,
 			creditAccountId: worldAccount._id,
-			amount: UNITS_PER_MORTGAGE,
+			amount: Number(UNITS_PER_MORTGAGE),
 			effectiveDate: args.effectiveDate,
 			idempotencyKey: args.idempotencyKey,
 			source: args.source,
@@ -411,7 +441,7 @@ export const burnMortgage = ledgerMutation
 			mortgageId: args.mortgageId,
 			debitAccountId: worldAccount._id,
 			creditAccountId: treasury._id,
-			amount: UNITS_PER_MORTGAGE,
+			amount: Number(UNITS_PER_MORTGAGE),
 			effectiveDate: args.effectiveDate,
 			idempotencyKey: args.idempotencyKey,
 			source: args.source,
