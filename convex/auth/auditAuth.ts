@@ -7,17 +7,16 @@ import { internal } from "../_generated/api";
 import { auditLog } from "../auditLog";
 import type { Viewer } from "../fluent";
 
+// @ts-expect-error - We know this is safe because of how our internal API is structured
+const internalWithAuth = internal as unknown as {
+	auth: {
+		internal: {
+			recordAuthFailure: FunctionReference<"mutation", "internal">;
+		};
+	};
+};
 const recordAuthFailureReference =
-	// @ts-expect-error — deep generic instantiation on `internal` exceeds TS depth limit
-	(
-		internal as unknown as {
-			auth: {
-				internal: {
-					recordAuthFailure: FunctionReference<"mutation", "internal">;
-				};
-			};
-		}
-	).auth.internal.recordAuthFailure;
+	internalWithAuth.auth.internal.recordAuthFailure;
 
 export function isMutationContext(
 	ctx: unknown

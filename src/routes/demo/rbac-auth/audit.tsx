@@ -16,6 +16,7 @@ import {
 	CardTitle,
 } from "#/components/ui/card";
 import { useAppAuth } from "#/hooks/use-app-auth";
+import { api } from "../../../../convex/_generated/api";
 
 export const Route = createFileRoute("/demo/rbac-auth/audit")({
 	ssr: false,
@@ -208,8 +209,7 @@ function AuditPage() {
 }
 
 function LiveAuditFeed() {
-	// biome-ignore lint/suspicious/noExplicitAny: placeholder until audit query endpoint is built
-	const events = useQuery(undefined as any);
+	const events = useQuery(api.audit.queries.watchCriticalAuthEvents);
 
 	return (
 		<Card>
