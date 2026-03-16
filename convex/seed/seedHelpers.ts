@@ -287,13 +287,10 @@ export async function findOnboardingRequestByUserAndRole(
 ): Promise<Doc<"onboardingRequests"> | null> {
 	return ctx.db
 		.query("onboardingRequests")
-		.withIndex("by_user", (q) => q.eq("userId", args.userId))
-		.filter((q) =>
-			q.and(
-				q.eq(q.field("requestedRole"), args.requestedRole),
-				q.eq(q.field("status"), args.status)
-			)
+		.withIndex("by_user_and_status", (q) =>
+			q.eq("userId", args.userId).eq("status", args.status)
 		)
+		.filter((q) => q.eq(q.field("requestedRole"), args.requestedRole))
 		.first();
 }
 
