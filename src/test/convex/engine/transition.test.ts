@@ -3,6 +3,7 @@ import { setup } from "xstate";
 import { internal } from "../../../../convex/_generated/api";
 import { effectRegistry } from "../../../../convex/engine/effects/registry";
 import { machineRegistry } from "../../../../convex/engine/machines/registry";
+import { transitionEntity } from "../../../../convex/engine/transition";
 import {
 	approveRequest,
 	createGovernedTestConvex,
@@ -285,6 +286,188 @@ describe("transition engine", () => {
 					event.metadata?.outcome === "same_state_with_effects"
 			)
 		).toBe(true);
+	});
+
+	it("rejects same-state transitions when the event config is a string target", async () => {
+		const t = createGovernedTestConvex();
+		await seedDefaultGovernedActors(t);
+		const requestId = await createSelfSignupRequest(t, "broker");
+		await approveRequest(t, requestId);
+
+		const stringTargetMachine = setup({
+			types: {
+				context: {} as Record<string, never>,
+				events: {} as { type: "RETRY_STRING" },
+			},
+		}).createMachine({
+			id: "onboardingRequest",
+			initial: "approved",
+			context: {},
+			states: {
+				approved: {
+					on: {
+						RETRY_STRING: "approved",
+					},
+				},
+			},
+		});
+
+		machineRegistry.onboardingRequest =
+			stringTargetMachine as unknown as typeof originalMachine;
+
+		const result = await t.mutation(
+			internal.engine.transitionMutation.transitionMutation,
+			{
+				entityType: "onboardingRequest",
+				entityId: requestId,
+				eventType: "RETRY_STRING",
+				payload: {},
+				source: {
+					actorType: "system",
+					channel: "scheduler",
+				},
+			}
+		);
+
+		expect(result).toMatchObject({
+			success: false,
+			previousState: "approved",
+			newState: "approved",
+		});
+	});
+
+	it("ignores undefined action descriptors when extracting scheduled effects", async () => {
+		const t = createGovernedTestConvex();
+		await seedDefaultGovernedActors(t);
+		const requestId = await createSelfSignupRequest(t, "broker");
+		await approveRequest(t, requestId);
+
+		const undefinedActionMachine = setup({
+			types: {
+				context: {} as Record<string, never>,
+				events: {} as { type: "RETRY_UNDEFINED" },
+			},
+		}).createMachine({
+			id: "onboardingRequest",
+			initial: "approved",
+			context: {},
+			states: {
+				approved: {
+					on: {
+						RETRY_UNDEFINED: {
+							actions: undefined,
+						},
+					},
+				},
+			},
+		});
+
+		machineRegistry.onboardingRequest =
+			undefinedActionMachine as unknown as typeof originalMachine;
+
+		const result = await t.mutation(
+			internal.engine.transitionMutation.transitionMutation,
+			{
+				entityType: "onboardingRequest",
+				entityId: requestId,
+				eventType: "RETRY_UNDEFINED",
+				payload: {},
+				source: {
+					actorType: "system",
+					channel: "scheduler",
+				},
+			}
+		);
+
+		expect(result).toMatchObject({
+			success: false,
+			previousState: "approved",
+			newState: "approved",
+		});
+	});
+
+	it("schedules single object action descriptors without array wrapping", async () => {
+		const t = createGovernedTestConvex();
+		await seedDefaultGovernedActors(t);
+		const requestId = await createSelfSignupRequest(t, "broker");
+		await approveRequest(t, requestId);
+
+		const singleActionMachine = setup({
+			types: {
+				context: {} as Record<string, never>,
+				events: {} as { type: "RETRY_SINGLE_ACTION" },
+			},
+			actions: {
+				testEffect: () => {
+					// noop test action
+				},
+			},
+		}).createMachine({
+			id: "onboardingRequest",
+			initial: "approved",
+			context: {},
+			states: {
+				approved: {
+					on: {
+						RETRY_SINGLE_ACTION: {
+							actions: {
+								type: "testEffect",
+								params: { attempt: "single" },
+							} as never,
+						},
+					},
+				},
+			},
+		});
+
+		machineRegistry.onboardingRequest =
+			singleActionMachine as unknown as typeof originalMachine;
+		effectRegistry.testEffect =
+			internal.engine.effects.onboarding.assignRoleToUser;
+
+		const result = await t.mutation(
+			internal.engine.transitionMutation.transitionMutation,
+			{
+				entityType: "onboardingRequest",
+				entityId: requestId,
+				eventType: "RETRY_SINGLE_ACTION",
+				payload: {},
+				source: {
+					actorType: "system",
+					channel: "scheduler",
+				},
+			}
+		);
+
+		expect(result).toMatchObject({
+			success: true,
+			newState: "approved",
+			effectsScheduled: ["testEffect"],
+		});
+	});
+
+	it("defaults payload and source when transitionEntity is called directly", async () => {
+		const t = createGovernedTestConvex();
+		await seedDefaultGovernedActors(t);
+		const requestId = await createSelfSignupRequest(t, "lender");
+
+		const result = await t.run(async (ctx) =>
+			transitionEntity(
+				ctx as never,
+				"onboardingRequest",
+				requestId,
+				"ASSIGN_ROLE"
+			)
+		);
+
+		expect(result).toMatchObject({
+			success: false,
+			previousState: "pending_review",
+			newState: "pending_review",
+		});
+
+		const latestJournal = (await getAuditJournalRows(t, requestId)).at(-1);
+		expect(latestJournal?.channel).toBe("scheduler");
 	});
 
 	it("throws when the entity type is not supported by the transition engine", async () => {

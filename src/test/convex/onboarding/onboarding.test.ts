@@ -6,6 +6,8 @@ import {
 	FAIRLEND_LAWYERS_ORG_ID,
 	FAIRLEND_STAFF_ORG_ID,
 } from "../../../../convex/constants";
+// biome-ignore lint/performance/noNamespaceImport: module spying in this test needs a namespace import.
+import * as transitionModule from "../../../../convex/engine/transition";
 import { createTestConvex, seedFromIdentity } from "../../auth/helpers";
 import { BROKER, FAIRLEND_ADMIN, MEMBER } from "../../auth/identities";
 
@@ -344,6 +346,87 @@ describe("onboarding mutations", () => {
 			expect(request?.rejectionReason).toBe("KYC verification failed");
 			expect(request?.reviewedBy).toBe(FAIRLEND_ADMIN.subject);
 		});
+
+		it("fails when request is not in pending_review state", async () => {
+			const t = createTestConvex();
+			await seedFromIdentity(t, MEMBER);
+			await seedFromIdentity(t, FAIRLEND_ADMIN);
+
+			const asMember = t.withIdentity(MEMBER);
+			const requestId = await asMember.mutation(
+				api.onboarding.mutations.requestRole,
+				{
+					requestedRole: "lender",
+					referralSource: "self_signup",
+				}
+			);
+
+			const asAdmin = t.withIdentity(FAIRLEND_ADMIN);
+			await asAdmin.mutation(api.onboarding.mutations.rejectRequest, {
+				requestId,
+				rejectionReason: "Already rejected",
+			});
+
+			await expect(
+				asAdmin.mutation(api.onboarding.mutations.rejectRequest, {
+					requestId,
+					rejectionReason: "Still rejected",
+				})
+			).rejects.toThrow('Event "REJECT" not valid in state "rejected"');
+		});
+
+		it("falls back to the generic transition failure message when approve has no reason", async () => {
+			const t = createTestConvex();
+			await seedFromIdentity(t, MEMBER);
+			await seedFromIdentity(t, FAIRLEND_ADMIN);
+
+			const requestId = await t
+				.withIdentity(MEMBER)
+				.mutation(api.onboarding.mutations.requestRole, {
+					requestedRole: "lender",
+					referralSource: "self_signup",
+				});
+
+			vi.spyOn(transitionModule, "transitionEntity").mockResolvedValueOnce({
+				success: false,
+				previousState: "pending_review",
+				newState: "pending_review",
+			});
+
+			await expect(
+				t
+					.withIdentity(FAIRLEND_ADMIN)
+					.mutation(api.onboarding.mutations.approveRequest, { requestId })
+			).rejects.toThrow("Transition failed");
+		});
+
+		it("falls back to the generic transition failure message when reject has no reason", async () => {
+			const t = createTestConvex();
+			await seedFromIdentity(t, MEMBER);
+			await seedFromIdentity(t, FAIRLEND_ADMIN);
+
+			const requestId = await t
+				.withIdentity(MEMBER)
+				.mutation(api.onboarding.mutations.requestRole, {
+					requestedRole: "lender",
+					referralSource: "self_signup",
+				});
+
+			vi.spyOn(transitionModule, "transitionEntity").mockResolvedValueOnce({
+				success: false,
+				previousState: "pending_review",
+				newState: "pending_review",
+			});
+
+			await expect(
+				t
+					.withIdentity(FAIRLEND_ADMIN)
+					.mutation(api.onboarding.mutations.rejectRequest, {
+						requestId,
+						rejectionReason: "Rejected without a reason",
+					})
+			).rejects.toThrow("Transition failed");
+		});
 	});
 
 	describe("audit journal", () => {
@@ -455,6 +538,34 @@ describe("onboarding mutations", () => {
 					invitedByBrokerId: "user_deactivated_broker",
 				})
 			).rejects.toThrow("not an active broker");
+		});
+
+		it("accepts active broker memberships that expose broker via roleSlugs", async () => {
+			const t = createTestConvex();
+			await seedFromIdentity(t, MEMBER);
+
+			await t.run(async (ctx) => {
+				await ctx.db.insert("organizationMemberships", {
+					workosId: "om_broker_role_slugs",
+					organizationWorkosId: "org_role_slugs_broker",
+					organizationName: "Role Slugs Brokerage",
+					userWorkosId: "user_role_slugs_broker",
+					status: "active",
+					roleSlug: "member",
+					roleSlugs: ["broker"],
+				});
+			});
+
+			const requestId = await t
+				.withIdentity(MEMBER)
+				.mutation(api.onboarding.mutations.requestRole, {
+					requestedRole: "lender",
+					referralSource: "broker_invite",
+					invitedByBrokerId: "user_role_slugs_broker",
+				});
+
+			const request = await t.run(async (ctx) => ctx.db.get(requestId));
+			expect(request?.targetOrganizationId).toBe("org_role_slugs_broker");
 		});
 	});
 

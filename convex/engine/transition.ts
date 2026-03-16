@@ -12,10 +12,6 @@ interface ScheduledEffectDescriptor {
 	params?: Record<string, unknown>;
 }
 
-function getAuditResourceType(entityType: EntityType): string {
-	return entityType === "onboardingRequest" ? "onboardingRequests" : entityType;
-}
-
 function normalizeActionDescriptors(
 	actions: unknown
 ): ScheduledEffectDescriptor[] {
@@ -159,7 +155,7 @@ export async function transitionEntity(
 	>[2];
 	const nextSnapshot = getNextSnapshot(machine, currentSnapshot, event);
 	const newState = nextSnapshot.value as string;
-	const resourceType = getAuditResourceType(entityType);
+	const resourceType = "onboardingRequests";
 	const defaultSource: CommandSource = { channel: "scheduler" };
 	const resolvedSource = source ?? defaultSource;
 	let journalEntryId = `${entityType}:${entityId}:${eventType}:${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;

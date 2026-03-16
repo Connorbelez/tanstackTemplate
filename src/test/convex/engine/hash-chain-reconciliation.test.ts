@@ -1,8 +1,15 @@
+import { WorkflowManager } from "@convex-dev/workflow";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { api, internal } from "../../../../convex/_generated/api";
+import type { Id } from "../../../../convex/_generated/dataModel";
 import type { MutationCtx } from "../../../../convex/_generated/server";
 import { AuditTrail } from "../../../../convex/auditTrailClient";
 import { appendAuditJournalEntry } from "../../../../convex/engine/auditJournal";
+import {
+	buildAuditTrailInsertArgs,
+	runHashChainJournalStep,
+	startHashChain,
+} from "../../../../convex/engine/hashChain";
 import { FAIRLEND_ADMIN } from "../../auth/identities";
 import {
 	createGovernedTestConvex,
@@ -68,6 +75,89 @@ describe("hash-chain and reconciliation", () => {
 			entityType: "mortgage",
 			eventType: "CREATED",
 		});
+	});
+
+	it("builds auditTrail insert args with serialized metadata", () => {
+		expect(
+			buildAuditTrailInsertArgs({
+				actorId: "user_member_test",
+				channel: "scheduler",
+				entityId: "entity_args",
+				entityType: "onboardingRequest",
+				eventType: "APPROVE",
+				machineVersion: "machine_v1",
+				newState: "approved",
+				outcome: "transitioned",
+				previousState: "pending_review",
+				reason: "Approved in test",
+				timestamp: 123,
+			})
+		).toEqual({
+			entityId: "entity_args",
+			entityType: "onboardingRequest",
+			eventType: "APPROVE",
+			actorId: "user_member_test",
+			beforeState: "pending_review",
+			afterState: "approved",
+			metadata: JSON.stringify({
+				outcome: "transitioned",
+				machineVersion: "machine_v1",
+				effectsScheduled: undefined,
+				channel: "scheduler",
+				reason: "Approved in test",
+			}),
+			timestamp: 123,
+		});
+	});
+
+	it("runs the hash-chain journal helper through the process mutation", async () => {
+		const step = {
+			runMutation: vi.fn().mockResolvedValue(undefined),
+		};
+
+		await runHashChainJournalStep(step as never, {
+			journalEntryId: "10000;auditJournal" as Id<"auditJournal">,
+		});
+
+		expect(step.runMutation).toHaveBeenCalledWith(
+			internal.engine.hashChain.processHashChainStep,
+			{
+				journalEntryId: "10000;auditJournal",
+			}
+		);
+	});
+
+	it("starts the workflow when the test short-circuit is disabled", async () => {
+		const startSpy = vi
+			.spyOn(WorkflowManager.prototype, "start")
+			.mockResolvedValue("workflow_test" as never);
+		const previousEnv = process.env.ALLOW_TEST_AUTH_ENDPOINTS;
+		process.env.ALLOW_TEST_AUTH_ENDPOINTS = "false";
+
+		try {
+			await startHashChain(
+				{
+					runMutation: vi.fn(),
+					scheduler: {} as never,
+				},
+				"10000;auditJournal" as Id<"auditJournal">
+			);
+		} finally {
+			process.env.ALLOW_TEST_AUTH_ENDPOINTS = previousEnv;
+		}
+
+		expect(startSpy).toHaveBeenCalledWith(
+			expect.objectContaining({
+				runMutation: expect.any(Function),
+			}),
+			internal.engine.hashChain.hashChainJournalEntry,
+			{
+				journalEntryId: "10000;auditJournal",
+			},
+			{
+				startAsync: true,
+			}
+		);
 	});
 
 	it("inserts a Layer 2 event when processHashChainStep sees a journal row", async () => {
@@ -217,6 +307,50 @@ describe("hash-chain and reconciliation", () => {
 				valid: false,
 				brokenAt: 1,
 				error: "Hash mismatch at event 1",
+			})
+		);
+	});
+
+	it("treats null verification payloads as missing Layer 2 chains", async () => {
+		const t = createGovernedTestConvex();
+		await seedDefaultGovernedActors(t);
+
+		const requestId = await createSelfSignupRequest(t, "lender");
+		vi.spyOn(AuditTrail.prototype, "verifyChain").mockResolvedValueOnce(null);
+
+		const result = await t
+			.withIdentity(FAIRLEND_ADMIN)
+			.query(api.engine.reconciliation.reconcileLayer2, {});
+
+		expect(result.brokenChains).toContainEqual(
+			expect.objectContaining({
+				entityId: requestId,
+				valid: false,
+				eventCount: 0,
+				error: "No Layer 2 entries found for entity with journal records",
+			})
+		);
+	});
+
+	it("treats verification payloads without a boolean valid flag as missing chains", async () => {
+		const t = createGovernedTestConvex();
+		await seedDefaultGovernedActors(t);
+
+		const requestId = await createSelfSignupRequest(t, "lender");
+		vi.spyOn(AuditTrail.prototype, "verifyChain").mockResolvedValueOnce({
+			valid: "yes",
+			eventCount: 2,
+		} as never);
+
+		const result = await t
+			.withIdentity(FAIRLEND_ADMIN)
+			.query(api.engine.reconciliation.reconcileLayer2, {});
+
+		expect(result.brokenChains).toContainEqual(
+			expect.objectContaining({
+				entityId: requestId,
+				valid: false,
+				eventCount: 0,
 			})
 		);
 	});

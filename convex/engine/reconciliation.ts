@@ -64,6 +64,7 @@ async function getEntityStatus(
 	entityType: keyof typeof ENTITY_TABLE_MAP,
 	entityId: string
 ) {
+	// biome-ignore lint/style/useDefaultSwitchClause: entityType is an exhaustive union here.
 	switch (entityType) {
 		case "onboardingRequest": {
 			const entity = await ctx.db.get(entityId as Id<"onboardingRequests">);
@@ -72,10 +73,6 @@ async function getEntityStatus(
 		case "mortgage":
 		case "obligation":
 			return null;
-		default: {
-			const exhaustive: never = entityType;
-			return exhaustive;
-		}
 	}
 }
 

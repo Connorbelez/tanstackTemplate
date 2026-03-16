@@ -50,6 +50,7 @@ import type * as documentEngine_validators from "../documentEngine/validators.js
 import type * as engine_auditJournal from "../engine/auditJournal.js";
 import type * as engine_effects_onboarding from "../engine/effects/onboarding.js";
 import type * as engine_effects_registry from "../engine/effects/registry.js";
+import type * as engine_effects_workosProvisioning from "../engine/effects/workosProvisioning.js";
 import type * as engine_hashChain from "../engine/hashChain.js";
 import type * as engine_machines_registry from "../engine/machines/registry.js";
 import type * as engine_reconciliation from "../engine/reconciliation.js";
@@ -125,6 +126,7 @@ declare const fullApi: ApiFromModules<{
   "engine/auditJournal": typeof engine_auditJournal;
   "engine/effects/onboarding": typeof engine_effects_onboarding;
   "engine/effects/registry": typeof engine_effects_registry;
+  "engine/effects/workosProvisioning": typeof engine_effects_workosProvisioning;
   "engine/hashChain": typeof engine_hashChain;
   "engine/machines/registry": typeof engine_machines_registry;
   "engine/reconciliation": typeof engine_reconciliation;

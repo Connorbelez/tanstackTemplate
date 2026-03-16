@@ -18,6 +18,7 @@ function computeTargetOrg(
 	referralSource: "self_signup" | "broker_invite",
 	invitingBrokerOrgId?: string
 ): string | undefined {
+	// biome-ignore lint/style/useDefaultSwitchClause: requestedRole is an exhaustive union here.
 	switch (requestedRole) {
 		case "lender":
 			return referralSource === "broker_invite"
@@ -33,10 +34,6 @@ function computeTargetOrg(
 		case "sr_underwriter":
 		case "admin":
 			return FAIRLEND_STAFF_ORG_ID;
-		default: {
-			const _exhaustive: never = requestedRole;
-			return _exhaustive;
-		}
 	}
 }
 

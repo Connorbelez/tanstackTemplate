@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { internal } from "../../../../convex/_generated/api";
+import { auditLog } from "../../../../convex/auditLog";
 import { FAIRLEND_BROKERAGE_ORG_ID } from "../../../../convex/constants";
 import {
 	setWorkosProvisioningForTests,
@@ -183,6 +184,53 @@ describe("onboarding role-assignment effect", () => {
 		expect(request?.status).toBe("role_assigned");
 	});
 
+	it("returns early when the journal was already processed", async () => {
+		const { t, requestId, approveJournal } =
+			await prepareApprovedRequest("lender");
+		await t.run(async (ctx) => {
+			await ctx.db.patch(requestId, {
+				processedRoleAssignmentJournalIds: [approveJournal._id],
+			});
+		});
+
+		const provisioning = createProvisioningMock();
+		setWorkosProvisioningForTests(provisioning);
+
+		await runAssignRoleAction(t, {
+			entityId: requestId,
+			journalEntryId: approveJournal._id,
+		});
+
+		expect(provisioning.createOrganizationMembership).not.toHaveBeenCalled();
+		expect((await getRequest(t, requestId))?.status).toBe("approved");
+	});
+
+	it("completes processing when the request is already role_assigned for the active journal", async () => {
+		const { t, requestId, approveJournal } =
+			await prepareApprovedRequest("lender");
+		await t.run(async (ctx) => {
+			await ctx.db.patch(requestId, {
+				status: "role_assigned",
+				activeRoleAssignmentJournalId: approveJournal._id,
+			});
+		});
+
+		const provisioning = createProvisioningMock();
+		setWorkosProvisioningForTests(provisioning);
+
+		await runAssignRoleAction(t, {
+			entityId: requestId,
+			journalEntryId: approveJournal._id,
+		});
+
+		expect(provisioning.createOrganizationMembership).not.toHaveBeenCalled();
+		const request = await getRequest(t, requestId);
+		expect(request?.activeRoleAssignmentJournalId).toBeUndefined();
+		expect(request?.processedRoleAssignmentJournalIds).toContain(
+			approveJournal._id
+		);
+	});
+
 	it("throws when the request cannot be found", async () => {
 		const { t, requestId, approveJournal } =
 			await prepareApprovedRequest("lender");
@@ -243,6 +291,29 @@ describe("onboarding role-assignment effect", () => {
 		).toBe(true);
 	});
 
+	it("throws when broker provisioning is already in progress without a target org", async () => {
+		const { t, requestId, approveJournal } =
+			await prepareApprovedRequest("broker");
+		await t.run(async (ctx) => {
+			await ctx.db.patch(requestId, {
+				activeRoleAssignmentJournalId: approveJournal._id,
+				targetOrganizationId: undefined,
+			});
+		});
+
+		const provisioning = createProvisioningMock();
+		setWorkosProvisioningForTests(provisioning);
+
+		await expect(
+			runAssignRoleAction(t, {
+				entityId: requestId,
+				journalEntryId: approveJournal._id,
+			})
+		).rejects.toThrow("Broker provisioning already started");
+
+		expect(provisioning.createOrganization).not.toHaveBeenCalled();
+	});
+
 	it("writes a failure audit event and rethrows provider errors", async () => {
 		const { t, requestId, approveJournal } =
 			await prepareApprovedRequest("lender");
@@ -268,6 +339,53 @@ describe("onboarding role-assignment effect", () => {
 					event.metadata?.error === "WorkOS outage"
 			)
 		).toBe(true);
+	});
+
+	it("throws when the ASSIGN_ROLE transition result is unsuccessful", async () => {
+		const { t, requestId, approveJournal } =
+			await prepareApprovedRequest("lender");
+		await t.run(async (ctx) => {
+			await ctx.db.patch(requestId, {
+				status: "pending_review",
+			});
+		});
+
+		const provisioning = createProvisioningMock();
+		setWorkosProvisioningForTests(provisioning);
+
+		await expect(
+			runAssignRoleAction(t, {
+				entityId: requestId,
+				journalEntryId: approveJournal._id,
+			})
+		).rejects.toThrow("ASSIGN_ROLE transition failed");
+	});
+
+	it("rethrows the original failure when failure auditing also throws", async () => {
+		const { t, requestId, approveJournal } =
+			await prepareApprovedRequest("lender");
+		const provisioning = createProvisioningMock({
+			createOrganizationMembership: vi.fn().mockRejectedValue("raw outage"),
+		});
+		setWorkosProvisioningForTests(provisioning);
+
+		const auditSpy = vi
+			.spyOn(auditLog, "log")
+			.mockImplementation(async (_, entry) => {
+				if (entry.action === "onboarding.role_assignment_failed") {
+					throw new Error("audit unavailable");
+				}
+				return "audit_log_test";
+			});
+
+		await expect(
+			runAssignRoleAction(t, {
+				entityId: requestId,
+				journalEntryId: approveJournal._id,
+			})
+		).rejects.toBe("raw outage");
+
+		expect(auditSpy).toHaveBeenCalled();
 	});
 
 	it("returns processed when the journal was already completed", async () => {

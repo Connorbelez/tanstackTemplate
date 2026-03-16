@@ -85,12 +85,17 @@ export const processHashChainStep = internalMutation({
  */
 export const hashChainJournalEntry = workflow.define({
 	args: { journalEntryId: v.id("auditJournal") },
-	handler: async (step, args): Promise<void> => {
-		await step.runMutation(internal.engine.hashChain.processHashChainStep, {
-			journalEntryId: args.journalEntryId,
-		});
-	},
+	handler: runHashChainJournalStep,
 });
+
+export async function runHashChainJournalStep(
+	step: Pick<MutationCtx, "runMutation">,
+	args: { journalEntryId: Id<"auditJournal"> }
+) {
+	await step.runMutation(internal.engine.hashChain.processHashChainStep, {
+		journalEntryId: args.journalEntryId,
+	});
+}
 
 /**
  * Start the hash-chain workflow from a mutation context.

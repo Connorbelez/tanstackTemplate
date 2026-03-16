@@ -9,8 +9,10 @@
  * - rejectRequest: adminMutation + requirePermission("onboarding:review")
  */
 
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { api } from "../../../../convex/_generated/api";
+import { setWorkosProvisioningForTests } from "../../../../convex/engine/effects/workosProvisioning";
+import { drainScheduledWork } from "../../convex/onboarding/helpers";
 import { createTestConvex, seedFromIdentity } from "../helpers";
 import {
 	BROKER,
@@ -19,7 +21,27 @@ import {
 	MEMBER,
 } from "../identities";
 
+function createProvisioningSuccessMock() {
+	return {
+		createOrganization: vi
+			.fn()
+			.mockResolvedValue({ id: "org_provisioned_test" }),
+		createOrganizationMembership: vi.fn().mockResolvedValue({}),
+	};
+}
+
 describe("onboarding auth integration", () => {
+	beforeEach(() => {
+		vi.useFakeTimers();
+	});
+
+	afterEach(() => {
+		setWorkosProvisioningForTests(null);
+		vi.restoreAllMocks();
+		vi.clearAllTimers();
+		vi.useRealTimers();
+	});
+
 	describe("requestRole", () => {
 		it("accepts member with onboarding:access", async () => {
 			const t = createTestConvex();
@@ -52,6 +74,7 @@ describe("onboarding auth integration", () => {
 			const t = createTestConvex();
 			await seedFromIdentity(t, MEMBER);
 			await seedFromIdentity(t, FAIRLEND_ADMIN);
+			setWorkosProvisioningForTests(createProvisioningSuccessMock());
 
 			const requestId = await t
 				.withIdentity(MEMBER)
@@ -63,6 +86,7 @@ describe("onboarding auth integration", () => {
 			const result = await t
 				.withIdentity(FAIRLEND_ADMIN)
 				.mutation(api.onboarding.mutations.approveRequest, { requestId });
+			await drainScheduledWork(t);
 
 			expect(result.success).toBe(true);
 		});
