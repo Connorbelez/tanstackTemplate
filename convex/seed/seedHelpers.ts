@@ -1,3 +1,4 @@
+import { ConvexError } from "convex/values";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 import { appendAuditJournalEntry } from "../engine/auditJournal";
@@ -100,6 +101,25 @@ export function seedTimestampSequence(
 	return timestamps;
 }
 
+export function isoDateFromTimestamp(timestamp: number): string {
+	return new Date(timestamp).toISOString().slice(0, 10);
+}
+
+export function addDaysToDateString(dateString: string, days: number): string {
+	const date = new Date(`${dateString}T00:00:00.000Z`);
+	date.setUTCDate(date.getUTCDate() + days);
+	return isoDateFromTimestamp(date.getTime());
+}
+
+export function addMonthsToDateString(
+	dateString: string,
+	months: number
+): string {
+	const date = new Date(`${dateString}T00:00:00.000Z`);
+	date.setUTCMonth(date.getUTCMonth() + months);
+	return isoDateFromTimestamp(date.getTime());
+}
+
 export async function findUserByEmail(
 	ctx: Pick<MutationCtx, "db">,
 	email: string
@@ -193,6 +213,168 @@ export async function findLenderByUserId(
 		.query("lenders")
 		.withIndex("by_user", (q) => q.eq("userId", userId))
 		.first();
+}
+
+export async function findPropertyByAddress(
+	ctx: Pick<MutationCtx, "db">,
+	address: Pick<Doc<"properties">, "postalCode" | "streetAddress" | "unit">
+): Promise<Doc<"properties"> | null> {
+	return ctx.db
+		.query("properties")
+		.filter((q) =>
+			q.and(
+				q.eq(q.field("streetAddress"), address.streetAddress),
+				q.eq(q.field("postalCode"), address.postalCode),
+				address.unit
+					? q.eq(q.field("unit"), address.unit)
+					: q.eq(q.field("unit"), undefined)
+			)
+		)
+		.first();
+}
+
+export async function findMortgageByPropertyId(
+	ctx: Pick<MutationCtx, "db">,
+	propertyId: Id<"properties">
+): Promise<Doc<"mortgages"> | null> {
+	return ctx.db
+		.query("mortgages")
+		.withIndex("by_property", (q) => q.eq("propertyId", propertyId))
+		.first();
+}
+
+export async function ensureMortgageBorrowerLink(
+	ctx: Pick<MutationCtx, "db">,
+	args: {
+		addedAt: number;
+		borrowerId: Id<"borrowers">;
+		mortgageId: Id<"mortgages">;
+		role: Doc<"mortgageBorrowers">["role"];
+	}
+): Promise<{ linkId: Id<"mortgageBorrowers">; wasCreated: boolean }> {
+	const existingLink = await ctx.db
+		.query("mortgageBorrowers")
+		.withIndex("by_mortgage", (q) => q.eq("mortgageId", args.mortgageId))
+		.filter((q) => q.eq(q.field("borrowerId"), args.borrowerId))
+		.first();
+
+	if (existingLink) {
+		return { linkId: existingLink._id, wasCreated: false };
+	}
+
+	const linkId = await ctx.db.insert("mortgageBorrowers", args);
+	return { linkId, wasCreated: true };
+}
+
+export async function findObligationByMortgageAndPaymentNumber(
+	ctx: Pick<MutationCtx, "db">,
+	args: { mortgageId: Id<"mortgages">; paymentNumber: number }
+): Promise<Doc<"obligations"> | null> {
+	return ctx.db
+		.query("obligations")
+		.withIndex("by_mortgage", (q) => q.eq("mortgageId", args.mortgageId))
+		.filter((q) => q.eq(q.field("paymentNumber"), args.paymentNumber))
+		.first();
+}
+
+export async function findOnboardingRequestByUserAndRole(
+	ctx: Pick<MutationCtx, "db">,
+	args: {
+		requestedRole: Doc<"onboardingRequests">["requestedRole"];
+		status: string;
+		userId: Id<"users">;
+	}
+): Promise<Doc<"onboardingRequests"> | null> {
+	return ctx.db
+		.query("onboardingRequests")
+		.withIndex("by_user", (q) => q.eq("userId", args.userId))
+		.filter((q) =>
+			q.and(
+				q.eq(q.field("requestedRole"), args.requestedRole),
+				q.eq(q.field("status"), args.status)
+			)
+		)
+		.first();
+}
+
+export async function resolveBrokerIds(
+	ctx: Pick<MutationCtx, "db">,
+	requestedBrokerIds?: Id<"brokers">[]
+): Promise<Id<"brokers">[]> {
+	if (requestedBrokerIds && requestedBrokerIds.length > 0) {
+		const uniqueBrokerIds: Id<"brokers">[] = [];
+		const seenBrokerIds = new Set<string>();
+
+		for (const brokerId of requestedBrokerIds) {
+			if (seenBrokerIds.has(brokerId)) {
+				continue;
+			}
+			const broker = await ctx.db.get(brokerId);
+			if (!broker) {
+				throw new ConvexError(`Broker not found for seed input: ${brokerId}`);
+			}
+			seenBrokerIds.add(brokerId);
+			uniqueBrokerIds.push(brokerId);
+		}
+		return uniqueBrokerIds;
+	}
+
+	const activeBrokers = await ctx.db
+		.query("brokers")
+		.withIndex("by_status", (q) => q.eq("status", "active"))
+		.collect();
+	if (activeBrokers.length > 0) {
+		return activeBrokers.map((broker) => broker._id);
+	}
+
+	const allBrokers = await ctx.db.query("brokers").collect();
+	if (allBrokers.length === 0) {
+		throw new ConvexError(
+			"No brokers available. Seed brokers first or pass brokerIds."
+		);
+	}
+	return allBrokers.map((broker) => broker._id);
+}
+
+export async function resolveBorrowerIds(
+	ctx: Pick<MutationCtx, "db">,
+	requestedBorrowerIds?: Id<"borrowers">[]
+): Promise<Id<"borrowers">[]> {
+	if (requestedBorrowerIds && requestedBorrowerIds.length > 0) {
+		const uniqueBorrowerIds: Id<"borrowers">[] = [];
+		const seenBorrowerIds = new Set<string>();
+
+		for (const borrowerId of requestedBorrowerIds) {
+			if (seenBorrowerIds.has(borrowerId)) {
+				continue;
+			}
+			const borrower = await ctx.db.get(borrowerId);
+			if (!borrower) {
+				throw new ConvexError(
+					`Borrower not found for seed input: ${borrowerId}`
+				);
+			}
+			seenBorrowerIds.add(borrowerId);
+			uniqueBorrowerIds.push(borrowerId);
+		}
+		return uniqueBorrowerIds;
+	}
+
+	const activeBorrowers = await ctx.db
+		.query("borrowers")
+		.withIndex("by_status", (q) => q.eq("status", "active"))
+		.collect();
+	if (activeBorrowers.length > 0) {
+		return activeBorrowers.map((borrower) => borrower._id);
+	}
+
+	const allBorrowers = await ctx.db.query("borrowers").collect();
+	if (allBorrowers.length === 0) {
+		throw new ConvexError(
+			"No borrowers available. Seed borrowers first or pass borrowerIds."
+		);
+	}
+	return allBorrowers.map((borrower) => borrower._id);
 }
 
 function isGovernedEntityType(

@@ -321,11 +321,24 @@ export const actionAuthMiddleware = convex
 		});
 	});
 
+export const requireFairLendAdminAction = convex
+	.$context<{ viewer: Viewer }>()
+	.createMiddleware(async (context, next) => {
+		if (!context.viewer.isFairLendAdmin) {
+			throw new ConvexError("Forbidden: fair lend admin role required");
+		}
+		return next(context);
+	});
+
 // ── Reusable Chains ─────────────────────────────────────────────────
 // Pre-configured chains with auth middleware baked in.
 export const authedQuery = convex.query().use(authMiddleware);
 export const authedMutation = convex.mutation().use(authMiddleware);
 export const authedAction = convex.action().use(actionAuthMiddleware);
+export const adminAction = convex
+	.action()
+	.use(actionAuthMiddleware)
+	.use(requireFairLendAdminAction);
 export const adminMutation = convex
 	.mutation()
 	.use(authMiddleware)

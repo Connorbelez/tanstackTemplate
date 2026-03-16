@@ -1,10 +1,10 @@
-import { ConvexError, v } from "convex/values";
+import { v } from "convex/values";
 import type { Doc, Id } from "../_generated/dataModel";
-import type { MutationCtx } from "../_generated/server";
 import { adminMutation } from "../fluent";
 import {
 	ensureUserByEmail,
 	findLenderByUserId,
+	resolveBrokerIds,
 	SEED_SOURCE,
 	type SeedUserFixture,
 	seedAuthIdFromEmail,
@@ -99,51 +99,12 @@ const LENDER_FIXTURES: readonly LenderSeedFixture[] = [
 	},
 ];
 
-async function resolveBrokerPool(
-	ctx: Pick<MutationCtx, "db">,
-	requestedBrokerIds?: Id<"brokers">[]
-): Promise<Id<"brokers">[]> {
-	if (requestedBrokerIds && requestedBrokerIds.length > 0) {
-		const uniqueBrokerIds: Id<"brokers">[] = [];
-		const seenBrokerIds = new Set<string>();
-
-		for (const brokerId of requestedBrokerIds) {
-			if (seenBrokerIds.has(brokerId)) {
-				continue;
-			}
-			const broker = await ctx.db.get(brokerId);
-			if (!broker) {
-				throw new ConvexError(`Broker not found for seed input: ${brokerId}`);
-			}
-			seenBrokerIds.add(brokerId);
-			uniqueBrokerIds.push(brokerId);
-		}
-		return uniqueBrokerIds;
-	}
-
-	const activeBrokers = await ctx.db
-		.query("brokers")
-		.withIndex("by_status", (q) => q.eq("status", "active"))
-		.collect();
-	if (activeBrokers.length > 0) {
-		return activeBrokers.map((broker) => broker._id);
-	}
-
-	const allBrokers = await ctx.db.query("brokers").collect();
-	if (allBrokers.length === 0) {
-		throw new ConvexError(
-			"No brokers available. Seed brokers first or pass brokerIds."
-		);
-	}
-	return allBrokers.map((broker) => broker._id);
-}
-
 export const seedLender = adminMutation
 	.input({
 		brokerIds: v.optional(v.array(v.id("brokers"))),
 	})
 	.handler(async (ctx, args) => {
-		const brokerPool = await resolveBrokerPool(ctx, args.brokerIds);
+		const brokerPool = await resolveBrokerIds(ctx, args.brokerIds);
 		const lenderIds: Id<"lenders">[] = [];
 		let createdLenders = 0;
 		let createdUsers = 0;
