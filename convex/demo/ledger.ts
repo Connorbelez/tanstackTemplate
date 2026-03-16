@@ -74,6 +74,15 @@ async function postSeedEntry(
 	});
 
 	// Update cumulative balances
+	if (!Number.isFinite(args.amount)) {
+		throw new Error("Amount must be a finite number (not NaN or Infinity)");
+	}
+	if (!Number.isInteger(args.amount)) {
+		throw new Error("Amount must be a whole number (integer)");
+	}
+	if (!Number.isSafeInteger(args.amount)) {
+		throw new Error("Amount exceeds safe integer range");
+	}
 	const amountBigInt = BigInt(args.amount);
 	const debitAccount = await ctx.db.get(args.debitAccountId);
 	const creditAccount = await ctx.db.get(args.creditAccountId);
