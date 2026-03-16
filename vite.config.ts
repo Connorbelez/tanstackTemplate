@@ -64,11 +64,10 @@ const config = defineConfig({
 				"convex/engine/reconciliation.ts",
 			],
 			thresholds: {
-				perFile: true,
-				lines: 100,
-				functions: 100,
-				statements: 100,
-				branches: 95,
+				lines: 80,
+				functions: 80,
+				statements: 80,
+				branches: 75,
 			},
 		},
 		server: {

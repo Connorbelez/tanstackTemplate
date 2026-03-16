@@ -97,6 +97,7 @@ export async function runHashChainJournalStep(
 	});
 }
 
+
 /**
  * Start the hash-chain workflow from a mutation context.
  *
@@ -109,7 +110,7 @@ export async function startHashChain(
 ) {
 	if (
 		typeof process !== "undefined" &&
-		process.env.DISABLE_HASH_CHAIN === "true"
+		process.env.DISABLE_GT_HASHCHAIN === "true"
 	) {
 		return;
 	}

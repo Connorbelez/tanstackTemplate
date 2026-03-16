@@ -16,25 +16,34 @@ import {
 } from "./engine/validators";
 
 export default defineSchema({
-	products: defineTable({
-		title: v.string(),
-		imageId: v.string(),
-		price: v.number(),
-	}),
-	todos: defineTable({
-		text: v.string(),
-		completed: v.boolean(),
-	}),
-	numbers: defineTable({
-		value: v.number(),
-	}),
+	// ══════════════════════════════════════════════════════════
+	// AUTH & IDENTITY
+	// ══════════════════════════════════════════════════════════
+
 	users: defineTable({
+		// ─── Auth (WorkOS synced) ───
 		authId: v.string(),
 		email: v.string(),
 		firstName: v.string(),
 		lastName: v.string(),
+
+		// ─── Contact ───
 		phoneNumber: v.optional(v.string()),
+		address: v.optional(
+			v.object({
+				streetAddress: v.string(),
+				unit: v.optional(v.string()),
+				city: v.string(),
+				province: v.string(),
+				postalCode: v.string(),
+			})
+		),
+		googlePlaceData: v.optional(v.any()),
+
+		// ─── Identity ───
+		dateOfBirth: v.optional(v.string()),
 	}).index("authId", ["authId"]),
+
 	organizations: defineTable({
 		workosId: v.string(),
 		name: v.string(),
@@ -60,6 +69,924 @@ export default defineSchema({
 		slug: v.string(),
 		permissions: v.array(v.string()),
 	}).index("slug", ["slug"]),
+
+	// ══════════════════════════════════════════════════════════
+	// CORE ROLE PROFILES
+	// ══════════════════════════════════════════════════════════
+
+	brokers: defineTable({
+		// ─── GT fields ───
+		status: v.string(),
+		lastTransitionAt: v.optional(v.number()),
+
+		// ─── Auth link ───
+		userId: v.id("users"),
+
+		// ─── Domain: licensing & business ───
+		licenseId: v.optional(v.string()),
+		licenseProvince: v.optional(v.string()),
+		brokerageName: v.optional(v.string()),
+		brokerageOrgId: v.optional(v.string()),
+
+		// ─── Lifecycle ───
+		onboardedAt: v.optional(v.number()),
+		createdAt: v.number(),
+	})
+		.index("by_user", ["userId"])
+		.index("by_license", ["licenseId"])
+		.index("by_status", ["status"]),
+
+	borrowers: defineTable({
+		// ─── GT fields ───
+		status: v.string(),
+		lastTransitionAt: v.optional(v.number()),
+
+		// ─── Auth link ───
+		userId: v.id("users"),
+
+		// ─── Domain ───
+		financialProfile: v.optional(v.any()),
+		idvStatus: v.optional(v.string()),
+		personaInquiryId: v.optional(v.string()),
+
+		// ─── Lifecycle ───
+		onboardedAt: v.optional(v.number()),
+		createdAt: v.number(),
+	})
+		.index("by_user", ["userId"])
+		.index("by_status", ["status"]),
+
+	lenders: defineTable({
+		// ─── Auth link ───
+		userId: v.id("users"),
+
+		// ─── Broker relationship ───
+		brokerId: v.id("brokers"),
+
+		// ─── Compliance ───
+		accreditationStatus: v.union(
+			v.literal("pending"),
+			v.literal("accredited"),
+			v.literal("exempt"),
+			v.literal("rejected")
+		),
+		idvStatus: v.optional(v.string()),
+		kycStatus: v.optional(v.string()),
+		personaInquiryId: v.optional(v.string()),
+
+		// ─── Provenance ───
+		onboardingEntryPath: v.string(),
+		onboardingId: v.optional(v.id("onboardingRequests")),
+
+		// ─── Lifecycle ───
+		status: v.string(),
+		activatedAt: v.optional(v.number()),
+		createdAt: v.number(),
+	})
+		.index("by_user", ["userId"])
+		.index("by_broker", ["brokerId"])
+		.index("by_status", ["status"]),
+
+	// ══════════════════════════════════════════════════════════
+	// LENDER ECOSYSTEM
+	// ══════════════════════════════════════════════════════════
+
+	lenderOnboardings: defineTable({
+		// ─── GT fields ───
+		status: v.string(),
+		machineContext: v.optional(v.any()),
+		lastTransitionAt: v.optional(v.number()),
+
+		// ─── Entry path ───
+		entryPath: v.string(),
+
+		// ─── Resolved lender (set on approval) ───
+		lenderId: v.optional(v.id("lenders")),
+		brokerId: v.id("brokers"),
+
+		// ─── Identity ───
+		email: v.string(),
+		inviteToken: v.optional(v.string()),
+		adminInviteToken: v.optional(v.string()),
+		invitedByAdminId: v.optional(v.string()),
+		subdomain: v.optional(v.string()),
+
+		// ─── Profile ───
+		fullName: v.optional(v.string()),
+		phone: v.optional(v.string()),
+		address: v.optional(v.any()),
+		accreditationStatus: v.optional(v.string()),
+
+		// ─── IDV (Persona) ───
+		personaInquiryId: v.optional(v.string()),
+		idvResult: v.optional(v.any()),
+
+		// ─── KYC ───
+		kycDocumentIds: v.optional(v.array(v.string())),
+		kycResult: v.optional(v.any()),
+		verificationScore: v.optional(v.number()),
+
+		// ─── Lifecycle ───
+		startedAt: v.number(),
+		lastActivityAt: v.number(),
+		expiresAt: v.number(),
+		createdAt: v.number(),
+	})
+		.index("by_email", ["email"])
+		.index("by_broker", ["brokerId", "status"])
+		.index("by_status", ["status"])
+		.index("by_invite_token", ["inviteToken"])
+		.index("by_admin_invite_token", ["adminInviteToken"]),
+
+	lenderFilterConstraints: defineTable({
+		// ─── Relationships ───
+		lenderId: v.id("lenders"),
+		brokerId: v.id("brokers"),
+		setByOnboardingId: v.optional(v.id("lenderOnboardings")),
+
+		// ─── Filter dimensions ───
+		ltvRange: v.optional(v.object({ min: v.number(), max: v.number() })),
+		interestRateRange: v.optional(
+			v.object({ min: v.number(), max: v.number() })
+		),
+		loanAmountRange: v.optional(v.object({ min: v.number(), max: v.number() })),
+		allowedMortgageTypes: v.optional(v.array(v.string())),
+		allowedPropertyTypes: v.optional(v.array(v.string())),
+		maturityDateMax: v.optional(v.string()),
+
+		// ─── Audit ───
+		lastUpdatedBy: v.string(),
+		updatedAt: v.number(),
+		createdAt: v.number(),
+	})
+		.index("by_lender", ["lenderId"])
+		.index("by_broker", ["brokerId"]),
+
+	lenderRenewalIntents: defineTable({
+		// ─── GT fields ───
+		status: v.string(),
+		machineContext: v.optional(v.any()),
+		lastTransitionAt: v.optional(v.number()),
+
+		// ─── Relationships ───
+		mortgageId: v.id("mortgages"),
+		lenderId: v.id("lenders"),
+		brokerId: v.id("brokers"),
+		positionAccountId: v.string(),
+
+		// ─── Intent ───
+		fractionCount: v.number(),
+		intent: v.union(
+			v.literal("renew"),
+			v.literal("exit"),
+			v.literal("partial_exit")
+		),
+		partialExitFractions: v.optional(v.number()),
+		notes: v.optional(v.string()),
+
+		// ─── Broker acknowledgment ───
+		brokerAcknowledgedAt: v.optional(v.number()),
+		brokerNotes: v.optional(v.string()),
+		borrowerRenewalIntentId: v.optional(v.string()),
+
+		// ─── Lifecycle ───
+		maturityDate: v.number(),
+		signalDeadline: v.number(),
+		signalledAt: v.optional(v.number()),
+		createdAt: v.number(),
+	})
+		.index("by_mortgage", ["mortgageId"])
+		.index("by_lender", ["lenderId", "status"])
+		.index("by_broker", ["brokerId", "status"])
+		.index("by_deadline", ["signalDeadline", "status"])
+		.index("by_maturity", ["maturityDate", "status"]),
+
+	portfolioSnapshots: defineTable({
+		lenderId: v.id("lenders"),
+		snapshotDate: v.string(),
+		snapshotType: v.union(v.literal("monthly"), v.literal("year_end")),
+		totalPositions: v.number(),
+		totalFractions: v.number(),
+		totalInvestedValue: v.number(),
+		periodIncome: v.number(),
+		cumulativeIncome: v.number(),
+		positions: v.array(
+			v.object({
+				mortgageId: v.string(),
+				accountId: v.string(),
+				balance: v.number(),
+				investedValue: v.number(),
+				periodIncome: v.number(),
+				cumulativeIncome: v.number(),
+				mortgageStatus: v.string(),
+			})
+		),
+		createdAt: v.number(),
+	})
+		.index("by_lender_date", ["lenderId", "snapshotDate"])
+		.index("by_type", ["snapshotType", "snapshotDate"]),
+
+	// ══════════════════════════════════════════════════════════
+	// ONBOARDING & GT (Governed Transitions)
+	// ══════════════════════════════════════════════════════════
+
+	onboardingRequests: defineTable({
+		userId: v.id("users"),
+		requestedRole: v.union(
+			v.literal("broker"),
+			v.literal("lender"),
+			v.literal("lawyer"),
+			v.literal("admin"),
+			v.literal("jr_underwriter"),
+			v.literal("underwriter"),
+			v.literal("sr_underwriter")
+		),
+		status: v.string(),
+		machineContext: v.optional(v.any()),
+		lastTransitionAt: v.optional(v.number()),
+		activeRoleAssignmentJournalId: v.optional(v.string()),
+		processedRoleAssignmentJournalIds: v.optional(v.array(v.string())),
+		referralSource: v.union(
+			v.literal("self_signup"),
+			v.literal("broker_invite")
+		),
+		invitedByBrokerId: v.optional(v.string()),
+		targetOrganizationId: v.optional(v.string()),
+		reviewedBy: v.optional(v.string()),
+		reviewedAt: v.optional(v.number()),
+		rejectionReason: v.optional(v.string()),
+		createdAt: v.number(),
+	})
+		.index("by_user", ["userId"])
+		.index("by_status", ["status"])
+		.index("by_user_and_status", ["userId", "status"]),
+
+	// ══════════════════════════════════════════════════════════
+	// CORE FINANCIAL ENTITIES
+	// ══════════════════════════════════════════════════════════
+
+	properties: defineTable({
+		// ─── Address (structured) ───
+		streetAddress: v.string(),
+		unit: v.optional(v.string()),
+		city: v.string(),
+		province: v.string(),
+		postalCode: v.string(),
+
+		// ─── Address (raw from Google Maps) ───
+		googlePlaceData: v.optional(v.any()),
+		latitude: v.optional(v.number()),
+		longitude: v.optional(v.number()),
+
+		// ─── Legal identity ───
+		legalDescription: v.optional(v.string()),
+		pin: v.optional(v.string()),
+		lroNumber: v.optional(v.string()),
+
+		// ─── Classification ───
+		propertyType: v.union(
+			v.literal("residential"),
+			v.literal("commercial"),
+			v.literal("multi_unit"),
+			v.literal("condo")
+		),
+
+		createdAt: v.number(),
+	})
+		.index("by_pin", ["pin"])
+		.index("by_postal_code", ["postalCode"]),
+
+	appraisals: defineTable({
+		propertyId: v.id("properties"),
+
+		// ─── Type ───
+		appraisalType: v.union(v.literal("as_is"), v.literal("as_if")),
+
+		// ─── Valuation ───
+		appraisedValue: v.number(),
+		asIfValue: v.optional(v.number()),
+		landValue: v.optional(v.number()),
+		improvementValue: v.optional(v.number()),
+
+		// ─── Appraiser ───
+		appraiserName: v.string(),
+		appraiserLicense: v.optional(v.string()),
+		appraiserFirm: v.optional(v.string()),
+
+		// ─── Dates ───
+		effectiveDate: v.string(),
+		reportDate: v.string(),
+
+		// ─── Supporting data ───
+		notes: v.optional(v.string()),
+		reportFileRef: v.optional(v.id("_storage")),
+
+		createdAt: v.number(),
+	})
+		.index("by_property", ["propertyId"])
+		.index("by_property_and_date", ["propertyId", "effectiveDate"]),
+
+	appraisalComparables: defineTable({
+		appraisalId: v.id("appraisals"),
+
+		// ─── The comparable property ───
+		address: v.string(),
+		googlePlaceData: v.optional(v.any()),
+		latitude: v.optional(v.number()),
+		longitude: v.optional(v.number()),
+
+		// ─── Comparison data ───
+		salePrice: v.optional(v.number()),
+		saleDate: v.optional(v.string()),
+		propertyType: v.optional(v.string()),
+		squareFootage: v.optional(v.number()),
+		lotSize: v.optional(v.string()),
+		yearBuilt: v.optional(v.number()),
+
+		// ─── Adjustments ───
+		adjustments: v.optional(v.any()),
+		adjustedValue: v.optional(v.number()),
+
+		sortOrder: v.number(),
+		createdAt: v.number(),
+	}).index("by_appraisal", ["appraisalId"]),
+
+	mortgages: defineTable({
+		// ─── Governed Transitions fields ───
+		status: v.string(),
+		machineContext: v.optional(v.any()),
+		lastTransitionAt: v.optional(v.number()),
+
+		// ─── The collateral ───
+		propertyId: v.id("properties"),
+
+		// ─── Loan financials ───
+		principal: v.number(),
+		interestRate: v.number(),
+		rateType: v.union(v.literal("fixed"), v.literal("variable")),
+		termMonths: v.number(),
+		amortizationMonths: v.number(),
+		paymentAmount: v.number(),
+		paymentFrequency: v.union(
+			v.literal("monthly"),
+			v.literal("bi_weekly"),
+			v.literal("accelerated_bi_weekly"),
+			v.literal("weekly")
+		),
+		loanType: v.union(
+			v.literal("conventional"),
+			v.literal("insured"),
+			v.literal("high_ratio")
+		),
+		lienPosition: v.number(),
+
+		// ─── Servicing ───
+		annualServicingRate: v.optional(v.number()),
+
+		// ─── Key dates ───
+		interestAdjustmentDate: v.string(),
+		termStartDate: v.string(),
+		maturityDate: v.string(),
+		firstPaymentDate: v.string(),
+
+		// ─── Participants ───
+		brokerOfRecordId: v.id("brokers"),
+		assignedBrokerId: v.optional(v.id("brokers")),
+
+		// ─── Renewal chain ───
+		priorMortgageId: v.optional(v.id("mortgages")),
+		isRenewal: v.optional(v.boolean()),
+
+		// ─── Lifecycle ───
+		fundedAt: v.optional(v.number()),
+		createdAt: v.number(),
+	})
+		.index("by_status", ["status"])
+		.index("by_property", ["propertyId"])
+		.index("by_broker_of_record", ["brokerOfRecordId"])
+		.index("by_assigned_broker", ["assignedBrokerId"])
+		.index("by_maturity", ["maturityDate"])
+		.index("by_prior_mortgage", ["priorMortgageId"]),
+
+	mortgageBorrowers: defineTable({
+		mortgageId: v.id("mortgages"),
+		borrowerId: v.id("borrowers"),
+		role: v.union(
+			v.literal("primary"),
+			v.literal("co_borrower"),
+			v.literal("guarantor")
+		),
+		addedAt: v.number(),
+	})
+		.index("by_mortgage", ["mortgageId"])
+		.index("by_borrower", ["borrowerId"]),
+
+	priorEncumbrances: defineTable({
+		propertyId: v.id("properties"),
+
+		// ─── Encumbrance details ───
+		encumbranceType: v.union(
+			v.literal("first_mortgage"),
+			v.literal("second_mortgage"),
+			v.literal("heloc"),
+			v.literal("lien"),
+			v.literal("other")
+		),
+		holder: v.string(),
+		outstandingBalance: v.optional(v.number()),
+		balanceAsOfDate: v.optional(v.string()),
+		priority: v.number(),
+		registrationNumber: v.optional(v.string()),
+		notes: v.optional(v.string()),
+
+		createdAt: v.number(),
+	}).index("by_property", ["propertyId"]),
+
+	obligations: defineTable({
+		// ─── Governed Transitions fields ───
+		status: v.string(),
+		machineContext: v.optional(v.any()),
+		lastTransitionAt: v.optional(v.number()),
+
+		// ─── Relationships ───
+		mortgageId: v.id("mortgages"),
+		borrowerId: v.id("borrowers"),
+
+		// ─── Payment identification ───
+		paymentNumber: v.number(),
+
+		// ─── Payment details (all amounts in cents) ───
+		amount: v.number(),
+		principalPortion: v.number(),
+		interestPortion: v.number(),
+		dueDate: v.string(),
+		gracePeriodEndDate: v.string(),
+
+		// ─── Settlement ───
+		settledAmount: v.optional(v.number()),
+		settledDate: v.optional(v.string()),
+		settledAt: v.optional(v.number()),
+
+		createdAt: v.number(),
+	})
+		.index("by_mortgage", ["mortgageId"])
+		.index("by_mortgage_and_due", ["mortgageId", "dueDate"])
+		.index("by_borrower", ["borrowerId"])
+		.index("by_status", ["status"]),
+
+	// ══════════════════════════════════════════════════════════
+	// PROVISIONAL FLOW
+	// ══════════════════════════════════════════════════════════
+
+	provisionalApplications: defineTable({
+		// ─── GT fields ───
+		status: v.string(),
+		lastTransitionAt: v.optional(v.number()),
+
+		// ─── Domain fields ───
+		brokerId: v.id("brokers"),
+		borrowerId: v.id("borrowers"),
+		normalizedData: v.any(),
+		fileIds: v.array(v.id("_storage")),
+		sourceType: v.union(v.literal("api"), v.literal("pdf"), v.literal("form")),
+		triageResult: v.optional(
+			v.object({
+				decision: v.string(),
+				details: v.any(),
+				decidedAt: v.number(),
+			})
+		),
+		createdAt: v.number(),
+	})
+		.index("by_status", ["status"])
+		.index("by_broker", ["brokerId"]),
+
+	provisionalOffers: defineTable({
+		// ─── GT fields ───
+		status: v.string(),
+		machineContext: v.optional(v.any()),
+		lastTransitionAt: v.optional(v.number()),
+
+		// ─── Domain fields ───
+		applicationId: v.id("provisionalApplications"),
+		brokerId: v.id("brokers"),
+		type: v.union(v.literal("pre_approval"), v.literal("conditional")),
+		portalToken: v.string(),
+		expiresAt: v.number(),
+		followUpScheduledId: v.optional(v.id("_scheduled_functions")),
+		commitmentDocRef: v.optional(v.id("_storage")),
+		createdAt: v.number(),
+	})
+		.index("by_application", ["applicationId"])
+		.index("by_broker", ["brokerId", "status"])
+		.index("by_portal_token", ["portalToken"])
+		.index("by_status", ["status"]),
+
+	offerConditions: defineTable({
+		// ─── GT fields ───
+		status: v.string(),
+		lastTransitionAt: v.optional(v.number()),
+
+		// ─── Domain fields ───
+		offerId: v.id("provisionalOffers"),
+		label: v.string(),
+		type: v.union(
+			v.literal("document_upload"),
+			v.literal("info_request"),
+			v.literal("acknowledgment"),
+			v.literal("commitment_signing")
+		),
+		gatedBy: v.optional(v.id("offerConditions")),
+		fulfillmentMethod: v.optional(
+			v.union(
+				v.literal("documenso_email"),
+				v.literal("physical_upload"),
+				v.literal("portal_embedded")
+			)
+		),
+		fileRef: v.optional(v.id("_storage")),
+		documensoEnvelopeId: v.optional(v.string()),
+		submittedAt: v.optional(v.number()),
+		reviewedAt: v.optional(v.number()),
+	})
+		.index("by_offer", ["offerId"])
+		.index("by_gated_by", ["gatedBy"]),
+
+	// ══════════════════════════════════════════════════════════
+	// APPLICATION & UNDERWRITING
+	// ══════════════════════════════════════════════════════════
+
+	applicationPackages: defineTable({
+		// ─── GT fields ───
+		status: v.string(),
+		machineContext: v.optional(v.any()),
+		lastTransitionAt: v.optional(v.number()),
+
+		// ─── Lineage ───
+		sourceApplicationId: v.id("provisionalApplications"),
+
+		// ─── Domain fields ───
+		currentVersion: v.number(),
+		borrowerId: v.id("borrowers"),
+		brokerId: v.id("brokers"),
+		closingDate: v.optional(v.number()),
+		createdAt: v.number(),
+	})
+		.index("by_status", ["status"])
+		.index("by_source_application", ["sourceApplicationId"])
+		.index("by_broker", ["brokerId"]),
+
+	applicationPackageVersions: defineTable({
+		packageId: v.id("applicationPackages"),
+		versionNumber: v.number(),
+		snapshotData: v.any(),
+		diff: v.optional(v.any()),
+		sourceWorkspaceId: v.optional(v.id("revisionWorkspaces")),
+		createdAt: v.number(),
+	}).index("by_package", ["packageId", "versionNumber"]),
+
+	underwritingArtifacts: defineTable({
+		packageId: v.id("applicationPackages"),
+		section: v.string(),
+		type: v.union(
+			v.literal("property_appraisal"),
+			v.literal("valuation_analysis"),
+			v.literal("comparable_market_analysis"),
+			v.literal("risk_notes"),
+			v.literal("verification_confirmation"),
+			v.literal("external_reference_check")
+		),
+		status: v.union(v.literal("current"), v.literal("superseded")),
+		createdAtVersion: v.number(),
+		supersededAtVersion: v.optional(v.number()),
+
+		content: v.any(),
+		fileRefs: v.optional(v.array(v.id("_storage"))),
+
+		createdBy: v.string(),
+		createdAt: v.number(),
+		supersededAt: v.optional(v.number()),
+	})
+		.index("by_package", ["packageId"])
+		.index("by_package_and_section", ["packageId", "section"])
+		.index("by_package_and_status", ["packageId", "status"]),
+
+	revisionWorkspaces: defineTable({
+		status: v.union(
+			v.literal("active"),
+			v.literal("submitted"),
+			v.literal("expired")
+		),
+
+		packageId: v.id("applicationPackages"),
+		sourceVersionNumber: v.number(),
+
+		revisionItems: v.optional(v.array(v.any())),
+		data: v.any(),
+
+		brokerNotes: v.optional(v.string()),
+		portalToken: v.string(),
+
+		createdAt: v.number(),
+		createdBy: v.string(),
+		submittedAt: v.optional(v.number()),
+		submittedBy: v.optional(v.string()),
+		expiresAt: v.number(),
+	})
+		.index("by_package", ["packageId"])
+		.index("by_portal_token", ["portalToken"])
+		.index("by_status", ["status"]),
+
+	// ══════════════════════════════════════════════════════════
+	// DEAL CLOSING
+	// ══════════════════════════════════════════════════════════
+
+	deals: defineTable({
+		// ─── Governed Transitions fields ───
+		status: v.string(),
+		machineContext: v.optional(v.any()),
+		lastTransitionAt: v.optional(v.number()),
+
+		// ─── Domain fields ───
+		mortgageId: v.id("mortgages"),
+		buyerId: v.string(),
+		sellerId: v.string(),
+		fractionalShare: v.number(),
+		closingDate: v.optional(v.number()),
+		lawyerId: v.optional(v.string()),
+		lawyerType: v.optional(
+			v.union(v.literal("platform_lawyer"), v.literal("guest_lawyer"))
+		),
+		createdAt: v.number(),
+		createdBy: v.string(),
+	})
+		.index("by_status", ["status"])
+		.index("by_mortgage", ["mortgageId"])
+		.index("by_buyer", ["buyerId"])
+		.index("by_seller", ["sellerId"]),
+
+	dealAccess: defineTable({
+		userId: v.string(),
+		dealId: v.id("deals"),
+		role: v.union(
+			v.literal("platform_lawyer"),
+			v.literal("guest_lawyer"),
+			v.literal("lender"),
+			v.literal("borrower")
+		),
+		grantedAt: v.number(),
+		grantedBy: v.string(),
+		revokedAt: v.optional(v.number()),
+		status: v.union(v.literal("active"), v.literal("revoked")),
+	})
+		.index("by_user_and_deal", ["userId", "dealId"])
+		.index("by_deal", ["dealId"])
+		.index("by_user", ["userId"]),
+
+	closingTeamAssignments: defineTable({
+		mortgageId: v.id("mortgages"),
+		userId: v.string(),
+		role: v.union(
+			v.literal("closing_lawyer"),
+			v.literal("reviewing_lawyer"),
+			v.literal("notary")
+		),
+		assignedBy: v.string(),
+		assignedAt: v.number(),
+	})
+		.index("by_mortgage", ["mortgageId"])
+		.index("by_user", ["userId"]),
+
+	// ══════════════════════════════════════════════════════════
+	// DISPERSAL ENGINE
+	// ══════════════════════════════════════════════════════════
+
+	dispersalEntries: defineTable({
+		mortgageId: v.id("mortgages"),
+		lenderId: v.id("lenders"),
+		lenderAccountId: v.id("ledger_accounts"),
+		amount: v.number(),
+		dispersalDate: v.string(),
+		obligationId: v.id("obligations"),
+		servicingFeeDeducted: v.number(),
+		status: v.literal("pending"),
+		idempotencyKey: v.string(),
+		calculationDetails: v.object({
+			settledAmount: v.number(),
+			servicingFee: v.number(),
+			distributableAmount: v.number(),
+			ownershipUnits: v.number(),
+			totalUnits: v.number(),
+			ownershipFraction: v.number(),
+			rawAmount: v.number(),
+			roundedAmount: v.number(),
+		}),
+		createdAt: v.number(),
+	})
+		.index("by_lender", ["lenderId", "dispersalDate"])
+		.index("by_mortgage", ["mortgageId", "dispersalDate"])
+		.index("by_obligation", ["obligationId"])
+		.index("by_status", ["status", "lenderId"])
+		.index("by_idempotency", ["idempotencyKey"]),
+
+	servicingFeeEntries: defineTable({
+		mortgageId: v.id("mortgages"),
+		obligationId: v.id("obligations"),
+		amount: v.number(),
+		annualRate: v.number(),
+		principalBalance: v.number(),
+		date: v.string(),
+		createdAt: v.number(),
+	})
+		.index("by_mortgage", ["mortgageId", "date"])
+		.index("by_obligation", ["obligationId"]),
+
+	// ══════════════════════════════════════════════════════════
+	// GT AUDIT JOURNAL
+	// ══════════════════════════════════════════════════════════
+
+	auditJournal: defineTable({
+		entityType: entityTypeValidator,
+		entityId: v.string(),
+		eventType: v.string(),
+		payload: v.optional(v.any()),
+		previousState: v.string(),
+		newState: v.string(),
+		outcome: v.union(v.literal("transitioned"), v.literal("rejected")),
+		reason: v.optional(v.string()),
+		actorId: v.string(),
+		actorType: v.optional(actorTypeValidator),
+		channel: channelValidator,
+		ip: v.optional(v.string()),
+		sessionId: v.optional(v.string()),
+		machineVersion: v.optional(v.string()),
+		effectsScheduled: v.optional(v.array(v.string())),
+		timestamp: v.number(),
+	})
+		.index("by_entity", ["entityType", "entityId", "timestamp"])
+		.index("by_actor", ["actorId", "timestamp"])
+		.index("by_type_and_time", ["entityType", "timestamp"]),
+
+	// ══════════════════════════════════════════════════════════
+	// MORTGAGE OWNERSHIP LEDGER
+	// ══════════════════════════════════════════════════════════
+
+	ledger_accounts: defineTable({
+		type: v.union(
+			v.literal("WORLD"),
+			v.literal("TREASURY"),
+			v.literal("POSITION")
+		),
+		mortgageId: v.optional(v.string()),
+		lenderId: v.optional(v.string()),
+		cumulativeDebits: v.int64(),
+		cumulativeCredits: v.int64(),
+		createdAt: v.float64(),
+		metadata: v.optional(v.record(v.string(), v.any())),
+	})
+		.index("by_mortgage", ["mortgageId"])
+		.index("by_lender", ["lenderId"])
+		.index("by_mortgage_and_lender", ["mortgageId", "lenderId"])
+		.index("by_type_and_mortgage", ["type", "mortgageId"]),
+
+	ledger_journal_entries: defineTable({
+		sequenceNumber: v.int64(),
+		entryType: v.union(
+			v.literal("MORTGAGE_MINTED"),
+			v.literal("SHARES_ISSUED"),
+			v.literal("SHARES_TRANSFERRED"),
+			v.literal("SHARES_REDEEMED"),
+			v.literal("MORTGAGE_BURNED"),
+			v.literal("CORRECTION")
+		),
+		mortgageId: v.string(),
+		effectiveDate: v.string(),
+		timestamp: v.float64(),
+		debitAccountId: v.id("ledger_accounts"),
+		creditAccountId: v.id("ledger_accounts"),
+		amount: v.int64(),
+		idempotencyKey: v.string(),
+		causedBy: v.optional(v.id("ledger_journal_entries")),
+		source: v.object({
+			type: v.union(
+				v.literal("user"),
+				v.literal("system"),
+				v.literal("webhook"),
+				v.literal("cron")
+			),
+			actor: v.optional(v.string()),
+			channel: v.optional(v.string()),
+		}),
+		reason: v.optional(v.string()),
+		metadata: v.optional(v.record(v.string(), v.any())),
+	})
+		.index("by_idempotency", ["idempotencyKey"])
+		.index("by_mortgage_and_time", ["mortgageId", "timestamp"])
+		.index("by_sequence", ["sequenceNumber"])
+		.index("by_debit_account", ["debitAccountId", "timestamp"])
+		.index("by_credit_account", ["creditAccountId", "timestamp"])
+		.index("by_entry_type", ["entryType", "timestamp"]),
+
+	ledger_cursors: defineTable({
+		consumerId: v.string(),
+		lastProcessedSequence: v.int64(),
+		lastProcessedAt: v.float64(),
+	}).index("by_consumer", ["consumerId"]),
+
+	// ══════════════════════════════════════════════════════════
+	// DOCUMENT ENGINE
+	// ══════════════════════════════════════════════════════════
+
+	documentBasePdfs: defineTable({
+		name: v.string(),
+		description: v.optional(v.string()),
+		fileRef: v.id("_storage"),
+		fileHash: v.string(),
+		fileSize: v.number(),
+		pageCount: v.number(),
+		pageDimensions: v.array(pageDimensionValidator),
+		uploadedBy: v.optional(v.string()),
+		uploadedAt: v.number(),
+	})
+		.index("by_hash", ["fileHash"])
+		.index("by_name", ["name"]),
+
+	systemVariables: defineTable({
+		key: v.string(),
+		label: v.string(),
+		type: variableTypeValidator,
+		description: v.optional(v.string()),
+		systemPath: v.optional(v.string()),
+		formatOptions: formatOptionsValidator,
+		createdBy: v.optional(v.string()),
+		createdAt: v.number(),
+	}).index("by_key", ["key"]),
+
+	documentTemplates: defineTable({
+		name: v.string(),
+		description: v.optional(v.string()),
+		basePdfId: v.id("documentBasePdfs"),
+		basePdfHash: v.string(),
+		draft: draftStateValidator,
+		currentPublishedVersion: v.optional(v.number()),
+		hasDraftChanges: v.boolean(),
+		createdAt: v.number(),
+		updatedAt: v.number(),
+	})
+		.index("by_name", ["name"])
+		.index("by_base_pdf", ["basePdfId"]),
+
+	documentTemplateVersions: defineTable({
+		templateId: v.id("documentTemplates"),
+		version: v.number(),
+		basePdfId: v.id("documentBasePdfs"),
+		basePdfHash: v.string(),
+		snapshot: draftStateValidator,
+		publishedBy: v.optional(v.string()),
+		publishedAt: v.number(),
+	}).index("by_template", ["templateId", "version"]),
+
+	dataModelEntities: defineTable({
+		name: v.string(),
+		label: v.string(),
+		source: entitySourceValidator,
+		hidden: v.boolean(),
+		fields: v.array(entityFieldValidator),
+		createdAt: v.number(),
+		updatedAt: v.number(),
+	}).index("by_name", ["name"]),
+
+	documentTemplateGroups: defineTable({
+		name: v.string(),
+		description: v.optional(v.string()),
+		templateRefs: v.array(
+			v.object({
+				templateId: v.id("documentTemplates"),
+				order: v.number(),
+				pinnedVersion: v.optional(v.number()),
+			})
+		),
+		signatories: v.array(signatoryConfigValidator),
+		createdAt: v.number(),
+		updatedAt: v.number(),
+	}).index("by_name", ["name"]),
+
+	// ══════════════════════════════════════════════════════════
+	// DEMO TABLES
+	// ══════════════════════════════════════════════════════════
+
+	products: defineTable({
+		title: v.string(),
+		imageId: v.string(),
+		price: v.number(),
+	}),
+	todos: defineTable({
+		text: v.string(),
+		completed: v.boolean(),
+	}),
+	numbers: defineTable({
+		value: v.number(),
+	}),
 
 	demo_auth_action_logs: defineTable({
 		actionType: v.string(),
@@ -140,7 +1067,6 @@ export default defineSchema({
 		storageId: v.optional(v.id("_storage")),
 	}),
 
-	// ── Demo Triggers tables ─────────────────────────────────────────
 	demo_triggers_contacts: defineTable({
 		firstName: v.string(),
 		lastName: v.string(),
@@ -161,7 +1087,6 @@ export default defineSchema({
 		timestamp: v.number(),
 	}),
 
-	// ── Demo fluent-convex tables ───────────────────────────────────
 	demo_fluent_widgets: defineTable({
 		name: v.string(),
 		createdBy: v.string(),
@@ -173,7 +1098,6 @@ export default defineSchema({
 		role: v.string(),
 	}).index("by_widget", ["widgetId"]),
 
-	// ── Demo Audit & Traceability ────────────────────────────────────
 	demo_audit_mortgages: defineTable({
 		label: v.string(),
 		currentOwnerId: v.string(),
@@ -195,205 +1119,4 @@ export default defineSchema({
 		createdAt: v.number(),
 		updatedAt: v.number(),
 	}).index("by_status", ["status"]),
-
-	// NOTE: demo_audit_events and demo_audit_outbox have moved into the
-	// auditTrail component (convex/components/auditTrail/). The host app's
-	// ctx.db cannot access them — append-only by design, not policy.
-
-	// ── Mortgage Ownership Ledger ────────────────────────────────────
-
-	ledger_accounts: defineTable({
-		type: v.union(
-			v.literal("WORLD"),
-			v.literal("TREASURY"),
-			v.literal("POSITION")
-		),
-		mortgageId: v.optional(v.string()),
-		lenderId: v.optional(v.string()),
-		cumulativeDebits: v.int64(),
-		cumulativeCredits: v.int64(),
-		createdAt: v.float64(),
-		metadata: v.optional(v.record(v.string(), v.any())),
-	})
-		.index("by_mortgage", ["mortgageId"])
-		.index("by_lender", ["lenderId"])
-		.index("by_mortgage_and_lender", ["mortgageId", "lenderId"])
-		.index("by_type_and_mortgage", ["type", "mortgageId"]),
-
-	ledger_journal_entries: defineTable({
-		sequenceNumber: v.int64(),
-		entryType: v.union(
-			v.literal("MORTGAGE_MINTED"),
-			v.literal("SHARES_ISSUED"),
-			v.literal("SHARES_TRANSFERRED"),
-			v.literal("SHARES_REDEEMED"),
-			v.literal("MORTGAGE_BURNED"),
-			v.literal("CORRECTION")
-		),
-		mortgageId: v.string(),
-		effectiveDate: v.string(),
-		timestamp: v.float64(),
-		debitAccountId: v.id("ledger_accounts"),
-		creditAccountId: v.id("ledger_accounts"),
-		amount: v.int64(),
-		idempotencyKey: v.string(),
-		causedBy: v.optional(v.id("ledger_journal_entries")),
-		source: v.object({
-			type: v.union(
-				v.literal("user"),
-				v.literal("system"),
-				v.literal("webhook"),
-				v.literal("cron")
-			),
-			actor: v.optional(v.string()),
-			channel: v.optional(v.string()),
-		}),
-		reason: v.optional(v.string()),
-		metadata: v.optional(v.record(v.string(), v.any())),
-	})
-		.index("by_idempotency", ["idempotencyKey"])
-		.index("by_mortgage_and_time", ["mortgageId", "timestamp"])
-		.index("by_sequence", ["sequenceNumber"])
-		.index("by_debit_account", ["debitAccountId", "timestamp"])
-		.index("by_credit_account", ["creditAccountId", "timestamp"])
-		.index("by_entry_type", ["entryType", "timestamp"]),
-
-	ledger_cursors: defineTable({
-		consumerId: v.string(),
-		lastProcessedSequence: v.int64(),
-		lastProcessedAt: v.float64(),
-	}).index("by_consumer", ["consumerId"]),
-
-	// ── Document Engine ──────────────────────────────────────────────
-
-	documentBasePdfs: defineTable({
-		name: v.string(),
-		description: v.optional(v.string()),
-		fileRef: v.id("_storage"),
-		fileHash: v.string(),
-		fileSize: v.number(),
-		pageCount: v.number(),
-		pageDimensions: v.array(pageDimensionValidator),
-		uploadedBy: v.optional(v.string()),
-		uploadedAt: v.number(),
-	})
-		.index("by_hash", ["fileHash"])
-		.index("by_name", ["name"]),
-
-	systemVariables: defineTable({
-		key: v.string(),
-		label: v.string(),
-		type: variableTypeValidator,
-		description: v.optional(v.string()),
-		systemPath: v.optional(v.string()),
-		formatOptions: formatOptionsValidator,
-		createdBy: v.optional(v.string()),
-		createdAt: v.number(),
-	}).index("by_key", ["key"]),
-
-	documentTemplates: defineTable({
-		name: v.string(),
-		description: v.optional(v.string()),
-		basePdfId: v.id("documentBasePdfs"),
-		basePdfHash: v.string(),
-		draft: draftStateValidator,
-		currentPublishedVersion: v.optional(v.number()),
-		hasDraftChanges: v.boolean(),
-		createdAt: v.number(),
-		updatedAt: v.number(),
-	})
-		.index("by_name", ["name"])
-		.index("by_base_pdf", ["basePdfId"]),
-
-	documentTemplateVersions: defineTable({
-		templateId: v.id("documentTemplates"),
-		version: v.number(),
-		basePdfId: v.id("documentBasePdfs"),
-		basePdfHash: v.string(),
-		snapshot: draftStateValidator,
-		publishedBy: v.optional(v.string()),
-		publishedAt: v.number(),
-	}).index("by_template", ["templateId", "version"]),
-
-	dataModelEntities: defineTable({
-		name: v.string(),
-		label: v.string(),
-		source: entitySourceValidator,
-		hidden: v.boolean(),
-		fields: v.array(entityFieldValidator),
-		createdAt: v.number(),
-		updatedAt: v.number(),
-	}).index("by_name", ["name"]),
-
-	// ── Onboarding & GT (Governed Transitions) ─────────────────────────
-
-	onboardingRequests: defineTable({
-		userId: v.id("users"),
-		requestedRole: v.union(
-			v.literal("broker"),
-			v.literal("lender"),
-			v.literal("lawyer"),
-			v.literal("admin"),
-			v.literal("jr_underwriter"),
-			v.literal("underwriter"),
-			v.literal("sr_underwriter")
-		),
-		status: v.string(),
-		machineContext: v.optional(v.any()),
-		lastTransitionAt: v.optional(v.number()),
-		activeRoleAssignmentJournalId: v.optional(v.string()),
-		processedRoleAssignmentJournalIds: v.optional(v.array(v.string())),
-		referralSource: v.union(
-			v.literal("self_signup"),
-			v.literal("broker_invite")
-		),
-		invitedByBrokerId: v.optional(v.string()),
-		targetOrganizationId: v.optional(v.string()),
-		reviewedBy: v.optional(v.string()),
-		reviewedAt: v.optional(v.number()),
-		rejectionReason: v.optional(v.string()),
-		createdAt: v.number(),
-	})
-		.index("by_user", ["userId"])
-		.index("by_status", ["status"])
-		.index("by_user_and_status", ["userId", "status"]),
-
-	// ── GT Audit Journal ──────────────────────────────────────────────
-	auditJournal: defineTable({
-		entityType: entityTypeValidator,
-		entityId: v.string(),
-		eventType: v.string(),
-		payload: v.optional(v.any()),
-		previousState: v.string(),
-		newState: v.string(),
-		outcome: v.union(v.literal("transitioned"), v.literal("rejected")),
-		reason: v.optional(v.string()),
-		// Source fields flattened (Convex cannot index nested objects)
-		actorId: v.string(),
-		actorType: v.optional(actorTypeValidator),
-		channel: channelValidator,
-		ip: v.optional(v.string()),
-		sessionId: v.optional(v.string()),
-		machineVersion: v.optional(v.string()),
-		effectsScheduled: v.optional(v.array(v.string())),
-		timestamp: v.number(),
-	})
-		.index("by_entity", ["entityType", "entityId", "timestamp"])
-		.index("by_actor", ["actorId", "timestamp"])
-		.index("by_type_and_time", ["entityType", "timestamp"]),
-
-	documentTemplateGroups: defineTable({
-		name: v.string(),
-		description: v.optional(v.string()),
-		templateRefs: v.array(
-			v.object({
-				templateId: v.id("documentTemplates"),
-				order: v.number(),
-				pinnedVersion: v.optional(v.number()),
-			})
-		),
-		signatories: v.array(signatoryConfigValidator),
-		createdAt: v.number(),
-		updatedAt: v.number(),
-	}).index("by_name", ["name"]),
 });

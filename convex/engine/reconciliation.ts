@@ -31,6 +31,7 @@ async function collectLatestJournalEntries(
 
 	let consecutiveEmptyPages = 0;
 
+
 	while (true) {
 		const { continueCursor, isDone, page } = await ctx.db
 			.query("auditJournal")
@@ -66,6 +67,7 @@ async function collectLatestJournalEntries(
 		if (consecutiveEmptyPages >= 3) {
 			return latestByEntity;
 		}
+
 
 		cursor = continueCursor;
 	}
