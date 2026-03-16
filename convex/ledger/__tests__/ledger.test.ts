@@ -1402,6 +1402,56 @@ describe("Common Rejections", () => {
 		).rejects.toThrow(/Amount must be positive/);
 	});
 
+	it("T-073b: fractional amount is rejected", async () => {
+		const t = createTestHarness();
+		const auth = asLedgerUser(t);
+		const { mintResult, issueResult } = await mintAndIssue(
+			t,
+			"m1",
+			"lender-a"
+		);
+
+		await expect(
+			auth.mutation(api.ledger.mutations.postEntry, {
+				entryType: "CORRECTION",
+				mortgageId: "m1",
+				debitAccountId: issueResult.positionAccountId,
+				creditAccountId: mintResult.treasuryAccountId,
+				amount: 0.5,
+				effectiveDate: "2026-01-02",
+				idempotencyKey: "fractional-amount",
+				source: ADMIN_SOURCE,
+				causedBy: issueResult.journalEntry._id,
+				reason: "test",
+			})
+		).rejects.toThrow(/whole number/i);
+	});
+
+	it("T-073c: amount exceeding Number.MAX_SAFE_INTEGER is rejected", async () => {
+		const t = createTestHarness();
+		const auth = asLedgerUser(t);
+		const { mintResult, issueResult } = await mintAndIssue(
+			t,
+			"m1",
+			"lender-a"
+		);
+
+		await expect(
+			auth.mutation(api.ledger.mutations.postEntry, {
+				entryType: "CORRECTION",
+				mortgageId: "m1",
+				debitAccountId: issueResult.positionAccountId,
+				creditAccountId: mintResult.treasuryAccountId,
+				amount: Number.MAX_SAFE_INTEGER + 1,
+				effectiveDate: "2026-01-02",
+				idempotencyKey: "unsafe-integer-amount",
+				source: ADMIN_SOURCE,
+				causedBy: issueResult.journalEntry._id,
+				reason: "test",
+			})
+		).rejects.toThrow(/safe integer/i);
+	});
+
 	it("T-074: self-transfer (debit == credit) is rejected", async () => {
 		const t = createTestHarness();
 		await initCounter(t);

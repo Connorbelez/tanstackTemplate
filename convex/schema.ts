@@ -867,12 +867,13 @@ export default defineSchema({
 			v.literal("SHARES_VOIDED"),
 			v.literal("CORRECTION")
 		),
-		reservationId: v.optional(v.string()),
+		reservationId: v.optional(v.id("ledger_reservations")),
 		mortgageId: v.string(),
 		effectiveDate: v.string(),
 		timestamp: v.number(),
 		debitAccountId: v.id("ledger_accounts"),
 		creditAccountId: v.id("ledger_accounts"),
+		/** Amount as a finite integer in the smallest currency unit (e.g. cents). Suitable for conversion to bigint. */
 		amount: v.number(),
 		idempotencyKey: v.string(),
 		causedBy: v.optional(v.id("ledger_journal_entries")),

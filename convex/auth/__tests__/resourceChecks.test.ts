@@ -174,6 +174,37 @@ async function insertLedgerPosition(
 	});
 }
 
+async function insertLedgerReservation(
+	ctx: MutationCtx,
+	mortgageId: Id<"mortgages">,
+	sellerAccountId: Id<"ledger_accounts">,
+	buyerAccountId: Id<"ledger_accounts">,
+	reserveJournalEntryId: Id<"ledger_journal_entries">,
+	overrides: {
+		status?: "pending" | "committed" | "voided";
+		dealId?: string;
+		amount?: number;
+	} = {}
+) {
+	return ctx.db.insert("ledger_reservations", {
+		mortgageId: mortgageId as string,
+		sellerAccountId,
+		buyerAccountId,
+		amount: overrides.amount ?? 1000,
+		status: overrides.status ?? "pending",
+		dealId: overrides.dealId,
+		reserveJournalEntryId,
+		createdAt: NOW,
+	});
+}
+
+async function insertSequenceCounter(ctx: MutationCtx, value = 1n) {
+	return ctx.db.insert("ledger_sequence_counter", {
+		name: "ledger_sequence" as const,
+		value,
+	});
+}
+
 async function insertClosingTeamAssignment(
 	ctx: MutationCtx,
 	mortgageId: Id<"mortgages">,
@@ -1988,6 +2019,217 @@ describe("canAccessApplicationPackage", () => {
 			});
 			const result = await canAccessApplicationPackage(ctx, viewer, packageId);
 			expect(result).toBe(false);
+		});
+	});
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// Ledger table coverage: ledger_reservations, ledger_sequence_counter
+// ═══════════════════════════════════════════════════════════════════
+
+describe("ledger_reservations — access via parent mortgage", () => {
+	it("lender with pending reservation still has access via POSITION balance", async () => {
+		const t = convexTest(schema, modules);
+		await t.run(async (ctx) => {
+			const brokerUserId = await insertUser(ctx, { authId: "broker-auth" });
+			const brokerId = await insertBroker(ctx, brokerUserId);
+			const propId = await insertProperty(ctx);
+			const mortgageId = await insertMortgage(ctx, propId, brokerId);
+
+			// Create lender with a POSITION account that has pending amounts
+			const lenderUserId = await insertUser(ctx, { authId: "lender-auth" });
+			await insertLender(ctx, lenderUserId, brokerId);
+			const positionId = await ctx.db.insert("ledger_accounts", {
+				type: "POSITION",
+				mortgageId: mortgageId as string,
+				lenderId: "lender-auth",
+				cumulativeDebits: 5000n,
+				cumulativeCredits: 0n,
+				pendingDebits: 0n,
+				pendingCredits: 1000n,
+				createdAt: NOW,
+			});
+
+			// Insert a journal entry to serve as the reservation's required reference
+			await insertSequenceCounter(ctx, 1n);
+			const journalEntryId = await ctx.db.insert("ledger_journal_entries", {
+				sequenceNumber: 1n,
+				entryType: "SHARES_RESERVED",
+				mortgageId: mortgageId as string,
+				effectiveDate: "2026-01-01",
+				timestamp: NOW,
+				debitAccountId: positionId,
+				creditAccountId: positionId,
+				amount: 1000,
+				idempotencyKey: "test-reserve-1",
+				source: { type: "system" },
+			});
+
+			// Create the reservation referencing the position accounts
+			await insertLedgerReservation(
+				ctx,
+				mortgageId,
+				positionId,
+				positionId,
+				journalEntryId,
+				{ status: "pending", amount: 1000 }
+			);
+
+			// Lender still has access since cumulative balance (5000) is positive
+			const viewer = makeViewer({ authId: "lender-auth" });
+			const result = await canAccessMortgage(ctx, viewer, mortgageId);
+			expect(result).toBe(true);
+		});
+	});
+
+	it("admin can access mortgage with reservations", async () => {
+		const t = convexTest(schema, modules);
+		await t.run(async (ctx) => {
+			const brokerUserId = await insertUser(ctx, { authId: "broker-auth" });
+			const brokerId = await insertBroker(ctx, brokerUserId);
+			const propId = await insertProperty(ctx);
+			const mortgageId = await insertMortgage(ctx, propId, brokerId);
+
+			const positionId = await ctx.db.insert("ledger_accounts", {
+				type: "POSITION",
+				mortgageId: mortgageId as string,
+				lenderId: "some-lender",
+				cumulativeDebits: 5000n,
+				cumulativeCredits: 0n,
+				pendingDebits: 0n,
+				pendingCredits: 2000n,
+				createdAt: NOW,
+			});
+
+			await insertSequenceCounter(ctx, 1n);
+			const journalEntryId = await ctx.db.insert("ledger_journal_entries", {
+				sequenceNumber: 1n,
+				entryType: "SHARES_RESERVED",
+				mortgageId: mortgageId as string,
+				effectiveDate: "2026-01-01",
+				timestamp: NOW,
+				debitAccountId: positionId,
+				creditAccountId: positionId,
+				amount: 2000,
+				idempotencyKey: "test-reserve-admin-1",
+				source: { type: "system" },
+			});
+
+			await insertLedgerReservation(
+				ctx,
+				mortgageId,
+				positionId,
+				positionId,
+				journalEntryId,
+				{ status: "pending", amount: 2000 }
+			);
+
+			const viewer = adminViewer();
+			const result = await canAccessMortgage(ctx, viewer, mortgageId);
+			expect(result).toBe(true);
+		});
+	});
+});
+
+describe("ledger_sequence_counter — table insertable", () => {
+	it("sequence counter can be seeded and read back", async () => {
+		const t = convexTest(schema, modules);
+		await t.run(async (ctx) => {
+			const counterId = await insertSequenceCounter(ctx, 42n);
+			const counter = await ctx.db.get(counterId);
+			expect(counter).not.toBeNull();
+			expect(counter?.name).toBe("ledger_sequence");
+			expect(counter?.value).toBe(42n);
+		});
+	});
+});
+
+describe("pendingDebits / pendingCredits — field presence in ledger_accounts", () => {
+	it("POSITION account with only pending balance — no access (pending not counted for access)", async () => {
+		const t = convexTest(schema, modules);
+		await t.run(async (ctx) => {
+			const brokerUserId = await insertUser(ctx, { authId: "broker-auth" });
+			const brokerId = await insertBroker(ctx, brokerUserId);
+			const propId = await insertProperty(ctx);
+			const mortgageId = await insertMortgage(ctx, propId, brokerId);
+
+			const lenderUserId = await insertUser(ctx, { authId: "lender-auth" });
+			await insertLender(ctx, lenderUserId, brokerId);
+
+			// Zero cumulative balance, but non-zero pending debits
+			await ctx.db.insert("ledger_accounts", {
+				type: "POSITION",
+				mortgageId: mortgageId as string,
+				lenderId: "lender-auth",
+				cumulativeDebits: 0n,
+				cumulativeCredits: 0n,
+				pendingDebits: 5000n,
+				pendingCredits: 0n,
+				createdAt: NOW,
+			});
+
+			// pendingDebits alone should NOT grant access (computeBalance uses cumulative only)
+			const viewer = makeViewer({ authId: "lender-auth" });
+			const result = await canAccessMortgage(ctx, viewer, mortgageId);
+			expect(result).toBe(false);
+		});
+	});
+
+	it("POSITION account with cumulative and pending — access based on cumulative", async () => {
+		const t = convexTest(schema, modules);
+		await t.run(async (ctx) => {
+			const brokerUserId = await insertUser(ctx, { authId: "broker-auth" });
+			const brokerId = await insertBroker(ctx, brokerUserId);
+			const propId = await insertProperty(ctx);
+			const mortgageId = await insertMortgage(ctx, propId, brokerId);
+
+			const lenderUserId = await insertUser(ctx, { authId: "lender-auth" });
+			await insertLender(ctx, lenderUserId, brokerId);
+
+			// Positive cumulative balance with pending credits (future reservation)
+			await ctx.db.insert("ledger_accounts", {
+				type: "POSITION",
+				mortgageId: mortgageId as string,
+				lenderId: "lender-auth",
+				cumulativeDebits: 5000n,
+				cumulativeCredits: 0n,
+				pendingDebits: 0n,
+				pendingCredits: 5000n,
+				createdAt: NOW,
+			});
+
+			// Should still have access — cumulative balance is positive (5000 - 0 = 5000)
+			const viewer = makeViewer({ authId: "lender-auth" });
+			const result = await canAccessMortgage(ctx, viewer, mortgageId);
+			expect(result).toBe(true);
+		});
+	});
+
+	it("ledger position access — pending fields respected on account with positive cumulative", async () => {
+		const t = convexTest(schema, modules);
+		await t.run(async (ctx) => {
+			const brokerUserId = await insertUser(ctx, { authId: "broker-auth" });
+			const brokerId = await insertBroker(ctx, brokerUserId);
+			const propId = await insertProperty(ctx);
+			const mortgageId = await insertMortgage(ctx, propId, brokerId);
+
+			const lenderUserId = await insertUser(ctx, { authId: "lender-auth" });
+			await insertLender(ctx, lenderUserId, brokerId);
+
+			await ctx.db.insert("ledger_accounts", {
+				type: "POSITION",
+				mortgageId: mortgageId as string,
+				lenderId: "lender-auth",
+				cumulativeDebits: 3000n,
+				cumulativeCredits: 0n,
+				pendingDebits: 1000n,
+				pendingCredits: 2000n,
+				createdAt: NOW,
+			});
+
+			const viewer = makeViewer({ authId: "lender-auth" });
+			const result = await canAccessLedgerPosition(ctx, viewer, mortgageId);
+			expect(result).toBe(true);
 		});
 	});
 });
