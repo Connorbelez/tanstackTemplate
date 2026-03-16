@@ -247,12 +247,13 @@ describe("hash-chain and reconciliation", () => {
 		const t = createGovernedTestConvex();
 		await seedDefaultGovernedActors(t);
 
+		// Use a non-governed entity type (deal has no machine definition)
 		await t.run(async (ctx) =>
 			appendAuditJournalEntry(ctx as unknown as MutationCtx, {
 				actorId: "user_member_test",
 				channel: "scheduler",
-				entityId: "mortgage_future",
-				entityType: "mortgage",
+				entityId: "deal_future",
+				entityType: "deal",
 				eventType: "CREATED",
 				previousState: "none",
 				newState: "pending_review",
@@ -264,9 +265,9 @@ describe("hash-chain and reconciliation", () => {
 		const result = await t
 			.withIdentity(FAIRLEND_ADMIN)
 			.query(api.engine.reconciliation.reconcile, {});
-		// Mortgage is not yet governed — reconciler skips it entirely
+		// Deal is not yet governed — reconciler skips it entirely
 		expect(result.discrepancies).not.toContainEqual(
-			expect.objectContaining({ entityType: "mortgage" })
+			expect.objectContaining({ entityType: "deal" })
 		);
 		expect(result.isHealthy).toBe(true);
 	});

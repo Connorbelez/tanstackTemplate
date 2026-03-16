@@ -995,7 +995,69 @@ describe("transition engine", () => {
 					channel: "scheduler",
 				},
 			})
-		).rejects.toThrow("No machine registered");
+		).rejects.toThrow("No machine registered for entity type: onboardingRequest");
+	});
+
+	it("warns but succeeds when a machine action has no effect registry entry", async () => {
+		const t = createGovernedTestConvex();
+		await seedDefaultGovernedActors(t);
+
+		// Register a test machine whose initial state matches "pending_review"
+		// (the state created by createSelfSignupRequest)
+		const testMachine = setup({
+			types: {
+				context: {} as Record<string, never>,
+				events: {} as { type: "GO" },
+			},
+			actions: {
+				unknownEffect: () => {
+					/* no-op stub */
+				},
+			},
+		}).createMachine({
+			id: "testMachineForMissingEffect",
+			initial: "pending_review",
+			context: {},
+			states: {
+				pending_review: {
+					on: {
+						GO: { target: "end", actions: ["unknownEffect"] },
+					},
+				},
+				end: { type: "final" },
+			},
+		});
+
+		const requestId = await createSelfSignupRequest(t, "lender");
+
+		// Temporarily register the test machine
+		const originalOnboarding = machineRegistry.onboardingRequest;
+		machineRegistry.onboardingRequest = testMachine;
+
+		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+		const result = await t.mutation(
+			internal.engine.transitionMutation.transitionMutation,
+			{
+				entityType: "onboardingRequest",
+				entityId: requestId,
+				eventType: "GO",
+				payload: {},
+				source: { actorType: "admin", channel: "admin_dashboard" },
+			}
+		);
+
+		// Transition succeeds despite missing effect handler
+		expect(result.success).toBe(true);
+		expect(result.newState).toBe("end");
+
+		// Warning was logged
+		expect(warnSpy).toHaveBeenCalledWith(
+			expect.stringContaining("unknownEffect")
+		);
+
+		machineRegistry.onboardingRequest = originalOnboarding;
+		warnSpy.mockRestore();
 	});
 
 	// ── AC: Happy path — journal entry field assertions ──────────────

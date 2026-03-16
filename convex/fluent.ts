@@ -324,7 +324,6 @@ export const actionAuthMiddleware = convex
 export const requireFairLendAdminAction = convex
 	.$context<{
 		viewer: Viewer;
-		runMutation: (...args: [unknown, unknown?]) => Promise<unknown>;
 	}>()
 	.createMiddleware(async (context, next) => {
 		if (!context.viewer.isFairLendAdmin) {

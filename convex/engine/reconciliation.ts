@@ -82,11 +82,16 @@ async function getEntityStatus(
 			const entity = await ctx.db.get(entityId as Id<"onboardingRequests">);
 			return entity?.status ?? null;
 		}
-		// All other entity types have tables in the schema but are not yet
-		// governed by the transition engine. Skip them to avoid false
-		// ENTITY_NOT_FOUND discrepancies from orphaned journal entries.
-		case "mortgage":
-		case "obligation":
+		case "mortgage": {
+			const entity = await ctx.db.get(entityId as Id<"mortgages">);
+			return entity?.status ?? null;
+		}
+		case "obligation": {
+			const entity = await ctx.db.get(entityId as Id<"obligations">);
+			return entity?.status ?? null;
+		}
+		// Non-governed entity types: tables exist in schema but have no
+		// machine definitions. Skip to avoid false discrepancies.
 		case "deal":
 		case "provisionalApplication":
 		case "applicationPackage":

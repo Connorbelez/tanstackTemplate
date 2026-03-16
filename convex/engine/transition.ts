@@ -106,8 +106,30 @@ function extractScheduledEffects(
 	});
 }
 
+/**
+ * Checks whether a named action resolves to an XState built-in action (assign, raise, etc.)
+ * rather than an effect-marker action. Built-in actions are executed during the pure COMPUTE
+ * step and should NOT be scheduled as effects.
+ */
+function isBuiltInAction(
+	machine: AnyStateMachine,
+	actionName: string
+): boolean {
+	const implementations = machine.implementations?.actions;
+	if (!implementations) {
+		return false;
+	}
+	const impl = implementations[actionName];
+	if (!impl || typeof impl !== "object") {
+		return false;
+	}
+	const implType = (impl as { type?: string }).type;
+	return typeof implType === "string" && implType.startsWith("xstate.");
+}
+
 async function scheduleEffects(
 	ctx: MutationCtx,
+	machine: AnyStateMachine,
 	entityId: string,
 	entityType: EntityType,
 	eventType: string,
@@ -119,6 +141,11 @@ async function scheduleEffects(
 	const effectNames: string[] = [];
 	for (const actionDescriptor of scheduledEffects) {
 		if (actionDescriptor.actionType.startsWith("xstate.")) {
+			continue;
+		}
+		// Skip XState built-in actions (assign, raise, etc.) — they execute
+		// during the pure COMPUTE step, not as scheduled effects.
+		if (isBuiltInAction(machine, actionDescriptor.actionType)) {
 			continue;
 		}
 		const handler = effectRegistry[actionDescriptor.actionType];
@@ -297,6 +324,7 @@ export async function executeTransition(
 		});
 		const effectNames = await scheduleEffects(
 			ctx,
+			machine,
 			entityId,
 			entityType,
 			eventType,
@@ -379,6 +407,7 @@ export async function executeTransition(
 	// ── 8. EFFECTS ───────────────────────────────────────────────────────
 	const effectNames = await scheduleEffects(
 		ctx,
+		machine,
 		entityId,
 		entityType,
 		eventType,

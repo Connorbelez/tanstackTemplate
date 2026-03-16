@@ -1,5 +1,13 @@
+import type { FunctionReference } from "convex/server";
 import { api } from "../_generated/api";
 import { adminAction } from "../fluent";
+
+// These references resolve after `convex codegen` picks up the new seed files.
+// Until then, cast through the api object to avoid TS errors.
+const seedApi = api.seed as Record<
+	string,
+	Record<string, FunctionReference<"mutation", "public">>
+>;
 
 export const seedAll = adminAction
 	.input({})
@@ -12,22 +20,19 @@ export const seedAll = adminAction
 		const lenders = await ctx.runMutation(api.seed.seedLender.seedLender, {
 			brokerIds: brokers.brokerIds,
 		});
-		const mortgages = await ctx.runMutation(
-			api.seed.seedMortgage.seedMortgage,
-			{
-				borrowerIds: borrowers.borrowerIds,
-				brokerIds: brokers.brokerIds,
-			}
-		);
+		const mortgages = await ctx.runMutation(seedApi.seedMortgage.seedMortgage, {
+			borrowerIds: borrowers.borrowerIds,
+			brokerIds: brokers.brokerIds,
+		});
 		const obligations = await ctx.runMutation(
-			api.seed.seedObligation.seedObligation,
+			seedApi.seedObligation.seedObligation,
 			{
 				borrowerIds: borrowers.borrowerIds,
 				mortgageBorrowers: mortgages.mortgageBorrowers,
 			}
 		);
 		const onboardingRequests = await ctx.runMutation(
-			api.seed.seedOnboardingRequest.seedOnboardingRequest,
+			seedApi.seedOnboardingRequest.seedOnboardingRequest,
 			{}
 		);
 

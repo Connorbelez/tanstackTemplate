@@ -101,3 +101,51 @@ export const transitionObligation = internalMutation({
 		});
 	},
 });
+
+/**
+ * Internal-only transition for mortgages.
+ * No auth — intended for cross-entity effects dispatched by the scheduler.
+ */
+export const transitionMortgageInternal = internalMutation({
+	args: { ...transitionCommandArgs, entityId: v.id("mortgages") },
+	handler: async (ctx, args) => {
+		const source = (args.source as CommandSource | undefined) ?? {
+			channel: "scheduler" as const,
+			actorType: "system" as const,
+		};
+		return executeTransition(ctx, {
+			entityType: "mortgage",
+			entityId: args.entityId,
+			eventType: args.eventType,
+			payload: args.payload as Record<string, unknown> | undefined,
+			source,
+		});
+	},
+});
+
+/**
+ * Authed mutation for confirming obligation payments.
+ * Requires authentication + `obligation:manage` permission.
+ * Wraps PAYMENT_APPLIED transition for admin/broker use.
+ */
+export const confirmObligationPayment = authedMutation
+	.use(requirePermission("obligation:manage"))
+	.input({
+		entityId: v.id("obligations"),
+		amount: v.number(),
+		paidAt: v.optional(v.number()),
+	})
+	.handler(async (ctx, args) => {
+		const source = buildSource(ctx.viewer, "admin_dashboard");
+		return executeTransition(ctx, {
+			entityType: "obligation",
+			entityId: args.entityId,
+			eventType: "PAYMENT_APPLIED",
+			payload: {
+				amount: args.amount,
+				paidAt: args.paidAt ?? Date.now(),
+			},
+			source,
+		});
+	})
+	.public();
