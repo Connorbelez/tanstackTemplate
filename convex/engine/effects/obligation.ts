@@ -94,8 +94,6 @@ async function forwardObligationEventToMortgage(
 	});
 
 	if (!result.success) {
-		// Mortgage machines reject these events in terminal/non-accepting states.
-		// Treat that as a no-op so scheduled effects do not retry forever.
 		console.warn(
 			`[${config.effectLabel}] Skipping ${config.eventType} for mortgage=${obligation.mortgageId} from obligation=${args.entityId}: ${getTransitionFailureReason(result)} (state=${result.previousState})`
 		);

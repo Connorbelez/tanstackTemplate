@@ -98,7 +98,7 @@ function buildStatePath(state: ObligationState): readonly string[] {
 		case "settled":
 			return ["upcoming", "due", "settled"];
 		default:
-			throw new ConvexError(`Unsupported obligation seed state: ${state}`);
+			throw new ConvexError(`Unsupported obligation seed state: ${state as string}`);
 	}
 }
 
@@ -146,7 +146,7 @@ function obligationDates(
 			};
 		}
 		default:
-			throw new ConvexError(`Unsupported obligation date state: ${state}`);
+			throw new ConvexError(`Unsupported obligation date state: ${state as string}`);
 	}
 }
 

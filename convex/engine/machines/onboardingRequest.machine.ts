@@ -20,6 +20,9 @@ export const onboardingRequestMachine = setup({
 		assignRole: () => {
 			/* resolved by GT effect registry */
 		},
+		notifyAdminNewRequest: () => {
+			/* resolved by GT effect registry */
+		},
 	},
 }).createMachine({
 	id: "onboardingRequest",
@@ -27,6 +30,11 @@ export const onboardingRequestMachine = setup({
 	context: {},
 	states: {
 		pending_review: {
+			// Entry action: notifies admins when a new request arrives.
+			// Note: the GT engine currently schedules transition actions only (not entry/exit).
+			// For Phase 1, this effect is triggered explicitly from creation mutations.
+			// Future: extend extractScheduledEffects to handle entry/exit actions.
+			entry: ["notifyAdminNewRequest"],
 			on: {
 				APPROVE: {
 					target: "approved",

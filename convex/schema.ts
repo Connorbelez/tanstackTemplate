@@ -302,6 +302,7 @@ export default defineSchema({
 			v.literal("sr_underwriter")
 		),
 		status: v.string(),
+		// machineContext: unused — no guards, no accumulated state
 		machineContext: v.optional(v.any()),
 		lastTransitionAt: v.optional(v.number()),
 		activeRoleAssignmentJournalId: v.optional(v.string()),
@@ -414,6 +415,7 @@ export default defineSchema({
 	mortgages: defineTable({
 		// ─── Governed Transitions fields ───
 		status: v.string(),
+		// machineContext: { missedPayments: number, lastPaymentAt: number } — guards read across transitions
 		machineContext: v.optional(v.any()),
 		lastTransitionAt: v.optional(v.number()),
 
@@ -505,6 +507,7 @@ export default defineSchema({
 	obligations: defineTable({
 		// ─── Governed Transitions fields ───
 		status: v.string(),
+		// machineContext: unused — no guards, no accumulated state
 		machineContext: v.optional(v.any()),
 		lastTransitionAt: v.optional(v.number()),
 
