@@ -10,9 +10,7 @@ import { effectPayloadValidator } from "../validators";
 export const emitObligationOverdue = internalMutation({
 	args: effectPayloadValidator,
 	handler: async (ctx, args) => {
-		const obligation = await ctx.db.get(
-			args.entityId as Id<"obligations">
-		);
+		const obligation = await ctx.db.get(args.entityId as Id<"obligations">);
 		if (!obligation) {
 			throw new Error(
 				`[emitObligationOverdue] Obligation not found: ${args.entityId}`
@@ -46,9 +44,7 @@ export const emitObligationOverdue = internalMutation({
 export const emitObligationSettled = internalMutation({
 	args: effectPayloadValidator,
 	handler: async (ctx, args) => {
-		const obligation = await ctx.db.get(
-			args.entityId as Id<"obligations">
-		);
+		const obligation = await ctx.db.get(args.entityId as Id<"obligations">);
 		if (!obligation) {
 			throw new Error(
 				`[emitObligationSettled] Obligation not found: ${args.entityId}`

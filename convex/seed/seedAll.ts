@@ -1,0 +1,63 @@
+import { api } from "../_generated/api";
+import { adminAction } from "../fluent";
+
+export const seedAll = adminAction
+	.input({})
+	.handler(async (ctx) => {
+		const brokers = await ctx.runMutation(api.seed.seedBroker.seedBroker, {});
+		const borrowers = await ctx.runMutation(
+			api.seed.seedBorrower.seedBorrower,
+			{}
+		);
+		const lenders = await ctx.runMutation(api.seed.seedLender.seedLender, {
+			brokerIds: brokers.brokerIds,
+		});
+		const mortgages = await ctx.runMutation(
+			api.seed.seedMortgage.seedMortgage,
+			{
+				borrowerIds: borrowers.borrowerIds,
+				brokerIds: brokers.brokerIds,
+			}
+		);
+		const obligations = await ctx.runMutation(
+			api.seed.seedObligation.seedObligation,
+			{
+				borrowerIds: borrowers.borrowerIds,
+				mortgageBorrowers: mortgages.mortgageBorrowers,
+			}
+		);
+		const onboardingRequests = await ctx.runMutation(
+			api.seed.seedOnboardingRequest.seedOnboardingRequest,
+			{}
+		);
+
+		return {
+			brokers,
+			borrowers,
+			lenders,
+			mortgages,
+			obligations,
+			onboardingRequests,
+			summary: {
+				created: {
+					brokers: brokers.created.brokers,
+					borrowers: borrowers.created.borrowers,
+					lenders: lenders.created.lenders,
+					properties: mortgages.created.properties,
+					mortgages: mortgages.created.mortgages,
+					obligations: obligations.created.obligations,
+					onboardingRequests: onboardingRequests.created.onboardingRequests,
+				},
+				reused: {
+					brokers: brokers.reused.brokers,
+					borrowers: borrowers.reused.borrowers,
+					lenders: lenders.reused.lenders,
+					properties: mortgages.reused.properties,
+					mortgages: mortgages.reused.mortgages,
+					obligations: obligations.reused.obligations,
+					onboardingRequests: onboardingRequests.reused.onboardingRequests,
+				},
+			},
+		};
+	})
+	.public();
