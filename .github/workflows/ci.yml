@@ -33,7 +33,7 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Generate route tree
-        run: bunx tanstack-router generate
+        run: bunx @tanstack/router-cli generate
 
       - name: Generate Convex types
         run: bunx convex codegen
