@@ -147,7 +147,10 @@ function LogRow({
   return (
     <>
       <motion.button
+        type="button"
         onClick={onToggle}
+        aria-expanded={expanded}
+        aria-controls={`log-details-${log.id}`}
         className="w-full p-4 text-left transition-colors hover:bg-muted/50 active:bg-muted/70"
         whileHover={{ backgroundColor: "rgba(0,0,0,0.02)" }}
       >
@@ -196,6 +199,7 @@ function LogRow({
       <AnimatePresence initial={false}>
         {expanded && (
           <motion.div
+            id={`log-details-${log.id}`}
             key="details"
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: "auto", opacity: 1 }}
@@ -513,7 +517,7 @@ export function InteractiveLogsTable({
                       exit={{ opacity: 0, y: -10 }}
                       transition={{
                         duration: 0.2,
-                        delay: index * 0.02,
+                        delay: Math.min(index, 8) * 0.02,
                       }}
                     >
                       <LogRow

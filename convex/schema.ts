@@ -1215,6 +1215,7 @@ export default defineSchema({
 		effectsScheduled: v.optional(v.array(v.string())),
 	})
 		.index("by_entity", ["entityId", "timestamp"])
+		.index("by_entity_outcome", ["entityId", "outcome", "timestamp"])
 		.index("by_outcome", ["outcome", "timestamp"])
 		.index("by_actor", ["source.actorId", "timestamp"])
 		.index("by_type_and_time", ["entityType", "timestamp"]),

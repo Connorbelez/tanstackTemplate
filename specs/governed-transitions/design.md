@@ -558,9 +558,9 @@ src/routes/demo/governed-transitions/
 | --------------------- | ---------------------------------------------------- | ------------------------------------------------ | ---------------------------------------- |
 | listEntities          | {}                                                   | Doc<"demo_gt_entities">[]                        | All entities, ordered by createdAt desc  |
 | getEntity             | { id: v.id("demo_gt_entities") }                     | Doc<"demo_gt_entities"> \| null                  | Single entity by ID                      |
-| getJournal            | { entityId?: v.id("demo_gt_entities"), outcome?: v.string() } | Doc<"demo_gt_journal">[]                | Journal entries, filtered, desc by time  |
+| getJournal            | { entityId?: v.id("demo_gt_entities"), outcome?: v.union("transitioned", "rejected") } | Doc<"demo_gt_journal">[]  | Journal entries, filtered, desc by time. Bounded to 200 rows. |
 | getJournalStats       | {}                                                   | { total: number, transitioned: number, rejected: number } | Aggregate counts              |
-| getValidTransitions   | { entityId: v.id("demo_gt_entities") }               | string[]                                         | Event types that produce valid transition from current state |
+| getValidTransitions   | { entityId: v.id("demo_gt_entities") }               | { eventType: string, targetState: string }[]     | Events that produce valid transition from current state |
 | getEffectsLog         | { entityId?: v.id("demo_gt_entities") }              | Doc<"demo_gt_effects_log">[]                     | Effects log, optionally filtered         |
 | getMachineDefinition  | {}                                                   | MachineSnapshot                                  | Serialized machine for frontend visualization |
 
@@ -634,7 +634,7 @@ import { api } from "../../../../convex/_generated/api";
 
 #### JournalViewer (journal.tsx)
 
-**Top bar:** Stats from `getJournalStats` — three stat cards showing Total, Transitioned (green), Rejected (red) counts.
+**Top bar:** Three stat cards showing Total, Transitioned (green), Rejected (red) counts — derived from the filtered `getJournal` result so counts stay in sync with active entity/outcome filters.
 
 **Filters row:** Entity dropdown (from `listEntities`, with "All" option), Outcome toggle buttons (All / Transitioned / Rejected).
 

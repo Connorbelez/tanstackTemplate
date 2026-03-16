@@ -170,7 +170,7 @@ export const Route = createFileRoute("/demo/governed-transitions/journal")({
 ```
 
 ### Top Bar
-Stats from `getJournalStats` — three stat cards showing Total, Transitioned (green), Rejected (red) counts.
+Three stat cards showing Total, Transitioned (green), Rejected (red) counts — derived from the filtered `getJournal` result so counts stay in sync with active entity/outcome filters.
 
 ### Filters Row
 Entity dropdown (from `listEntities`, with "All" option), Outcome toggle buttons (All / Transitioned / Rejected).

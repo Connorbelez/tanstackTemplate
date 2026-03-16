@@ -10,15 +10,16 @@ The file `convex/demo/governedTransitions.ts` already exists from chunk-02 with 
 
 ### listEntities
 ```typescript
-export const listEntities = query({
-  args: {},
-  handler: async (ctx) => {
+export const listEntities = convex
+  .query()
+  .handler(async (ctx) => {
     return await ctx.db
       .query("demo_gt_entities")
+      .withIndex("by_created")
       .order("desc")
-      .collect();
-  },
-});
+      .take(100);
+  })
+  .public();
 ```
 
 ### getEntity
@@ -32,20 +33,21 @@ export const getEntity = query({
 ```
 
 ### getJournal
-Filter by optional entityId and outcome. Order by timestamp descending.
+Filter by optional entityId and outcome. Order by timestamp descending. Uses composite index `by_entity_outcome` when both filters are active, falling back to `by_entity` or `by_outcome` for single-filter paths. All paths are bounded with `.take(200)`.
 ```typescript
-export const getJournal = query({
-  args: {
+export const getJournal = convex
+  .query()
+  .input({
     entityId: v.optional(v.id("demo_gt_entities")),
-    outcome: v.optional(v.string()),
-  },
-  handler: async (ctx, { entityId, outcome }) => {
-    // If entityId provided, use the by_entity index
-    // If outcome provided, use the by_outcome index
-    // Otherwise, collect all and sort desc
-    // Implementation: query appropriately, filter, return desc by timestamp
-  },
-});
+    outcome: v.optional(v.union(v.literal("transitioned"), v.literal("rejected"))),
+  })
+  .handler(async (ctx, { entityId, outcome }) => {
+    // If both: use by_entity_outcome composite index
+    // If entityId only: use by_entity index
+    // If outcome only: use by_outcome index
+    // Otherwise: .order("desc").take(200)
+  })
+  .public();
 ```
 
 ### getJournalStats
@@ -86,12 +88,22 @@ export const getValidTransitions = query({
       },
     });
 
-    // Get all event types from the machine
-    // Test each one against current state
-    const allEvents = ["SUBMIT", "ASSIGN_REVIEWER", "APPROVE", "REJECT",
-                       "REQUEST_INFO", "RESUBMIT", "REOPEN", "FUND", "CLOSE"];
+    // Derive all event types from the machine's state definitions
+    const allEventTypes = new Set<string>();
+    const statesConfig = machineDef.config.states ?? {};
+    for (const stateDef of Object.values(statesConfig)) {
+      const onConfig = (stateDef as Record<string, unknown>).on as
+        | Record<string, unknown>
+        | undefined;
+      if (onConfig) {
+        for (const eventName of Object.keys(onConfig)) {
+          allEventTypes.add(eventName);
+        }
+      }
+    }
 
-    return allEvents.filter(eventType => {
+    // Test each event against current state
+    return [...allEventTypes].filter(eventType => {
       const next = machineDef.transition(restoredState, { type: eventType });
       const nextValue = typeof next.value === "string" ? next.value : JSON.stringify(next.value);
       return nextValue !== entity.status;
@@ -338,4 +350,5 @@ const auditTrail = new AuditTrail(components.auditTrail);
 After completing all tasks, run:
 - `bun check` (auto-formats + lints)
 - `bun typecheck` (TypeScript type checking)
+- `bunx convex codegen` (refresh generated Convex types)
 - Fix any issues that arise.

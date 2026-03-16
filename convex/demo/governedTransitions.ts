@@ -459,14 +459,14 @@ export const getJournal = convex
 	})
 	.handler(async (ctx, { entityId, outcome }) => {
 		if (entityId && outcome) {
-			// Both filters: use by_entity index, then filter by outcome
-			return (
-				await ctx.db
-					.query("demo_gt_journal")
-					.withIndex("by_entity", (q) => q.eq("entityId", entityId))
-					.order("desc")
-					.take(200)
-			).filter((e) => e.outcome === outcome);
+			// Both filters: use composite index
+			return await ctx.db
+				.query("demo_gt_journal")
+				.withIndex("by_entity_outcome", (q) =>
+					q.eq("entityId", entityId).eq("outcome", outcome)
+				)
+				.order("desc")
+				.take(200);
 		}
 
 		if (entityId) {
