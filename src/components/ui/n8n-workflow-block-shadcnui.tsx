@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 
 // Interfaces
-interface WorkflowNode {
+export interface WorkflowNode {
   id: string;
   type: "trigger" | "action" | "condition";
   title: string;
@@ -27,9 +27,17 @@ interface WorkflowNode {
   position: { x: number; y: number };
 }
 
-interface WorkflowConnection {
+export interface WorkflowConnection {
   from: string;
   to: string;
+}
+
+interface N8nWorkflowBlockProps {
+  nodes?: WorkflowNode[];
+  connections?: WorkflowConnection[];
+  readOnly?: boolean;
+  title?: string;
+  activeNodeId?: string;
 }
 
 // Constants
@@ -156,25 +164,52 @@ function WorkflowConnectionLine({
 }
 
 // Main Component
-export function N8nWorkflowBlock() {
-  const [nodes, setNodes] = useState<WorkflowNode[]>(initialNodes);
-  const [connections, setConnections] =
+export function N8nWorkflowBlock({
+  nodes: propNodes,
+  connections: propConnections,
+  readOnly = false,
+  title = "Workflow Builder",
+  activeNodeId,
+}: N8nWorkflowBlockProps) {
+  const [internalNodes, setInternalNodes] =
+    useState<WorkflowNode[]>(initialNodes);
+  const [internalConnections, setInternalConnections] =
     useState<WorkflowConnection[]>(initialConnections);
+
+  const nodes = propNodes ?? internalNodes;
+  const connections = propConnections ?? internalConnections;
+
   const canvasRef = useRef<HTMLDivElement>(null);
   const dragStartPosition = useRef<{ x: number; y: number } | null>(null);
   const [draggingNodeId, setDraggingNodeId] = useState<string | null>(null);
   const [contentSize, setContentSize] = useState(() => {
+    const sourceNodes = propNodes ?? initialNodes;
     const maxX = Math.max(
-      ...initialNodes.map((n) => n.position.x + NODE_WIDTH)
+      ...sourceNodes.map((n) => n.position.x + NODE_WIDTH)
     );
     const maxY = Math.max(
-      ...initialNodes.map((n) => n.position.y + NODE_HEIGHT)
+      ...sourceNodes.map((n) => n.position.y + NODE_HEIGHT)
     );
     return { width: maxX + 50, height: maxY + 50 };
   });
 
+  // Recompute content size when propNodes change
+  const computedContentSize = propNodes
+    ? {
+        width: Math.max(
+          contentSize.width,
+          ...propNodes.map((n) => n.position.x + NODE_WIDTH + 50)
+        ),
+        height: Math.max(
+          contentSize.height,
+          ...propNodes.map((n) => n.position.y + NODE_HEIGHT + 50)
+        ),
+      }
+    : contentSize;
+
   // Drag Handlers
   const handleDragStart = (nodeId: string) => {
+    if (readOnly) return;
     setDraggingNodeId(nodeId);
     const node = nodes.find((n) => n.id === nodeId);
     if (node) {
@@ -183,6 +218,7 @@ export function N8nWorkflowBlock() {
   };
 
   const handleDrag = (nodeId: string, { offset }: PanInfo) => {
+    if (readOnly) return;
     if (draggingNodeId !== nodeId || !dragStartPosition.current) return;
 
     const newX = dragStartPosition.current.x + offset.x;
@@ -192,7 +228,7 @@ export function N8nWorkflowBlock() {
     const constrainedY = Math.max(0, newY);
 
     flushSync(() => {
-      setNodes((prev) =>
+      setInternalNodes((prev) =>
         prev.map((node) =>
           node.id === nodeId
             ? { ...node, position: { x: constrainedX, y: constrainedY } }
@@ -214,9 +250,10 @@ export function N8nWorkflowBlock() {
 
   // Add Node Handler
   const addNode = () => {
+    if (readOnly) return;
     const template =
       nodeTemplates[Math.floor(Math.random() * nodeTemplates.length)];
-    const lastNode = nodes[nodes.length - 1];
+    const lastNode = internalNodes[internalNodes.length - 1];
     const newPosition = lastNode
       ? { x: lastNode.position.x + 250, y: lastNode.position.y }
       : { x: 50, y: 100 };
@@ -228,9 +265,9 @@ export function N8nWorkflowBlock() {
     };
 
     flushSync(() => {
-      setNodes((prev) => [...prev, newNode]);
+      setInternalNodes((prev) => [...prev, newNode]);
       if (lastNode) {
-        setConnections((prev) => [
+        setInternalConnections((prev) => [
           ...prev,
           { from: lastNode.id, to: newNode.id },
         ]);
@@ -261,22 +298,24 @@ export function N8nWorkflowBlock() {
             variant="outline"
             className="rounded-full border-emerald-400/40 bg-emerald-400/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.25em] text-emerald-400"
           >
-            Active
+            {readOnly ? "Read-Only" : "Active"}
           </Badge>
           <span className="text-xs sm:text-sm uppercase tracking-[0.25em] text-foreground/50">
-            Workflow Builder
+            {title}
           </span>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={addNode}
-          className="h-8 gap-2 rounded-lg text-xs uppercase tracking-[0.2em] text-foreground/70 hover:text-foreground"
-          aria-label="Add new node"
-        >
-          <Plus className="h-3.5 w-3.5" aria-hidden="true" />
-          <span className="hidden sm:inline">Add Node</span>
-        </Button>
+        {!readOnly && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={addNode}
+            className="h-8 gap-2 rounded-lg text-xs uppercase tracking-[0.2em] text-foreground/70 hover:text-foreground"
+            aria-label="Add new node"
+          >
+            <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+            <span className="hidden sm:inline">Add Node</span>
+          </Button>
+        )}
       </div>
 
       {/* Canvas */}
@@ -292,15 +331,15 @@ export function N8nWorkflowBlock() {
         <div
           className="relative"
           style={{
-            minWidth: contentSize.width,
-            minHeight: contentSize.height,
+            minWidth: computedContentSize.width,
+            minHeight: computedContentSize.height,
           }}
         >
           {/* SVG Connections */}
           <svg
             className="absolute top-0 left-0 pointer-events-none"
-            width={contentSize.width}
-            height={contentSize.height}
+            width={computedContentSize.width}
+            height={computedContentSize.height}
             style={{ overflow: "visible" }}
             aria-hidden="true"
           >
@@ -318,11 +357,12 @@ export function N8nWorkflowBlock() {
           {nodes.map((node) => {
             const Icon = node.icon;
             const isDragging = draggingNodeId === node.id;
+            const isActive = activeNodeId === node.id;
 
             return (
               <motion.div
                 key={node.id}
-                drag
+                drag={!readOnly}
                 dragMomentum={false}
                 dragConstraints={{
                   left: 0,
@@ -339,16 +379,16 @@ export function N8nWorkflowBlock() {
                   width: NODE_WIDTH,
                   transformOrigin: "0 0",
                 }}
-                className="absolute cursor-grab"
+                className={readOnly ? "absolute" : "absolute cursor-grab"}
                 initial={{ scale: 0.8, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
                 transition={{ duration: 0.2 }}
-                whileHover={{ scale: 1.02 }}
-                whileDrag={{ scale: 1.05, zIndex: 50, cursor: "grabbing" }}
+                whileHover={readOnly ? undefined : { scale: 1.02 }}
+                whileDrag={readOnly ? undefined : { scale: 1.05, zIndex: 50, cursor: "grabbing" }}
                 aria-grabbed={isDragging}
               >
                 <Card
-                  className={`group/node relative w-full overflow-hidden rounded-xl border ${colorClasses[node.color]} bg-background/70 p-3 backdrop-blur transition-all hover:shadow-lg ${isDragging ? "shadow-xl ring-2 ring-primary/50" : ""}`}
+                  className={`group/node relative w-full overflow-hidden rounded-xl border ${colorClasses[node.color]} bg-background/70 p-3 backdrop-blur transition-all hover:shadow-lg ${isDragging ? "shadow-xl ring-2 ring-primary/50" : ""} ${isActive ? "ring-2 ring-green-500 shadow-lg shadow-green-500/20" : ""}`}
                   role="article"
                   aria-label={`${node.type} node: ${node.title}`}
                 >
@@ -418,9 +458,11 @@ export function N8nWorkflowBlock() {
             </span>
           </div>
         </div>
-        <p className="text-[10px] uppercase tracking-[0.2em] text-foreground/40">
-          Drag nodes to reposition
-        </p>
+        {!readOnly && (
+          <p className="text-[10px] uppercase tracking-[0.2em] text-foreground/40">
+            Drag nodes to reposition
+          </p>
+        )}
       </div>
     </div>
   );

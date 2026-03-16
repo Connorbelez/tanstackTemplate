@@ -1179,4 +1179,54 @@ export default defineSchema({
 		createdAt: v.number(),
 		updatedAt: v.number(),
 	}).index("by_status", ["status"]),
+
+	// ── Demo Governed Transitions ───────────────────────────────────
+	demo_gt_entities: defineTable({
+		entityType: v.string(),
+		label: v.string(),
+		status: v.string(),
+		machineContext: v.optional(v.any()),
+		lastTransitionAt: v.optional(v.number()),
+		data: v.optional(v.any()),
+		createdAt: v.number(),
+	})
+		.index("by_status", ["status"])
+		.index("by_type", ["entityType"]),
+
+	demo_gt_journal: defineTable({
+		entityType: v.string(),
+		entityId: v.id("demo_gt_entities"),
+		eventType: v.string(),
+		payload: v.optional(v.any()),
+		previousState: v.string(),
+		newState: v.string(),
+		outcome: v.union(v.literal("transitioned"), v.literal("rejected")),
+		reason: v.optional(v.string()),
+		source: v.object({
+			channel: v.string(),
+			actorId: v.optional(v.string()),
+			actorType: v.optional(v.string()),
+			sessionId: v.optional(v.string()),
+		}),
+		machineVersion: v.optional(v.string()),
+		timestamp: v.number(),
+		effectsScheduled: v.optional(v.array(v.string())),
+	})
+		.index("by_entity", ["entityId", "timestamp"])
+		.index("by_outcome", ["outcome", "timestamp"]),
+
+	demo_gt_effects_log: defineTable({
+		entityId: v.id("demo_gt_entities"),
+		journalEntryId: v.id("demo_gt_journal"),
+		effectName: v.string(),
+		status: v.union(
+			v.literal("scheduled"),
+			v.literal("completed"),
+			v.literal("failed")
+		),
+		scheduledAt: v.number(),
+		completedAt: v.optional(v.number()),
+	})
+		.index("by_entity", ["entityId"])
+		.index("by_journal", ["journalEntryId"]),
 });

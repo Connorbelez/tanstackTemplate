@@ -54,6 +54,7 @@ const demoSections = [
 		links: linkOptions([
 			{ to: "/demo/document-engine", label: "Document Engine" },
 			{ to: "/demo/audit-traceability", label: "Audit & Traceability" },
+			{ to: "/demo/governed-transitions", label: "Governed Transitions" },
 		]),
 	},
 ];
