@@ -116,6 +116,18 @@ export const seedData = authedMutation
 			}
 		}
 
+		// Ensure the sequence counter exists (getNextSequenceNumber throws if missing)
+		const existingCounter = await ctx.db
+			.query("ledger_sequence_counters")
+			.withIndex("by_name", (q) => q.eq("name", "ledger_sequence"))
+			.first();
+		if (!existingCounter) {
+			await ctx.db.insert("ledger_sequence_counters", {
+				name: "ledger_sequence",
+				value: 0n,
+			});
+		}
+
 		const worldAccount = await getOrCreateWorldAccount(ctx);
 
 		for (const mortgage of DEMO_MORTGAGES) {

@@ -956,6 +956,23 @@ describe("Idempotency & Sequencing", () => {
 		// Should return same journal entry
 		expect(first.journalEntry._id).toBe(second.journalEntry._id);
 
+		// Idempotent replay must return the identical sequenceNumber (gap-free numbering)
+		expect(first.journalEntry.sequenceNumber).toBe(
+			second.journalEntry.sequenceNumber,
+		);
+
+		// Verify the sequence counter was NOT advanced by the replay
+		const counterAfterReplay = await t.run(async (ctx) => {
+			const doc = await ctx.db
+				.query("ledger_sequence_counters")
+				.withIndex("by_name", (q) => q.eq("name", "ledger_sequence"))
+				.unique();
+			return doc!.value;
+		});
+		// mintMortgage (seq 1) + issueShares (seq 2) = counter should be 2,
+		// NOT 3 from a duplicate issueShares
+		expect(counterAfterReplay).toBe(2n);
+
 		// Balance should be 5,000 not 10,000
 		expect(
 			await auth.query(api.ledger.queries.getBalance, {

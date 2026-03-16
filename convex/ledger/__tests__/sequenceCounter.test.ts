@@ -73,6 +73,37 @@ describe("Sequence Counter", () => {
 			return ctx.db.query("ledger_sequence_counters").collect();
 		});
 		expect(docs).toHaveLength(1);
+
+		// Increment the counter by minting a mortgage (internally calls getNextSequenceNumber)
+		await auth.mutation(api.ledger.mutations.mintMortgage, {
+			mortgageId: "m1",
+			effectiveDate: "2026-01-01",
+			idempotencyKey: "mint-m1",
+			source: SYS_SOURCE,
+		});
+
+		// Re-initialize after increment — should NOT reset the counter
+		const id3 = await auth.mutation(
+			api.ledger.sequenceCounter.initializeSequenceCounter,
+			{},
+		);
+
+		expect(id3).toBe(id1);
+
+		// Still only one document
+		const docsAfter = await t.run(async (ctx) => {
+			return ctx.db.query("ledger_sequence_counters").collect();
+		});
+		expect(docsAfter).toHaveLength(1);
+
+		// Counter value must still be 1n (not reset to 0n)
+		const counter = await t.run(async (ctx) => {
+			return ctx.db
+				.query("ledger_sequence_counters")
+				.withIndex("by_name", (q) => q.eq("name", "ledger_sequence"))
+				.unique();
+		});
+		expect(counter!.value).toBe(1n);
 	});
 
 	it("getNextSequenceNumber throws ConvexError if counter not initialized", async () => {
