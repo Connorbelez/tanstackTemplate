@@ -1,11 +1,18 @@
+import type { AnyStateMachine } from "xstate";
 import { getNextSnapshot } from "xstate";
 import type { Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 import { auditLog } from "../auditLog";
 import { appendAuditJournalEntry } from "./auditJournal";
 import { effectRegistry } from "./effects/registry";
-import { machineRegistry } from "./machines/registry";
+import { getMachineVersion, machineRegistry } from "./machines/registry";
 import type { CommandSource, EntityType, TransitionResult } from "./types";
+
+function isGovernedEntityType(
+	entityType: EntityType
+): entityType is EntityType & keyof typeof machineRegistry {
+	return entityType in machineRegistry;
+}
 
 interface ScheduledEffectDescriptor {
 	actionType: string;
@@ -47,7 +54,7 @@ function normalizeActionDescriptors(
 }
 
 function extractScheduledEffects(
-	machine: NonNullable<(typeof machineRegistry)[keyof typeof machineRegistry]>,
+	machine: AnyStateMachine,
 	previousState: string,
 	eventType: string
 ): ScheduledEffectDescriptor[] {
@@ -142,10 +149,11 @@ export async function transitionEntity(
 	}
 
 	// 2. Get machine
-	const machine = machineRegistry[entityType];
-	if (!machine) {
+	if (!isGovernedEntityType(entityType)) {
 		throw new Error(`No machine registered for entity type: ${entityType}`);
 	}
+	const machine = machineRegistry[entityType];
+	const machineVersion = getMachineVersion(entityType);
 
 	// 3. Hydrate current state
 	const previousState = entity.status as string;
@@ -195,7 +203,7 @@ export async function transitionEntity(
 				newState,
 				outcome: "rejected",
 				reason: `Event "${eventType}" not valid in state "${previousState}"`,
-				machineVersion: machine.id,
+				machineVersion,
 				timestamp: Date.now(),
 			});
 
@@ -216,7 +224,7 @@ export async function transitionEntity(
 					outcome: "rejected",
 					reason: `Event "${eventType}" not valid in state "${previousState}"`,
 					source: resolvedSource,
-					machineVersion: machine.id,
+					machineVersion,
 				},
 			});
 			return {
@@ -242,7 +250,7 @@ export async function transitionEntity(
 			newState,
 			outcome: "transitioned",
 			reason: "same_state_with_effects",
-			machineVersion: machine.id,
+			machineVersion,
 			timestamp: Date.now(),
 		});
 		const effectNames = await scheduleEffects(
@@ -271,7 +279,7 @@ export async function transitionEntity(
 				outcome: "same_state_with_effects",
 				effectsScheduled: effectNames,
 				source: resolvedSource,
-				machineVersion: machine.id,
+				machineVersion,
 			},
 		});
 		return {
@@ -302,7 +310,7 @@ export async function transitionEntity(
 		previousState,
 		newState,
 		outcome: "transitioned",
-		machineVersion: machine.id,
+		machineVersion,
 		timestamp: Date.now(),
 	});
 
@@ -322,7 +330,7 @@ export async function transitionEntity(
 			newState,
 			outcome: "transitioned",
 			source: resolvedSource,
-			machineVersion: machine.id,
+			machineVersion,
 		},
 	});
 
