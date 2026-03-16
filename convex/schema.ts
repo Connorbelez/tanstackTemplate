@@ -972,6 +972,61 @@ export default defineSchema({
 	}).index("by_name", ["name"]),
 
 	// ══════════════════════════════════════════════════════════
+	// GENERATED DOCUMENTS (consumer-side document tracking)
+	// ══════════════════════════════════════════════════════════
+
+	generatedDocuments: defineTable({
+		// ─── What was generated ───
+		name: v.string(),
+		templateId: v.id("documentTemplates"),
+		templateVersionUsed: v.number(),
+		groupId: v.optional(v.id("documentTemplateGroups")),
+
+		// ─── Generated output ───
+		pdfStorageId: v.id("_storage"),
+		documensoEnvelopeId: v.optional(v.string()),
+
+		// ─── Entity linkage (polymorphic) ───
+		entityType: v.union(
+			v.literal("mortgage"),
+			v.literal("deal"),
+			v.literal("applicationPackage"),
+			v.literal("provisionalApplication")
+		),
+		entityId: v.string(),
+
+		// ─── Access control ───
+		sensitivityTier: v.union(
+			v.literal("public"),
+			v.literal("private"),
+			v.literal("sensitive")
+		),
+
+		// ─── Signing status ───
+		signingStatus: v.optional(
+			v.union(
+				v.literal("draft"),
+				v.literal("sent"),
+				v.literal("partially_signed"),
+				v.literal("completed"),
+				v.literal("declined"),
+				v.literal("voided")
+			)
+		),
+
+		// ─── Metadata ───
+		generatedBy: v.string(),
+		generatedAt: v.number(),
+		// Caller-specific context (deal phase, etc.) — v.any() is intentional
+		// because metadata shape varies by entityType and consumer
+		metadata: v.optional(v.any()),
+	})
+		.index("by_entity", ["entityType", "entityId"])
+		.index("by_template", ["templateId"])
+		.index("by_sensitivity", ["sensitivityTier", "entityType"])
+		.index("by_signing_status", ["signingStatus"]),
+
+	// ══════════════════════════════════════════════════════════
 	// DEMO TABLES
 	// ══════════════════════════════════════════════════════════
 
