@@ -143,9 +143,10 @@ export async function transitionEntity(
 	const previousState = entity.status as string;
 	// machineContext is v.optional(v.any()) in schema — cast to satisfy resolveState.
 	// Today the onboardingRequest machine has an empty context; ENG-12 will generalize.
-	const hydratedContext = (entity.machineContext ?? {}) as Parameters<
-		typeof machine.resolveState
-	>[0]["context"];
+	const hydratedContext = (entity.machineContext ?? {}) as Record<
+		string,
+		unknown
+	> as Parameters<typeof machine.resolveState>[0]["context"];
 	const currentSnapshot = machine.resolveState({
 		value: previousState,
 		context: hydratedContext,
@@ -158,7 +159,7 @@ export async function transitionEntity(
 	const nextSnapshot = getNextSnapshot(machine, currentSnapshot, event);
 	const newState = nextSnapshot.value as string;
 	const resourceType = getAuditResourceType(entityType);
-	const journalEntryId = `${entityType}:${entityId}:${eventType}:${Date.now()}`;
+	const journalEntryId = `${entityType}:${entityId}:${eventType}:${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
 	const defaultSource: CommandSource = { channel: "scheduler" };
 
 	// 5. Check if transition occurred (state change) or if targetless transition has effects

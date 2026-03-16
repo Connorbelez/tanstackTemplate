@@ -66,7 +66,7 @@ export async function getPositionAccount(
 		)
 		.first();
 	const position =
-		indexedPosition ??
+		(indexedPosition?.type === "POSITION" ? indexedPosition : null) ??
 		(
 			await ctx.db
 				.query("ledger_accounts")
@@ -97,7 +97,7 @@ export async function getOrCreatePositionAccount(
 		)
 		.first();
 	const existing =
-		indexedExisting ??
+		(indexedExisting?.type === "POSITION" ? indexedExisting : null) ??
 		(
 			await ctx.db
 				.query("ledger_accounts")
@@ -108,11 +108,6 @@ export async function getOrCreatePositionAccount(
 				account.type === "POSITION" && getAccountLenderId(account) === lenderId
 		);
 	if (existing) {
-		if (existing.type !== "POSITION") {
-			throw new Error(
-				`Account for lender ${lenderId} on mortgage ${mortgageId} exists but is type ${existing.type}, not POSITION`
-			);
-		}
 		return existing;
 	}
 

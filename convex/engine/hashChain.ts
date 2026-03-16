@@ -12,7 +12,8 @@ const workflow = new WorkflowManager(components.workflow);
  * Mutation step: reads a journal entry and inserts it into the auditTrail
  * component for SHA-256 hash-chaining (Layer 2).
  *
- * Errors propagate to the workflow for retry — do NOT swallow them here.
+ * Fire-and-forget: errors are logged but never thrown so they don't
+ * propagate to the calling workflow.
  */
 export const processHashChainStep = internalMutation({
 	args: {
@@ -28,22 +29,29 @@ export const processHashChainStep = internalMutation({
 			return;
 		}
 
-		await auditTrail.insert(ctx, {
-			entityId: entry.entityId,
-			entityType: entry.entityType,
-			eventType: entry.eventType,
-			actorId: entry.actorId,
-			beforeState: entry.previousState,
-			afterState: entry.newState,
-			metadata: JSON.stringify({
-				outcome: entry.outcome,
-				machineVersion: entry.machineVersion,
-				effectsScheduled: entry.effectsScheduled,
-				channel: entry.channel,
-				reason: entry.reason,
-			}),
-			timestamp: entry.timestamp,
-		});
+		try {
+			await auditTrail.insert(ctx, {
+				entityId: entry.entityId,
+				entityType: entry.entityType,
+				eventType: entry.eventType,
+				actorId: entry.actorId,
+				beforeState: entry.previousState,
+				afterState: entry.newState,
+				metadata: JSON.stringify({
+					outcome: entry.outcome,
+					machineVersion: entry.machineVersion,
+					effectsScheduled: entry.effectsScheduled,
+					channel: entry.channel,
+					reason: entry.reason,
+				}),
+				timestamp: entry.timestamp,
+			});
+		} catch (error) {
+			console.error(
+				`[GT HashChain] Failed to insert audit trail entry for journal ${args.journalEntryId}:`,
+				error
+			);
+		}
 	},
 });
 

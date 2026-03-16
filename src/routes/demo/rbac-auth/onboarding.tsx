@@ -9,7 +9,7 @@ import {
 	X,
 	XCircle,
 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import { Badge } from "#/components/ui/badge";
 import { Button } from "#/components/ui/button";
 import {
@@ -25,6 +25,7 @@ import {
 	ROLE_DISPLAY_METADATA,
 } from "#/lib/rbac-display-metadata";
 import { api } from "../../../../convex/_generated/api";
+import type { Id } from "../../../../convex/_generated/dataModel";
 
 export const Route = createFileRoute("/demo/rbac-auth/onboarding")({
 	ssr: false,
@@ -306,23 +307,11 @@ interface PendingRequestItem {
 }
 
 function AdminReviewSection() {
-	const listPending = useMutation(api.onboarding.queries.listPendingRequests);
+	const requests = useQuery(api.onboarding.queries.listPendingRequests, {});
 	const approve = useMutation(api.onboarding.mutations.approveRequest);
 	const reject = useMutation(api.onboarding.mutations.rejectRequest);
 	const [rejectingId, setRejectingId] = useState<string | null>(null);
 	const [rejectionReason, setRejectionReason] = useState("");
-	const [requests, setRequests] = useState<PendingRequestItem[]>([]);
-	const [loaded, setLoaded] = useState(false);
-
-	const fetchRequests = useCallback(async () => {
-		const result = await listPending({});
-		setRequests(result as PendingRequestItem[]);
-		setLoaded(true);
-	}, [listPending]);
-
-	useEffect(() => {
-		fetchRequests();
-	}, [fetchRequests]);
 
 	return (
 		<Card>
@@ -333,24 +322,24 @@ function AdminReviewSection() {
 				</CardDescription>
 			</CardHeader>
 			<CardContent>
-				{loaded ? (
+				{requests !== undefined ? (
 					<PendingRequestsContent
 						onApprove={async (requestId) => {
-							await approve({ requestId: requestId as never });
-							fetchRequests();
+							await approve({
+								requestId: requestId as Id<"onboardingRequests">,
+							});
 						}}
 						onReject={async (requestId, reason) => {
 							await reject({
-								requestId: requestId as never,
+								requestId: requestId as Id<"onboardingRequests">,
 								rejectionReason: reason,
 							});
-							fetchRequests();
 						}}
 						onSetRejectingId={setRejectingId}
 						onSetRejectionReason={setRejectionReason}
 						rejectingId={rejectingId}
 						rejectionReason={rejectionReason}
-						requests={requests}
+						requests={requests as PendingRequestItem[]}
 					/>
 				) : (
 					<p className="text-muted-foreground text-sm">Loading...</p>
@@ -464,6 +453,7 @@ function MemberRequestSection() {
 	const requestRole = useMutation(api.onboarding.mutations.requestRole);
 	const [selectedRole, setSelectedRole] = useState<string | null>(null);
 	const [submitting, setSubmitting] = useState(false);
+	const [error, setError] = useState<string | null>(null);
 
 	const hasPending = myRequests?.some(
 		(r) => r.status === "pending_review" || r.status === "approved"
@@ -520,12 +510,15 @@ function MemberRequestSection() {
 									disabled={submitting}
 									onClick={async () => {
 										setSubmitting(true);
+										setError(null);
 										try {
 											await requestRole({
 												requestedRole:
 													selectedRole as (typeof REQUESTABLE_ROLES)[number],
 												referralSource: "self_signup",
 											});
+										} catch (e) {
+											setError(e instanceof Error ? e.message : String(e));
 										} finally {
 											setSubmitting(false);
 										}
@@ -534,6 +527,7 @@ function MemberRequestSection() {
 								>
 									Submit Request
 								</Button>
+								{error && <p className="text-destructive text-sm">{error}</p>}
 							</div>
 						)}
 					</div>

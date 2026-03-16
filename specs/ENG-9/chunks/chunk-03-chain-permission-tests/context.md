@@ -102,6 +102,7 @@ describe.each(Object.entries(ROLE_PERMISSIONS))("Role: %s", (role, expectedPermi
 ```
 
 ### Also verify the underwriter hierarchy specifically:
+
 | Permission | jr_underwriter | underwriter | sr_underwriter |
 |-----------|---------------|-------------|----------------|
 | underwriting:view_queue | yes | yes | yes |

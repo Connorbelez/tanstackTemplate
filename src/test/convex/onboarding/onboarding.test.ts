@@ -26,7 +26,7 @@ async function getOnboardingAuditEvents(
 	await seedFromIdentity(t, FAIRLEND_ADMIN);
 	return t
 		.withIdentity(FAIRLEND_ADMIN)
-		.mutation(api.onboarding.queries.getRequestHistory, {
+		.query(api.onboarding.queries.getRequestHistory, {
 			requestId,
 		}) as Promise<OnboardingAuditEvent[]>;
 }

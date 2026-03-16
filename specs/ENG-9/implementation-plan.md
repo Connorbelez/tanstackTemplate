@@ -40,7 +40,7 @@ Build a test harness and comprehensive test suite for the auth system. The harne
 
 ### File structure
 
-```
+```text
 src/test/
   auth/                                 ← NEW directory
     helpers.ts                          ← Mock utilities (createMockViewer, createMockIdentity, withAuth)
@@ -191,7 +191,7 @@ export const MEMBER: MockIdentity
 ```
 
 Each identity includes the **exact permissions** from the role→permission matrix in the Authorization Architecture page. For example, `LENDER` gets:
-```
+```text
 lender:access, onboarding:access, deal:view, ledger:view, accrual:view,
 dispersal:view, listing:view, listing:invest, portfolio:view,
 portfolio:signal_renewal, portfolio:export_tax
@@ -538,7 +538,7 @@ export async function seedFromIdentity(
 //
 // Minimal endpoints that expose each middleware chain for testing.
 // Each returns { ok: true } — we're testing the auth gate, not business logic.
-// This file is only loaded by tests (via import.meta.glob) and never deployed.
+// This file is intended for test use only and should be excluded from production builds.
 
 import { v } from "convex/values";
 import {
@@ -628,7 +628,7 @@ Underwriters bypass the org context check because they're always in FairLend Sta
 The `Viewer` interface stores `roles: Set<string>` and `permissions: Set<string>`. When returning viewer from `whoAmI`, they're spread to arrays. The middleware checks use `.has()` method. Test Set behavior with overlapping roles (multi-role users like admin+broker).
 
 ### Convex test endpoint visibility
-The `convex/test/authTestEndpoints.ts` file will be included in `convex codegen`. This is fine — it's standard practice to have test-only Convex functions. They're only called by tests, never deployed to production.
+The `convex/test/authTestEndpoints.ts` file will be included in `convex codegen` and deployed with all other Convex functions. This is fine — it's standard practice to have test-only Convex functions. They are intended for test use only and should be excluded from production builds or gated behind environment checks.
 
 ### No mocking of middleware internals
 Don't mock `authMiddleware`, `requirePermission`, etc. in isolation. The value of these tests is proving the real middleware chain works end-to-end with `convex-test`. Mock only the JWT identity via `withIdentity()`.

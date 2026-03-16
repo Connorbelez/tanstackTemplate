@@ -253,7 +253,9 @@ function AuditEventList({
 				const timestamp = event._creationTime as number | undefined;
 				const action = String(event.action ?? "unknown");
 				const actorId = event.actorId ? String(event.actorId) : null;
-				const eventKey = `${action}-${timestamp ?? ""}-${actorId ?? ""}`;
+				const eventKey = event._id
+					? String(event._id)
+					: `${action}-${timestamp ?? ""}-${actorId ?? ""}`;
 
 				return (
 					<div

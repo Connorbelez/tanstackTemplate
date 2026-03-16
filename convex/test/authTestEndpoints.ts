@@ -111,7 +111,7 @@ export const testLawyerMutation = lawyerMutation
 	.handler(async () => okResponse())
 	.public();
 
-// ── uw (underwriter:access, no org context required) ─────────────────
+// ── uw (underwriter:access, org context required) ───────────────────
 export const testUwQuery = uwQuery.handler(async () => okResponse()).public();
 
 export const testUwMutation = uwMutation

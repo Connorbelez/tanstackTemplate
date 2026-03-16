@@ -1,9 +1,9 @@
 import { v } from "convex/values";
 import { auditLog } from "../auditLog";
-import { adminMutation, authedQuery, requirePermission } from "../fluent";
+import { adminQuery, authedQuery, requirePermission } from "../fluent";
 
 /** List onboarding requests by status. Defaults to pending_review. Admin only. */
-export const listPendingRequests = adminMutation
+export const listPendingRequests = adminQuery
 	.use(requirePermission("onboarding:review"))
 	.input({ status: v.optional(v.string()) })
 	.handler(async (ctx, args) => {
@@ -45,7 +45,7 @@ export const getMyOnboardingRequest = authedQuery
 	.public();
 
 /** Get the full audit journal history for a request. Admin only. */
-export const getRequestHistory = adminMutation
+export const getRequestHistory = adminQuery
 	.use(requirePermission("onboarding:review"))
 	.input({ requestId: v.id("onboardingRequests") })
 	.handler(async (ctx, args) => {

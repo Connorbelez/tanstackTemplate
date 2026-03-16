@@ -145,7 +145,7 @@ export function LedgerActions({
 								<Label>Buyer Lender ID</Label>
 								<Input
 									onChange={(e) => onTransferChange({ buyer: e.target.value })}
-									placeholder="demo-inv-..."
+									placeholder="demo-lender-..."
 									value={transferForm.buyer}
 								/>
 							</div>
@@ -196,7 +196,7 @@ export function LedgerActions({
 								<Label>Lender ID</Label>
 								<Input
 									onChange={(e) => onIssueChange({ lender: e.target.value })}
-									placeholder="demo-inv-..."
+									placeholder="demo-lender-..."
 									value={issueForm.lender}
 								/>
 							</div>
