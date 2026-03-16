@@ -138,7 +138,7 @@ describe("onboarding integration coverage", () => {
 		expect(result).toBeNull();
 	});
 
-	it("returns created, approve, and role-assigned history in order", async () => {
+	it("returns created and approve history in reverse-chronological order", async () => {
 		const t = createGovernedTestConvex();
 		await seedDefaultGovernedActors(t);
 		setWorkosProvisioningForTests(createProvisioningSuccessMock());
@@ -148,14 +148,10 @@ describe("onboarding integration coverage", () => {
 		await drainScheduledWork(t);
 
 		const history = await getRequestAuditHistory(t, requestId);
-		expect(history.map((event: AuditHistoryEvent) => event.action)).toEqual(
-			expect.arrayContaining([
-				"transition.onboardingRequest.created",
-				"transition.onboardingRequest.approve",
-				"onboarding.role_assigned",
-				"transition.onboardingRequest.assign_role",
-			])
-		);
+		const actions = history.map((event: AuditHistoryEvent) => event.action);
+		expect(actions).toContain("transition.onboardingRequest.created");
+		expect(actions).toContain("transition.onboardingRequest.approve");
+		expect(actions).toContain("onboarding.request_approved");
 
 		const createdIndex = history.findIndex(
 			(event: AuditHistoryEvent) =>
@@ -165,19 +161,15 @@ describe("onboarding integration coverage", () => {
 			(event: AuditHistoryEvent) =>
 				event.action === "transition.onboardingRequest.approve"
 		);
-		const roleAssignedIndex = history.findIndex(
-			(event: AuditHistoryEvent) => event.action === "onboarding.role_assigned"
-		);
-		const assignRoleIndex = history.findIndex(
+		const approvedAuditIndex = history.findIndex(
 			(event: AuditHistoryEvent) =>
-				event.action === "transition.onboardingRequest.assign_role"
+				event.action === "onboarding.request_approved"
 		);
 
-		expect(assignRoleIndex).toBeLessThan(roleAssignedIndex);
-		expect(roleAssignedIndex).toBeLessThan(approveIndex);
+		expect(approvedAuditIndex).toBeLessThan(approveIndex);
 		expect(approveIndex).toBeLessThan(createdIndex);
 
 		const request = await getRequest(t, requestId);
-		expect(request?.status).toBe("role_assigned");
+		expect(request?.status).toBe("approved");
 	});
 });

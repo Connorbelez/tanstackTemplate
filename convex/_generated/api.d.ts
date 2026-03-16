@@ -14,6 +14,7 @@ import type * as auditTrailClient from "../auditTrailClient.js";
 import type * as auth from "../auth.js";
 import type * as auth_auditAuth from "../auth/auditAuth.js";
 import type * as auth_internal from "../auth/internal.js";
+import type * as auth_resourceChecks from "../auth/resourceChecks.js";
 import type * as constants from "../constants.js";
 import type * as crons from "../crons.js";
 import type * as demo_actionCache from "../demo/actionCache.js";
@@ -51,6 +52,7 @@ import type * as documentEngine_templateVersions from "../documentEngine/templat
 import type * as documentEngine_templates from "../documentEngine/templates.js";
 import type * as documentEngine_validators from "../documentEngine/validators.js";
 import type * as engine_auditJournal from "../engine/auditJournal.js";
+import type * as engine_commands from "../engine/commands.js";
 import type * as engine_effects_obligation from "../engine/effects/obligation.js";
 import type * as engine_effects_onboarding from "../engine/effects/onboarding.js";
 import type * as engine_effects_registry from "../engine/effects/registry.js";
@@ -58,6 +60,7 @@ import type * as engine_effects_workosProvisioning from "../engine/effects/worko
 import type * as engine_hashChain from "../engine/hashChain.js";
 import type * as engine_machines_registry from "../engine/machines/registry.js";
 import type * as engine_reconciliation from "../engine/reconciliation.js";
+import type * as engine_serialization from "../engine/serialization.js";
 import type * as engine_transition from "../engine/transition.js";
 import type * as engine_transitionMutation from "../engine/transitionMutation.js";
 import type * as engine_types from "../engine/types.js";
@@ -78,6 +81,10 @@ import type * as onboarding_internal from "../onboarding/internal.js";
 import type * as onboarding_mutations from "../onboarding/mutations.js";
 import type * as onboarding_queries from "../onboarding/queries.js";
 import type * as onboarding_validators from "../onboarding/validators.js";
+import type * as seed_seedBorrower from "../seed/seedBorrower.js";
+import type * as seed_seedBroker from "../seed/seedBroker.js";
+import type * as seed_seedHelpers from "../seed/seedHelpers.js";
+import type * as seed_seedLender from "../seed/seedLender.js";
 import type * as test_authTestEndpoints from "../test/authTestEndpoints.js";
 import type * as todos from "../todos.js";
 
@@ -94,6 +101,7 @@ declare const fullApi: ApiFromModules<{
   auth: typeof auth;
   "auth/auditAuth": typeof auth_auditAuth;
   "auth/internal": typeof auth_internal;
+  "auth/resourceChecks": typeof auth_resourceChecks;
   constants: typeof constants;
   crons: typeof crons;
   "demo/actionCache": typeof demo_actionCache;
@@ -131,6 +139,7 @@ declare const fullApi: ApiFromModules<{
   "documentEngine/templates": typeof documentEngine_templates;
   "documentEngine/validators": typeof documentEngine_validators;
   "engine/auditJournal": typeof engine_auditJournal;
+  "engine/commands": typeof engine_commands;
   "engine/effects/obligation": typeof engine_effects_obligation;
   "engine/effects/onboarding": typeof engine_effects_onboarding;
   "engine/effects/registry": typeof engine_effects_registry;
@@ -138,6 +147,7 @@ declare const fullApi: ApiFromModules<{
   "engine/hashChain": typeof engine_hashChain;
   "engine/machines/registry": typeof engine_machines_registry;
   "engine/reconciliation": typeof engine_reconciliation;
+  "engine/serialization": typeof engine_serialization;
   "engine/transition": typeof engine_transition;
   "engine/transitionMutation": typeof engine_transitionMutation;
   "engine/types": typeof engine_types;
@@ -158,6 +168,10 @@ declare const fullApi: ApiFromModules<{
   "onboarding/mutations": typeof onboarding_mutations;
   "onboarding/queries": typeof onboarding_queries;
   "onboarding/validators": typeof onboarding_validators;
+  "seed/seedBorrower": typeof seed_seedBorrower;
+  "seed/seedBroker": typeof seed_seedBroker;
+  "seed/seedHelpers": typeof seed_seedHelpers;
+  "seed/seedLender": typeof seed_seedLender;
   "test/authTestEndpoints": typeof test_authTestEndpoints;
   todos: typeof todos;
 }>;

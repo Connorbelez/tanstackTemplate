@@ -20,7 +20,10 @@ import { ENTITY_TABLE_MAP } from "./types";
 function isGovernedEntityType(
 	entityType: EntityType
 ): entityType is GovernedEntityType {
-	return entityType in machineRegistry;
+	return (
+		entityType in machineRegistry &&
+		Boolean(machineRegistry[entityType as GovernedEntityType])
+	);
 }
 
 interface ScheduledEffectDescriptor {

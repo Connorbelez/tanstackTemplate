@@ -28,7 +28,7 @@ describe("buildSource", () => {
 
 		expect(source).toEqual({
 			actorId: "user_abc",
-			actorType: undefined,
+			actorType: "member",
 			channel: "broker_portal",
 		});
 	});
@@ -44,11 +44,11 @@ describe("buildSource", () => {
 		});
 	});
 
-	it("sets actorType to undefined when viewer is not a FairLend admin", () => {
+	it("derives actorType from the viewer's role set when not a FairLend admin", () => {
 		const viewer = makeViewer({ isFairLendAdmin: false });
 		const source = buildSource(viewer, "borrower_portal");
 
-		expect(source.actorType).toBeUndefined();
+		expect(source.actorType).toBe("member");
 	});
 
 	it("uses the exact channel passed as argument", () => {
@@ -92,7 +92,7 @@ describe("command wrapper defaults (documented behavior)", () => {
 		const viewer = makeViewer({ authId: "broker_1" });
 		const source = buildSource(viewer, "broker_portal");
 		expect(source.channel).toBe("broker_portal");
-		expect(source.actorType).toBeUndefined();
+		expect(source.actorType).toBe("member");
 	});
 
 	it("transitionObligation defaults to scheduler channel with no actor info", () => {

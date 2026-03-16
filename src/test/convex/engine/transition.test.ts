@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setup } from "xstate";
 import { internal } from "../../../../convex/_generated/api";
+import type { Id } from "../../../../convex/_generated/dataModel";
 import { effectRegistry } from "../../../../convex/engine/effects/registry";
 import { machineRegistry } from "../../../../convex/engine/machines/registry";
 import { executeTransition } from "../../../../convex/engine/transition";
@@ -11,6 +12,7 @@ import {
 	getAuditJournalRows,
 	getRequest,
 	getRequestAuditHistory,
+	rejectRequest,
 	seedDefaultGovernedActors,
 } from "../onboarding/helpers";
 
@@ -19,6 +21,125 @@ interface AuditHistoryEvent {
 	metadata?: {
 		outcome?: string;
 	};
+}
+
+type GovernedTestConvex = ReturnType<typeof createGovernedTestConvex>;
+
+async function getConvexErrorData(error: unknown) {
+	if (typeof error === "string") {
+		const parsed = JSON.parse(error) as unknown;
+		return typeof parsed === "string" ? JSON.parse(parsed) : parsed;
+	}
+	if (
+		error &&
+		typeof error === "object" &&
+		"data" in error &&
+		typeof error.data === "string"
+	) {
+		const parsed = JSON.parse(error.data) as unknown;
+		return typeof parsed === "string" ? JSON.parse(parsed) : parsed;
+	}
+	if (error && typeof error === "object" && "data" in error) {
+		return error.data;
+	}
+	return undefined;
+}
+
+async function getEntityJournalRows(
+	t: GovernedTestConvex,
+	entityType: "mortgage" | "onboardingRequest",
+	entityId: string
+) {
+	return t.run(async (ctx) => {
+		return ctx.db
+			.query("auditJournal")
+			.withIndex("by_entity", (q) =>
+				q.eq("entityType", entityType).eq("entityId", entityId)
+			)
+			.collect();
+	});
+}
+
+async function seedMortgage(
+	t: GovernedTestConvex,
+	options?: {
+		machineContext?: {
+			lastPaymentAt: number;
+			missedPayments: number;
+		};
+		status?: string;
+	}
+): Promise<Id<"mortgages">> {
+	return t.run(async (ctx) => {
+		const createdAt = Date.now();
+		const brokerUserId = await ctx.db.insert("users", {
+			authId: `user_mortgage_broker_${createdAt}`,
+			email: `mortgage-broker-${createdAt}@fairlend.test`,
+			firstName: "Mortgage",
+			lastName: "Broker",
+		});
+		const brokerId = await ctx.db.insert("brokers", {
+			status: "active",
+			userId: brokerUserId,
+			createdAt,
+		});
+		const propertyId = await ctx.db.insert("properties", {
+			streetAddress: "1 Test Street",
+			city: "Toronto",
+			province: "ON",
+			postalCode: "M5V1E1",
+			propertyType: "residential",
+			createdAt,
+		});
+
+		return ctx.db.insert("mortgages", {
+			status: options?.status ?? "active",
+			machineContext: options?.machineContext,
+			propertyId,
+			principal: 500_000_00,
+			interestRate: 0.0599,
+			rateType: "fixed",
+			termMonths: 12,
+			amortizationMonths: 300,
+			paymentAmount: 2_950_00,
+			paymentFrequency: "monthly",
+			loanType: "conventional",
+			lienPosition: 1,
+			interestAdjustmentDate: "2026-01-01",
+			termStartDate: "2026-01-01",
+			maturityDate: "2027-01-01",
+			firstPaymentDate: "2026-02-01",
+			brokerOfRecordId: brokerId,
+			createdAt,
+		});
+	});
+}
+
+async function getMortgage(t: GovernedTestConvex, mortgageId: Id<"mortgages">) {
+	return t.run(async (ctx) => ctx.db.get(mortgageId));
+}
+
+async function seedPendingOnboardingRequest(
+	t: GovernedTestConvex
+): Promise<Id<"onboardingRequests">> {
+	return t.run(async (ctx) => {
+		const createdAt = Date.now();
+		const userId = await ctx.db.insert("users", {
+			authId: `user_onboarding_${createdAt}`,
+			email: `onboarding-${createdAt}@fairlend.test`,
+			firstName: "Onboarding",
+			lastName: "Member",
+		});
+
+		return ctx.db.insert("onboardingRequests", {
+			userId,
+			requestedRole: "lender",
+			status: "pending_review",
+			referralSource: "self_signup",
+			targetOrganizationId: "org_fairlend_brokerage",
+			createdAt,
+		});
+	});
 }
 
 describe("transition engine", () => {
@@ -70,6 +191,20 @@ describe("transition engine", () => {
 
 		const request = await getRequest(t, requestId);
 		expect(request?.status).toBe("approved");
+
+		const latestJournal = (await getAuditJournalRows(t, requestId)).at(-1);
+		expect(latestJournal).toMatchObject({
+			entityType: "onboardingRequest",
+			entityId: requestId,
+			eventType: "APPROVE",
+			previousState: "pending_review",
+			newState: "approved",
+			outcome: "transitioned",
+			actorId: "user_fairlend_admin",
+			actorType: "admin",
+			channel: "admin_dashboard",
+			machineVersion: "onboardingRequest@1.0.0",
+		});
 	});
 
 	it("transitions pending_review to rejected via transitionMutation", async () => {
@@ -176,6 +311,50 @@ describe("transition engine", () => {
 					event.action === "transition.onboardingRequest.rejected"
 			)
 		).toBe(true);
+	});
+
+	it("rejects terminal onboarding requests without scheduling effects", async () => {
+		const t = createGovernedTestConvex();
+		await seedDefaultGovernedActors(t);
+
+		const requestId = await createSelfSignupRequest(t, "lender");
+		await rejectRequest(t, requestId, "Incomplete application");
+		const journalCountBefore = (await getAuditJournalRows(t, requestId)).length;
+
+		const result = await t.mutation(
+			internal.engine.transitionMutation.transitionMutation,
+			{
+				entityType: "onboardingRequest",
+				entityId: requestId,
+				eventType: "APPROVE",
+				payload: {},
+				source: {
+					actorId: "user_fairlend_admin",
+					actorType: "admin",
+					channel: "admin_dashboard",
+				},
+			}
+		);
+
+		expect(result).toMatchObject({
+			success: false,
+			previousState: "rejected",
+			newState: "rejected",
+		});
+		expect(result.effectsScheduled).toBeUndefined();
+		expect((await getRequest(t, requestId))?.status).toBe("rejected");
+
+		const latestJournal = (await getAuditJournalRows(t, requestId)).at(-1);
+		expect(latestJournal).toMatchObject({
+			eventType: "APPROVE",
+			outcome: "rejected",
+			previousState: "rejected",
+			newState: "rejected",
+		});
+		expect(latestJournal?.reason).toContain('Event "APPROVE" not valid');
+		expect((await getAuditJournalRows(t, requestId)).length).toBe(
+			journalCountBefore + 1
+		);
 	});
 
 	it("rejects same-state transitions with no effects", async () => {
@@ -497,6 +676,224 @@ describe("transition engine", () => {
 		expect(latestJournal?.channel).toBe("scheduler");
 	});
 
+	it("rejects DEFAULT_THRESHOLD_REACHED when the mortgage guard fails", async () => {
+		const t = createGovernedTestConvex();
+		const mortgageId = await seedMortgage(t, {
+			status: "delinquent",
+			machineContext: {
+				lastPaymentAt: 0,
+				missedPayments: 2,
+			},
+		});
+
+		const result = await t.mutation(
+			internal.engine.transitionMutation.transitionMutation,
+			{
+				entityType: "mortgage",
+				entityId: mortgageId,
+				eventType: "DEFAULT_THRESHOLD_REACHED",
+				payload: {},
+				source: {
+					channel: "scheduler",
+					actorType: "system",
+				},
+			}
+		);
+
+		expect(result).toMatchObject({
+			success: false,
+			previousState: "delinquent",
+			newState: "delinquent",
+		});
+		expect(result.effectsScheduled).toBeUndefined();
+
+		const mortgage = await getMortgage(t, mortgageId);
+		expect(mortgage?.status).toBe("delinquent");
+		expect(mortgage?.machineContext).toEqual({
+			lastPaymentAt: 0,
+			missedPayments: 2,
+		});
+
+		const latestJournal = (
+			await getEntityJournalRows(t, "mortgage", mortgageId)
+		).at(-1);
+		expect(latestJournal).toMatchObject({
+			entityType: "mortgage",
+			entityId: mortgageId,
+			eventType: "DEFAULT_THRESHOLD_REACHED",
+			outcome: "rejected",
+			previousState: "delinquent",
+			newState: "delinquent",
+		});
+	});
+
+	it("writes an unbroken audit journal chain across multiple transition-engine events", async () => {
+		const t = createGovernedTestConvex();
+		const requestId = await seedPendingOnboardingRequest(t);
+
+		await t.mutation(internal.engine.transitionMutation.transitionMutation, {
+			entityType: "onboardingRequest",
+			entityId: requestId,
+			eventType: "APPROVE",
+			payload: {},
+			source: {
+				actorId: "user_fairlend_admin",
+				actorType: "admin",
+				channel: "admin_dashboard",
+			},
+		});
+		await t.mutation(internal.engine.transitionMutation.transitionMutation, {
+			entityType: "onboardingRequest",
+			entityId: requestId,
+			eventType: "ASSIGN_ROLE",
+			payload: {},
+			source: { channel: "scheduler", actorType: "system" },
+		});
+
+		const journalEntries = await getEntityJournalRows(
+			t,
+			"onboardingRequest",
+			requestId
+		);
+		expect(journalEntries).toHaveLength(2);
+		expect(
+			journalEntries.map((entry) => ({
+				eventType: entry.eventType,
+				previousState: entry.previousState,
+				newState: entry.newState,
+			}))
+		).toEqual([
+			{
+				eventType: "APPROVE",
+				previousState: "pending_review",
+				newState: "approved",
+			},
+			{
+				eventType: "ASSIGN_ROLE",
+				previousState: "approved",
+				newState: "role_assigned",
+			},
+		]);
+
+		for (let index = 1; index < journalEntries.length; index += 1) {
+			expect(journalEntries[index]?.previousState).toBe(
+				journalEntries[index - 1]?.newState
+			);
+		}
+
+		expect((await getRequest(t, requestId))?.status).toBe("role_assigned");
+	});
+
+	it("warns and still commits the transition when an effect is missing from the registry", async () => {
+		const t = createGovernedTestConvex();
+		await seedDefaultGovernedActors(t);
+		const requestId = await createSelfSignupRequest(t, "lender");
+		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+		const missingEffectMachine = setup({
+			types: {
+				context: {} as Record<string, never>,
+				events: {} as { type: "APPROVE" },
+			},
+			actions: {
+				missingEffect: () => {
+					// noop test action
+				},
+			},
+		}).createMachine({
+			id: "onboardingRequest",
+			initial: "pending_review",
+			context: {},
+			states: {
+				pending_review: {
+					on: {
+						APPROVE: {
+							target: "approved",
+							actions: ["missingEffect"],
+						},
+					},
+				},
+				approved: {},
+			},
+		});
+
+		machineRegistry.onboardingRequest =
+			missingEffectMachine as unknown as typeof originalMachine;
+
+		const result = await t.mutation(
+			internal.engine.transitionMutation.transitionMutation,
+			{
+				entityType: "onboardingRequest",
+				entityId: requestId,
+				eventType: "APPROVE",
+				payload: {},
+				source: {
+					actorId: "user_fairlend_admin",
+					actorType: "admin",
+					channel: "admin_dashboard",
+				},
+			}
+		);
+
+		expect(result).toMatchObject({
+			success: true,
+			previousState: "pending_review",
+			newState: "approved",
+			effectsScheduled: [],
+		});
+		expect(warnSpy).toHaveBeenCalledWith(
+			expect.stringContaining('No handler registered for effect "missingEffect"')
+		);
+		expect((await getRequest(t, requestId))?.status).toBe("approved");
+	});
+
+	it("keeps a consistent final state under competing transition requests", async () => {
+		const t = createGovernedTestConvex();
+		await seedDefaultGovernedActors(t);
+		const requestId = await createSelfSignupRequest(t, "lender");
+
+		// convex-test serializes top-level functions, so this models competing
+		// requests in the test harness while production relies on OCC retries.
+		const [first, second] = await Promise.all([
+			t.mutation(internal.engine.transitionMutation.transitionMutation, {
+				entityType: "onboardingRequest",
+				entityId: requestId,
+				eventType: "APPROVE",
+				payload: {},
+				source: {
+					actorId: "user_fairlend_admin",
+					actorType: "admin",
+					channel: "admin_dashboard",
+				},
+			}),
+			t.mutation(internal.engine.transitionMutation.transitionMutation, {
+				entityType: "onboardingRequest",
+				entityId: requestId,
+				eventType: "APPROVE",
+				payload: {},
+				source: {
+					actorId: "user_fairlend_admin",
+					actorType: "admin",
+					channel: "admin_dashboard",
+				},
+			}),
+		]);
+
+		const results = [first, second];
+		expect(results.filter((result) => result.success)).toHaveLength(1);
+		expect(results.filter((result) => !result.success)).toHaveLength(1);
+		expect((await getRequest(t, requestId))?.status).toBe("approved");
+
+		const approveEntries = (await getAuditJournalRows(t, requestId)).filter(
+			(entry) => entry.eventType === "APPROVE"
+		);
+		expect(approveEntries).toHaveLength(2);
+		expect(approveEntries.map((entry) => entry.outcome)).toEqual([
+			"transitioned",
+			"rejected",
+		]);
+	});
+
 	it("throws ENTITY_NOT_FOUND for a governed entity type with an invalid entity ID", async () => {
 		const t = createGovernedTestConvex();
 
@@ -523,6 +920,28 @@ describe("transition engine", () => {
 				: (error as { data: unknown }).data;
 
 		expect(data).toMatchObject({ code: "ENTITY_NOT_FOUND" });
+	});
+
+	it("throws UNKNOWN_ENTITY_TYPE before attempting to load the entity", async () => {
+		const t = createGovernedTestConvex();
+
+		const error = await t
+			.run(async (ctx) =>
+				executeTransition(ctx as never, {
+					entityType: "notARealEntityType" as never,
+					entityId: "fake_entity_id",
+					eventType: "ANY_EVENT",
+					payload: {},
+					source: {
+						channel: "scheduler",
+					},
+				})
+			)
+			.catch((caughtError: unknown) => caughtError);
+
+		expect(await getConvexErrorData(error)).toMatchObject({
+			code: "UNKNOWN_ENTITY_TYPE",
+		});
 	});
 
 	it("throws when the entity does not exist", async () => {
