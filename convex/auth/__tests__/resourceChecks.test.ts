@@ -9,6 +9,7 @@ import {
 	canAccessApplicationPackage,
 	canAccessDeal,
 	canAccessDispersal,
+	canAccessDocument,
 	canAccessLedgerPosition,
 	canAccessMortgage,
 } from "../resourceChecks";
@@ -948,6 +949,30 @@ describe("canAccessDispersal", () => {
 			// Broker should NOT have dispersal access
 			const viewer = makeViewer({ authId: "broker-auth" });
 			const result = await canAccessDispersal(ctx, viewer, "lender-auth");
+			expect(result).toBe(false);
+		});
+	});
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// canAccessDocument
+// ═══════════════════════════════════════════════════════════════════
+
+describe("canAccessDocument", () => {
+	it("admin — always true", async () => {
+		const t = convexTest(schema, modules);
+		await t.run(async (ctx) => {
+			const viewer = adminViewer();
+			const result = await canAccessDocument(ctx, viewer, "any-doc-id");
+			expect(result).toBe(true);
+		});
+	});
+
+	it("non-admin — always false (stub pending ENG-144)", async () => {
+		const t = convexTest(schema, modules);
+		await t.run(async (ctx) => {
+			const viewer = makeViewer({ authId: "regular-user-auth" });
+			const result = await canAccessDocument(ctx, viewer, "any-doc-id");
 			expect(result).toBe(false);
 		});
 	});

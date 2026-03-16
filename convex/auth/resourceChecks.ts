@@ -66,13 +66,25 @@ export async function getLenderMortgageIds(
 	ctx: { db: QueryCtx["db"] },
 	lenderAuthId: string
 ): Promise<Set<Id<"mortgages">>> {
-	const accounts = await ctx.db
+	// Primary: indexed lookup on lenderId
+	const indexedAccounts = await ctx.db
 		.query("ledger_accounts")
 		.withIndex("by_lender", (q) => q.eq("lenderId", lenderAuthId))
 		.collect();
 
+	// Fallback: scan for legacy accounts that store investorId instead of lenderId.
+	// These won't be found by the by_lender index. Mirrors the pattern from
+	// getPositionAccount in convex/ledger/internal.ts.
+	const allAccounts = await ctx.db.query("ledger_accounts").collect();
+	const legacyAccounts = allAccounts.filter(
+		(account) =>
+			!account.lenderId && getAccountLenderId(account) === lenderAuthId
+	);
+
+	const combined = [...indexedAccounts, ...legacyAccounts];
+
 	const mortgageIds = new Set<Id<"mortgages">>();
-	for (const account of accounts) {
+	for (const account of combined) {
 		if (account.type !== "POSITION") {
 			continue;
 		}
@@ -143,8 +155,13 @@ export async function canAccessMortgage(
 		}
 	}
 
-	// Broker check
-	if (await isBrokerForMortgage(ctx, viewer, mortgageId)) {
+	// Broker check: inline to reuse already-fetched mortgage
+	const broker = await getBrokerByAuthId(ctx, viewer.authId);
+	if (
+		broker &&
+		(mortgage.brokerOfRecordId === broker._id ||
+			mortgage.assignedBrokerId === broker._id)
+	) {
 		return true;
 	}
 
@@ -187,7 +204,7 @@ export async function canAccessDeal(
 		return true;
 	}
 
-	// Lender check: buyerId or sellerId match viewer.authId
+	// Buyer / Seller check: buyerId or sellerId match viewer.authId
 	if (deal.buyerId === viewer.authId || deal.sellerId === viewer.authId) {
 		return true;
 	}
