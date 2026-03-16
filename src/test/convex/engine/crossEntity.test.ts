@@ -99,12 +99,17 @@ describe("cross-entity coordination: obligation → mortgage", () => {
 		return { mortgageId, obligationId, borrowerId, brokerId };
 	}
 
-	const effectArgs = (entityId: string, effectName: string) => ({
+	const effectArgs = (
+		entityId: string,
+		effectName: string,
+		payload?: Record<string, unknown>
+	) => ({
 		entityId,
 		entityType: "obligation" as const,
 		eventType: "TEST",
 		journalEntryId: `test-${effectName}`,
 		effectName,
+		payload,
 		source: { actorType: "system" as const, channel: "scheduler" as const },
 	});
 
@@ -192,7 +197,7 @@ describe("cross-entity coordination: obligation → mortgage", () => {
 		);
 
 		// Effect: mortgage delinquent → active (cure)
-		await t.mutation(settledEffect, effectArgs(obligationId, "emitObligationSettled"));
+		await t.mutation(settledEffect, effectArgs(obligationId, "emitObligationSettled", { amount: 333_333, paidAt: Date.now() }));
 
 		mortgage = await t.run(async (ctx) => ctx.db.get(mortgageId));
 		expect(mortgage?.status).toBe("active");
@@ -222,7 +227,7 @@ describe("cross-entity coordination: obligation → mortgage", () => {
 			payload: { amount: 333_333, paidAt: Date.now() },
 			source: { actorType: "system", channel: "scheduler" },
 		});
-		await t.mutation(settledEffect, effectArgs(obligationId, "emitObligationSettled"));
+		await t.mutation(settledEffect, effectArgs(obligationId, "emitObligationSettled", { amount: 333_333, paidAt: Date.now() }));
 
 		// Verify obligation journal
 		const oblJournal = await t.run(async (ctx) =>
