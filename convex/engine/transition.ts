@@ -80,7 +80,11 @@ function extractScheduledEffects(
 async function scheduleEffects(
 	ctx: MutationCtx,
 	entityId: string,
+	entityType: EntityType,
+	eventType: string,
 	journalEntryId: string,
+	source: CommandSource,
+	payload: Record<string, unknown> | undefined,
 	scheduledEffects: ScheduledEffectDescriptor[]
 ): Promise<string[]> {
 	const effectNames: string[] = [];
@@ -92,11 +96,18 @@ async function scheduleEffects(
 		if (handler) {
 			await ctx.scheduler.runAfter(0, handler, {
 				entityId,
+				entityType,
+				eventType,
 				journalEntryId,
 				effectName: actionDescriptor.actionType,
-				params: actionDescriptor.params,
+				payload: actionDescriptor.params ?? payload,
+				source,
 			});
 			effectNames.push(actionDescriptor.actionType);
+		} else {
+			console.warn(
+				`[GT Effect Scheduler] No handler registered for effect "${actionDescriptor.actionType}". Skipping.`
+			);
 		}
 	}
 	return effectNames;
@@ -237,7 +248,11 @@ export async function transitionEntity(
 		const effectNames = await scheduleEffects(
 			ctx,
 			entityId,
+			entityType,
+			eventType,
 			journalEntryId,
+			resolvedSource,
+			payload,
 			scheduledEffects
 		);
 		await auditLog.log(ctx, {
@@ -315,7 +330,11 @@ export async function transitionEntity(
 	const effectNames = await scheduleEffects(
 		ctx,
 		entityId,
+		entityType,
+		eventType,
 		journalEntryId,
+		resolvedSource,
+		payload,
 		scheduledEffects
 	);
 

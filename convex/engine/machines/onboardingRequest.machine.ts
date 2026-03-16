@@ -9,8 +9,8 @@ export const onboardingRequestMachine = setup({
 			| { type: "ASSIGN_ROLE" },
 	},
 	actions: {
-		// No-op stubs: the Transition Engine reads action names from the machine
-		// config and schedules the matching effect from the Effect Registry.
+		// No-op: the transition engine reads the action name from the machine config
+		// and schedules the matching effect from the effect registry.
 		notifyApplicantApproved: () => {
 			/* resolved by GT effect registry */
 		},
