@@ -199,7 +199,7 @@ async function insertLedgerReservation(
 }
 
 async function insertSequenceCounter(ctx: MutationCtx, value = 1n) {
-	return ctx.db.insert("ledger_sequence_counter", {
+	return ctx.db.insert("ledger_sequence_counters", {
 		name: "ledger_sequence" as const,
 		value,
 	});
