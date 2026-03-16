@@ -1,8 +1,11 @@
-import type { Id } from "../_generated/dataModel";
+import type { Doc, Id } from "../_generated/dataModel";
 import type { QueryCtx } from "../_generated/server";
 import type { Viewer } from "../fluent";
 import { getAccountLenderId } from "../ledger/accountOwnership";
 import { computeBalance } from "../ledger/internal";
+
+/** The 4 entity types that generatedDocuments can be linked to. */
+type DocumentEntityType = Doc<"generatedDocuments">["entityType"];
 
 // ═══════════════════════════════════════════════════════════════════
 // Resource-level access checks
@@ -318,7 +321,7 @@ export async function canAccessDispersal(
 async function hasActiveDealAccess(
 	ctx: { db: QueryCtx["db"] },
 	viewer: Viewer,
-	entityType: string,
+	entityType: DocumentEntityType,
 	entityId: string
 ): Promise<boolean> {
 	if (entityType === "deal") {
@@ -352,9 +355,12 @@ async function hasActiveDealAccess(
 		return false;
 	}
 
-	// applicationPackage / provisionalApplication are pre-deal entities —
-	// entity-level access (underwriting RBAC) is sufficient for all tiers.
-	return true;
+	// applicationPackage / provisionalApplication are pre-deal entities with no
+	// deal linkage. Since there is no deal, there is no dealAccess record to
+	// check against — the private/sensitive gate cannot be satisfied. In practice
+	// this means pre-deal entities should only carry `public`-tier documents;
+	// the entity-level RBAC (underwriting roles) provides sufficient restriction.
+	return false;
 }
 
 export async function canAccessDocument(
