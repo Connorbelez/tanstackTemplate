@@ -4,6 +4,7 @@ import { internal } from "../../../../convex/_generated/api";
 import { effectRegistry } from "../../../../convex/engine/effects/registry";
 import { machineRegistry } from "../../../../convex/engine/machines/registry";
 import { executeTransition } from "../../../../convex/engine/transition";
+import type { EntityType } from "../../../../convex/engine/types";
 import {
 	approveRequest,
 	createGovernedTestConvex,
@@ -11,8 +12,14 @@ import {
 	getAuditJournalRows,
 	getRequest,
 	getRequestAuditHistory,
+	rejectRequest,
 	seedDefaultGovernedActors,
 } from "../onboarding/helpers";
+import {
+	getAuditJournalForEntity,
+	getEntity,
+	seedMortgage,
+} from "./helpers";
 
 interface AuditHistoryEvent {
 	action?: string;
@@ -30,7 +37,8 @@ describe("transition engine", () => {
 	});
 
 	afterEach(() => {
-		machineRegistry.onboardingRequest = originalMachine;
+		(machineRegistry as Record<string, unknown>).onboardingRequest =
+			originalMachine;
 		if (originalTestEffect) {
 			effectRegistry.testEffect = originalTestEffect;
 		} else {
@@ -553,7 +561,10 @@ describe("transition engine", () => {
 		await seedDefaultGovernedActors(t);
 
 		const requestId = await createSelfSignupRequest(t, "lender");
-		machineRegistry.onboardingRequest = undefined;
+
+		// Delete the key entirely so `in` check fails via isGovernedEntityType
+		// biome-ignore lint/performance/noDelete: test needs key removal to trigger UNKNOWN_ENTITY_TYPE
+		delete (machineRegistry as Record<string, unknown>).onboardingRequest;
 
 		await expect(
 			t.mutation(internal.engine.transitionMutation.transitionMutation, {
@@ -567,5 +578,362 @@ describe("transition engine", () => {
 				},
 			})
 		).rejects.toThrow("No machine registered");
+	});
+
+	// ── AC: Happy path — journal entry field assertions ──────────────
+
+	it("happy path: APPROVE produces journal entry with correct fields", async () => {
+		const t = createGovernedTestConvex();
+		await seedDefaultGovernedActors(t);
+
+		const requestId = await createSelfSignupRequest(t, "lender");
+		await t.mutation(
+			internal.engine.transitionMutation.transitionMutation,
+			{
+				entityType: "onboardingRequest",
+				entityId: requestId,
+				eventType: "APPROVE",
+				payload: {},
+				source: {
+					actorId: "user_fairlend_admin",
+					actorType: "admin",
+					channel: "admin_dashboard",
+				},
+			}
+		);
+
+		const journal = await getAuditJournalRows(t, requestId);
+		const entry = journal.find(
+			(j) => j.eventType === "APPROVE" && j.outcome === "transitioned"
+		);
+		expect(entry).toBeDefined();
+		expect(entry).toMatchObject({
+			entityType: "onboardingRequest",
+			entityId: requestId,
+			eventType: "APPROVE",
+			previousState: "pending_review",
+			newState: "approved",
+			outcome: "transitioned",
+			actorId: "user_fairlend_admin",
+			channel: "admin_dashboard",
+		});
+		expect(entry?.machineVersion).toMatch(/^onboardingRequest@/);
+		expect(entry?.timestamp).toBeGreaterThan(0);
+	});
+
+	// ── AC: Rejection path — terminal state ─────────────────────────
+
+	it("rejects APPROVE on terminal 'rejected' state with rejection journal entry", async () => {
+		const t = createGovernedTestConvex();
+		await seedDefaultGovernedActors(t);
+
+		const requestId = await createSelfSignupRequest(t, "lender");
+		await rejectRequest(t, requestId);
+
+		const result = await t.mutation(
+			internal.engine.transitionMutation.transitionMutation,
+			{
+				entityType: "onboardingRequest",
+				entityId: requestId,
+				eventType: "APPROVE",
+				payload: {},
+				source: {
+					actorId: "user_fairlend_admin",
+					actorType: "admin",
+					channel: "admin_dashboard",
+				},
+			}
+		);
+
+		expect(result).toMatchObject({
+			success: false,
+			previousState: "rejected",
+			newState: "rejected",
+		});
+		expect(result.reason).toContain("not valid");
+
+		// Entity status unchanged
+		const request = await getRequest(t, requestId);
+		expect(request?.status).toBe("rejected");
+
+		// Rejection journal entry written
+		const journal = await getAuditJournalRows(t, requestId);
+		const rejectionEntries = journal.filter(
+			(j) => j.eventType === "APPROVE" && j.outcome === "rejected"
+		);
+		expect(rejectionEntries).toHaveLength(1);
+		expect(rejectionEntries[0].previousState).toBe("rejected");
+		expect(rejectionEntries[0].newState).toBe("rejected");
+	});
+
+	// ── AC: Concurrency ─────────────────────────────────────────────
+
+	it("handles concurrent transitions with sequential consistency", async () => {
+		// convex-test serializes mutations, so true OCC contention cannot be triggered.
+		// This test verifies that two transitions dispatched via Promise.allSettled
+		// produce a consistent final state with no data corruption.
+		const t = createGovernedTestConvex();
+		await seedDefaultGovernedActors(t);
+
+		const requestId = await createSelfSignupRequest(t, "lender");
+		const [r1, r2] = await Promise.allSettled([
+			t.mutation(internal.engine.transitionMutation.transitionMutation, {
+				entityType: "onboardingRequest",
+				entityId: requestId,
+				eventType: "APPROVE",
+				payload: {},
+				source: {
+					actorId: "admin1",
+					actorType: "admin",
+					channel: "admin_dashboard",
+				},
+			}),
+			t.mutation(internal.engine.transitionMutation.transitionMutation, {
+				entityType: "onboardingRequest",
+				entityId: requestId,
+				eventType: "REJECT",
+				payload: {},
+				source: {
+					actorId: "admin2",
+					actorType: "admin",
+					channel: "admin_dashboard",
+				},
+			}),
+		]);
+
+		// At least one should have fulfilled
+		const fulfilled = [r1, r2].filter((r) => r.status === "fulfilled");
+		expect(fulfilled.length).toBeGreaterThanOrEqual(1);
+
+		// Final entity state must be one of the two valid outcomes
+		const request = await getRequest(t, requestId);
+		expect(["approved", "rejected"]).toContain(request?.status);
+
+		// Journal entries: each successful transition has a matching entry
+		const journal = await getAuditJournalRows(t, requestId);
+		const transitioned = journal.filter((j) => j.outcome === "transitioned");
+		expect(transitioned.length).toBeGreaterThanOrEqual(1);
+
+		// No corruption: last transitioned journal entry's newState matches entity status
+		const lastTransitioned = transitioned.at(-1);
+		expect(lastTransitioned?.newState).toBe(request?.status);
+	});
+
+	// ── AC: Audit completeness ──────────────────────────────────────
+
+	it("produces N journal entries for N transitions with correct state chains", async () => {
+		const t = createGovernedTestConvex();
+		await seedDefaultGovernedActors(t);
+
+		const requestId = await createSelfSignupRequest(t, "lender");
+
+		// Transition 1: pending_review → approved
+		await t.mutation(
+			internal.engine.transitionMutation.transitionMutation,
+			{
+				entityType: "onboardingRequest",
+				entityId: requestId,
+				eventType: "APPROVE",
+				payload: {},
+				source: {
+					actorId: "user_fairlend_admin",
+					actorType: "admin",
+					channel: "admin_dashboard",
+				},
+			}
+		);
+
+		// Transition 2: approved → role_assigned
+		await t.mutation(
+			internal.engine.transitionMutation.transitionMutation,
+			{
+				entityType: "onboardingRequest",
+				entityId: requestId,
+				eventType: "ASSIGN_ROLE",
+				payload: {},
+				source: {
+					actorType: "system",
+					channel: "scheduler",
+				},
+			}
+		);
+
+		const journal = await getAuditJournalRows(t, requestId);
+		const transitioned = journal.filter((j) => j.outcome === "transitioned");
+
+		// The APPROVE and ASSIGN_ROLE transitions must be present
+		const approve = transitioned.find((j) => j.eventType === "APPROVE");
+		const assignRole = transitioned.find(
+			(j) => j.eventType === "ASSIGN_ROLE"
+		);
+		expect(approve).toBeDefined();
+		expect(assignRole).toBeDefined();
+
+		// Chain integrity for our two transitions
+		expect(approve).toMatchObject({
+			previousState: "pending_review",
+			newState: "approved",
+		});
+		expect(assignRole).toMatchObject({
+			previousState: "approved",
+			newState: "role_assigned",
+		});
+
+		// Full chain validation: each entry's previousState = prior entry's newState
+		for (let i = 1; i < transitioned.length; i++) {
+			expect(transitioned[i].previousState).toBe(
+				transitioned[i - 1].newState
+			);
+		}
+
+		// Timestamps are monotonically increasing
+		for (let i = 1; i < transitioned.length; i++) {
+			expect(transitioned[i].timestamp).toBeGreaterThanOrEqual(
+				transitioned[i - 1].timestamp
+			);
+		}
+	});
+
+	// ── AC: Unknown entity type ─────────────────────────────────────
+
+	it("throws UNKNOWN_ENTITY_TYPE for a non-governed entity type", async () => {
+		const t = createGovernedTestConvex();
+
+		const error = await t
+			.mutation(internal.engine.transitionMutation.transitionMutation, {
+				entityType: "deal" as EntityType,
+				entityId: "fake_deal_id",
+				eventType: "APPROVE",
+				payload: {},
+				source: {
+					actorType: "system",
+					channel: "scheduler",
+				},
+			})
+			.catch((e: unknown) => e);
+
+		const data =
+			error &&
+			typeof error === "object" &&
+			"data" in error &&
+			typeof error.data === "string"
+				? JSON.parse(error.data)
+				: (error as { data: unknown }).data;
+
+		expect(data).toMatchObject({ code: "UNKNOWN_ENTITY_TYPE" });
+	});
+
+	// ── AC: Guard failure — mortgage ────────────────────────────────
+
+	it("rejects DEFAULT_THRESHOLD_REACHED when missedPayments < 3", async () => {
+		const t = createGovernedTestConvex();
+		await seedDefaultGovernedActors(t);
+
+		// Seed mortgage in 'delinquent' with missedPayments = 2 (below threshold of >= 3)
+		const mortgageId = await seedMortgage(t, {
+			status: "delinquent",
+			machineContext: { missedPayments: 2, lastPaymentAt: 0 },
+		});
+
+		const result = await t.mutation(
+			internal.engine.transitionMutation.transitionMutation,
+			{
+				entityType: "mortgage",
+				entityId: mortgageId,
+				eventType: "DEFAULT_THRESHOLD_REACHED",
+				payload: {},
+				source: {
+					actorType: "system",
+					channel: "scheduler",
+				},
+			}
+		);
+
+		expect(result).toMatchObject({
+			success: false,
+			previousState: "delinquent",
+			newState: "delinquent",
+		});
+
+		// Entity status unchanged
+		const mortgage = await getEntity(t, mortgageId);
+		expect(mortgage?.status).toBe("delinquent");
+
+		// Rejection journal entry
+		const journal = await getAuditJournalForEntity(
+			t,
+			"mortgage",
+			mortgageId
+		);
+		const lastEntry = journal.at(-1);
+		expect(lastEntry?.outcome).toBe("rejected");
+	});
+
+	// ── AC: Missing effect ──────────────────────────────────────────
+
+	it("warns and continues when machine declares an unregistered effect", async () => {
+		const t = createGovernedTestConvex();
+		await seedDefaultGovernedActors(t);
+
+		const warnSpy = vi
+			.spyOn(console, "warn")
+			.mockImplementation(() => {});
+
+		const machineWithMissingEffect = setup({
+			types: {
+				context: {} as Record<string, never>,
+				events: {} as { type: "APPROVE" },
+			},
+			actions: {
+				nonExistentEffect: () => {
+					/* noop */
+				},
+			},
+		}).createMachine({
+			id: "onboardingRequest",
+			initial: "pending_review",
+			context: {},
+			states: {
+				pending_review: {
+					on: {
+						APPROVE: {
+							target: "approved",
+							actions: ["nonExistentEffect"],
+						},
+					},
+				},
+				approved: { type: "final" },
+			},
+		});
+
+		machineRegistry.onboardingRequest =
+			machineWithMissingEffect as unknown as typeof originalMachine;
+
+		const requestId = await createSelfSignupRequest(t, "lender");
+		const result = await t.mutation(
+			internal.engine.transitionMutation.transitionMutation,
+			{
+				entityType: "onboardingRequest",
+				entityId: requestId,
+				eventType: "APPROVE",
+				payload: {},
+				source: {
+					actorId: "user_fairlend_admin",
+					actorType: "admin",
+					channel: "admin_dashboard",
+				},
+			}
+		);
+
+		// Transition succeeds despite missing handler
+		expect(result.success).toBe(true);
+		expect(result.newState).toBe("approved");
+
+		// console.warn called about missing handler
+		expect(warnSpy).toHaveBeenCalledWith(
+			expect.stringContaining("nonExistentEffect")
+		);
+
+		warnSpy.mockRestore();
 	});
 });
