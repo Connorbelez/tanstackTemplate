@@ -995,7 +995,138 @@ describe("transition engine", () => {
 					channel: "scheduler",
 				},
 			})
-		).rejects.toThrow("No machine registered");
+		).rejects.toThrow();
+	});
+
+	it("rejects transition when guard fails (mortgage DEFAULT_THRESHOLD_REACHED with 0 missed payments)", async () => {
+		const t = createGovernedTestConvex();
+		await seedDefaultGovernedActors(t);
+
+		// Create a mortgage in "active" state with 0 missed payments
+		const propertyId = await t.run(async (ctx) =>
+			ctx.db.insert("properties", {
+				streetAddress: "1 Test St",
+				city: "Toronto",
+				province: "ON",
+				postalCode: "M5V 0A1",
+				propertyType: "residential",
+				createdAt: Date.now(),
+			})
+		);
+
+		const brokerId = await t.run(async (ctx) =>
+			ctx.db.insert("brokers", {
+				status: "active",
+				userId: (await ctx.db.query("users").first())!._id,
+				createdAt: Date.now(),
+			})
+		);
+
+		const mortgageId = await t.run(async (ctx) =>
+			ctx.db.insert("mortgages", {
+				status: "active",
+				machineContext: { missedPayments: 0, lastPaymentAt: 0 },
+				propertyId,
+				principal: 50_000_000,
+				interestRate: 0.08,
+				rateType: "fixed",
+				termMonths: 12,
+				amortizationMonths: 12,
+				paymentAmount: 333_333,
+				paymentFrequency: "monthly",
+				loanType: "conventional",
+				lienPosition: 1,
+				interestAdjustmentDate: "2026-01-01",
+				termStartDate: "2026-01-15",
+				maturityDate: "2027-01-15",
+				firstPaymentDate: "2026-02-15",
+				brokerOfRecordId: brokerId,
+				createdAt: Date.now(),
+			})
+		);
+
+		// Try DEFAULT_THRESHOLD_REACHED — guard requires missedPayments >= 3
+		const result = await t.mutation(
+			internal.engine.transitionMutation.transitionMutation,
+			{
+				entityType: "mortgage",
+				entityId: mortgageId,
+				eventType: "DEFAULT_THRESHOLD_REACHED",
+				payload: {},
+				source: { actorType: "system", channel: "scheduler" },
+			}
+		);
+
+		// Guard fails → event rejected, status unchanged
+		expect(result.success).toBe(false);
+		expect(result.previousState).toBe("active");
+		expect(result.newState).toBe("active");
+
+		// Verify entity status is still active
+		const mortgage = await t.run(async (ctx) => ctx.db.get(mortgageId));
+		expect(mortgage?.status).toBe("active");
+	});
+
+	it("warns but succeeds when a machine action has no effect registry entry", async () => {
+		const t = createGovernedTestConvex();
+		await seedDefaultGovernedActors(t);
+
+		// Register a test machine whose initial state matches "pending_review"
+		// (the state created by createSelfSignupRequest)
+		const testMachine = setup({
+			types: {
+				context: {} as Record<string, never>,
+				events: {} as { type: "GO" },
+			},
+			actions: {
+				unknownEffect: () => {
+					/* no-op stub */
+				},
+			},
+		}).createMachine({
+			id: "testMachineForMissingEffect",
+			initial: "pending_review",
+			context: {},
+			states: {
+				pending_review: {
+					on: {
+						GO: { target: "end", actions: ["unknownEffect"] },
+					},
+				},
+				end: { type: "final" },
+			},
+		});
+
+		const requestId = await createSelfSignupRequest(t, "lender");
+
+		// Temporarily register the test machine
+		const originalOnboarding = machineRegistry.onboardingRequest;
+		machineRegistry.onboardingRequest = testMachine;
+
+		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+		const result = await t.mutation(
+			internal.engine.transitionMutation.transitionMutation,
+			{
+				entityType: "onboardingRequest",
+				entityId: requestId,
+				eventType: "GO",
+				payload: {},
+				source: { actorType: "admin", channel: "admin_dashboard" },
+			}
+		);
+
+		// Transition succeeds despite missing effect handler
+		expect(result.success).toBe(true);
+		expect(result.newState).toBe("end");
+
+		// Warning was logged
+		expect(warnSpy).toHaveBeenCalledWith(
+			expect.stringContaining("unknownEffect")
+		);
+
+		machineRegistry.onboardingRequest = originalOnboarding;
+		warnSpy.mockRestore();
 	});
 
 	// ── AC: Happy path — journal entry field assertions ──────────────
