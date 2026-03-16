@@ -66,9 +66,8 @@ export const myAction = authedAction
 		// const data = await response.json();
 
 		// // Query data by running Convex queries.
-		const data = await ctx.runQuery(api.numbers.listNumbers, {
-			count: 10,
-		});
+		// @ts-expect-error — deep generated type triggers TS2589
+		const data = await ctx.runQuery(api.numbers.listNumbers, { count: 10 });
 		console.log(data);
 
 		// // Write data by running Convex mutations.
