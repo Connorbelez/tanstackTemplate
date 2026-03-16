@@ -1,8 +1,8 @@
-import { v } from "convex/values";
 import { internal } from "../../_generated/api";
 import type { Id } from "../../_generated/dataModel";
 import { type ActionCtx, internalAction } from "../../_generated/server";
 import { auditLog } from "../../auditLog";
+import { effectPayloadValidator } from "../validators";
 import { getWorkosProvisioning } from "./workosProvisioning";
 
 async function completeRoleAssignmentProcessing(
@@ -42,7 +42,7 @@ async function resolveTargetOrganizationId(
 	if (requestedRole === "broker" && !resolvedTargetOrganizationId) {
 		if (processingStatus === "in_progress") {
 			throw new Error(
-				`[assignRoleToUser] Broker provisioning already started for request ${requestId}`
+				`[assignRole] Broker provisioning already started for request ${requestId}`
 			);
 		}
 		const orgName = `${user.firstName} ${user.lastName}'s Brokerage`;
@@ -59,7 +59,7 @@ async function resolveTargetOrganizationId(
 
 	if (!resolvedTargetOrganizationId) {
 		throw new Error(
-			`[assignRoleToUser] No target org for request ${requestId} (role: ${requestedRole}, journal: ${journalEntryId})`
+			`[assignRole] No target org for request ${requestId} (role: ${requestedRole}, journal: ${journalEntryId})`
 		);
 	}
 
@@ -92,10 +92,49 @@ async function ensureOrganizationMembership(
 			throw membershipError;
 		}
 		console.info(
-			`[assignRoleToUser] Membership already exists for ${user.authId} in ${targetOrganizationId}`
+			`[assignRole] Membership already exists for ${user.authId} in ${targetOrganizationId}`
 		);
 	}
 }
+
+/**
+ * Stub: notifies the applicant that their onboarding request was approved.
+ * Will be replaced with real email/notification logic in a future milestone.
+ */
+export const notifyApplicantApproved = internalAction({
+	args: effectPayloadValidator,
+	handler: async (_ctx, args) => {
+		console.info(
+			`[stub] notifyApplicantApproved: entity=${args.entityId}, event=${args.eventType}`
+		);
+	},
+});
+
+/**
+ * Stub: notifies the applicant that their onboarding request was rejected.
+ * Will be replaced with real email/notification logic in a future milestone.
+ */
+export const notifyApplicantRejected = internalAction({
+	args: effectPayloadValidator,
+	handler: async (_ctx, args) => {
+		console.info(
+			`[stub] notifyApplicantRejected: entity=${args.entityId}, event=${args.eventType}`
+		);
+	},
+});
+
+/**
+ * Stub: notifies admins that a new onboarding request has been submitted.
+ * Will be replaced with real email/notification logic in a future milestone.
+ */
+export const notifyAdminNewRequest = internalAction({
+	args: effectPayloadValidator,
+	handler: async (_ctx, args) => {
+		console.info(
+			`[stub] notifyAdminNewRequest: entity=${args.entityId}, event=${args.eventType}`
+		);
+	},
+});
 
 /**
  * Side effect triggered by the APPROVE transition.
@@ -103,13 +142,8 @@ async function ensureOrganizationMembership(
  * On success, sends ASSIGN_ROLE to complete the lifecycle.
  * On failure, request stays in `approved` — Convex retries automatically.
  */
-export const assignRoleToUser = internalAction({
-	args: {
-		entityId: v.string(),
-		journalEntryId: v.string(),
-		effectName: v.string(),
-		params: v.optional(v.object({})),
-	},
+export const assignRole = internalAction({
+	args: effectPayloadValidator,
 	handler: async (ctx, args) => {
 		// 1. Load the request
 		const request = await ctx.runQuery(
@@ -117,7 +151,7 @@ export const assignRoleToUser = internalAction({
 			{ id: args.entityId as Id<"onboardingRequests"> }
 		);
 		if (!request) {
-			throw new Error(`[assignRoleToUser] Request not found: ${args.entityId}`);
+			throw new Error(`[assignRole] Request not found: ${args.entityId}`);
 		}
 
 		// 2. Load the user
@@ -126,7 +160,7 @@ export const assignRoleToUser = internalAction({
 		});
 		if (!user) {
 			throw new Error(
-				`[assignRoleToUser] User not found for request ${args.entityId}: ${request.userId}`
+				`[assignRole] User not found for request ${args.entityId}: ${request.userId}`
 			);
 		}
 
@@ -203,7 +237,7 @@ export const assignRoleToUser = internalAction({
 
 			if (!transitionResult.success) {
 				throw new Error(
-					`[assignRoleToUser] ASSIGN_ROLE transition failed for ${args.entityId}: ${transitionResult.reason}`
+					`[assignRole] ASSIGN_ROLE transition failed for ${args.entityId}: ${transitionResult.reason}`
 				);
 			}
 
@@ -213,13 +247,13 @@ export const assignRoleToUser = internalAction({
 				args.journalEntryId
 			);
 			console.info(
-				`[assignRoleToUser] Assigned ${request.requestedRole} to ${user.authId} in ${targetOrgId}`
+				`[assignRole] Assigned ${request.requestedRole} to ${user.authId} in ${targetOrgId}`
 			);
 		} catch (error) {
 			// On failure — log but do NOT transition.
 			// Request stays in `approved`. Convex retries automatically.
 			console.error(
-				`[assignRoleToUser] Failed for request ${args.entityId}: ${
+				`[assignRole] Failed for request ${args.entityId}: ${
 					error instanceof Error ? error.message : String(error)
 				}`
 			);

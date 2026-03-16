@@ -7,10 +7,17 @@ import { internal } from "../../_generated/api";
  */
 export const effectRegistry: Record<
 	string,
-	FunctionReference<"action", "internal">
+	FunctionReference<"mutation" | "action", "internal">
 > = {
-	// onboardingRequest machine effects
-	assignRole: internal.engine.effects.onboarding.assignRoleToUser,
-	// notifyApplicantApproved — TODO: implement notification effect
-	// notifyApplicantRejected — TODO: implement notification effect
+	assignRole: internal.engine.effects.onboarding.assignRole,
+	notifyApplicantApproved:
+		internal.engine.effects.onboarding.notifyApplicantApproved,
+	notifyApplicantRejected:
+		internal.engine.effects.onboarding.notifyApplicantRejected,
+	notifyAdminNewRequest:
+		internal.engine.effects.onboarding.notifyAdminNewRequest,
+	emitObligationOverdue:
+		internal.engine.effects.obligation.emitObligationOverdue,
+	emitObligationSettled:
+		internal.engine.effects.obligation.emitObligationSettled,
 };

@@ -47,3 +47,13 @@ export const commandArgsValidator = {
 	payload: v.optional(v.any()),
 	source: sourceValidator,
 };
+
+export const effectPayloadValidator = {
+	entityId: v.string(),
+	entityType: entityTypeValidator,
+	eventType: v.string(),
+	journalEntryId: v.string(),
+	effectName: v.string(),
+	payload: v.optional(v.any()),
+	source: sourceValidator,
+};

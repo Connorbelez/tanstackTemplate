@@ -65,9 +65,8 @@ describe("transition engine", () => {
 			success: true,
 			previousState: "pending_review",
 			newState: "approved",
+			effectsScheduled: ["notifyApplicantApproved"],
 		});
-		// notifyApplicantApproved is declared but not yet in effectRegistry (TODO)
-		expect(result.effectsScheduled).toEqual([]);
 
 		const request = await getRequest(t, requestId);
 		expect(request?.status).toBe("approved");
@@ -97,7 +96,7 @@ describe("transition engine", () => {
 			success: true,
 			previousState: "pending_review",
 			newState: "rejected",
-			effectsScheduled: [],
+			effectsScheduled: ["notifyApplicantRejected"],
 		});
 
 		const request = await getRequest(t, requestId);
@@ -223,7 +222,7 @@ describe("transition engine", () => {
 				events: {} as { type: "RETRY_ASSIGN" },
 			},
 			actions: {
-				assignRoleToUser: () => {
+				assignRole: () => {
 					// noop test action
 				},
 				testEffect: () => {
@@ -240,7 +239,7 @@ describe("transition engine", () => {
 						RETRY_ASSIGN: {
 							actions: [
 								{ type: "xstate.raise" },
-								"assignRoleToUser",
+								"assignRole",
 								{ type: "testEffect", params: { attempt: "retry" } },
 							] as unknown as never,
 						},
@@ -251,10 +250,7 @@ describe("transition engine", () => {
 
 		machineRegistry.onboardingRequest =
 			retryMachine as unknown as typeof originalMachine;
-		effectRegistry.assignRoleToUser =
-			internal.engine.effects.onboarding.assignRoleToUser;
-		effectRegistry.testEffect =
-			internal.engine.effects.onboarding.assignRoleToUser;
+		effectRegistry.testEffect = internal.engine.effects.onboarding.assignRole;
 
 		const journalCountBefore = (await getAuditJournalRows(t, requestId)).length;
 		const result = await t.mutation(
@@ -275,7 +271,7 @@ describe("transition engine", () => {
 			success: true,
 			previousState: "approved",
 			newState: "approved",
-			effectsScheduled: ["assignRoleToUser", "testEffect"],
+			effectsScheduled: ["assignRole", "testEffect"],
 		});
 		// Same-state-with-effects still writes a journal entry for traceability
 		expect((await getAuditJournalRows(t, requestId)).length).toBe(
@@ -426,8 +422,7 @@ describe("transition engine", () => {
 
 		machineRegistry.onboardingRequest =
 			singleActionMachine as unknown as typeof originalMachine;
-		effectRegistry.testEffect =
-			internal.engine.effects.onboarding.assignRoleToUser;
+		effectRegistry.testEffect = internal.engine.effects.onboarding.assignRole;
 
 		const result = await t.mutation(
 			internal.engine.transitionMutation.transitionMutation,

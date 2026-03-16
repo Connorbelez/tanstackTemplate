@@ -52,6 +52,17 @@ export interface TransitionResult {
 	success: boolean;
 }
 
+// ── Effect Payload ──────────────────────────────────────────────────
+export interface EffectPayload {
+	effectName: string;
+	entityId: string;
+	entityType: EntityType;
+	eventType: string;
+	journalEntryId: string;
+	payload?: Record<string, unknown>;
+	source: CommandSource;
+}
+
 // ── Audit Journal Entry ─────────────────────────────────────────────
 // Mirrors the auditJournal table in schema.ts — source fields flattened for indexability
 export interface AuditJournalEntry {

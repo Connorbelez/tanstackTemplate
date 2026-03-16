@@ -187,10 +187,13 @@ export async function runAssignRoleAction(
 		journalEntryId: string;
 	}
 ) {
-	return t.action(internal.engine.effects.onboarding.assignRoleToUser, {
+	return t.action(internal.engine.effects.onboarding.assignRole, {
 		entityId: args.entityId,
+		entityType: "onboardingRequest",
+		eventType: "ASSIGN_ROLE",
 		journalEntryId: args.journalEntryId,
-		effectName: args.effectName ?? "assignRoleToUser",
+		effectName: args.effectName ?? "assignRole",
+		source: { channel: "scheduler", actorType: "system" },
 	});
 }
 
