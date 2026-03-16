@@ -5,14 +5,14 @@ import { onboardingRequestMachine } from "../onboardingRequest.machine";
 function snapshotAt(stateValue: string) {
 	return onboardingRequestMachine.resolveState({
 		value: stateValue,
-		context: { requestId: "test-id" },
+		context: {} as Record<string, never>,
 	});
 }
 
 describe("onboardingRequest machine", () => {
 	// ── Happy paths ──────────────────────────────────────────────────
 
-	it("transitions from pending_review to approved on APPROVE", () => {
+	it("pending_review → approved on APPROVE", () => {
 		const current = snapshotAt("pending_review");
 		const next = getNextSnapshot(onboardingRequestMachine, current, {
 			type: "APPROVE",
@@ -20,7 +20,7 @@ describe("onboardingRequest machine", () => {
 		expect(next.value).toBe("approved");
 	});
 
-	it("transitions from pending_review to rejected on REJECT", () => {
+	it("pending_review → rejected on REJECT", () => {
 		const current = snapshotAt("pending_review");
 		const next = getNextSnapshot(onboardingRequestMachine, current, {
 			type: "REJECT",
@@ -28,7 +28,7 @@ describe("onboardingRequest machine", () => {
 		expect(next.value).toBe("rejected");
 	});
 
-	it("transitions from approved to role_assigned on ASSIGN_ROLE", () => {
+	it("approved → role_assigned on ASSIGN_ROLE", () => {
 		const current = snapshotAt("approved");
 		const next = getNextSnapshot(onboardingRequestMachine, current, {
 			type: "ASSIGN_ROLE",
@@ -38,7 +38,7 @@ describe("onboardingRequest machine", () => {
 
 	// ── Invalid transitions (should stay in same state) ──────────────
 
-	it("does not accept ASSIGN_ROLE in pending_review", () => {
+	it("pending_review ignores ASSIGN_ROLE", () => {
 		const current = snapshotAt("pending_review");
 		const next = getNextSnapshot(onboardingRequestMachine, current, {
 			type: "ASSIGN_ROLE",
@@ -46,7 +46,7 @@ describe("onboardingRequest machine", () => {
 		expect(next.value).toBe("pending_review");
 	});
 
-	it("does not accept APPROVE in approved state", () => {
+	it("approved ignores APPROVE", () => {
 		const current = snapshotAt("approved");
 		const next = getNextSnapshot(onboardingRequestMachine, current, {
 			type: "APPROVE",
@@ -54,7 +54,7 @@ describe("onboardingRequest machine", () => {
 		expect(next.value).toBe("approved");
 	});
 
-	it("does not accept REJECT in approved state (cannot reject after approval)", () => {
+	it("approved ignores REJECT", () => {
 		const current = snapshotAt("approved");
 		const next = getNextSnapshot(onboardingRequestMachine, current, {
 			type: "REJECT",
@@ -62,21 +62,54 @@ describe("onboardingRequest machine", () => {
 		expect(next.value).toBe("approved");
 	});
 
-	// ── Terminal states ──────────────────────────────────────────────
+	// ── Terminal state lockdown ──────────────────────────────────────
 
-	it("cannot escape terminal states", () => {
-		const terminalStates = ["rejected", "role_assigned"];
-		const events = ["APPROVE", "REJECT", "ASSIGN_ROLE"] as const;
+	it("rejected ignores APPROVE", () => {
+		const current = snapshotAt("rejected");
+		const next = getNextSnapshot(onboardingRequestMachine, current, {
+			type: "APPROVE",
+		});
+		expect(next.value).toBe("rejected");
+	});
 
-		for (const terminal of terminalStates) {
-			for (const eventType of events) {
-				const current = snapshotAt(terminal);
-				const next = getNextSnapshot(onboardingRequestMachine, current, {
-					type: eventType,
-				});
-				expect(next.value).toBe(terminal);
-			}
-		}
+	it("rejected ignores REJECT", () => {
+		const current = snapshotAt("rejected");
+		const next = getNextSnapshot(onboardingRequestMachine, current, {
+			type: "REJECT",
+		});
+		expect(next.value).toBe("rejected");
+	});
+
+	it("rejected ignores ASSIGN_ROLE", () => {
+		const current = snapshotAt("rejected");
+		const next = getNextSnapshot(onboardingRequestMachine, current, {
+			type: "ASSIGN_ROLE",
+		});
+		expect(next.value).toBe("rejected");
+	});
+
+	it("role_assigned ignores APPROVE", () => {
+		const current = snapshotAt("role_assigned");
+		const next = getNextSnapshot(onboardingRequestMachine, current, {
+			type: "APPROVE",
+		});
+		expect(next.value).toBe("role_assigned");
+	});
+
+	it("role_assigned ignores REJECT", () => {
+		const current = snapshotAt("role_assigned");
+		const next = getNextSnapshot(onboardingRequestMachine, current, {
+			type: "REJECT",
+		});
+		expect(next.value).toBe("role_assigned");
+	});
+
+	it("role_assigned ignores ASSIGN_ROLE", () => {
+		const current = snapshotAt("role_assigned");
+		const next = getNextSnapshot(onboardingRequestMachine, current, {
+			type: "ASSIGN_ROLE",
+		});
+		expect(next.value).toBe("role_assigned");
 	});
 
 	// ── Machine metadata ─────────────────────────────────────────────

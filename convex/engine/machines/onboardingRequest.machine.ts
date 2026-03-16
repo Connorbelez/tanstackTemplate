@@ -2,7 +2,7 @@ import { setup } from "xstate";
 
 export const onboardingRequestMachine = setup({
 	types: {
-		context: {} as { requestId: string },
+		context: {} as Record<string, never>,
 		events: {} as
 			| { type: "APPROVE" }
 			| { type: "REJECT" }
@@ -18,7 +18,7 @@ export const onboardingRequestMachine = setup({
 }).createMachine({
 	id: "onboardingRequest",
 	initial: "pending_review",
-	context: { requestId: "" },
+	context: {},
 	states: {
 		pending_review: {
 			on: {
