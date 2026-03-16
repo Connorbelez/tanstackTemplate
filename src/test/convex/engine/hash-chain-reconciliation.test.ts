@@ -131,8 +131,8 @@ describe("hash-chain and reconciliation", () => {
 		const startSpy = vi
 			.spyOn(WorkflowManager.prototype, "start")
 			.mockResolvedValue("workflow_test" as never);
-		const previousEnv = process.env.DISABLE_HASH_CHAIN;
-		process.env.DISABLE_HASH_CHAIN = "false";
+		const previousEnv = process.env.DISABLE_GT_HASHCHAIN;
+		process.env.DISABLE_GT_HASHCHAIN = "false";
 
 		try {
 			await startHashChain(
@@ -143,7 +143,7 @@ describe("hash-chain and reconciliation", () => {
 				"10000;auditJournal" as Id<"auditJournal">
 			);
 		} finally {
-			process.env.DISABLE_HASH_CHAIN = previousEnv;
+			process.env.DISABLE_GT_HASHCHAIN = previousEnv;
 		}
 
 		expect(startSpy).toHaveBeenCalledWith(
@@ -243,7 +243,7 @@ describe("hash-chain and reconciliation", () => {
 		).rejects.toThrow("insert failed");
 	});
 
-	it("reports unsupported future entity types as ENTITY_NOT_FOUND when they only exist in the journal", async () => {
+	it("skips entity types not yet governed by the transition engine", async () => {
 		const t = createGovernedTestConvex();
 		await seedDefaultGovernedActors(t);
 
@@ -264,13 +264,11 @@ describe("hash-chain and reconciliation", () => {
 		const result = await t
 			.withIdentity(FAIRLEND_ADMIN)
 			.query(api.engine.reconciliation.reconcile, {});
-		expect(result.discrepancies).toContainEqual(
-			expect.objectContaining({
-				entityId: "mortgage_future",
-				entityType: "mortgage",
-				entityStatus: "ENTITY_NOT_FOUND",
-			})
+		// Mortgage is not yet governed — reconciler skips it entirely
+		expect(result.discrepancies).not.toContainEqual(
+			expect.objectContaining({ entityType: "mortgage" })
 		);
+		expect(result.isHealthy).toBe(true);
 	});
 
 	it("reports broken chains when Layer 2 verification indicates tampering", async () => {

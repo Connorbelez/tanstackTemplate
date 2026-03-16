@@ -172,9 +172,11 @@ export async function ensureSeededIdentity(
 	identity: MockIdentity
 ) {
 	return t.run(async (ctx) => {
-		const existing = (await ctx.db.query("users").collect()).find(
-			(user) => user.authId === identity.subject
-		);
+		// t.run() context lacks schema-typed indexes; filter is fine for test data
+		const existing = await ctx.db
+			.query("users")
+			.filter((q) => q.eq(q.field("authId"), identity.subject))
+			.first();
 		if (existing) {
 			return existing._id;
 		}

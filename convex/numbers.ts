@@ -65,8 +65,7 @@ export const myAction = authedAction
 		// const response = await ctx.fetch("https://api.thirdpartyservice.com");
 		// const data = await response.json();
 
-		// // Query data by running Convex queries.
-		// @ts-expect-error — deep generated type triggers TS2589
+		// Query data by running Convex queries.
 		const data = await ctx.runQuery(api.numbers.listNumbers, { count: 10 });
 		console.log(data);
 

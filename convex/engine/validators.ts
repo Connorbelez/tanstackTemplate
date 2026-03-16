@@ -20,7 +20,16 @@ export const actorTypeValidator = v.union(
 export const entityTypeValidator = v.union(
 	v.literal("onboardingRequest"),
 	v.literal("mortgage"),
-	v.literal("obligation")
+	v.literal("obligation"),
+	v.literal("deal"),
+	v.literal("provisionalApplication"),
+	v.literal("applicationPackage"),
+	v.literal("broker"),
+	v.literal("borrower"),
+	v.literal("lenderOnboarding"),
+	v.literal("provisionalOffer"),
+	v.literal("offerCondition"),
+	v.literal("lenderRenewalIntent")
 );
 
 export const sourceValidator = v.object({

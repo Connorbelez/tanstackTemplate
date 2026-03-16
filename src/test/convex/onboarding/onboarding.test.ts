@@ -8,7 +8,11 @@ import {
 } from "../../../../convex/constants";
 // biome-ignore lint/performance/noNamespaceImport: module spying in this test needs a namespace import.
 import * as transitionModule from "../../../../convex/engine/transition";
-import { createTestConvex, seedFromIdentity } from "../../auth/helpers";
+import {
+	createTestConvex,
+	ensureSeededIdentity,
+	seedFromIdentity,
+} from "../../auth/helpers";
 import { BROKER, FAIRLEND_ADMIN, MEMBER } from "../../auth/identities";
 
 interface OnboardingAuditEvent {
@@ -40,7 +44,7 @@ async function getOnboardingAuditEvents(
 	t: ReturnType<typeof createTestConvex>,
 	requestId: Id<"onboardingRequests">
 ) {
-	await seedFromIdentity(t, FAIRLEND_ADMIN);
+	await ensureSeededIdentity(t, FAIRLEND_ADMIN);
 	return t
 		.withIdentity(FAIRLEND_ADMIN)
 		.query(api.onboarding.queries.getRequestHistory, {
