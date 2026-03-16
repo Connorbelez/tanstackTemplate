@@ -4,7 +4,7 @@ import { v } from "convex/values";
 import { components, internal } from "./_generated/api";
 import type { DataModel } from "./_generated/dataModel";
 import { internalAction, internalMutation } from "./_generated/server";
-import { convex } from "./fluent";
+import { authedQuery } from "./fluent";
 
 const authFunctions: AuthFunctions = internal.auth;
 
@@ -293,8 +293,7 @@ export const { authKitEvent } = authKit.events({
 	},
 });
 
-export const getCurrentUser = convex
-	.query()
+export const getCurrentUser = authedQuery
 	.handler(async (ctx) => {
 		const user = await authKit.getAuthUser(ctx);
 		return user;

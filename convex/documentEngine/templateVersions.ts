@@ -1,6 +1,9 @@
 import { v } from "convex/values";
 import { authedQuery } from "../fluent";
 
+// TODO: Read queries (listByTemplate, get, getLatest) use authedQuery (authentication only).
+// Add permission gate (e.g. requirePermission("document:view")) when moving to production.
+
 export const listByTemplate = authedQuery
 	.input({ templateId: v.id("documentTemplates") })
 	.handler(async (ctx, args) => {
