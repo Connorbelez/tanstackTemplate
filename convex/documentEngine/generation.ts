@@ -335,6 +335,7 @@ const signatoryMappingArg = v.array(
 	})
 );
 
+// TODO: Add requirePermission("document:generate") when moving to production
 export const prepareGeneration = authedAction
 	.input({
 		templateId: v.id("documentTemplates"),
@@ -447,6 +448,7 @@ export const prepareGeneration = authedAction
 
 // ── Upload URL for client-generated PDFs ────────────────────────
 
+// TODO: Add requirePermission("document:upload") when moving to production
 export const generateUploadUrl = authedMutation
 	.input({})
 	.handler(async (ctx) => {
@@ -564,6 +566,7 @@ export const generateSingleTemplate = internalAction({
 
 // ── Public actions ────────────────────────────────────────────────
 
+// TODO: Add requirePermission("document:generate") when moving to production
 export const generateFromTemplate = authedAction
 	.input({
 		templateId: v.id("documentTemplates"),
@@ -579,6 +582,7 @@ export const generateFromTemplate = authedAction
 	})
 	.public();
 
+// TODO: Add requirePermission("document:generate") when moving to production
 export const generateFromGroup = authedAction
 	.input({
 		groupId: v.id("documentTemplateGroups"),

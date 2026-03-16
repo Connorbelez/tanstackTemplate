@@ -85,6 +85,9 @@ import type * as seed_seedBorrower from "../seed/seedBorrower.js";
 import type * as seed_seedBroker from "../seed/seedBroker.js";
 import type * as seed_seedHelpers from "../seed/seedHelpers.js";
 import type * as seed_seedLender from "../seed/seedLender.js";
+import type * as seed_seedMortgage from "../seed/seedMortgage.js";
+import type * as seed_seedObligation from "../seed/seedObligation.js";
+import type * as seed_seedOnboardingRequest from "../seed/seedOnboardingRequest.js";
 import type * as test_authTestEndpoints from "../test/authTestEndpoints.js";
 import type * as todos from "../todos.js";
 
@@ -172,6 +175,9 @@ declare const fullApi: ApiFromModules<{
   "seed/seedBroker": typeof seed_seedBroker;
   "seed/seedHelpers": typeof seed_seedHelpers;
   "seed/seedLender": typeof seed_seedLender;
+  "seed/seedMortgage": typeof seed_seedMortgage;
+  "seed/seedObligation": typeof seed_seedObligation;
+  "seed/seedOnboardingRequest": typeof seed_seedOnboardingRequest;
   "test/authTestEndpoints": typeof test_authTestEndpoints;
   todos: typeof todos;
 }>;

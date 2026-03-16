@@ -1,8 +1,11 @@
-import type { Id } from "../_generated/dataModel";
+import type { Doc, Id } from "../_generated/dataModel";
 import type { QueryCtx } from "../_generated/server";
 import type { Viewer } from "../fluent";
 import { getAccountLenderId } from "../ledger/accountOwnership";
 import { computeBalance } from "../ledger/internal";
+
+/** The 4 entity types that generatedDocuments can be linked to. */
+type DocumentEntityType = Doc<"generatedDocuments">["entityType"];
 
 // ═══════════════════════════════════════════════════════════════════
 // Resource-level access checks
@@ -307,23 +310,143 @@ export async function canAccessDispersal(
 	return false;
 }
 
-// ── T-009: canAccessDocument (STUB) ─────────────────────────────────
-// TODO (ENG-144): The `generatedDocuments` table is not yet defined.
-// Once ENG-144 is implemented, this function should resolve the document
-// to its parent entity (mortgage, deal, etc.) and delegate to the
-// appropriate canAccess* function. For now, only admins have access.
+// ── T-009: canAccessDocument ─────────────────────────────────────────
+// Resolves a generatedDocument to its parent entity via the polymorphic
+// entityType/entityId linkage, then applies the three-tier sensitivity
+// model from ENG-144:
+//   public    → entity-level access is sufficient
+//   private   → entity access + dealAccess record required
+//   sensitive → entity access + dealAccess + documents:sensitive_access permission
+
+async function hasActiveDealAccess(
+	ctx: { db: QueryCtx["db"] },
+	viewer: Viewer,
+	entityType: DocumentEntityType,
+	entityId: string
+): Promise<boolean> {
+	if (entityType === "deal") {
+		const records = await ctx.db
+			.query("dealAccess")
+			.withIndex("by_user_and_deal", (q) =>
+				q.eq("userId", viewer.authId).eq("dealId", entityId as Id<"deals">)
+			)
+			.collect();
+		return records.some((r) => r.status === "active");
+	}
+
+	if (entityType === "mortgage") {
+		const deals = await ctx.db
+			.query("deals")
+			.withIndex("by_mortgage", (q) =>
+				q.eq("mortgageId", entityId as Id<"mortgages">)
+			)
+			.collect();
+		for (const deal of deals) {
+			const records = await ctx.db
+				.query("dealAccess")
+				.withIndex("by_user_and_deal", (q) =>
+					q.eq("userId", viewer.authId).eq("dealId", deal._id)
+				)
+				.collect();
+			if (records.some((r) => r.status === "active")) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	// applicationPackage / provisionalApplication are pre-deal entities with no
+	// deal linkage. Since there is no deal, there is no dealAccess record to
+	// check against — the private/sensitive gate cannot be satisfied. In practice
+	// this means pre-deal entities should only carry `public`-tier documents;
+	// the entity-level RBAC (underwriting roles) provides sufficient restriction.
+	return false;
+}
 
 export async function canAccessDocument(
-	_ctx: { db: QueryCtx["db"] },
+	ctx: { db: QueryCtx["db"] },
 	viewer: Viewer,
-	_documentId: string
+	documentId: Id<"generatedDocuments">
 ): Promise<boolean> {
 	if (viewer.isFairLendAdmin) {
 		return true;
 	}
 
-	// Non-admin access blocked until generatedDocuments table exists (ENG-144)
-	return false;
+	const doc = await ctx.db.get(documentId);
+	if (!doc) {
+		return false;
+	}
+
+	// Step 1: entity-level access check
+	let hasEntityAccess = false;
+	switch (doc.entityType) {
+		case "mortgage":
+			hasEntityAccess = await canAccessMortgage(
+				ctx,
+				viewer,
+				doc.entityId as Id<"mortgages">
+			);
+			break;
+		case "deal":
+			hasEntityAccess = await canAccessDeal(
+				ctx,
+				viewer,
+				doc.entityId as Id<"deals">
+			);
+			break;
+		case "applicationPackage":
+			hasEntityAccess = await canAccessApplicationPackage(
+				ctx,
+				viewer,
+				doc.entityId as Id<"applicationPackages">
+			);
+			break;
+		case "provisionalApplication":
+			// No dedicated canAccess* for provisional apps — check broker/borrower ownership
+			{
+				const app = await ctx.db.get(
+					doc.entityId as Id<"provisionalApplications">
+				);
+				if (app) {
+					const broker = await getBrokerByAuthId(ctx, viewer.authId);
+					const borrower = await getBorrowerByAuthId(ctx, viewer.authId);
+					hasEntityAccess =
+						(broker !== null && broker._id === app.brokerId) ||
+						(borrower !== null && borrower._id === app.borrowerId);
+				}
+			}
+			break;
+		default:
+			break;
+	}
+
+	if (!hasEntityAccess) {
+		return false;
+	}
+
+	// Step 2: public tier — entity access is sufficient
+	if (doc.sensitivityTier === "public") {
+		return true;
+	}
+
+	// Step 3: private/sensitive — require dealAccess for deal-scoped entities
+	const hasDealAccessResult = await hasActiveDealAccess(
+		ctx,
+		viewer,
+		doc.entityType,
+		doc.entityId
+	);
+	if (!hasDealAccessResult) {
+		return false;
+	}
+
+	// Step 4: sensitive — additionally require permission
+	if (doc.sensitivityTier === "sensitive") {
+		return viewer.permissions.has("documents:sensitive_access");
+	}
+
+	// private tier satisfied
+	return true;
 }
 
 // ── T-010: canAccessApplicationPackage ──────────────────────────────

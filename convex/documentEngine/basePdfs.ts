@@ -6,6 +6,10 @@ import {
 	requirePermission,
 } from "../fluent";
 
+// TODO: Read queries (list, get, getUrl, checkDuplicate) and extractPdfMetadata action
+// use authedQuery/authedAction (authentication only). Add permission gates
+// (e.g. requirePermission("document:view")) when moving to production.
+
 const docUploadMutation = authedMutation.use(
 	requirePermission("document:upload")
 );

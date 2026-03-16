@@ -1,6 +1,9 @@
 import { ConvexError, v } from "convex/values";
 import { authedMutation, authedQuery, requirePermission } from "../fluent";
 
+// TODO: Read queries (get, list) use authedQuery (authentication only).
+// Add permission gate (e.g. requirePermission("document:view")) when moving to production.
+
 const docGenMutation = authedMutation.use(
 	requirePermission("document:generate")
 );

@@ -77,6 +77,9 @@ const SKIP_TABLES = new Set([
 	"dataModelEntities",
 ]);
 
+// TODO: Read query (list) uses authedQuery (authentication only).
+// Add permission gate (e.g. requirePermission("entity:view")) when moving to production.
+
 // ── Queries ──────────────────────────────────────────────────────────
 
 export const list = authedQuery
