@@ -9,15 +9,9 @@ export const onboardingRequestMachine = setup({
 			| { type: "ASSIGN_ROLE" },
 	},
 	actions: {
-		// No-op stubs: the Transition Engine reads action names from the machine
-		// config and schedules the matching effect from the Effect Registry.
-		notifyApplicantApproved: () => {
-			/* resolved by GT effect registry */
-		},
-		notifyApplicantRejected: () => {
-			/* resolved by GT effect registry */
-		},
-		assignRole: () => {
+		// No-op: the transition engine reads the action name from the machine config
+		// and schedules the matching effect from the effect registry.
+		assignRoleToUser: () => {
 			/* resolved by GT effect registry */
 		},
 	},
@@ -30,21 +24,13 @@ export const onboardingRequestMachine = setup({
 			on: {
 				APPROVE: {
 					target: "approved",
-					actions: ["notifyApplicantApproved"],
+					actions: ["assignRoleToUser"],
 				},
-				REJECT: {
-					target: "rejected",
-					actions: ["notifyApplicantRejected"],
-				},
+				REJECT: { target: "rejected" },
 			},
 		},
 		approved: {
-			on: {
-				ASSIGN_ROLE: {
-					target: "role_assigned",
-					actions: ["assignRole"],
-				},
-			},
+			on: { ASSIGN_ROLE: { target: "role_assigned" } },
 		},
 		rejected: { type: "final" },
 		role_assigned: { type: "final" },
