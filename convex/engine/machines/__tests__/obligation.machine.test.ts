@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getNextSnapshot } from "xstate";
+import { getNextSnapshot, transition } from "xstate";
 import { obligationMachine } from "../obligation.machine";
 
 // ── Helpers ─────────────────────────────────────────────────────────
@@ -80,22 +80,24 @@ describe("obligation machine", () => {
 			expect(next.value).toBe("due");
 		});
 
-		it("due -> overdue on GRACE_PERIOD_EXPIRED", () => {
-			const next = getNextSnapshot(
+		it("due -> overdue on GRACE_PERIOD_EXPIRED fires emitObligationOverdue", () => {
+			const [next, actions] = transition(
 				obligationMachine,
 				snapshotAt("due"),
 				GRACE_PERIOD_EXPIRED
 			);
 			expect(next.value).toBe("overdue");
+			expect(actions.map((a) => a.type)).toContain("emitObligationOverdue");
 		});
 
-		it("due -> settled on PAYMENT_APPLIED", () => {
-			const next = getNextSnapshot(
+		it("due -> settled on PAYMENT_APPLIED fires emitObligationSettled", () => {
+			const [next, actions] = transition(
 				obligationMachine,
 				snapshotAt("due"),
 				PAYMENT_APPLIED
 			);
 			expect(next.value).toBe("settled");
+			expect(actions.map((a) => a.type)).toContain("emitObligationSettled");
 		});
 	});
 
@@ -118,13 +120,14 @@ describe("obligation machine", () => {
 			expect(next.value).toBe("overdue");
 		});
 
-		it("overdue -> settled on PAYMENT_APPLIED", () => {
-			const next = getNextSnapshot(
+		it("overdue -> settled on PAYMENT_APPLIED fires emitObligationSettled", () => {
+			const [next, actions] = transition(
 				obligationMachine,
 				snapshotAt("overdue"),
 				PAYMENT_APPLIED
 			);
 			expect(next.value).toBe("settled");
+			expect(actions.map((a) => a.type)).toContain("emitObligationSettled");
 		});
 	});
 
