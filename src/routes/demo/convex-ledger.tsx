@@ -29,12 +29,12 @@ const INTERACTIVE_SOURCE = {
 const INTERACTIVE_META = { demo: true, source: "interactive" };
 const POSITIVE_INTEGER_RE = /^\d+$/;
 
-function parseIntegerAmount(value: string): bigint {
+function parseIntegerAmount(value: string): number {
 	const trimmed = value.trim();
 	if (!POSITIVE_INTEGER_RE.test(trimmed)) {
 		throw new Error("Amount must be a positive whole number");
 	}
-	return BigInt(trimmed);
+	return Number(trimmed);
 }
 
 // ── Component ────────────────────────────────────────────────────

@@ -6,6 +6,9 @@ export const entryTypeValidator = v.union(
 	v.literal("SHARES_TRANSFERRED"),
 	v.literal("SHARES_REDEEMED"),
 	v.literal("MORTGAGE_BURNED"),
+	v.literal("SHARES_RESERVED"),
+	v.literal("SHARES_COMMITTED"),
+	v.literal("SHARES_VOIDED"),
 	v.literal("CORRECTION")
 );
 
@@ -33,13 +36,13 @@ export const postEntryArgsValidator = {
 	mortgageId: v.string(),
 	debitAccountId: v.id("ledger_accounts"),
 	creditAccountId: v.id("ledger_accounts"),
-	amount: v.int64(),
+	amount: v.number(),
 	effectiveDate: v.string(),
 	idempotencyKey: v.string(),
 	source: eventSourceValidator,
 	causedBy: v.optional(v.id("ledger_journal_entries")),
 	reason: v.optional(v.string()),
-	metadata: v.optional(v.record(v.string(), v.any())),
+	metadata: v.optional(v.any()),
 };
 
 export const mintMortgageArgsValidator = {
@@ -47,7 +50,7 @@ export const mintMortgageArgsValidator = {
 	effectiveDate: v.string(),
 	idempotencyKey: v.string(),
 	source: eventSourceValidator,
-	metadata: v.optional(v.record(v.string(), v.any())),
+	metadata: v.optional(v.any()),
 };
 
 export const burnMortgageArgsValidator = {
@@ -56,7 +59,7 @@ export const burnMortgageArgsValidator = {
 	idempotencyKey: v.string(),
 	source: eventSourceValidator,
 	reason: v.string(),
-	metadata: v.optional(v.record(v.string(), v.any())),
+	metadata: v.optional(v.any()),
 };
 
 // ── Tier 2: Convenience Mutations ──────────────────────────────────
@@ -64,31 +67,31 @@ export const burnMortgageArgsValidator = {
 export const issueSharesArgsValidator = {
 	mortgageId: v.string(),
 	lenderId: v.string(),
-	amount: v.int64(),
+	amount: v.number(),
 	effectiveDate: v.string(),
 	idempotencyKey: v.string(),
 	source: eventSourceValidator,
-	metadata: v.optional(v.record(v.string(), v.any())),
+	metadata: v.optional(v.any()),
 };
 
 export const transferSharesArgsValidator = {
 	mortgageId: v.string(),
 	sellerLenderId: v.string(),
 	buyerLenderId: v.string(),
-	amount: v.int64(),
+	amount: v.number(),
 	effectiveDate: v.string(),
 	idempotencyKey: v.string(),
 	source: eventSourceValidator,
-	metadata: v.optional(v.record(v.string(), v.any())),
+	metadata: v.optional(v.any()),
 };
 
 export const redeemSharesArgsValidator = {
 	mortgageId: v.string(),
 	lenderId: v.string(),
-	amount: v.int64(),
+	amount: v.number(),
 	effectiveDate: v.string(),
 	idempotencyKey: v.string(),
 	source: eventSourceValidator,
 	reason: v.optional(v.string()),
-	metadata: v.optional(v.record(v.string(), v.any())),
+	metadata: v.optional(v.any()),
 };

@@ -17,17 +17,17 @@ const DEMO_MORTGAGES = [
 		mortgageId: "demo-mtg-greenfield",
 		label: "123 Greenfield Rd — Residential",
 		lenders: [
-			{ lenderId: "demo-inv-alice", amount: 5_000n },
-			{ lenderId: "demo-inv-bob", amount: 3_000n },
-			{ lenderId: "demo-inv-charlie", amount: 2_000n },
+			{ lenderId: "demo-inv-alice", amount: 5000 },
+			{ lenderId: "demo-inv-bob", amount: 3000 },
+			{ lenderId: "demo-inv-charlie", amount: 2000 },
 		],
 	},
 	{
 		mortgageId: "demo-mtg-riverside",
 		label: "456 Riverside Dr — Commercial",
 		lenders: [
-			{ lenderId: "demo-inv-alice", amount: 7_000n },
-			{ lenderId: "demo-inv-dave", amount: 3_000n },
+			{ lenderId: "demo-inv-alice", amount: 7000 },
+			{ lenderId: "demo-inv-dave", amount: 3000 },
 		],
 	},
 ] as const;
@@ -50,17 +50,11 @@ function lenderDisplayName(id: string): string {
 async function postSeedEntry(
 	ctx: MutationCtx,
 	args: {
-		entryType:
-			| "MORTGAGE_MINTED"
-			| "SHARES_ISSUED"
-			| "SHARES_TRANSFERRED"
-			| "SHARES_REDEEMED"
-			| "MORTGAGE_BURNED"
-			| "CORRECTION";
+		entryType: Doc<"ledger_journal_entries">["entryType"];
 		mortgageId: string;
 		debitAccountId: Id<"ledger_accounts">;
 		creditAccountId: Id<"ledger_accounts">;
-		amount: bigint;
+		amount: number;
 		idempotencyKey: string;
 	}
 ) {
@@ -80,16 +74,17 @@ async function postSeedEntry(
 	});
 
 	// Update cumulative balances
+	const amountBigInt = BigInt(args.amount);
 	const debitAccount = await ctx.db.get(args.debitAccountId);
 	const creditAccount = await ctx.db.get(args.creditAccountId);
 	if (debitAccount) {
 		await ctx.db.patch(args.debitAccountId, {
-			cumulativeDebits: debitAccount.cumulativeDebits + args.amount,
+			cumulativeDebits: debitAccount.cumulativeDebits + amountBigInt,
 		});
 	}
 	if (creditAccount) {
 		await ctx.db.patch(args.creditAccountId, {
-			cumulativeCredits: creditAccount.cumulativeCredits + args.amount,
+			cumulativeCredits: creditAccount.cumulativeCredits + amountBigInt,
 		});
 	}
 
@@ -137,6 +132,8 @@ export const seedData = authedMutation
 				mortgageId: mortgage.mortgageId,
 				cumulativeDebits: 0n,
 				cumulativeCredits: 0n,
+				pendingDebits: 0n,
+				pendingCredits: 0n,
 				createdAt: Date.now(),
 			});
 
@@ -146,7 +143,7 @@ export const seedData = authedMutation
 				mortgageId: mortgage.mortgageId,
 				debitAccountId: treasuryId,
 				creditAccountId: worldAccount._id,
-				amount: UNITS_PER_MORTGAGE,
+				amount: Number(UNITS_PER_MORTGAGE),
 				idempotencyKey: `demo-seed-mint-${mortgage.mortgageId}`,
 			});
 
@@ -158,6 +155,8 @@ export const seedData = authedMutation
 					lenderId: inv.lenderId,
 					cumulativeDebits: 0n,
 					cumulativeCredits: 0n,
+					pendingDebits: 0n,
+					pendingCredits: 0n,
 					createdAt: Date.now(),
 				});
 
@@ -236,11 +235,11 @@ export const cleanup = authedMutation
 
 			let totalDebits = 0n;
 			for (const e of remainingDebits) {
-				totalDebits += e.amount;
+				totalDebits += BigInt(e.amount);
 			}
 			let totalCredits = 0n;
 			for (const e of remainingCredits) {
-				totalCredits += e.amount;
+				totalCredits += BigInt(e.amount);
 			}
 
 			await ctx.db.patch(worldAccount._id, {
@@ -420,7 +419,7 @@ export const getDemoJournal = authedQuery
 				sequenceNumber: Number(entry.sequenceNumber),
 				entryType: entry.entryType,
 				mortgageId: entry.mortgageId,
-				amount: Number(entry.amount),
+				amount: entry.amount,
 				fromLabel: creditLabel,
 				toLabel: debitLabel,
 				source: meta?.source ?? "unknown",

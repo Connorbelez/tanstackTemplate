@@ -168,6 +168,8 @@ async function insertLedgerPosition(
 		lenderId,
 		cumulativeDebits: balance,
 		cumulativeCredits: 0n,
+		pendingDebits: 0n,
+		pendingCredits: 0n,
 		createdAt: NOW,
 	});
 }

@@ -844,8 +844,10 @@ export default defineSchema({
 		lenderId: v.optional(v.string()),
 		cumulativeDebits: v.int64(),
 		cumulativeCredits: v.int64(),
-		createdAt: v.float64(),
-		metadata: v.optional(v.record(v.string(), v.any())),
+		pendingDebits: v.int64(),
+		pendingCredits: v.int64(),
+		createdAt: v.number(),
+		metadata: v.optional(v.any()),
 	})
 		.index("by_mortgage", ["mortgageId"])
 		.index("by_lender", ["lenderId"])
@@ -860,14 +862,18 @@ export default defineSchema({
 			v.literal("SHARES_TRANSFERRED"),
 			v.literal("SHARES_REDEEMED"),
 			v.literal("MORTGAGE_BURNED"),
+			v.literal("SHARES_RESERVED"),
+			v.literal("SHARES_COMMITTED"),
+			v.literal("SHARES_VOIDED"),
 			v.literal("CORRECTION")
 		),
+		reservationId: v.optional(v.string()),
 		mortgageId: v.string(),
 		effectiveDate: v.string(),
-		timestamp: v.float64(),
+		timestamp: v.number(),
 		debitAccountId: v.id("ledger_accounts"),
 		creditAccountId: v.id("ledger_accounts"),
-		amount: v.int64(),
+		amount: v.number(),
 		idempotencyKey: v.string(),
 		causedBy: v.optional(v.id("ledger_journal_entries")),
 		source: v.object({
@@ -881,7 +887,7 @@ export default defineSchema({
 			channel: v.optional(v.string()),
 		}),
 		reason: v.optional(v.string()),
-		metadata: v.optional(v.record(v.string(), v.any())),
+		metadata: v.optional(v.any()),
 	})
 		.index("by_idempotency", ["idempotencyKey"])
 		.index("by_mortgage_and_time", ["mortgageId", "timestamp"])
@@ -893,8 +899,29 @@ export default defineSchema({
 	ledger_cursors: defineTable({
 		consumerId: v.string(),
 		lastProcessedSequence: v.int64(),
-		lastProcessedAt: v.float64(),
+		lastProcessedAt: v.number(),
 	}).index("by_consumer", ["consumerId"]),
+
+	ledger_reservations: defineTable({
+		mortgageId: v.string(),
+		sellerAccountId: v.id("ledger_accounts"),
+		buyerAccountId: v.id("ledger_accounts"),
+		amount: v.number(),
+		status: v.union(
+			v.literal("pending"),
+			v.literal("committed"),
+			v.literal("voided")
+		),
+		dealId: v.optional(v.string()),
+		reserveJournalEntryId: v.id("ledger_journal_entries"),
+		commitJournalEntryId: v.optional(v.id("ledger_journal_entries")),
+		voidJournalEntryId: v.optional(v.id("ledger_journal_entries")),
+		createdAt: v.number(),
+		resolvedAt: v.optional(v.number()),
+	})
+		.index("by_mortgage", ["mortgageId", "status"])
+		.index("by_seller", ["sellerAccountId", "status"])
+		.index("by_deal", ["dealId"]),
 
 	ledger_sequence_counters: defineTable({
 		name: v.literal("ledger_sequence"),
