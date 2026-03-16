@@ -13,7 +13,7 @@ export const initializeSequenceCounter = ledgerMutation
 		const existing = await ctx.db
 			.query("ledger_sequence_counters")
 			.withIndex("by_name", (q) => q.eq("name", COUNTER_NAME))
-			.unique();
+			.first();
 
 		if (existing) {
 			return existing._id;
@@ -35,7 +35,7 @@ export async function getNextSequenceNumber(ctx: MutationCtx): Promise<bigint> {
 	const counter = await ctx.db
 		.query("ledger_sequence_counters")
 		.withIndex("by_name", (q) => q.eq("name", COUNTER_NAME))
-		.unique();
+		.first();
 
 	if (!counter) {
 		throw new ConvexError({

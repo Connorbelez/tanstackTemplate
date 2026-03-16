@@ -48,3 +48,30 @@ export const getLenderIdBackfillStatus = adminQuery
 		};
 	})
 	.public();
+
+const COUNTER_NAME = "ledger_sequence" as const;
+
+/**
+ * Bootstrap mutation: initializes the ledger sequence counter for production deployments.
+ * Idempotent — safe to call multiple times. Uses .first() to avoid .unique() conflicts.
+ */
+export const bootstrapSequenceCounter = adminMutation
+	.input({})
+	.handler(async (ctx) => {
+		const existing = await ctx.db
+			.query("ledger_sequence_counters")
+			.withIndex("by_name", (q) => q.eq("name", COUNTER_NAME))
+			.first();
+
+		if (existing) {
+			return { status: "already_initialized" as const, id: existing._id };
+		}
+
+		const id = await ctx.db.insert("ledger_sequence_counters", {
+			name: COUNTER_NAME,
+			value: 0n,
+		});
+
+		return { status: "initialized" as const, id };
+	})
+	.public();
