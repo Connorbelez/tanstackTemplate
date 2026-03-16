@@ -52,3 +52,31 @@ Use Playwright (project test framework per CLAUDE.md). Place test files at `test
 - [ ] T-051: Create `specs/governed-transitions/gap-analysis.md`
 - [ ] T-052: Present gap analysis to user
 - [ ] T-053: Final `bun check`, `bun typecheck`, and `bunx convex codegen` pass
+
+## Addendum — Demo Route UI Refinement Tasks
+
+These tasks append and refine the existing frontend implementation plan. In case of conflict, these tasks supersede earlier generic frontend UI wording while preserving the same route and backend scope.
+
+## Phase 3A: Frontend Adapters
+
+- [ ] T-031A: Create a governed-transitions-specific journal wrapper component that adapts `demo_gt_journal` data into the shape required by `src/components/ui/interactive-logs-table-shadcnui.tsx`. The wrapper must remain read-only and support search/filter/inspection only.
+- [ ] T-031B: Create a governed-transitions-specific machine wrapper component that adapts `getMachineDefinition` output and selected entity state into the shape required by `src/components/ui/n8n-workflow-block-shadcnui.tsx`. The wrapper must render in read-only mode only.
+- [ ] T-031C: If needed, refactor the two reusable UI components to accept a read-only/observer configuration without changing their generic purpose. Do not introduce governed-transitions-specific domain logic directly into the shared UI components.
+
+## Phase 3B: Route Integration Refinement
+
+- [ ] T-032A: Update the Journal page implementation so it uses the governed-transitions journal wrapper around `InteractiveLogsTable` instead of a bespoke card list. Preserve filtering, entity scoping, and detailed inspection behavior.
+- [ ] T-033A: Update the Machine Inspector page implementation so it uses the governed-transitions machine wrapper around `N8nWorkflowBlock` instead of a bespoke HTML/CSS diagram. Preserve current-state highlighting and transition metadata display.
+- [ ] T-033B: Ensure the Command Center remains the only mutative route surface. The Journal and Machine routes must not expose command buttons, reset actions, node editing, or any other state-changing affordance.
+
+## Phase 4A: Observer-Surface E2E Coverage
+
+- [ ] T-045A: Add e2e coverage verifying the Journal route is read-only: users can filter/search/inspect entries, but cannot dispatch commands or mutate state from that surface.
+- [ ] T-045B: Add e2e coverage verifying the Machine route is read-only: users can inspect current state and topology, but cannot drag nodes, add nodes, edit transitions, or mutate state from that surface.
+- [ ] T-045C: Add e2e coverage verifying Command Center actions update both observer surfaces reactively after successful transitions and rejected transitions.
+
+## Phase 5A: Verification Additions
+
+- [ ] T-053A: Verify manually or via test assertions that the Journal surface exposes only observer interactions.
+- [ ] T-053B: Verify manually or via test assertions that the Machine surface exposes only observer interactions.
+- [ ] T-053C: Verify the implemented UX matches the approved spec refinement: interactive command panel plus read-only journal and machine observer surfaces.
