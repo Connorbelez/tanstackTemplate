@@ -353,6 +353,30 @@ export default defineSchema({
 		.index("by_status", ["status"])
 		.index("by_user_and_status", ["userId", "status"]),
 
+	// ── GT Audit Journal ──────────────────────────────────────────────
+	auditJournal: defineTable({
+		entityType: v.string(),
+		entityId: v.string(),
+		eventType: v.string(),
+		payload: v.optional(v.any()),
+		previousState: v.string(),
+		newState: v.string(),
+		outcome: v.union(v.literal("transitioned"), v.literal("rejected")),
+		reason: v.optional(v.string()),
+		// Source fields flattened (Convex cannot index nested objects)
+		actorId: v.string(),
+		actorType: v.optional(v.string()),
+		channel: v.string(),
+		ip: v.optional(v.string()),
+		sessionId: v.optional(v.string()),
+		machineVersion: v.optional(v.string()),
+		effectsScheduled: v.optional(v.array(v.string())),
+		timestamp: v.number(),
+	})
+		.index("by_entity", ["entityType", "entityId", "timestamp"])
+		.index("by_actor", ["actorId", "timestamp"])
+		.index("by_type_and_time", ["entityType", "timestamp"]),
+
 	documentTemplateGroups: defineTable({
 		name: v.string(),
 		description: v.optional(v.string()),

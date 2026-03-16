@@ -40,17 +40,30 @@ export interface TransitionResult {
 }
 
 // ── Audit Journal Entry ─────────────────────────────────────────────
-// Mirrors the auditJournal table in schema.ts
+// Mirrors the auditJournal table in schema.ts — source fields flattened for indexability
 export interface AuditJournalEntry {
+	// Source fields flattened (Convex cannot index nested objects)
+	actorId: string;
+	actorType?: ActorType;
+	channel: CommandChannel;
+	effectsScheduled?: string[];
 	entityId: string;
-	entityType: string;
+	entityType: EntityType;
 	eventType: string;
+	ip?: string;
 	machineVersion?: string;
 	newState: string;
 	outcome: "transitioned" | "rejected";
 	payload?: Record<string, unknown>;
 	previousState: string;
 	reason?: string;
-	source: CommandSource;
+	sessionId?: string;
 	timestamp: number;
 }
+
+// ── Entity Type → Table Name Mapping ────────────────────────────────
+export const ENTITY_TABLE_MAP = {
+	onboardingRequest: "onboardingRequests",
+	mortgage: "mortgages",
+	obligation: "obligations",
+} as const satisfies Record<EntityType, string>;
