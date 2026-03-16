@@ -17,6 +17,7 @@
       "!!src/routes/-auth-redirect.ts",
       "!!src/components/storybook/*",
       "!!e2e/*",
+      "!!src/test/*",
       "!!convex/ledger/__tests__/*"
     ]
   },

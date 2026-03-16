@@ -1,5 +1,13 @@
 {
   "include": ["**/*.ts", "**/*.tsx"],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "src/test/**/*",
+    "node_modules/**/*",
+    "node_modules/*",
+    "node_modules/@tanstack/router-core/dist/esm/"
+  ],
   "compilerOptions": {
     "target": "ES2022",
     "jsx": "react-jsx",
