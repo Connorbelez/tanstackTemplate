@@ -370,8 +370,8 @@ describe("canAccessMortgage", () => {
 
 			// Create lender with a POSITION account
 			const lenderUserId = await insertUser(ctx, { authId: "lender-auth" });
-			const lenderId = await insertLender(ctx, lenderUserId, brokerId);
-			await insertLedgerPosition(ctx, mortgageId, lenderId, 5000n);
+			await insertLender(ctx, lenderUserId, brokerId);
+			await insertLedgerPosition(ctx, mortgageId, "lender-auth", 5000n);
 
 			const viewer = makeViewer({ authId: "lender-auth" });
 			const result = await canAccessMortgage(ctx, viewer, mortgageId);
@@ -441,6 +441,52 @@ describe("canAccessMortgage", () => {
 			const mortgageId = await insertMortgage(ctx, propId, brokerId);
 
 			const viewer = makeViewer({ authId: "random-user-auth" });
+			const result = await canAccessMortgage(ctx, viewer, mortgageId);
+			expect(result).toBe(false);
+		});
+	});
+
+	it("lender — zero-balance POSITION — false", async () => {
+		const t = convexTest(schema, modules);
+		await t.run(async (ctx) => {
+			const brokerUserId = await insertUser(ctx, { authId: "broker-auth" });
+			const brokerId = await insertBroker(ctx, brokerUserId);
+			const propId = await insertProperty(ctx);
+			const mortgageId = await insertMortgage(ctx, propId, brokerId);
+
+			// Create lender with a zero-balance POSITION account
+			const lenderUserId = await insertUser(ctx, { authId: "lender-auth" });
+			await insertLender(ctx, lenderUserId, brokerId);
+			await insertLedgerPosition(ctx, mortgageId, "lender-auth", 0n);
+
+			const viewer = makeViewer({ authId: "lender-auth" });
+			const result = await canAccessMortgage(ctx, viewer, mortgageId);
+			expect(result).toBe(false);
+		});
+	});
+
+	it("lender — POSITION owned by different lender — false", async () => {
+		const t = convexTest(schema, modules);
+		await t.run(async (ctx) => {
+			const brokerUserId = await insertUser(ctx, { authId: "broker-auth" });
+			const brokerId = await insertBroker(ctx, brokerUserId);
+			const propId = await insertProperty(ctx);
+			const mortgageId = await insertMortgage(ctx, propId, brokerId);
+
+			// Lender A owns the POSITION
+			const lenderAUserId = await insertUser(ctx, {
+				authId: "lender-a-auth",
+			});
+			await insertLender(ctx, lenderAUserId, brokerId);
+			await insertLedgerPosition(ctx, mortgageId, "lender-a-auth", 5000n);
+
+			// Lender B tries to access via lender A's position
+			const lenderBUserId = await insertUser(ctx, {
+				authId: "lender-b-auth",
+			});
+			await insertLender(ctx, lenderBUserId, brokerId);
+
+			const viewer = makeViewer({ authId: "lender-b-auth" });
 			const result = await canAccessMortgage(ctx, viewer, mortgageId);
 			expect(result).toBe(false);
 		});
@@ -601,6 +647,57 @@ describe("canAccessDeal", () => {
 			expect(result).toBe(false);
 		});
 	});
+
+	it("lawyer — revoked dealAccess — false", async () => {
+		const t = convexTest(schema, modules);
+		await t.run(async (ctx) => {
+			const brokerUserId = await insertUser(ctx, { authId: "broker-auth" });
+			const brokerId = await insertBroker(ctx, brokerUserId);
+			const propId = await insertProperty(ctx);
+			const mortgageId = await insertMortgage(ctx, propId, brokerId);
+			const dealId = await insertDeal(
+				ctx,
+				mortgageId,
+				"buyer-auth",
+				"seller-auth"
+			);
+
+			// Grant then revoke access
+			await insertDealAccess(
+				ctx,
+				"lawyer-auth",
+				dealId,
+				"platform_lawyer",
+				"revoked"
+			);
+
+			const viewer = makeViewer({ authId: "lawyer-auth" });
+			const result = await canAccessDeal(ctx, viewer, dealId);
+			expect(result).toBe(false);
+		});
+	});
+
+	it("missing deal — false", async () => {
+		const t = convexTest(schema, modules);
+		await t.run(async (ctx) => {
+			// Create and then delete a deal to get a valid but non-existent ID
+			const brokerUserId = await insertUser(ctx, { authId: "broker-auth" });
+			const brokerId = await insertBroker(ctx, brokerUserId);
+			const propId = await insertProperty(ctx);
+			const mortgageId = await insertMortgage(ctx, propId, brokerId);
+			const dealId = await insertDeal(
+				ctx,
+				mortgageId,
+				"buyer-auth",
+				"seller-auth"
+			);
+			await ctx.db.delete(dealId);
+
+			const viewer = makeViewer({ authId: "buyer-auth" });
+			const result = await canAccessDeal(ctx, viewer, dealId);
+			expect(result).toBe(false);
+		});
+	});
 });
 
 // ═══════════════════════════════════════════════════════════════════
@@ -631,8 +728,8 @@ describe("canAccessLedgerPosition", () => {
 			const mortgageId = await insertMortgage(ctx, propId, brokerId);
 
 			const lenderUserId = await insertUser(ctx, { authId: "lender-auth" });
-			const lenderId = await insertLender(ctx, lenderUserId, brokerId);
-			await insertLedgerPosition(ctx, mortgageId, lenderId, 1000n);
+			await insertLender(ctx, lenderUserId, brokerId);
+			await insertLedgerPosition(ctx, mortgageId, "lender-auth", 1000n);
 
 			const viewer = makeViewer({ authId: "lender-auth" });
 			const result = await canAccessLedgerPosition(ctx, viewer, mortgageId);
@@ -707,10 +804,10 @@ describe("canAccessAccrual", () => {
 			const brokerId = await insertBroker(ctx, brokerUserId);
 
 			const lenderUserId = await insertUser(ctx, { authId: "lender-auth" });
-			const lenderId = await insertLender(ctx, lenderUserId, brokerId);
+			await insertLender(ctx, lenderUserId, brokerId);
 
 			const viewer = makeViewer({ authId: "lender-auth" });
-			const result = await canAccessAccrual(ctx, viewer, lenderId);
+			const result = await canAccessAccrual(ctx, viewer, "lender-auth");
 			expect(result).toBe(true);
 		});
 	});
@@ -727,14 +824,10 @@ describe("canAccessAccrual", () => {
 			const otherLenderUserId = await insertUser(ctx, {
 				authId: "other-lender-auth",
 			});
-			const otherLenderId = await insertLender(
-				ctx,
-				otherLenderUserId,
-				brokerId
-			);
+			await insertLender(ctx, otherLenderUserId, brokerId);
 
 			const viewer = makeViewer({ authId: "lender-auth" });
-			const result = await canAccessAccrual(ctx, viewer, otherLenderId);
+			const result = await canAccessAccrual(ctx, viewer, "other-lender-auth");
 			expect(result).toBe(false);
 		});
 	});
@@ -746,10 +839,10 @@ describe("canAccessAccrual", () => {
 			const brokerId = await insertBroker(ctx, brokerUserId);
 
 			const lenderUserId = await insertUser(ctx, { authId: "lender-auth" });
-			const lenderId = await insertLender(ctx, lenderUserId, brokerId);
+			await insertLender(ctx, lenderUserId, brokerId);
 
 			const viewer = makeViewer({ authId: "broker-auth" });
-			const result = await canAccessAccrual(ctx, viewer, lenderId);
+			const result = await canAccessAccrual(ctx, viewer, "lender-auth");
 			expect(result).toBe(true);
 		});
 	});
@@ -769,11 +862,11 @@ describe("canAccessAccrual", () => {
 
 			// Lender belongs to broker1
 			const lenderUserId = await insertUser(ctx, { authId: "lender-auth" });
-			const lenderId = await insertLender(ctx, lenderUserId, broker1Id);
+			await insertLender(ctx, lenderUserId, broker1Id);
 
 			// Viewer is broker2
 			const viewer = makeViewer({ authId: "broker2-auth" });
-			const result = await canAccessAccrual(ctx, viewer, lenderId);
+			const result = await canAccessAccrual(ctx, viewer, "lender-auth");
 			expect(result).toBe(false);
 		});
 	});
@@ -785,10 +878,10 @@ describe("canAccessAccrual", () => {
 			const brokerId = await insertBroker(ctx, brokerUserId);
 
 			const lenderUserId = await insertUser(ctx, { authId: "lender-auth" });
-			const lenderId = await insertLender(ctx, lenderUserId, brokerId);
+			await insertLender(ctx, lenderUserId, brokerId);
 
 			const viewer = makeViewer({ authId: "random-user-auth" });
-			const result = await canAccessAccrual(ctx, viewer, lenderId);
+			const result = await canAccessAccrual(ctx, viewer, "lender-auth");
 			expect(result).toBe(false);
 		});
 	});
@@ -815,10 +908,10 @@ describe("canAccessDispersal", () => {
 			const brokerId = await insertBroker(ctx, brokerUserId);
 
 			const lenderUserId = await insertUser(ctx, { authId: "lender-auth" });
-			const lenderId = await insertLender(ctx, lenderUserId, brokerId);
+			await insertLender(ctx, lenderUserId, brokerId);
 
 			const viewer = makeViewer({ authId: "lender-auth" });
-			const result = await canAccessDispersal(ctx, viewer, lenderId);
+			const result = await canAccessDispersal(ctx, viewer, "lender-auth");
 			expect(result).toBe(true);
 		});
 	});
@@ -835,14 +928,10 @@ describe("canAccessDispersal", () => {
 			const otherLenderUserId = await insertUser(ctx, {
 				authId: "other-lender-auth",
 			});
-			const otherLenderId = await insertLender(
-				ctx,
-				otherLenderUserId,
-				brokerId
-			);
+			await insertLender(ctx, otherLenderUserId, brokerId);
 
 			const viewer = makeViewer({ authId: "lender-auth" });
-			const result = await canAccessDispersal(ctx, viewer, otherLenderId);
+			const result = await canAccessDispersal(ctx, viewer, "other-lender-auth");
 			expect(result).toBe(false);
 		});
 	});
@@ -854,11 +943,11 @@ describe("canAccessDispersal", () => {
 			const brokerId = await insertBroker(ctx, brokerUserId);
 
 			const lenderUserId = await insertUser(ctx, { authId: "lender-auth" });
-			const lenderId = await insertLender(ctx, lenderUserId, brokerId);
+			await insertLender(ctx, lenderUserId, brokerId);
 
 			// Broker should NOT have dispersal access
 			const viewer = makeViewer({ authId: "broker-auth" });
-			const result = await canAccessDispersal(ctx, viewer, lenderId);
+			const result = await canAccessDispersal(ctx, viewer, "lender-auth");
 			expect(result).toBe(false);
 		});
 	});
@@ -1064,6 +1153,71 @@ describe("canAccessApplicationPackage", () => {
 			const { packageId } = await setupApplicationPackage(ctx);
 
 			const viewer = makeViewer({ authId: "random-user-auth" });
+			const result = await canAccessApplicationPackage(ctx, viewer, packageId);
+			expect(result).toBe(false);
+		});
+	});
+
+	it("non-existent package — false", async () => {
+		const t = convexTest(schema, modules);
+		await t.run(async (ctx) => {
+			// Create and delete a package to get a valid but non-existent ID
+			const { packageId } = await setupApplicationPackage(ctx);
+			await ctx.db.delete(packageId);
+
+			const viewer = makeViewer({
+				authId: "sr-uw-auth",
+				roles: new Set(["sr_underwriter"]),
+			});
+			const result = await canAccessApplicationPackage(ctx, viewer, packageId);
+			expect(result).toBe(false);
+		});
+	});
+
+	it("jr_underwriter — decision_pending_review — false", async () => {
+		const t = convexTest(schema, modules);
+		await t.run(async (ctx) => {
+			const { packageId } = await setupApplicationPackage(ctx, {
+				status: "decision_pending_review",
+			});
+
+			const viewer = makeViewer({
+				authId: "jr-uw-auth",
+				roles: new Set(["jr_underwriter"]),
+			});
+			const result = await canAccessApplicationPackage(ctx, viewer, packageId);
+			expect(result).toBe(false);
+		});
+	});
+
+	it("underwriter — decision_pending_review — false", async () => {
+		const t = convexTest(schema, modules);
+		await t.run(async (ctx) => {
+			const { packageId } = await setupApplicationPackage(ctx, {
+				status: "decision_pending_review",
+			});
+
+			const viewer = makeViewer({
+				authId: "uw-auth",
+				roles: new Set(["underwriter"]),
+			});
+			const result = await canAccessApplicationPackage(ctx, viewer, packageId);
+			expect(result).toBe(false);
+		});
+	});
+
+	it("review_decisions permission — under_review — false", async () => {
+		const t = convexTest(schema, modules);
+		await t.run(async (ctx) => {
+			const { packageId } = await setupApplicationPackage(ctx, {
+				status: "under_review",
+				machineContext: { claimedBy: "someone-auth" },
+			});
+
+			const viewer = makeViewer({
+				authId: "reviewer-auth",
+				permissions: new Set(["underwriting:review_decisions"]),
+			});
 			const result = await canAccessApplicationPackage(ctx, viewer, packageId);
 			expect(result).toBe(false);
 		});

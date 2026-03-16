@@ -60,14 +60,15 @@ async function getLenderByAuthId(ctx: { db: QueryCtx["db"] }, authId: string) {
 // ── T-002: getLenderMortgageIds ─────────────────────────────────────
 // Returns the set of mortgage IDs where the given lender holds a
 // POSITION account with a positive balance.
+// `lenderAuthId` is the WorkOS authId string stored in ledger_accounts.lenderId.
 
 export async function getLenderMortgageIds(
 	ctx: { db: QueryCtx["db"] },
-	lenderId: string
+	lenderAuthId: string
 ): Promise<Set<Id<"mortgages">>> {
 	const accounts = await ctx.db
 		.query("ledger_accounts")
-		.withIndex("by_lender", (q) => q.eq("lenderId", lenderId))
+		.withIndex("by_lender", (q) => q.eq("lenderId", lenderAuthId))
 		.collect();
 
 	const mortgageIds = new Set<Id<"mortgages">>();
@@ -80,7 +81,7 @@ export async function getLenderMortgageIds(
 			continue;
 		}
 		const effectiveLenderId = getAccountLenderId(account);
-		if (effectiveLenderId !== lenderId) {
+		if (effectiveLenderId !== lenderAuthId) {
 			continue;
 		}
 		const mortgageId = account.mortgageId;
@@ -147,13 +148,10 @@ export async function canAccessMortgage(
 		return true;
 	}
 
-	// Lender check: viewer → user → lender → getLenderMortgageIds
-	const lender = await getLenderByAuthId(ctx, viewer.authId);
-	if (lender) {
-		const mortgageIds = await getLenderMortgageIds(ctx, lender._id);
-		if (mortgageIds.has(mortgageId)) {
-			return true;
-		}
+	// Lender check: ledger_accounts.lenderId stores authId strings
+	const lenderMortgageIds = await getLenderMortgageIds(ctx, viewer.authId);
+	if (lenderMortgageIds.has(mortgageId)) {
+		return true;
 	}
 
 	// Lawyer check: closingTeamAssignments by_user filtered by mortgageId
@@ -228,13 +226,10 @@ export async function canAccessLedgerPosition(
 		return true;
 	}
 
-	// Lender check
-	const lender = await getLenderByAuthId(ctx, viewer.authId);
-	if (lender) {
-		const mortgageIds = await getLenderMortgageIds(ctx, lender._id);
-		if (mortgageIds.has(mortgageId)) {
-			return true;
-		}
+	// Lender check: ledger_accounts.lenderId stores authId strings
+	const lenderMortgageIds = await getLenderMortgageIds(ctx, viewer.authId);
+	if (lenderMortgageIds.has(mortgageId)) {
+		return true;
 	}
 
 	// Broker check
@@ -246,7 +241,7 @@ export async function canAccessLedgerPosition(
 }
 
 // ── T-007: canAccessAccrual ─────────────────────────────────────────
-// investorId here refers to a lender's _id (legacy naming in the ledger).
+// investorId is the WorkOS authId string stored in ledger_accounts.lenderId.
 
 export async function canAccessAccrual(
 	ctx: { db: QueryCtx["db"] },
@@ -257,17 +252,15 @@ export async function canAccessAccrual(
 		return true;
 	}
 
-	// Lender check: the investorId matches the viewer's lender profile
-	const lender = await getLenderByAuthId(ctx, viewer.authId);
-	if (lender && lender._id === investorId) {
+	// Lender check: the investorId is an authId — compare directly
+	if (investorId === viewer.authId) {
 		return true;
 	}
 
-	// Broker check: the lender referenced by investorId belongs to viewer's brokerage
+	// Broker check: resolve investorId (authId) → user → lender, then check brokerId
 	const broker = await getBrokerByAuthId(ctx, viewer.authId);
 	if (broker) {
-		// Find the lender record that matches investorId
-		const targetLender = await ctx.db.get(investorId as Id<"lenders">);
+		const targetLender = await getLenderByAuthId(ctx, investorId);
 		if (targetLender && targetLender.brokerId === broker._id) {
 			return true;
 		}
@@ -277,10 +270,10 @@ export async function canAccessAccrual(
 }
 
 // ── T-008: canAccessDispersal ───────────────────────────────────────
-// investorId here refers to a lender's _id (legacy naming in the ledger).
+// investorId is the WorkOS authId string stored in ledger_accounts.lenderId.
 
 export async function canAccessDispersal(
-	ctx: { db: QueryCtx["db"] },
+	_ctx: { db: QueryCtx["db"] },
 	viewer: Viewer,
 	investorId: string
 ): Promise<boolean> {
@@ -288,9 +281,8 @@ export async function canAccessDispersal(
 		return true;
 	}
 
-	// Lender check: the investorId matches the viewer's lender profile
-	const lender = await getLenderByAuthId(ctx, viewer.authId);
-	if (lender && lender._id === investorId) {
+	// Lender check: the investorId is an authId — compare directly
+	if (investorId === viewer.authId) {
 		return true;
 	}
 
