@@ -19,6 +19,7 @@ const modules = {
 	...import.meta.glob("../../../convex/auth/**/*.*s"),
 	...import.meta.glob("../../../convex/engine/**/*.*s"),
 	...import.meta.glob("../../../convex/onboarding/**/*.*s"),
+	...import.meta.glob("../../../convex/seed/**/*.*s"),
 	...import.meta.glob("../../../convex/test/**/*.*s"),
 	...import.meta.glob("../../../convex/auditLog.ts"),
 	...import.meta.glob("../../../convex/constants.ts"),
