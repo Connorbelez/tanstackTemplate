@@ -322,9 +322,16 @@ export const actionAuthMiddleware = convex
 	});
 
 export const requireFairLendAdminAction = convex
-	.$context<{ viewer: Viewer }>()
+	.$context<{
+		viewer: Viewer;
+		runMutation: (...args: [unknown, unknown?]) => Promise<unknown>;
+	}>()
 	.createMiddleware(async (context, next) => {
 		if (!context.viewer.isFairLendAdmin) {
+			await auditAuthFailure(context, context.viewer, {
+				middleware: "requireFairLendAdminAction",
+				reason: "User is not a FairLend Staff admin",
+			});
 			throw new ConvexError("Forbidden: fair lend admin role required");
 		}
 		return next(context);
@@ -335,10 +342,7 @@ export const requireFairLendAdminAction = convex
 export const authedQuery = convex.query().use(authMiddleware);
 export const authedMutation = convex.mutation().use(authMiddleware);
 export const authedAction = convex.action().use(actionAuthMiddleware);
-export const adminAction = convex
-	.action()
-	.use(actionAuthMiddleware)
-	.use(requireFairLendAdminAction);
+export const adminAction = authedAction.use(requireFairLendAdminAction);
 export const adminMutation = convex
 	.mutation()
 	.use(authMiddleware)

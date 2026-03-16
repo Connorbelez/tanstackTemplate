@@ -116,8 +116,12 @@ export function addMonthsToDateString(
 	months: number
 ): string {
 	const date = new Date(`${dateString}T00:00:00.000Z`);
-	date.setUTCMonth(date.getUTCMonth() + months);
-	return isoDateFromTimestamp(date.getTime());
+	const targetMonth = date.getUTCMonth() + months;
+	const year = date.getUTCFullYear() + Math.floor(targetMonth / 12);
+	const month = ((targetMonth % 12) + 12) % 12;
+	const lastDay = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+	const day = Math.min(date.getUTCDate(), lastDay);
+	return isoDateFromTimestamp(Date.UTC(year, month, day));
 }
 
 export async function findUserByEmail(
@@ -221,11 +225,13 @@ export async function findPropertyByAddress(
 ): Promise<Doc<"properties"> | null> {
 	return ctx.db
 		.query("properties")
+		.withIndex("by_postal_code", (q) =>
+			q.eq("postalCode", address.postalCode)
+		)
 		.filter((q) =>
 			q.and(
 				q.eq(q.field("streetAddress"), address.streetAddress),
-				q.eq(q.field("postalCode"), address.postalCode),
-				address.unit
+				address.unit !== undefined
 					? q.eq(q.field("unit"), address.unit)
 					: q.eq(q.field("unit"), undefined)
 			)
@@ -281,19 +287,16 @@ export async function findOnboardingRequestByUserAndRole(
 	ctx: Pick<MutationCtx, "db">,
 	args: {
 		requestedRole: Doc<"onboardingRequests">["requestedRole"];
-		status: string;
+		status: Doc<"onboardingRequests">["status"];
 		userId: Id<"users">;
 	}
 ): Promise<Doc<"onboardingRequests"> | null> {
 	return ctx.db
 		.query("onboardingRequests")
-		.withIndex("by_user", (q) => q.eq("userId", args.userId))
-		.filter((q) =>
-			q.and(
-				q.eq(q.field("requestedRole"), args.requestedRole),
-				q.eq(q.field("status"), args.status)
-			)
+		.withIndex("by_user_and_status", (q) =>
+			q.eq("userId", args.userId).eq("status", args.status)
 		)
+		.filter((q) => q.eq(q.field("requestedRole"), args.requestedRole))
 		.first();
 }
 
@@ -303,7 +306,7 @@ export async function resolveBrokerIds(
 ): Promise<Id<"brokers">[]> {
 	if (requestedBrokerIds && requestedBrokerIds.length > 0) {
 		const uniqueBrokerIds: Id<"brokers">[] = [];
-		const seenBrokerIds = new Set<string>();
+		const seenBrokerIds = new Set<Id<"brokers">>();
 
 		for (const brokerId of requestedBrokerIds) {
 			if (seenBrokerIds.has(brokerId)) {
@@ -342,7 +345,7 @@ export async function resolveBorrowerIds(
 ): Promise<Id<"borrowers">[]> {
 	if (requestedBorrowerIds && requestedBorrowerIds.length > 0) {
 		const uniqueBorrowerIds: Id<"borrowers">[] = [];
-		const seenBorrowerIds = new Set<string>();
+		const seenBorrowerIds = new Set<Id<"borrowers">>();
 
 		for (const borrowerId of requestedBorrowerIds) {
 			if (seenBorrowerIds.has(borrowerId)) {
