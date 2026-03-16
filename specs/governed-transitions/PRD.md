@@ -152,9 +152,9 @@ These are the invariants of the pattern. Every implementation decision must hono
 - Multiple machine types in registry — demo uses a single Loan Application machine (registry pattern is still used, just with one entry)
 - Cross-entity coordination — would require multiple machine types
 - Parallel/nested states (Deal Closing pattern) — demo uses flat states for clarity
-- machineContext with guards that accumulate across transitions — demo guard checks event payload only
+- machineContext with guards that accumulate across transitions — demo guard checks `context.data` only (POC pattern; production may use event payload)
 - Production-grade transition engine (the real one will be shared infrastructure)
-- The `ip` field from the production `CommandSource` — demo runs in browser where IP collection isn't meaningful
+- Server-side auth enforcement on demo endpoints — demo mutations use `.public()` without auth middleware; production would use `authedMutation` from `fluent.ts`
 
 ## Addendum — Demo Route UI Refinement
 
