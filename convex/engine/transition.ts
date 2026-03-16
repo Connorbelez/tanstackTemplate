@@ -1,16 +1,25 @@
+import type { GenericId } from "convex/values";
+import { ConvexError } from "convex/values";
 import type { AnyStateMachine } from "xstate";
 import { getNextSnapshot } from "xstate";
-import type { Id } from "../_generated/dataModel";
+import type { TableNames } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 import { auditLog } from "../auditLog";
 import { appendAuditJournalEntry } from "./auditJournal";
 import { effectRegistry } from "./effects/registry";
 import { getMachineVersion, machineRegistry } from "./machines/registry";
-import type { CommandSource, EntityType, TransitionResult } from "./types";
+import { deserializeStatus, serializeStatus } from "./serialization";
+import type {
+	CommandSource,
+	EntityType,
+	GovernedEntityType,
+	TransitionResult,
+} from "./types";
+import { ENTITY_TABLE_MAP } from "./types";
 
 function isGovernedEntityType(
 	entityType: EntityType
-): entityType is EntityType & keyof typeof machineRegistry {
+): entityType is GovernedEntityType {
 	return entityType in machineRegistry;
 }
 
@@ -55,13 +64,23 @@ function normalizeActionDescriptors(
 
 function extractScheduledEffects(
 	machine: AnyStateMachine,
-	previousState: string,
+	previousStateValue: string | Record<string, unknown>,
 	eventType: string
 ): ScheduledEffectDescriptor[] {
+	// For config inspection we use the string form of the state (top-level key)
+	const stateKeys =
+		typeof previousStateValue === "string"
+			? [previousStateValue]
+			: Object.keys(previousStateValue);
+	if (stateKeys.length !== 1) {
+		throw new Error(
+			`extractScheduledEffects only supports a single active top-level state node; got: ${stateKeys.join(", ")}`
+		);
+	}
+	const stateKey = stateKeys[0];
+
 	const stateNode =
-		machine.config.states?.[
-			previousState as keyof typeof machine.config.states
-		];
+		machine.config.states?.[stateKey as keyof typeof machine.config.states];
 	const eventConfig =
 		stateNode && "on" in stateNode
 			? (stateNode.on as Record<string, unknown>)?.[eventType]
@@ -123,94 +142,113 @@ async function scheduleEffects(
 /**
  * Core GT transition engine — called within mutations to maintain atomicity.
  *
- * Hydrates the entity's current state into an XState snapshot, computes the
- * next state via `getNextSnapshot()`, persists the change, writes to the
- * shared audit log, and schedules any declared effects.
+ * Implements the 8-step pipeline:
+ * 1. RESOLVE — Look up machine from registry (fail fast for unknown entity types)
+ * 2. LOAD — Read entity record (status + machineContext)
+ * 3. HYDRATE — Restore XState snapshot from persisted state
+ * 4. COMPUTE — Pure `getNextSnapshot()` call
+ * 5. DETECT — Compare new vs previous state; unchanged → rejection path
+ * 6. PERSIST — Atomic patch + audit journal entry
+ * 7. AUDIT — Layer 2 hash-chain entry (via appendAuditJournalEntry)
+ * 8. EFFECTS — Schedule declared actions
  */
-export async function transitionEntity(
+export async function executeTransition(
 	ctx: MutationCtx,
-	entityType: EntityType,
-	entityId: string,
-	eventType: string,
-	payload?: Record<string, unknown>,
-	source?: CommandSource
+	command: {
+		entityType: EntityType;
+		entityId: string;
+		eventType: string;
+		payload?: Record<string, unknown>;
+		source?: CommandSource;
+	}
 ): Promise<TransitionResult> {
-	// 1. Load entity
-	// Internal cast: only onboardingRequests exists today.
-	// ENG-12 generalizes this with a table lookup from entityType.
-	if (entityType !== "onboardingRequest") {
-		throw new Error(
-			`Entity type ${entityType} is not yet supported by transitionEntity`
-		);
-	}
-	const entity = await ctx.db.get(entityId as Id<"onboardingRequests">);
-	if (!entity) {
-		throw new Error(`Entity ${entityType}/${entityId} not found`);
-	}
+	const { entityType, entityId, eventType, payload } = command;
+	const source: CommandSource = command.source ?? { channel: "scheduler" };
 
-	// 2. Get machine
+	// ── 1. RESOLVE ──────────────────────────────────────────────────────
+	// Fail fast before any DB reads if the entity type has no registered machine.
 	if (!isGovernedEntityType(entityType)) {
-		throw new Error(`No machine registered for entity type: ${entityType}`);
+		throw new ConvexError({
+			code: "UNKNOWN_ENTITY_TYPE",
+			message: `No machine registered for entity type: ${entityType}`,
+		});
 	}
 	const machine = machineRegistry[entityType];
 	const machineVersion = getMachineVersion(entityType);
 
-	// 3. Hydrate current state
-	const previousState = entity.status as string;
-	// machineContext is v.optional(v.any()) in schema — cast to satisfy resolveState.
-	// Today the onboardingRequest machine has an empty context; ENG-12 will generalize.
-	const hydratedContext = (entity.machineContext ?? {}) as Record<
-		string,
-		unknown
-	> as Parameters<typeof machine.resolveState>[0]["context"];
+	// ── 2. LOAD ─────────────────────────────────────────────────────────
+	const tableName = ENTITY_TABLE_MAP[entityType];
+	const entity = await ctx.db.get(
+		entityId as GenericId<typeof tableName & TableNames>
+	);
+	if (!entity) {
+		throw new ConvexError({
+			code: "ENTITY_NOT_FOUND",
+			message: `Entity ${entityType}/${entityId} not found`,
+		});
+	}
+
+	// ── 3. HYDRATE ───────────────────────────────────────────────────────
+	// Cast to a governed record shape — all governed entities share `status` + `machineContext`.
+	const governedEntity = entity as unknown as {
+		status: string;
+		machineContext?: Record<string, unknown>;
+	};
+	const previousStateValue = deserializeStatus(governedEntity.status);
+	const previousStateSerialized = serializeStatus(previousStateValue);
+	const hydratedContext = (governedEntity.machineContext ?? {}) as Parameters<
+		typeof machine.resolveState
+	>[0]["context"];
 	const currentSnapshot = machine.resolveState({
-		value: previousState,
+		value: previousStateValue as Parameters<
+			typeof machine.resolveState
+		>[0]["value"],
 		context: hydratedContext,
 	});
 
-	// 4. Compute next state (pure — no side effects)
+	// ── 4. COMPUTE ───────────────────────────────────────────────────────
 	const event = { ...(payload ?? {}), type: eventType } as Parameters<
 		typeof getNextSnapshot<typeof machine>
 	>[2];
 	const nextSnapshot = getNextSnapshot(machine, currentSnapshot, event);
-	const newState = nextSnapshot.value as string;
-	const resourceType = "onboardingRequests";
-	const defaultSource: CommandSource = { channel: "scheduler" };
-	const resolvedSource = source ?? defaultSource;
+	const newStateValue = nextSnapshot.value as string | Record<string, unknown>;
+	const newStateSerialized = serializeStatus(newStateValue);
+
+	const resourceType = tableName;
 	let journalEntryId = `${entityType}:${entityId}:${eventType}:${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
 
-	// 5. Check if transition occurred (state change) or if targetless transition has effects
+	// ── 5. DETECT ────────────────────────────────────────────────────────
 	const scheduledEffects = extractScheduledEffects(
 		machine,
-		previousState,
+		previousStateValue,
 		eventType
 	);
 	const hasEffects = scheduledEffects.length > 0;
 
-	if (newState === previousState) {
+	if (newStateSerialized === previousStateSerialized) {
 		if (!hasEffects) {
+			// No state change and no effects — event is rejected
 			journalEntryId = await appendAuditJournalEntry(ctx, {
-				actorId: resolvedSource.actorId ?? "system",
-				actorType: resolvedSource.actorType,
-				channel: resolvedSource.channel,
+				actorId: source.actorId ?? "system",
+				actorType: source.actorType,
+				channel: source.channel,
 				entityId,
 				entityType,
 				eventType,
-				ip: resolvedSource.ip,
-				sessionId: resolvedSource.sessionId,
+				ip: source.ip,
+				sessionId: source.sessionId,
 				payload,
-				previousState,
-				newState,
+				previousState: previousStateSerialized,
+				newState: newStateSerialized,
 				outcome: "rejected",
-				reason: `Event "${eventType}" not valid in state "${previousState}"`,
+				reason: `Event "${eventType}" not valid in state "${previousStateSerialized}"`,
 				machineVersion,
 				timestamp: Date.now(),
 			});
 
-			// No state change and no effects — event is ignored/rejected
 			await auditLog.log(ctx, {
 				action: `transition.${entityType}.rejected`,
-				actorId: resolvedSource.actorId ?? "system",
+				actorId: source.actorId ?? "system",
 				resourceType,
 				resourceId: entityId,
 				severity: "warning",
@@ -219,35 +257,36 @@ export async function transitionEntity(
 					entityType,
 					eventType,
 					payload,
-					previousState,
-					newState,
+					previousState: previousStateSerialized,
+					newState: newStateSerialized,
 					outcome: "rejected",
-					reason: `Event "${eventType}" not valid in state "${previousState}"`,
-					source: resolvedSource,
+					reason: `Event "${eventType}" not valid in state "${previousStateSerialized}"`,
+					source,
 					machineVersion,
 				},
 			});
 			return {
 				success: false,
-				previousState,
-				newState,
-				reason: `Event "${eventType}" not valid in state "${previousState}"`,
+				previousState: previousStateSerialized,
+				newState: newStateSerialized,
+				reason: `Event "${eventType}" not valid in state "${previousStateSerialized}"`,
 			};
 		}
+
 		// Same state but has effects — write journal entry for traceability and
 		// deterministic idempotency key, then schedule effects.
 		journalEntryId = await appendAuditJournalEntry(ctx, {
-			actorId: resolvedSource.actorId ?? "system",
-			actorType: resolvedSource.actorType,
-			channel: resolvedSource.channel,
+			actorId: source.actorId ?? "system",
+			actorType: source.actorType,
+			channel: source.channel,
 			entityId,
 			entityType,
 			eventType,
-			ip: resolvedSource.ip,
-			sessionId: resolvedSource.sessionId,
+			ip: source.ip,
+			sessionId: source.sessionId,
 			payload,
-			previousState,
-			newState,
+			previousState: previousStateSerialized,
+			newState: newStateSerialized,
 			outcome: "transitioned",
 			reason: "same_state_with_effects",
 			machineVersion,
@@ -259,13 +298,13 @@ export async function transitionEntity(
 			entityType,
 			eventType,
 			journalEntryId,
-			resolvedSource,
+			source,
 			payload,
 			scheduledEffects
 		);
 		await auditLog.log(ctx, {
 			action: `transition.${entityType}.${eventType.toLowerCase()}`,
-			actorId: resolvedSource.actorId ?? "system",
+			actorId: source.actorId ?? "system",
 			resourceType,
 			resourceId: entityId,
 			severity: "info",
@@ -274,50 +313,50 @@ export async function transitionEntity(
 				entityType,
 				eventType,
 				payload,
-				previousState,
-				newState,
+				previousState: previousStateSerialized,
+				newState: newStateSerialized,
 				outcome: "same_state_with_effects",
 				effectsScheduled: effectNames,
-				source: resolvedSource,
+				source,
 				machineVersion,
 			},
 		});
 		return {
 			success: true,
-			previousState,
-			newState,
+			previousState: previousStateSerialized,
+			newState: newStateSerialized,
 			journalEntryId,
 			effectsScheduled: effectNames,
 		};
 	}
 
-	// 6. Persist state change
-	await ctx.db.patch(entityId as Id<"onboardingRequests">, {
-		status: newState,
+	// ── 6. PERSIST ───────────────────────────────────────────────────────
+	await ctx.db.patch(entityId as GenericId<typeof tableName & TableNames>, {
+		status: newStateSerialized,
 		machineContext: nextSnapshot.context,
 		lastTransitionAt: Date.now(),
 	});
 	journalEntryId = await appendAuditJournalEntry(ctx, {
-		actorId: resolvedSource.actorId ?? "system",
-		actorType: resolvedSource.actorType,
-		channel: resolvedSource.channel,
+		actorId: source.actorId ?? "system",
+		actorType: source.actorType,
+		channel: source.channel,
 		entityId,
 		entityType,
 		eventType,
-		ip: resolvedSource.ip,
-		sessionId: resolvedSource.sessionId,
+		ip: source.ip,
+		sessionId: source.sessionId,
 		payload,
-		previousState,
-		newState,
+		previousState: previousStateSerialized,
+		newState: newStateSerialized,
 		outcome: "transitioned",
 		machineVersion,
 		timestamp: Date.now(),
 	});
 
-	// 7. Write audit entry
+	// ── 7. AUDIT (Layer 2 — handled inside appendAuditJournalEntry) ────
 	await auditLog.log(ctx, {
 		action: `transition.${entityType}.${eventType.toLowerCase()}`,
-		actorId: resolvedSource.actorId ?? "system",
+		actorId: source.actorId ?? "system",
 		resourceType,
 		resourceId: entityId,
 		severity: "info",
@@ -326,31 +365,31 @@ export async function transitionEntity(
 			entityType,
 			eventType,
 			payload,
-			previousState,
-			newState,
+			previousState: previousStateSerialized,
+			newState: newStateSerialized,
 			outcome: "transitioned",
-			source: resolvedSource,
+			source,
 			machineVersion,
 		},
 	});
 
-	// 8. Schedule effects (reuse extraction from step 5)
+	// ── 8. EFFECTS ───────────────────────────────────────────────────────
 	const effectNames = await scheduleEffects(
 		ctx,
 		entityId,
 		entityType,
 		eventType,
 		journalEntryId,
-		resolvedSource,
+		source,
 		payload,
 		scheduledEffects
 	);
 
-	// 9. Return
+	// ── 9. Return ────────────────────────────────────────────────────────
 	return {
 		success: true,
-		previousState,
-		newState,
+		previousState: previousStateSerialized,
+		newState: newStateSerialized,
 		journalEntryId,
 		effectsScheduled: effectNames,
 	};

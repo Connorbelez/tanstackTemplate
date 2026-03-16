@@ -3,7 +3,7 @@ import { setup } from "xstate";
 import { internal } from "../../../../convex/_generated/api";
 import { effectRegistry } from "../../../../convex/engine/effects/registry";
 import { machineRegistry } from "../../../../convex/engine/machines/registry";
-import { transitionEntity } from "../../../../convex/engine/transition";
+import { executeTransition } from "../../../../convex/engine/transition";
 import {
 	approveRequest,
 	createGovernedTestConvex,
@@ -445,18 +445,18 @@ describe("transition engine", () => {
 		});
 	});
 
-	it("defaults payload and source when transitionEntity is called directly", async () => {
+	it("uses scheduler channel when source specifies scheduler", async () => {
 		const t = createGovernedTestConvex();
 		await seedDefaultGovernedActors(t);
 		const requestId = await createSelfSignupRequest(t, "lender");
 
 		const result = await t.run(async (ctx) =>
-			transitionEntity(
-				ctx as never,
-				"onboardingRequest",
-				requestId,
-				"ASSIGN_ROLE"
-			)
+			executeTransition(ctx as never, {
+				entityType: "onboardingRequest",
+				entityId: requestId,
+				eventType: "ASSIGN_ROLE",
+				source: { channel: "scheduler" },
+			})
 		);
 
 		expect(result).toMatchObject({
@@ -469,11 +469,39 @@ describe("transition engine", () => {
 		expect(latestJournal?.channel).toBe("scheduler");
 	});
 
-	it("throws when the entity type is not supported by the transition engine", async () => {
+	it("defaults to scheduler channel when source is omitted", async () => {
+		const t = createGovernedTestConvex();
+		await seedDefaultGovernedActors(t);
+		const requestId = await createSelfSignupRequest(t, "lender");
+
+		const result = await t.run(async (ctx) =>
+			executeTransition(
+				ctx as never,
+				// Omit `source` to exercise the default fallback path
+				{
+					entityType: "onboardingRequest",
+					entityId: requestId,
+					eventType: "ASSIGN_ROLE",
+				} as Parameters<typeof executeTransition>[1]
+			)
+		);
+
+		expect(result).toMatchObject({
+			success: false,
+			previousState: "pending_review",
+			newState: "pending_review",
+		});
+
+		const latestJournal = (await getAuditJournalRows(t, requestId)).at(-1);
+		expect(latestJournal).toBeDefined();
+		expect(latestJournal?.channel).toBe("scheduler");
+	});
+
+	it("throws ENTITY_NOT_FOUND for a governed entity type with an invalid entity ID", async () => {
 		const t = createGovernedTestConvex();
 
-		await expect(
-			t.mutation(internal.engine.transitionMutation.transitionMutation, {
+		const error = await t
+			.mutation(internal.engine.transitionMutation.transitionMutation, {
 				entityType: "mortgage",
 				entityId: "mortgage_123",
 				eventType: "APPROVE",
@@ -483,7 +511,18 @@ describe("transition engine", () => {
 					channel: "scheduler",
 				},
 			})
-		).rejects.toThrow("not yet supported");
+			.catch((e: unknown) => e);
+
+		// ConvexError data may be serialised to a JSON string by convex-test
+		const data =
+			error &&
+			typeof error === "object" &&
+			"data" in error &&
+			typeof error.data === "string"
+				? JSON.parse(error.data)
+				: (error as { data: unknown }).data;
+
+		expect(data).toMatchObject({ code: "ENTITY_NOT_FOUND" });
 	});
 
 	it("throws when the entity does not exist", async () => {
