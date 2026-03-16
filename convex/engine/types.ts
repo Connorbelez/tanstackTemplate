@@ -1,6 +1,18 @@
 // ── Entity Types ────────────────────────────────────────────────────
-// Extensible — Project 4 adds "deal", Project 5 adds "collectionAttempt"
-export type EntityType = "onboardingRequest" | "mortgage" | "obligation";
+// Kept in sync with entityTypeValidator in validators.ts
+export type EntityType =
+	| "onboardingRequest"
+	| "mortgage"
+	| "obligation"
+	| "deal"
+	| "provisionalApplication"
+	| "applicationPackage"
+	| "broker"
+	| "borrower"
+	| "lenderOnboarding"
+	| "provisionalOffer"
+	| "offerCondition"
+	| "lenderRenewalIntent";
 
 // ── Command Source ──────────────────────────────────────────────────
 export type CommandChannel =
@@ -67,4 +79,13 @@ export const ENTITY_TABLE_MAP = {
 	onboardingRequest: "onboardingRequests",
 	mortgage: "mortgages",
 	obligation: "obligations",
+	deal: "deals",
+	provisionalApplication: "provisionalApplications",
+	applicationPackage: "applicationPackages",
+	broker: "brokers",
+	borrower: "borrowers",
+	lenderOnboarding: "lenderOnboardings",
+	provisionalOffer: "provisionalOffers",
+	offerCondition: "offerConditions",
+	lenderRenewalIntent: "lenderRenewalIntents",
 } as const satisfies Record<EntityType, string>;

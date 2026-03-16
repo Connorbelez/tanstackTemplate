@@ -243,7 +243,7 @@ describe("hash-chain and reconciliation", () => {
 		).rejects.toThrow("insert failed");
 	});
 
-	it("reports unsupported future entity types as ENTITY_NOT_FOUND when they only exist in the journal", async () => {
+	it("skips entity types not yet governed by the transition engine", async () => {
 		const t = createGovernedTestConvex();
 		await seedDefaultGovernedActors(t);
 
@@ -264,13 +264,11 @@ describe("hash-chain and reconciliation", () => {
 		const result = await t
 			.withIdentity(FAIRLEND_ADMIN)
 			.query(api.engine.reconciliation.reconcile, {});
-		expect(result.discrepancies).toContainEqual(
-			expect.objectContaining({
-				entityId: "mortgage_future",
-				entityType: "mortgage",
-				entityStatus: "ENTITY_NOT_FOUND",
-			})
+		// Mortgage is not yet governed — reconciler skips it entirely
+		expect(result.discrepancies).not.toContainEqual(
+			expect.objectContaining({ entityType: "mortgage" })
 		);
+		expect(result.isHealthy).toBe(true);
 	});
 
 	it("reports broken chains when Layer 2 verification indicates tampering", async () => {

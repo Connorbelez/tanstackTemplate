@@ -31,7 +31,6 @@ async function collectLatestJournalEntries(
 
 	let consecutiveEmptyPages = 0;
 
-
 	while (true) {
 		const { continueCursor, isDone, page } = await ctx.db
 			.query("auditJournal")
@@ -68,7 +67,6 @@ async function collectLatestJournalEntries(
 			return latestByEntity;
 		}
 
-
 		cursor = continueCursor;
 	}
 }
@@ -84,10 +82,20 @@ async function getEntityStatus(
 			const entity = await ctx.db.get(entityId as Id<"onboardingRequests">);
 			return entity?.status ?? null;
 		}
+		// All other entity types have tables in the schema but are not yet
+		// governed by the transition engine. Skip them to avoid false
+		// ENTITY_NOT_FOUND discrepancies from orphaned journal entries.
 		case "mortgage":
 		case "obligation":
-			// Not yet supported by the transition engine — return undefined to
-			// skip rather than report false ENTITY_NOT_FOUND discrepancies.
+		case "deal":
+		case "provisionalApplication":
+		case "applicationPackage":
+		case "broker":
+		case "borrower":
+		case "lenderOnboarding":
+		case "provisionalOffer":
+		case "offerCondition":
+		case "lenderRenewalIntent":
 			return undefined;
 	}
 }

@@ -97,7 +97,6 @@ export async function runHashChainJournalStep(
 	});
 }
 
-
 /**
  * Start the hash-chain workflow from a mutation context.
  *
