@@ -29,6 +29,12 @@ export const eventSourceValidator = v.object({
 	channel: v.optional(v.string()),
 });
 
+export const reservationStatusValidator = v.union(
+	v.literal("pending"),
+	v.literal("committed"),
+	v.literal("voided")
+);
+
 // ── Tier 1: Strict Primitives ──────────────────────────────────────
 
 export const postEntryArgsValidator = {
@@ -94,4 +100,44 @@ export const redeemSharesArgsValidator = {
 	source: eventSourceValidator,
 	reason: v.optional(v.string()),
 	metadata: v.optional(v.any()),
+};
+
+export const postCorrectionArgsValidator = {
+	mortgageId: v.string(),
+	debitAccountId: v.id("ledger_accounts"),
+	creditAccountId: v.id("ledger_accounts"),
+	amount: v.number(),
+	effectiveDate: v.string(),
+	idempotencyKey: v.string(),
+	source: eventSourceValidator,
+	causedBy: v.id("ledger_journal_entries"),
+	reason: v.string(),
+	metadata: v.optional(v.any()),
+};
+
+// ── Tier 3: Two-Phase Reservation ───────────────────────────────────
+
+export const reserveSharesArgsValidator = {
+	mortgageId: v.string(),
+	sellerLenderId: v.string(),
+	buyerLenderId: v.string(),
+	amount: v.number(),
+	effectiveDate: v.string(),
+	idempotencyKey: v.string(),
+	source: eventSourceValidator,
+	dealId: v.optional(v.string()),
+	metadata: v.optional(v.any()),
+};
+
+export const commitReservationArgsValidator = {
+	reservationId: v.id("ledger_reservations"),
+	idempotencyKey: v.string(),
+	source: eventSourceValidator,
+};
+
+export const voidReservationArgsValidator = {
+	reservationId: v.id("ledger_reservations"),
+	reason: v.string(),
+	idempotencyKey: v.string(),
+	source: eventSourceValidator,
 };

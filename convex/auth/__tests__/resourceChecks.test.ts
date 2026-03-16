@@ -2024,7 +2024,7 @@ describe("canAccessApplicationPackage", () => {
 });
 
 // ═══════════════════════════════════════════════════════════════════
-// Ledger table coverage: ledger_reservations, ledger_sequence_counter
+// Ledger table coverage: ledger_reservations, ledger_sequence_counters
 // ═══════════════════════════════════════════════════════════════════
 
 describe("ledger_reservations — access via parent mortgage", () => {
@@ -2131,7 +2131,7 @@ describe("ledger_reservations — access via parent mortgage", () => {
 	});
 });
 
-describe("ledger_sequence_counter — table insertable", () => {
+describe("ledger_sequence_counters — table insertable", () => {
 	it("sequence counter can be seeded and read back", async () => {
 		const t = convexTest(schema, modules);
 		await t.run(async (ctx) => {

@@ -2,7 +2,7 @@ import { v } from "convex/values";
 import { ledgerQuery } from "../fluent";
 import { getAccountLenderId } from "./accountOwnership";
 import { getPostedBalance } from "./accounts";
-import { UNITS_PER_MORTGAGE } from "./constants";
+import { TOTAL_SUPPLY } from "./constants";
 
 export const validateSupplyInvariant = ledgerQuery
 	.input({ mortgageId: v.string() })
@@ -55,7 +55,7 @@ export const validateSupplyInvariant = ledgerQuery
 		const total = treasuryBalance + positionSum;
 
 		return {
-			valid: total === UNITS_PER_MORTGAGE,
+			valid: total === TOTAL_SUPPLY,
 			treasuryBalance,
 			positions,
 			total,

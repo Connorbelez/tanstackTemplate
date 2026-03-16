@@ -3,7 +3,7 @@ import type { MutationCtx } from "../_generated/server";
 import { authedMutation, authedQuery } from "../fluent";
 import { getAccountLenderId } from "../ledger/accountOwnership";
 import { getPostedBalance, initializeWorldAccount } from "../ledger/accounts";
-import { UNITS_PER_MORTGAGE } from "../ledger/constants";
+import { TOTAL_SUPPLY } from "../ledger/constants";
 import { getNextSequenceNumber } from "../ledger/sequenceCounter";
 
 // ── Constants ────────────────────────────────────────────────────
@@ -152,7 +152,7 @@ export const seedData = authedMutation
 				mortgageId: mortgage.mortgageId,
 				debitAccountId: treasuryId,
 				creditAccountId: worldAccount._id,
-				amount: Number(UNITS_PER_MORTGAGE),
+				amount: Number(TOTAL_SUPPLY),
 				idempotencyKey: `demo-seed-mint-${mortgage.mortgageId}`,
 			});
 
@@ -334,7 +334,7 @@ export const getDemoState = authedQuery
 			// Supply invariant
 			const positionSum = positions.reduce((sum, p) => sum + p.balance, 0);
 			const total = treasuryBalance + positionSum;
-			const invariantValid = total === Number(UNITS_PER_MORTGAGE);
+			const invariantValid = total === Number(TOTAL_SUPPLY);
 
 			// Find label from seed data
 			const seedDef = DEMO_MORTGAGES.find((m) => m.mortgageId === mortgageId);

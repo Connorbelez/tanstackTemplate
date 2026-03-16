@@ -9,8 +9,9 @@ import {
 	getWorldAccount,
 	initializeWorldAccount,
 } from "./accounts";
-import { MIN_POSITION_UNITS, UNITS_PER_MORTGAGE } from "./constants";
+import { MIN_FRACTION, TOTAL_SUPPLY } from "./constants";
 import { getNextSequenceNumber } from "./sequenceCounter";
+import type { AccountType, EntryType, EventSource } from "./types";
 import {
 	burnMortgageArgsValidator,
 	issueSharesArgsValidator,
@@ -21,9 +22,6 @@ import {
 } from "./validators";
 
 // ── Types ─────────────────────────────────────────────────────────
-
-type EntryType = Doc<"ledger_journal_entries">["entryType"];
-type AccountType = Doc<"ledger_accounts">["type"];
 
 interface PostEntryInput {
 	amount: number;
@@ -36,11 +34,7 @@ interface PostEntryInput {
 	metadata?: Record<string, unknown>;
 	mortgageId: string;
 	reason?: string;
-	source: {
-		type: "user" | "system" | "webhook" | "cron";
-		actor?: string;
-		channel?: string;
-	};
+	source: EventSource;
 }
 
 // ── Internal postEntry logic ──────────────────────────────────────
@@ -153,9 +147,9 @@ function assertMortgageMatch(
 }
 
 function checkMinPosition(balance: bigint, label: string) {
-	if (balance !== 0n && balance < MIN_POSITION_UNITS) {
+	if (balance !== 0n && balance < MIN_FRACTION) {
 		throw new Error(
-			`${label} balance ${balance} violates minimum position (must be 0 or >= ${MIN_POSITION_UNITS})`
+			`${label} balance ${balance} violates minimum position (must be 0 or >= ${MIN_FRACTION})`
 		);
 	}
 }
@@ -173,9 +167,9 @@ interface ValidationContext {
 function validateMortgageMinted(v: ValidationContext) {
 	assertAccountType(v.debitAccount, "TREASURY", "Receiving account");
 	assertAccountType(v.creditAccount, "WORLD", "Source account");
-	if (v.amountBigInt !== UNITS_PER_MORTGAGE) {
+	if (v.amountBigInt !== TOTAL_SUPPLY) {
 		throw new Error(
-			`MORTGAGE_MINTED must be exactly ${UNITS_PER_MORTGAGE} units, got ${v.amountBigInt}`
+			`MORTGAGE_MINTED must be exactly ${TOTAL_SUPPLY} units, got ${v.amountBigInt}`
 		);
 	}
 }
@@ -226,14 +220,14 @@ function validateSharesRedeemed(v: ValidationContext) {
 function validateMortgageBurned(v: ValidationContext) {
 	assertAccountType(v.debitAccount, "WORLD", "Receiving account");
 	assertAccountType(v.creditAccount, "TREASURY", "Burning treasury");
-	if (v.amountBigInt !== UNITS_PER_MORTGAGE) {
+	if (v.amountBigInt !== TOTAL_SUPPLY) {
 		throw new Error(
-			`MORTGAGE_BURNED must be exactly ${UNITS_PER_MORTGAGE} units, got ${v.amountBigInt}`
+			`MORTGAGE_BURNED must be exactly ${TOTAL_SUPPLY} units, got ${v.amountBigInt}`
 		);
 	}
-	if (v.creditBalance !== UNITS_PER_MORTGAGE) {
+	if (v.creditBalance !== TOTAL_SUPPLY) {
 		throw new Error(
-			`TREASURY balance must be exactly ${UNITS_PER_MORTGAGE} to burn, got ${v.creditBalance}`
+			`TREASURY balance must be exactly ${TOTAL_SUPPLY} to burn, got ${v.creditBalance}`
 		);
 	}
 }
@@ -387,7 +381,7 @@ export const mintMortgage = ledgerMutation
 			mortgageId: args.mortgageId,
 			debitAccountId: treasuryId,
 			creditAccountId: worldAccount._id,
-			amount: Number(UNITS_PER_MORTGAGE),
+			amount: Number(TOTAL_SUPPLY),
 			effectiveDate: args.effectiveDate,
 			idempotencyKey: args.idempotencyKey,
 			source: args.source,
@@ -420,9 +414,9 @@ export const burnMortgage = ledgerMutation
 		}
 		const treasuryBalance = getPostedBalance(treasury);
 
-		if (treasuryBalance !== UNITS_PER_MORTGAGE) {
+		if (treasuryBalance !== TOTAL_SUPPLY) {
 			throw new Error(
-				`Cannot burn: TREASURY balance is ${treasuryBalance}, must be ${UNITS_PER_MORTGAGE}`
+				`Cannot burn: TREASURY balance is ${treasuryBalance}, must be ${TOTAL_SUPPLY}`
 			);
 		}
 
@@ -447,7 +441,7 @@ export const burnMortgage = ledgerMutation
 			mortgageId: args.mortgageId,
 			debitAccountId: worldAccount._id,
 			creditAccountId: treasury._id,
-			amount: Number(UNITS_PER_MORTGAGE),
+			amount: Number(TOTAL_SUPPLY),
 			effectiveDate: args.effectiveDate,
 			idempotencyKey: args.idempotencyKey,
 			source: args.source,
