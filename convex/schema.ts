@@ -987,12 +987,17 @@ export default defineSchema({
 		documensoEnvelopeId: v.optional(v.string()),
 
 		// ─── Entity linkage (polymorphic) ───
+		// Intentionally NOT reusing entityTypeValidator from engine/validators —
+		// that covers all 12 GT-governed entity types. This union is scoped to the
+		// 4 entity types that documents can actually be generated for.
 		entityType: v.union(
 			v.literal("mortgage"),
 			v.literal("deal"),
 			v.literal("applicationPackage"),
 			v.literal("provisionalApplication")
 		),
+		// v.string() instead of v.id() because polymorphic FKs can't use typed IDs
+		// across multiple tables. ENG-6's canAccessDocument() casts at runtime.
 		entityId: v.string(),
 
 		// ─── Access control ───
@@ -1003,20 +1008,20 @@ export default defineSchema({
 		),
 
 		// ─── Signing status ───
-		signingStatus: v.optional(
-			v.union(
-				v.literal("draft"),
-				v.literal("sent"),
-				v.literal("partially_signed"),
-				v.literal("completed"),
-				v.literal("declined"),
-				v.literal("voided")
-			)
+		signingStatus: v.union(
+			v.literal("not_applicable"),
+			v.literal("draft"),
+			v.literal("sent"),
+			v.literal("partially_signed"),
+			v.literal("completed"),
+			v.literal("declined"),
+			v.literal("voided")
 		),
 
 		// ─── Metadata ───
 		generatedBy: v.string(),
 		generatedAt: v.number(),
+		updatedAt: v.number(),
 		// Caller-specific context (deal phase, etc.) — v.any() is intentional
 		// because metadata shape varies by entityType and consumer
 		metadata: v.optional(v.any()),
