@@ -153,3 +153,26 @@ export async function seedFromIdentity(
 		identity.user_last_name
 	);
 }
+
+/**
+ * Seed a user from a MockIdentity if it does not already exist.
+ */
+export async function ensureSeededIdentity(
+	t: ReturnType<typeof convexTest>,
+	identity: MockIdentity
+) {
+	return t.run(async (ctx) => {
+		const existing = (await ctx.db.query("users").collect()).find(
+			(user) => user.authId === identity.subject
+		);
+		if (existing) {
+			return existing._id;
+		}
+		return ctx.db.insert("users", {
+			authId: identity.subject,
+			email: identity.user_email,
+			firstName: identity.user_first_name,
+			lastName: identity.user_last_name,
+		});
+	});
+}

@@ -3,7 +3,7 @@ import { internal } from "../../_generated/api";
 import type { Id } from "../../_generated/dataModel";
 import { type ActionCtx, internalAction } from "../../_generated/server";
 import { auditLog } from "../../auditLog";
-import { authKit } from "../../auth";
+import { getWorkosProvisioning } from "./workosProvisioning";
 
 async function completeRoleAssignmentProcessing(
 	ctx: ActionCtx,
@@ -29,6 +29,7 @@ async function resolveTargetOrganizationId(
 	targetOrganizationId: string | undefined
 ) {
 	let resolvedTargetOrganizationId = targetOrganizationId;
+	const workosProvisioning = getWorkosProvisioning();
 
 	if (requestedRole === "broker" && !resolvedTargetOrganizationId) {
 		const latestRequest = await ctx.runQuery(
@@ -45,7 +46,7 @@ async function resolveTargetOrganizationId(
 			);
 		}
 		const orgName = `${user.firstName} ${user.lastName}'s Brokerage`;
-		const newOrg = await authKit.workos.organizations.createOrganization({
+		const newOrg = await workosProvisioning.createOrganization({
 			name: orgName,
 		});
 		resolvedTargetOrganizationId = newOrg.id;
@@ -70,8 +71,9 @@ async function ensureOrganizationMembership(
 	targetOrganizationId: string,
 	requestedRole: string
 ) {
+	const workosProvisioning = getWorkosProvisioning();
 	try {
-		await authKit.workos.userManagement.createOrganizationMembership({
+		await workosProvisioning.createOrganizationMembership({
 			userId: user.authId,
 			organizationId: targetOrganizationId,
 			roleSlug: requestedRole,

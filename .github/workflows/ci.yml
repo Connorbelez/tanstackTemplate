@@ -44,5 +44,5 @@ jobs:
       - name: Type check
         run: bun typecheck
 
-      - name: Run unit tests
-        run: bun run test
+      - name: Run unit tests with governed-path coverage
+        run: bun run test:coverage

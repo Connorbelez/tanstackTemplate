@@ -310,6 +310,7 @@ function AdminReviewSection() {
 	const requests = useQuery(api.onboarding.queries.listPendingRequests, {});
 	const approve = useMutation(api.onboarding.mutations.approveRequest);
 	const reject = useMutation(api.onboarding.mutations.rejectRequest);
+	const [actionError, setActionError] = useState<string | null>(null);
 	const [rejectingId, setRejectingId] = useState<string | null>(null);
 	const [rejectionReason, setRejectionReason] = useState("");
 
@@ -324,16 +325,35 @@ function AdminReviewSection() {
 			<CardContent>
 				{requests !== undefined ? (
 					<PendingRequestsContent
+						actionError={actionError}
 						onApprove={async (requestId) => {
-							await approve({
-								requestId: requestId as Id<"onboardingRequests">,
-							});
+							setActionError(null);
+							try {
+								await approve({
+									requestId: requestId as Id<"onboardingRequests">,
+								});
+							} catch (error) {
+								setActionError(
+									error instanceof Error
+										? error.message
+										: "Failed to approve request."
+								);
+							}
 						}}
 						onReject={async (requestId, reason) => {
-							await reject({
-								requestId: requestId as Id<"onboardingRequests">,
-								rejectionReason: reason,
-							});
+							setActionError(null);
+							try {
+								await reject({
+									requestId: requestId as Id<"onboardingRequests">,
+									rejectionReason: reason,
+								});
+							} catch (error) {
+								setActionError(
+									error instanceof Error
+										? error.message
+										: "Failed to reject request."
+								);
+							}
 						}}
 						onSetRejectingId={setRejectingId}
 						onSetRejectionReason={setRejectionReason}
@@ -351,6 +371,7 @@ function AdminReviewSection() {
 
 function PendingRequestsContent({
 	requests,
+	actionError,
 	rejectingId,
 	rejectionReason,
 	onApprove,
@@ -359,10 +380,11 @@ function PendingRequestsContent({
 	onSetRejectionReason,
 }: {
 	requests: PendingRequestItem[];
+	actionError: string | null;
 	rejectingId: string | null;
 	rejectionReason: string;
-	onApprove: (requestId: string) => void;
-	onReject: (requestId: string, reason: string) => void;
+	onApprove: (requestId: string) => Promise<void>;
+	onReject: (requestId: string, reason: string) => Promise<void>;
 	onSetRejectingId: (id: string | null) => void;
 	onSetRejectionReason: (reason: string) => void;
 }) {
@@ -373,6 +395,11 @@ function PendingRequestsContent({
 	}
 	return (
 		<div className="space-y-3">
+			{actionError ? (
+				<p className="text-destructive text-sm" role="alert">
+					{actionError}
+				</p>
+			) : null}
 			{requests.map(({ request, user }) => {
 				const roleMeta = ROLE_DISPLAY_METADATA[request.requestedRole];
 				const colors = roleMeta
@@ -381,7 +408,11 @@ function PendingRequestsContent({
 				const isRejecting = rejectingId === request._id;
 
 				return (
-					<div className="rounded-lg border p-3" key={request._id}>
+					<div
+						className="rounded-lg border p-3"
+						data-testid={`pending-request-${request._id}`}
+						key={request._id}
+					>
 						<div className="flex items-center justify-between">
 							<div>
 								<p className="font-medium text-sm">
@@ -396,7 +427,10 @@ function PendingRequestsContent({
 							</div>
 							<div className="flex gap-2">
 								<Button
-									onClick={() => onApprove(request._id)}
+									aria-label={`Approve ${user?.email ?? request._id}`}
+									onClick={async () => {
+										await onApprove(request._id);
+									}}
 									size="sm"
 									variant="outline"
 								>
@@ -404,6 +438,7 @@ function PendingRequestsContent({
 									Approve
 								</Button>
 								<Button
+									aria-label={`Reject ${user?.email ?? request._id}`}
 									onClick={() =>
 										isRejecting
 											? onSetRejectingId(null)
@@ -420,15 +455,17 @@ function PendingRequestsContent({
 						{isRejecting && (
 							<div className="mt-3 flex gap-2">
 								<input
+									aria-label="Rejection reason"
 									className="flex-1 rounded border px-2 py-1 text-sm"
 									onChange={(e) => onSetRejectionReason(e.target.value)}
 									placeholder="Rejection reason..."
 									value={rejectionReason}
 								/>
 								<Button
+									aria-label={`Confirm rejection for ${user?.email ?? request._id}`}
 									disabled={!rejectionReason.trim()}
-									onClick={() => {
-										onReject(request._id, rejectionReason);
+									onClick={async () => {
+										await onReject(request._id, rejectionReason);
 										onSetRejectingId(null);
 										onSetRejectionReason("");
 									}}
@@ -487,6 +524,7 @@ function MemberRequestSection() {
 								const isSelected = selectedRole === slug;
 								return (
 									<button
+										aria-label={`Select ${meta?.label ?? slug} role`}
 										className={`rounded-full border px-3 py-1 text-sm transition-all ${
 											isSelected
 												? `ring-2 ring-primary ${colors?.badge ?? ""}`
@@ -527,7 +565,11 @@ function MemberRequestSection() {
 								>
 									Submit Request
 								</Button>
-								{error && <p className="text-destructive text-sm">{error}</p>}
+								{error && (
+									<p className="text-destructive text-sm" role="alert">
+										{error}
+									</p>
+								)}
 							</div>
 						)}
 					</div>

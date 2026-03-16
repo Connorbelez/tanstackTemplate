@@ -1,13 +1,13 @@
 import { v } from "convex/values";
 import { AuditLog } from "convex-audit-log";
 import { components } from "../_generated/api";
-import { mutation, query } from "../_generated/server";
+import { authedMutation, authedQuery } from "../fluent";
 
 const auditLog = new AuditLog(components.auditLog);
 
-export const createDocument = mutation({
-	args: { title: v.string(), body: v.string() },
-	handler: async (ctx, args) => {
+export const createDocument = authedMutation
+	.input({ title: v.string(), body: v.string() })
+	.handler(async (ctx, args) => {
 		const id = await ctx.db.insert("demo_audit_documents", {
 			title: args.title,
 			body: args.body,
@@ -22,17 +22,17 @@ export const createDocument = mutation({
 			metadata: { title: args.title },
 		});
 		return id;
-	},
-});
+	})
+	.public();
 
-export const updateDocument = mutation({
-	args: {
+export const updateDocument = authedMutation
+	.input({
 		id: v.id("demo_audit_documents"),
 		title: v.string(),
 		body: v.string(),
 		status: v.string(),
-	},
-	handler: async (ctx, args) => {
+	})
+	.handler(async (ctx, args) => {
 		const before = await ctx.db.get(args.id);
 		if (!before) {
 			throw new Error("Document not found");
@@ -53,12 +53,12 @@ export const updateDocument = mutation({
 			generateDiff: true,
 			severity: "info",
 		});
-	},
-});
+	})
+	.public();
 
-export const deleteDocument = mutation({
-	args: { id: v.id("demo_audit_documents") },
-	handler: async (ctx, args) => {
+export const deleteDocument = authedMutation
+	.input({ id: v.id("demo_audit_documents") })
+	.handler(async (ctx, args) => {
 		const doc = await ctx.db.get(args.id);
 		if (!doc) {
 			throw new Error("Document not found");
@@ -72,19 +72,18 @@ export const deleteDocument = mutation({
 			severity: "warning",
 			metadata: { title: doc.title },
 		});
-	},
-});
+	})
+	.public();
 
-export const listDocuments = query({
-	args: {},
-	handler: async (ctx) => {
+export const listDocuments = authedQuery
+	.handler(async (ctx) => {
 		return await ctx.db.query("demo_audit_documents").order("desc").take(20);
-	},
-});
+	})
+	.public();
 
-export const getAuditTrail = query({
-	args: { resourceId: v.optional(v.string()) },
-	handler: async (ctx, args) => {
+export const getAuditTrail = authedQuery
+	.input({ resourceId: v.optional(v.string()) })
+	.handler(async (ctx, args) => {
 		if (args.resourceId) {
 			return await auditLog.queryByResource(ctx, {
 				resourceType: "demo_audit_documents",
@@ -96,5 +95,5 @@ export const getAuditTrail = query({
 			actorId: "demo-user",
 			limit: 50,
 		});
-	},
-});
+	})
+	.public();

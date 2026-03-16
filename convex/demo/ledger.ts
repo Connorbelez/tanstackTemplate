@@ -1,6 +1,6 @@
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
-import { mutation, query } from "../_generated/server";
+import { authedMutation, authedQuery } from "../fluent";
 import { getAccountLenderId } from "../ledger/accountOwnership";
 import { UNITS_PER_MORTGAGE } from "../ledger/constants";
 import {
@@ -101,9 +101,8 @@ async function postSeedEntry(
 
 // ── Mutations ────────────────────────────────────────────────────
 
-export const seedData = mutation({
-	args: {},
-	handler: async (ctx) => {
+export const seedData = authedMutation
+	.handler(async (ctx) => {
 		// Idempotency: check if any demo TREASURY accounts exist for any demo mortgage
 		for (const mortgage of DEMO_MORTGAGES) {
 			const existing = await ctx.db
@@ -168,12 +167,11 @@ export const seedData = mutation({
 			seeded: true,
 			message: `Seeded ${DEMO_MORTGAGES.length} mortgages with lenders.`,
 		};
-	},
-});
+	})
+	.public();
 
-export const cleanup = mutation({
-	args: {},
-	handler: async (ctx) => {
+export const cleanup = authedMutation
+	.handler(async (ctx) => {
 		// Collect all demo mortgage IDs by scanning TREASURY and POSITION accounts
 		const allAccounts = await ctx.db.query("ledger_accounts").collect();
 
@@ -243,14 +241,13 @@ export const cleanup = mutation({
 		}
 
 		return { deletedEntries, deletedAccounts: demoAccountIds.length };
-	},
-});
+	})
+	.public();
 
 // ── Queries ──────────────────────────────────────────────────────
 
-export const getDemoState = query({
-	args: {},
-	handler: async (ctx) => {
+export const getDemoState = authedQuery
+	.handler(async (ctx) => {
 		// Find all demo accounts
 		const allAccounts = await ctx.db.query("ledger_accounts").collect();
 
@@ -338,12 +335,11 @@ export const getDemoState = query({
 		}
 
 		return { mortgages, totalEntries };
-	},
-});
+	})
+	.public();
 
-export const getDemoJournal = query({
-	args: {},
-	handler: async (ctx) => {
+export const getDemoJournal = authedQuery
+	.handler(async (ctx) => {
 		// Collect demo mortgage IDs
 		const allAccounts = await ctx.db.query("ledger_accounts").collect();
 
@@ -422,5 +418,5 @@ export const getDemoJournal = query({
 				timestamp: entry.timestamp,
 			};
 		});
-	},
-});
+	})
+	.public();

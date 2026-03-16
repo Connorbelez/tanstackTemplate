@@ -109,9 +109,17 @@ Proposed CLAUDE.md amendments from issues encountered during development. Review
 **Proposed amendment:**
 > For `convex-test` integration tests: (1) pass modules as `convexTest(schema, modules)` not `convexTest(schema, { modules })`. (2) Use `import.meta.glob("../../../../convex/**/*.*s")` from `src/test/` directories. (3) Add `fluent-convex` to `test.server.deps.inline` in vite.config.ts to fix ESM resolution.
 
-## Lesson 13: Convex components must be registered in convex-test
+## Lesson 13 (AMENDED): Convex component registration in convex-test — only when code paths hit them
 **Date:** 2026-03-15
 **Context:** Integration tests for onboarding mutations all failed with `Component "auditLog" is not registered. Call "t.registerComponent"`. The onboarding mutations call `auditLog.log()` which requires the `auditLog` component to be registered with the test instance. The `convex-audit-log` package exports a `register` function from `convex-audit-log/test` that handles this. Also needed to add `convex-audit-log` to `test.server.deps.inline` in vite.config.ts for ESM resolution.
 **Root cause:** Tests used `convexTest(schema, modules)` without registering any Convex components. Any code path that calls a component API (like `auditLog.log()`) will fail unless the component is registered via `t.registerComponent()` or the component's exported `register()` helper.
 **Proposed amendment:**
 > When writing `convex-test` integration tests for code that uses Convex components (audit-log, rate-limiter, etc.), you MUST register each component with the test instance. Most components export a `register()` function from their `/test` entrypoint (e.g. `import auditLogTest from "convex-audit-log/test"; auditLogTest.register(t)`). Also add the component package to `test.server.deps.inline` in vite.config.ts.
+> **IMPORTANT CAVEAT:** Only register components when the tests actually exercise code paths that call those components. Adding `auditLogTest.register()` imports `@convex-dev/aggregate/test` which uses `import.meta.glob` and can break if not properly inlined. The `auditAuthFailure` function (used by auth middleware on FAILED auth) doesn't need registration when all tests pass valid identity — the audit failure path is never hit.
+
+## Lesson 14: Don't narrow convex-test module globs unless you have a specific reason
+**Date:** 2026-03-15
+**Context:** When migrating ledger tests to support fluent auth middleware, an agent narrowed the broad `import.meta.glob("/convex/**/*.ts")` to selective subdirectory globs, then imported `auditLogTest` to register the audit log component. This caused `import.meta.glob is not a function` errors because `@convex-dev/aggregate/test` (transitively imported) wasn't properly inlined. The fix was to revert to the original broad glob and remove the unnecessary `auditLogTest` registration — auth middleware only calls `auditAuthFailure` on FAILED auth, but all test cases pass valid identity.
+**Root cause:** Over-engineering the test setup by adding unnecessary component registration for code paths that tests don't exercise.
+**Proposed amendment:**
+> Keep `convex-test` module globs broad (`import.meta.glob("/convex/**/*.ts")`) unless you have a measured performance reason to narrow them. Don't add component test registrations unless your tests actually exercise code paths that call those components.

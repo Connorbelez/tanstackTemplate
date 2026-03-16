@@ -2,7 +2,7 @@ import { Migrations } from "@convex-dev/migrations";
 import { v } from "convex/values";
 import { components, internal } from "../_generated/api";
 import type { DataModel } from "../_generated/dataModel";
-import { mutation, query } from "../_generated/server";
+import { authedMutation, authedQuery } from "../fluent";
 
 const migrations = new Migrations<DataModel>(components.migrations);
 
@@ -15,16 +15,15 @@ export const addMigratedFlag = migrations.define({
 	},
 });
 
-export const runMigration = mutation({
-	args: {},
-	handler: async (ctx) => {
+export const runMigration = authedMutation
+	.handler(async (ctx) => {
 		await migrations.runOne(ctx, internal.demo.migrations.addMigratedFlag);
-	},
-});
+	})
+	.public();
 
-export const seedItems = mutation({
-	args: { count: v.optional(v.number()) },
-	handler: async (ctx, args) => {
+export const seedItems = authedMutation
+	.input({ count: v.optional(v.number()) })
+	.handler(async (ctx, args) => {
 		const count = args.count ?? 50;
 		const existing = await ctx.db.query("demo_migrations_items").collect();
 		if (existing.length > 0) {
@@ -36,23 +35,21 @@ export const seedItems = mutation({
 			});
 		}
 		return { seeded: count, message: `Seeded ${count} items` };
-	},
-});
+	})
+	.public();
 
-export const clearItems = mutation({
-	args: {},
-	handler: async (ctx) => {
+export const clearItems = authedMutation
+	.handler(async (ctx) => {
 		const items = await ctx.db.query("demo_migrations_items").collect();
 		for (const item of items) {
 			await ctx.db.delete(item._id);
 		}
 		return { cleared: items.length };
-	},
-});
+	})
+	.public();
 
-export const listItems = query({
-	args: {},
-	handler: async (ctx) => {
+export const listItems = authedQuery
+	.handler(async (ctx) => {
 		const items = await ctx.db
 			.query("demo_migrations_items")
 			.order("asc")
@@ -60,5 +57,5 @@ export const listItems = query({
 		const returned = items.length;
 		const migrated = items.filter((i) => i.migrated === true).length;
 		return { items, returned, migrated };
-	},
-});
+	})
+	.public();

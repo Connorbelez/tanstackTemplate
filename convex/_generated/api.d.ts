@@ -47,6 +47,7 @@ import type * as documentEngine_templateTimeline from "../documentEngine/templat
 import type * as documentEngine_templateVersions from "../documentEngine/templateVersions.js";
 import type * as documentEngine_templates from "../documentEngine/templates.js";
 import type * as documentEngine_validators from "../documentEngine/validators.js";
+import type * as engine_auditJournal from "../engine/auditJournal.js";
 import type * as engine_effects_onboarding from "../engine/effects/onboarding.js";
 import type * as engine_effects_registry from "../engine/effects/registry.js";
 import type * as engine_hashChain from "../engine/hashChain.js";
@@ -121,6 +122,7 @@ declare const fullApi: ApiFromModules<{
   "documentEngine/templateVersions": typeof documentEngine_templateVersions;
   "documentEngine/templates": typeof documentEngine_templates;
   "documentEngine/validators": typeof documentEngine_validators;
+  "engine/auditJournal": typeof engine_auditJournal;
   "engine/effects/onboarding": typeof engine_effects_onboarding;
   "engine/effects/registry": typeof engine_effects_registry;
   "engine/hashChain": typeof engine_hashChain;

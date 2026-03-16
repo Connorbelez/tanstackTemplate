@@ -1,12 +1,8 @@
 import { WorkflowManager } from "@convex-dev/workflow";
 import { v } from "convex/values";
 import { components, internal } from "../_generated/api";
-import {
-	internalAction,
-	internalMutation,
-	mutation,
-	query,
-} from "../_generated/server";
+import { internalAction, internalMutation } from "../_generated/server";
+import { authedMutation, authedQuery } from "../fluent";
 
 const workflow = new WorkflowManager(components.workflow);
 
@@ -55,13 +51,9 @@ export const updateOrderStep = internalMutation({
 	},
 });
 
-export const startOrder = mutation({
-	args: { amount: v.number() },
-	returns: v.object({
-		orderId: v.id("demo_workflow_orders"),
-		workflowId: v.string(),
-	}),
-	handler: async (ctx, args) => {
+export const startOrder = authedMutation
+	.input({ amount: v.number() })
+	.handler(async (ctx, args) => {
 		const orderId = await ctx.db.insert("demo_workflow_orders", {
 			amount: args.amount,
 			status: "pending",
@@ -73,12 +65,11 @@ export const startOrder = mutation({
 			{ orderId }
 		);
 		return { orderId, workflowId };
-	},
-});
+	})
+	.public();
 
-export const listOrders = query({
-	args: {},
-	handler: async (ctx) => {
+export const listOrders = authedQuery
+	.handler(async (ctx) => {
 		return await ctx.db.query("demo_workflow_orders").order("desc").take(10);
-	},
-});
+	})
+	.public();

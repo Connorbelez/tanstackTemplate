@@ -1,9 +1,8 @@
-import { query } from "../_generated/server";
+import { authedQuery } from "../fluent";
 
 /** Lightweight demo stats for the RBAC security overview page. */
-export const getSecurityOverviewStats = query({
-	args: {},
-	handler: async (ctx) => {
+export const getSecurityOverviewStats = authedQuery
+	.handler(async (ctx) => {
 		const [users, roles, organizations, pendingRequests] = await Promise.all([
 			ctx.db.query("users").collect(),
 			ctx.db.query("roles").collect(),
@@ -20,5 +19,5 @@ export const getSecurityOverviewStats = query({
 			orgCount: organizations.length,
 			pendingRequestCount: pendingRequests.length,
 		};
-	},
-});
+	})
+	.public();

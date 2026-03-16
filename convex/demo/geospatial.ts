@@ -2,21 +2,21 @@ import { GeospatialIndex } from "@convex-dev/geospatial";
 import { v } from "convex/values";
 import { components } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
-import { mutation, query } from "../_generated/server";
+import { authedMutation, authedQuery } from "../fluent";
 
 const geo = new GeospatialIndex<
 	Id<"demo_geospatial_places">,
 	{ category: string }
 >(components.geospatial);
 
-export const addPlace = mutation({
-	args: {
+export const addPlace = authedMutation
+	.input({
 		name: v.string(),
 		latitude: v.number(),
 		longitude: v.number(),
 		category: v.string(),
-	},
-	handler: async (ctx, args) => {
+	})
+	.handler(async (ctx, args) => {
 		const id = await ctx.db.insert("demo_geospatial_places", {
 			name: args.name,
 			latitude: args.latitude,
@@ -31,36 +31,35 @@ export const addPlace = mutation({
 			0
 		);
 		return id;
-	},
-});
+	})
+	.public();
 
-export const removePlace = mutation({
-	args: { id: v.id("demo_geospatial_places") },
-	handler: async (ctx, args) => {
+export const removePlace = authedMutation
+	.input({ id: v.id("demo_geospatial_places") })
+	.handler(async (ctx, args) => {
 		const doc = await ctx.db.get(args.id);
 		if (!doc) {
 			throw new Error("Place not found");
 		}
 		await geo.remove(ctx, args.id);
 		await ctx.db.delete(args.id);
-	},
-});
+	})
+	.public();
 
-export const listPlaces = query({
-	args: {},
-	handler: async (ctx) => {
+export const listPlaces = authedQuery
+	.handler(async (ctx) => {
 		return await ctx.db.query("demo_geospatial_places").order("desc").take(50);
-	},
-});
+	})
+	.public();
 
-export const searchArea = query({
-	args: {
+export const searchArea = authedQuery
+	.input({
 		west: v.number(),
 		south: v.number(),
 		east: v.number(),
 		north: v.number(),
-	},
-	handler: async (ctx, args) => {
+	})
+	.handler(async (ctx, args) => {
 		const results = await geo.query(ctx, {
 			shape: {
 				type: "rectangle",
@@ -74,12 +73,11 @@ export const searchArea = query({
 			limit: 50,
 		});
 		return results;
-	},
-});
+	})
+	.public();
 
-export const seedPlaces = mutation({
-	args: {},
-	handler: async (ctx) => {
+export const seedPlaces = authedMutation
+	.handler(async (ctx) => {
 		const existing = await ctx.db.query("demo_geospatial_places").take(1);
 		if (existing.length > 0) {
 			return { seeded: 0 };
@@ -147,5 +145,5 @@ export const seedPlaces = mutation({
 			);
 		}
 		return { seeded: places.length };
-	},
-});
+	})
+	.public();

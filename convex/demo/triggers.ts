@@ -6,7 +6,9 @@ import {
 } from "convex-helpers/server/customFunctions";
 import { Triggers } from "convex-helpers/server/triggers";
 import type { DataModel } from "../_generated/dataModel";
-import { query, mutation as rawMutation } from "../_generated/server";
+// biome-ignore lint/style/noRestrictedImports: Triggers require raw mutation for customMutation with wrapDB
+import { mutation as rawMutation } from "../_generated/server";
+import { authedQuery } from "../fluent";
 
 const triggers = new Triggers<DataModel>();
 
@@ -203,23 +205,20 @@ export const seedContacts = mutation({
 });
 
 // ── Queries ─────────────────────────────────────────────────────────
-export const listContacts = query({
-	args: {},
-	handler: async (ctx) => {
+export const listContacts = authedQuery
+	.handler(async (ctx) => {
 		return await ctx.db.query("demo_triggers_contacts").order("desc").collect();
-	},
-});
+	})
+	.public();
 
-export const getStats = query({
-	args: {},
-	handler: async (ctx) => {
+export const getStats = authedQuery
+	.handler(async (ctx) => {
 		return await ctx.db.query("demo_triggers_stats").collect();
-	},
-});
+	})
+	.public();
 
-export const getLog = query({
-	args: {},
-	handler: async (ctx) => {
+export const getLog = authedQuery
+	.handler(async (ctx) => {
 		return await ctx.db.query("demo_triggers_log").order("desc").take(50);
-	},
-});
+	})
+	.public();
