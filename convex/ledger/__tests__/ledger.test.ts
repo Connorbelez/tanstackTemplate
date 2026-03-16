@@ -1,12 +1,34 @@
 import { convexTest } from "convex-test";
 import { describe, expect, it } from "vitest";
 import { api } from "../../_generated/api";
+import { FAIRLEND_STAFF_ORG_ID } from "../../constants";
 import schema from "../../schema";
 
 const modules = import.meta.glob("/convex/**/*.ts");
 
+// ── Auth identity for ledger tests ──────────────────────────────
+// FairLend admin with ledger:view + ledger:correct permissions.
+// Covers ledgerQuery, ledgerMutation, adminQuery, and adminMutation chains.
+const LEDGER_TEST_IDENTITY = {
+	subject: "test-ledger-user",
+	issuer: "https://api.workos.com",
+	org_id: FAIRLEND_STAFF_ORG_ID,
+	organization_name: "FairLend Staff",
+	role: "admin",
+	roles: JSON.stringify(["admin"]),
+	permissions: JSON.stringify(["ledger:view", "ledger:correct"]),
+	user_email: "ledger-test@fairlend.ca",
+	user_first_name: "Ledger",
+	user_last_name: "Tester",
+};
+
 function createTestHarness() {
 	return convexTest(schema, modules);
+}
+
+/** Return an authenticated test context with ledger permissions. */
+function asLedgerUser(t: ReturnType<typeof createTestHarness>) {
+	return t.withIdentity(LEDGER_TEST_IDENTITY);
 }
 
 // ── Helpers ───────────────────────────────────────────────────────
@@ -24,13 +46,14 @@ async function mintAndIssue(
 	lenderId: string,
 	amount = 10_000n
 ) {
-	const mintResult = await t.mutation(api.ledger.mutations.mintMortgage, {
+	const auth = asLedgerUser(t);
+	const mintResult = await auth.mutation(api.ledger.mutations.mintMortgage, {
 		mortgageId,
 		effectiveDate: "2026-01-01",
 		idempotencyKey: `mint-${mortgageId}`,
 		source: SYS_SOURCE,
 	});
-	const issueResult = await t.mutation(api.ledger.mutations.issueShares, {
+	const issueResult = await auth.mutation(api.ledger.mutations.issueShares, {
 		mortgageId,
 		lenderId,
 		amount,
@@ -46,9 +69,10 @@ async function mintAndIssue(
 describe("Ledger Full Lifecycle", () => {
 	it("T-041: mintMortgage → issueShares → transferShares → redeemShares → burnMortgage", async () => {
 		const t = createTestHarness();
+		const auth = asLedgerUser(t);
 
 		// 1. Mint mortgage
-		const { treasuryAccountId } = await t.mutation(
+		const { treasuryAccountId } = await auth.mutation(
 			api.ledger.mutations.mintMortgage,
 			{
 				mortgageId: "m1",
@@ -59,13 +83,13 @@ describe("Ledger Full Lifecycle", () => {
 		);
 
 		// Verify TREASURY = 10,000
-		const treasuryBalance = await t.query(api.ledger.queries.getBalance, {
+		const treasuryBalance = await auth.query(api.ledger.queries.getBalance, {
 			accountId: treasuryAccountId,
 		});
 		expect(treasuryBalance).toBe(10_000n);
 
 		// 2. Issue all to lender A
-		const { positionAccountId: posA } = await t.mutation(
+		const { positionAccountId: posA } = await auth.mutation(
 			api.ledger.mutations.issueShares,
 			{
 				mortgageId: "m1",
@@ -78,18 +102,18 @@ describe("Ledger Full Lifecycle", () => {
 		);
 
 		expect(
-			await t.query(api.ledger.queries.getBalance, {
+			await auth.query(api.ledger.queries.getBalance, {
 				accountId: treasuryAccountId,
 			})
 		).toBe(0n);
 		expect(
-			await t.query(api.ledger.queries.getBalance, {
+			await auth.query(api.ledger.queries.getBalance, {
 				accountId: posA,
 			})
 		).toBe(10_000n);
 
 		// 3. Transfer 5,000 from A to B
-		const { buyerAccountId: posB } = await t.mutation(
+		const { buyerAccountId: posB } = await auth.mutation(
 			api.ledger.mutations.transferShares,
 			{
 				mortgageId: "m1",
@@ -103,21 +127,21 @@ describe("Ledger Full Lifecycle", () => {
 		);
 
 		expect(
-			await t.query(api.ledger.queries.getBalance, { accountId: posA })
+			await auth.query(api.ledger.queries.getBalance, { accountId: posA })
 		).toBe(5_000n);
 		expect(
-			await t.query(api.ledger.queries.getBalance, { accountId: posB })
+			await auth.query(api.ledger.queries.getBalance, { accountId: posB })
 		).toBe(5_000n);
 
 		// Supply invariant should hold
-		const invariant = await t.query(
+		const invariant = await auth.query(
 			api.ledger.validation.validateSupplyInvariant,
 			{ mortgageId: "m1" }
 		);
 		expect(invariant.valid).toBe(true);
 
 		// 4. Redeem B's 5,000
-		await t.mutation(api.ledger.mutations.redeemShares, {
+		await auth.mutation(api.ledger.mutations.redeemShares, {
 			mortgageId: "m1",
 			lenderId: "lender-b",
 			amount: 5_000n,
@@ -127,11 +151,11 @@ describe("Ledger Full Lifecycle", () => {
 		});
 
 		expect(
-			await t.query(api.ledger.queries.getBalance, { accountId: posB })
+			await auth.query(api.ledger.queries.getBalance, { accountId: posB })
 		).toBe(0n);
 
 		// 5. Redeem A's 5,000
-		await t.mutation(api.ledger.mutations.redeemShares, {
+		await auth.mutation(api.ledger.mutations.redeemShares, {
 			mortgageId: "m1",
 			lenderId: "lender-a",
 			amount: 5_000n,
@@ -141,13 +165,13 @@ describe("Ledger Full Lifecycle", () => {
 		});
 
 		expect(
-			await t.query(api.ledger.queries.getBalance, {
+			await auth.query(api.ledger.queries.getBalance, {
 				accountId: treasuryAccountId,
 			})
 		).toBe(10_000n);
 
 		// 6. Burn
-		await t.mutation(api.ledger.mutations.burnMortgage, {
+		await auth.mutation(api.ledger.mutations.burnMortgage, {
 			mortgageId: "m1",
 			effectiveDate: "2026-01-04",
 			idempotencyKey: "burn-m1",
@@ -157,7 +181,7 @@ describe("Ledger Full Lifecycle", () => {
 
 		// Treasury should be 0 after burn
 		expect(
-			await t.query(api.ledger.queries.getBalance, {
+			await auth.query(api.ledger.queries.getBalance, {
 				accountId: treasuryAccountId,
 			})
 		).toBe(0n);
@@ -169,9 +193,10 @@ describe("Ledger Full Lifecycle", () => {
 describe("Transfer Validation", () => {
 	it("T-042: transferShares creates buyer POSITION on first purchase", async () => {
 		const t = createTestHarness();
+		const auth = asLedgerUser(t);
 		await mintAndIssue(t, "m1", "seller");
 
-		const { buyerAccountId } = await t.mutation(
+		const { buyerAccountId } = await auth.mutation(
 			api.ledger.mutations.transferShares,
 			{
 				mortgageId: "m1",
@@ -186,7 +211,7 @@ describe("Transfer Validation", () => {
 
 		expect(buyerAccountId).toBeDefined();
 		expect(
-			await t.query(api.ledger.queries.getBalance, {
+			await auth.query(api.ledger.queries.getBalance, {
 				accountId: buyerAccountId,
 			})
 		).toBe(5_000n);
@@ -194,12 +219,13 @@ describe("Transfer Validation", () => {
 
 	it("T-043: transferShares rejects cross-mortgage transfer", async () => {
 		const t = createTestHarness();
+		const auth = asLedgerUser(t);
 		await mintAndIssue(t, "m1", "lender-a");
 		await mintAndIssue(t, "m2", "lender-b");
 
 		// Try to transfer from lender-a on m1 to lender-b, but seller has no position on m2
 		await expect(
-			t.mutation(api.ledger.mutations.transferShares, {
+			auth.mutation(api.ledger.mutations.transferShares, {
 				mortgageId: "m2",
 				sellerLenderId: "lender-a",
 				buyerLenderId: "lender-c",
@@ -213,10 +239,11 @@ describe("Transfer Validation", () => {
 
 	it("T-044: transferShares allows seller full exit (balance → 0)", async () => {
 		const t = createTestHarness();
+		const auth = asLedgerUser(t);
 		await mintAndIssue(t, "m1", "seller");
 
 		// Transfer all 10,000 — full exit is allowed
-		await t.mutation(api.ledger.mutations.transferShares, {
+		await auth.mutation(api.ledger.mutations.transferShares, {
 			mortgageId: "m1",
 			sellerLenderId: "seller",
 			buyerLenderId: "buyer",
@@ -227,7 +254,7 @@ describe("Transfer Validation", () => {
 		});
 
 		// Verify positions
-		const positions = await t.query(api.ledger.queries.getPositions, {
+		const positions = await auth.query(api.ledger.queries.getPositions, {
 			mortgageId: "m1",
 		});
 		expect(positions).toHaveLength(1);
@@ -237,11 +264,12 @@ describe("Transfer Validation", () => {
 
 	it("T-045: transferShares rejects seller remainder between 1-999", async () => {
 		const t = createTestHarness();
+		const auth = asLedgerUser(t);
 		await mintAndIssue(t, "m1", "seller");
 
 		// Transfer 9,500 leaves seller with 500 — below minimum
 		await expect(
-			t.mutation(api.ledger.mutations.transferShares, {
+			auth.mutation(api.ledger.mutations.transferShares, {
 				mortgageId: "m1",
 				sellerLenderId: "seller",
 				buyerLenderId: "buyer",
@@ -255,11 +283,12 @@ describe("Transfer Validation", () => {
 
 	it("T-046: transferShares rejects buyer position below 1,000", async () => {
 		const t = createTestHarness();
+		const auth = asLedgerUser(t);
 		await mintAndIssue(t, "m1", "seller");
 
 		// Transfer 500 to buyer — below minimum
 		await expect(
-			t.mutation(api.ledger.mutations.transferShares, {
+			auth.mutation(api.ledger.mutations.transferShares, {
 				mortgageId: "m1",
 				sellerLenderId: "seller",
 				buyerLenderId: "buyer",
@@ -273,10 +302,11 @@ describe("Transfer Validation", () => {
 
 	it("T-047: transferShares rejects insufficient seller balance", async () => {
 		const t = createTestHarness();
+		const auth = asLedgerUser(t);
 		await mintAndIssue(t, "m1", "seller", 5_000n);
 
 		await expect(
-			t.mutation(api.ledger.mutations.transferShares, {
+			auth.mutation(api.ledger.mutations.transferShares, {
 				mortgageId: "m1",
 				sellerLenderId: "seller",
 				buyerLenderId: "buyer",
@@ -290,19 +320,23 @@ describe("Transfer Validation", () => {
 
 	it("T-047b: rejected transfer leaves state unchanged", async () => {
 		const t = createTestHarness();
+		const auth = asLedgerUser(t);
 		const { issueResult } = await mintAndIssue(t, "m1", "seller", 5_000n);
 
 		// Record state before rejection
-		const balanceBefore = await t.query(api.ledger.queries.getBalance, {
+		const balanceBefore = await auth.query(api.ledger.queries.getBalance, {
 			accountId: issueResult.positionAccountId,
 		});
-		const historyBefore = await t.query(api.ledger.queries.getMortgageHistory, {
-			mortgageId: "m1",
-		});
+		const historyBefore = await auth.query(
+			api.ledger.queries.getMortgageHistory,
+			{
+				mortgageId: "m1",
+			}
+		);
 
 		// Attempt transfer that exceeds balance — must reject
 		await expect(
-			t.mutation(api.ledger.mutations.transferShares, {
+			auth.mutation(api.ledger.mutations.transferShares, {
 				mortgageId: "m1",
 				sellerLenderId: "seller",
 				buyerLenderId: "buyer",
@@ -314,23 +348,27 @@ describe("Transfer Validation", () => {
 		).rejects.toThrow();
 
 		// Verify state unchanged: balance same, no new journal entries
-		const balanceAfter = await t.query(api.ledger.queries.getBalance, {
+		const balanceAfter = await auth.query(api.ledger.queries.getBalance, {
 			accountId: issueResult.positionAccountId,
 		});
 		expect(balanceAfter).toBe(balanceBefore);
 
-		const historyAfter = await t.query(api.ledger.queries.getMortgageHistory, {
-			mortgageId: "m1",
-		});
+		const historyAfter = await auth.query(
+			api.ledger.queries.getMortgageHistory,
+			{
+				mortgageId: "m1",
+			}
+		);
 		expect(historyAfter).toHaveLength(historyBefore.length);
 	});
 
 	it("T-048: transferShares reuses existing buyer POSITION on buy-back", async () => {
 		const t = createTestHarness();
+		const auth = asLedgerUser(t);
 		await mintAndIssue(t, "m1", "seller");
 
 		// First transfer to buyer
-		const { buyerAccountId: firstId } = await t.mutation(
+		const { buyerAccountId: firstId } = await auth.mutation(
 			api.ledger.mutations.transferShares,
 			{
 				mortgageId: "m1",
@@ -344,7 +382,7 @@ describe("Transfer Validation", () => {
 		);
 
 		// Transfer back to seller (full exit for buyer)
-		await t.mutation(api.ledger.mutations.transferShares, {
+		await auth.mutation(api.ledger.mutations.transferShares, {
 			mortgageId: "m1",
 			sellerLenderId: "buyer",
 			buyerLenderId: "seller",
@@ -355,7 +393,7 @@ describe("Transfer Validation", () => {
 		});
 
 		// Transfer back to buyer again — same account should be reused
-		const { buyerAccountId: secondId } = await t.mutation(
+		const { buyerAccountId: secondId } = await auth.mutation(
 			api.ledger.mutations.transferShares,
 			{
 				mortgageId: "m1",
@@ -377,14 +415,15 @@ describe("Transfer Validation", () => {
 describe("Issuance & Redemption", () => {
 	it("T-049: issueShares creates POSITION account on first purchase", async () => {
 		const t = createTestHarness();
-		await t.mutation(api.ledger.mutations.mintMortgage, {
+		const auth = asLedgerUser(t);
+		await auth.mutation(api.ledger.mutations.mintMortgage, {
 			mortgageId: "m1",
 			effectiveDate: "2026-01-01",
 			idempotencyKey: "mint-m1",
 			source: SYS_SOURCE,
 		});
 
-		const { positionAccountId } = await t.mutation(
+		const { positionAccountId } = await auth.mutation(
 			api.ledger.mutations.issueShares,
 			{
 				mortgageId: "m1",
@@ -398,7 +437,7 @@ describe("Issuance & Redemption", () => {
 
 		expect(positionAccountId).toBeDefined();
 		expect(
-			await t.query(api.ledger.queries.getBalance, {
+			await auth.query(api.ledger.queries.getBalance, {
 				accountId: positionAccountId,
 			})
 		).toBe(5_000n);
@@ -406,11 +445,12 @@ describe("Issuance & Redemption", () => {
 
 	it("T-050: issueShares rejects when TREASURY balance insufficient", async () => {
 		const t = createTestHarness();
+		const auth = asLedgerUser(t);
 		await mintAndIssue(t, "m1", "lender-a");
 
 		// Treasury is now 0 — can't issue more
 		await expect(
-			t.mutation(api.ledger.mutations.issueShares, {
+			auth.mutation(api.ledger.mutations.issueShares, {
 				mortgageId: "m1",
 				lenderId: "lender-b",
 				amount: 1_000n,
@@ -423,7 +463,8 @@ describe("Issuance & Redemption", () => {
 
 	it("T-051: issueShares rejects resulting position < 1,000", async () => {
 		const t = createTestHarness();
-		await t.mutation(api.ledger.mutations.mintMortgage, {
+		const auth = asLedgerUser(t);
+		await auth.mutation(api.ledger.mutations.mintMortgage, {
 			mortgageId: "m1",
 			effectiveDate: "2026-01-01",
 			idempotencyKey: "mint-m1",
@@ -431,7 +472,7 @@ describe("Issuance & Redemption", () => {
 		});
 
 		await expect(
-			t.mutation(api.ledger.mutations.issueShares, {
+			auth.mutation(api.ledger.mutations.issueShares, {
 				mortgageId: "m1",
 				lenderId: "lender-a",
 				amount: 500n,
@@ -444,9 +485,10 @@ describe("Issuance & Redemption", () => {
 
 	it("T-052: redeemShares full exit (position → 0) allowed", async () => {
 		const t = createTestHarness();
+		const auth = asLedgerUser(t);
 		await mintAndIssue(t, "m1", "lender-a", 5_000n);
 
-		await t.mutation(api.ledger.mutations.redeemShares, {
+		await auth.mutation(api.ledger.mutations.redeemShares, {
 			mortgageId: "m1",
 			lenderId: "lender-a",
 			amount: 5_000n,
@@ -456,7 +498,7 @@ describe("Issuance & Redemption", () => {
 		});
 
 		// Verify no positions left
-		const positions = await t.query(api.ledger.queries.getPositions, {
+		const positions = await auth.query(api.ledger.queries.getPositions, {
 			mortgageId: "m1",
 		});
 		expect(positions).toHaveLength(0);
@@ -464,10 +506,11 @@ describe("Issuance & Redemption", () => {
 
 	it("T-053: redeemShares rejects remainder between 1-999", async () => {
 		const t = createTestHarness();
+		const auth = asLedgerUser(t);
 		await mintAndIssue(t, "m1", "lender-a", 5_000n);
 
 		await expect(
-			t.mutation(api.ledger.mutations.redeemShares, {
+			auth.mutation(api.ledger.mutations.redeemShares, {
 				mortgageId: "m1",
 				lenderId: "lender-a",
 				amount: 4_500n,
@@ -480,7 +523,8 @@ describe("Issuance & Redemption", () => {
 
 	it("T-054: redeemShares throws if lender has no POSITION", async () => {
 		const t = createTestHarness();
-		await t.mutation(api.ledger.mutations.mintMortgage, {
+		const auth = asLedgerUser(t);
+		await auth.mutation(api.ledger.mutations.mintMortgage, {
 			mortgageId: "m1",
 			effectiveDate: "2026-01-01",
 			idempotencyKey: "mint-m1",
@@ -488,7 +532,7 @@ describe("Issuance & Redemption", () => {
 		});
 
 		await expect(
-			t.mutation(api.ledger.mutations.redeemShares, {
+			auth.mutation(api.ledger.mutations.redeemShares, {
 				mortgageId: "m1",
 				lenderId: "ghost",
 				amount: 1_000n,
@@ -505,7 +549,8 @@ describe("Issuance & Redemption", () => {
 describe("Tier 1 postEntry Strict Behavior", () => {
 	it("T-055: postEntry throws when debitAccountId doesn't exist", async () => {
 		const t = createTestHarness();
-		const { treasuryAccountId } = await t.mutation(
+		const auth = asLedgerUser(t);
+		const { treasuryAccountId } = await auth.mutation(
 			api.ledger.mutations.mintMortgage,
 			{
 				mortgageId: "m1",
@@ -516,7 +561,7 @@ describe("Tier 1 postEntry Strict Behavior", () => {
 		);
 
 		await expect(
-			t.mutation(api.ledger.mutations.postEntry, {
+			auth.mutation(api.ledger.mutations.postEntry, {
 				entryType: "SHARES_ISSUED",
 				mortgageId: "m1",
 				debitAccountId:
@@ -532,6 +577,7 @@ describe("Tier 1 postEntry Strict Behavior", () => {
 
 	it("T-057: postEntry works with pre-resolved account IDs and returns correct journal entry", async () => {
 		const t = createTestHarness();
+		const auth = asLedgerUser(t);
 		const { mintResult, issueResult } = await mintAndIssue(
 			t,
 			"m1",
@@ -539,7 +585,7 @@ describe("Tier 1 postEntry Strict Behavior", () => {
 		);
 
 		// Use Tier 1 postEntry directly to redeem 1,000 shares
-		const entry = await t.mutation(api.ledger.mutations.postEntry, {
+		const entry = await auth.mutation(api.ledger.mutations.postEntry, {
 			entryType: "SHARES_REDEEMED",
 			mortgageId: "m1",
 			debitAccountId: mintResult.treasuryAccountId,
@@ -564,12 +610,12 @@ describe("Tier 1 postEntry Strict Behavior", () => {
 
 		// Verify balances updated correctly
 		expect(
-			await t.query(api.ledger.queries.getBalance, {
+			await auth.query(api.ledger.queries.getBalance, {
 				accountId: mintResult.treasuryAccountId,
 			})
 		).toBe(1_000n);
 		expect(
-			await t.query(api.ledger.queries.getBalance, {
+			await auth.query(api.ledger.queries.getBalance, {
 				accountId: issueResult.positionAccountId,
 			})
 		).toBe(9_000n);
@@ -577,7 +623,8 @@ describe("Tier 1 postEntry Strict Behavior", () => {
 
 	it("T-056: postEntry throws when creditAccountId doesn't exist", async () => {
 		const t = createTestHarness();
-		const { treasuryAccountId } = await t.mutation(
+		const auth = asLedgerUser(t);
+		const { treasuryAccountId } = await auth.mutation(
 			api.ledger.mutations.mintMortgage,
 			{
 				mortgageId: "m1",
@@ -588,7 +635,7 @@ describe("Tier 1 postEntry Strict Behavior", () => {
 		);
 
 		await expect(
-			t.mutation(api.ledger.mutations.postEntry, {
+			auth.mutation(api.ledger.mutations.postEntry, {
 				entryType: "SHARES_ISSUED",
 				mortgageId: "m1",
 				debitAccountId: treasuryAccountId,
@@ -608,7 +655,8 @@ describe("Tier 1 postEntry Strict Behavior", () => {
 describe("Mint & Burn", () => {
 	it("T-058: mintMortgage rejects double-mint", async () => {
 		const t = createTestHarness();
-		await t.mutation(api.ledger.mutations.mintMortgage, {
+		const auth = asLedgerUser(t);
+		await auth.mutation(api.ledger.mutations.mintMortgage, {
 			mortgageId: "m1",
 			effectiveDate: "2026-01-01",
 			idempotencyKey: "mint-m1",
@@ -616,7 +664,7 @@ describe("Mint & Burn", () => {
 		});
 
 		await expect(
-			t.mutation(api.ledger.mutations.mintMortgage, {
+			auth.mutation(api.ledger.mutations.mintMortgage, {
 				mortgageId: "m1",
 				effectiveDate: "2026-01-01",
 				idempotencyKey: "mint-m1-dup",
@@ -627,10 +675,11 @@ describe("Mint & Burn", () => {
 
 	it("T-059: burnMortgage rejects when POSITION accounts still have balance", async () => {
 		const t = createTestHarness();
+		const auth = asLedgerUser(t);
 		await mintAndIssue(t, "m1", "lender-a");
 
 		await expect(
-			t.mutation(api.ledger.mutations.burnMortgage, {
+			auth.mutation(api.ledger.mutations.burnMortgage, {
 				mortgageId: "m1",
 				effectiveDate: "2026-01-02",
 				idempotencyKey: "burn-m1",
@@ -642,10 +691,11 @@ describe("Mint & Burn", () => {
 
 	it("T-060: burnMortgage rejects when TREASURY != 10,000", async () => {
 		const t = createTestHarness();
+		const auth = asLedgerUser(t);
 		await mintAndIssue(t, "m1", "lender-a", 5_000n);
 
 		await expect(
-			t.mutation(api.ledger.mutations.burnMortgage, {
+			auth.mutation(api.ledger.mutations.burnMortgage, {
 				mortgageId: "m1",
 				effectiveDate: "2026-01-02",
 				idempotencyKey: "burn-m1",
@@ -661,6 +711,7 @@ describe("Mint & Burn", () => {
 describe("CORRECTION", () => {
 	it("T-061: CORRECTION requires source.type == 'user' with actor", async () => {
 		const t = createTestHarness();
+		const auth = asLedgerUser(t);
 		const { mintResult, issueResult } = await mintAndIssue(
 			t,
 			"m1",
@@ -668,7 +719,7 @@ describe("CORRECTION", () => {
 		);
 
 		await expect(
-			t.mutation(api.ledger.mutations.postEntry, {
+			auth.mutation(api.ledger.mutations.postEntry, {
 				entryType: "CORRECTION",
 				mortgageId: "m1",
 				debitAccountId: issueResult.positionAccountId,
@@ -685,6 +736,7 @@ describe("CORRECTION", () => {
 
 	it("T-062: CORRECTION requires causedBy reference", async () => {
 		const t = createTestHarness();
+		const auth = asLedgerUser(t);
 		const { mintResult, issueResult } = await mintAndIssue(
 			t,
 			"m1",
@@ -692,7 +744,7 @@ describe("CORRECTION", () => {
 		);
 
 		await expect(
-			t.mutation(api.ledger.mutations.postEntry, {
+			auth.mutation(api.ledger.mutations.postEntry, {
 				entryType: "CORRECTION",
 				mortgageId: "m1",
 				debitAccountId: issueResult.positionAccountId,
@@ -708,6 +760,7 @@ describe("CORRECTION", () => {
 
 	it("T-063: CORRECTION requires reason string", async () => {
 		const t = createTestHarness();
+		const auth = asLedgerUser(t);
 		const { mintResult, issueResult } = await mintAndIssue(
 			t,
 			"m1",
@@ -715,7 +768,7 @@ describe("CORRECTION", () => {
 		);
 
 		await expect(
-			t.mutation(api.ledger.mutations.postEntry, {
+			auth.mutation(api.ledger.mutations.postEntry, {
 				entryType: "CORRECTION",
 				mortgageId: "m1",
 				debitAccountId: issueResult.positionAccountId,
@@ -731,6 +784,7 @@ describe("CORRECTION", () => {
 
 	it("T-064b: valid CORRECTION updates balances and preserves supply invariant", async () => {
 		const t = createTestHarness();
+		const auth = asLedgerUser(t);
 		const { mintResult, issueResult } = await mintAndIssue(
 			t,
 			"m1",
@@ -738,18 +792,21 @@ describe("CORRECTION", () => {
 		);
 
 		// Correction: move 1,000 units from POSITION back to TREASURY
-		const correctionEntry = await t.mutation(api.ledger.mutations.postEntry, {
-			entryType: "CORRECTION",
-			mortgageId: "m1",
-			debitAccountId: mintResult.treasuryAccountId,
-			creditAccountId: issueResult.positionAccountId,
-			amount: 1_000n,
-			effectiveDate: "2026-01-02",
-			idempotencyKey: "correction-happy",
-			source: ADMIN_SOURCE,
-			causedBy: issueResult.journalEntry._id,
-			reason: "Over-issuance correction",
-		});
+		const correctionEntry = await auth.mutation(
+			api.ledger.mutations.postEntry,
+			{
+				entryType: "CORRECTION",
+				mortgageId: "m1",
+				debitAccountId: mintResult.treasuryAccountId,
+				creditAccountId: issueResult.positionAccountId,
+				amount: 1_000n,
+				effectiveDate: "2026-01-02",
+				idempotencyKey: "correction-happy",
+				source: ADMIN_SOURCE,
+				causedBy: issueResult.journalEntry._id,
+				reason: "Over-issuance correction",
+			}
+		);
 
 		// Verify the correction entry was written
 		expect(correctionEntry.entryType).toBe("CORRECTION");
@@ -759,18 +816,18 @@ describe("CORRECTION", () => {
 
 		// Verify balances updated
 		expect(
-			await t.query(api.ledger.queries.getBalance, {
+			await auth.query(api.ledger.queries.getBalance, {
 				accountId: mintResult.treasuryAccountId,
 			})
 		).toBe(1_000n);
 		expect(
-			await t.query(api.ledger.queries.getBalance, {
+			await auth.query(api.ledger.queries.getBalance, {
 				accountId: issueResult.positionAccountId,
 			})
 		).toBe(9_000n);
 
 		// Supply invariant must still hold
-		const invariant = await t.query(
+		const invariant = await auth.query(
 			api.ledger.validation.validateSupplyInvariant,
 			{ mortgageId: "m1" }
 		);
@@ -780,6 +837,7 @@ describe("CORRECTION", () => {
 
 	it("T-064: CORRECTION enforces balance checks", async () => {
 		const t = createTestHarness();
+		const auth = asLedgerUser(t);
 		const { mintResult, issueResult } = await mintAndIssue(
 			t,
 			"m1",
@@ -788,7 +846,7 @@ describe("CORRECTION", () => {
 
 		// Try correction that would make position negative (taking 11,000 from a 10,000 position)
 		await expect(
-			t.mutation(api.ledger.mutations.postEntry, {
+			auth.mutation(api.ledger.mutations.postEntry, {
 				entryType: "CORRECTION",
 				mortgageId: "m1",
 				debitAccountId: mintResult.treasuryAccountId,
@@ -805,12 +863,13 @@ describe("CORRECTION", () => {
 
 	it("T-064c: CORRECTION rejects cross-mortgage unit movement", async () => {
 		const t = createTestHarness();
+		const auth = asLedgerUser(t);
 		const m1 = await mintAndIssue(t, "m1", "lender-a");
 		const m2 = await mintAndIssue(t, "m2", "lender-b");
 
 		// Attempt CORRECTION moving units from m1 POSITION to m2 TREASURY
 		await expect(
-			t.mutation(api.ledger.mutations.postEntry, {
+			auth.mutation(api.ledger.mutations.postEntry, {
 				entryType: "CORRECTION",
 				mortgageId: "m1",
 				debitAccountId: m2.mintResult.treasuryAccountId,
@@ -831,14 +890,15 @@ describe("CORRECTION", () => {
 describe("Idempotency & Sequencing", () => {
 	it("T-065: same idempotencyKey returns existing entry, no double-post", async () => {
 		const t = createTestHarness();
-		await t.mutation(api.ledger.mutations.mintMortgage, {
+		const auth = asLedgerUser(t);
+		await auth.mutation(api.ledger.mutations.mintMortgage, {
 			mortgageId: "m1",
 			effectiveDate: "2026-01-01",
 			idempotencyKey: "mint-m1",
 			source: SYS_SOURCE,
 		});
 
-		const first = await t.mutation(api.ledger.mutations.issueShares, {
+		const first = await auth.mutation(api.ledger.mutations.issueShares, {
 			mortgageId: "m1",
 			lenderId: "lender-a",
 			amount: 5_000n,
@@ -847,7 +907,7 @@ describe("Idempotency & Sequencing", () => {
 			source: SYS_SOURCE,
 		});
 
-		const second = await t.mutation(api.ledger.mutations.issueShares, {
+		const second = await auth.mutation(api.ledger.mutations.issueShares, {
 			mortgageId: "m1",
 			lenderId: "lender-a",
 			amount: 5_000n,
@@ -861,7 +921,7 @@ describe("Idempotency & Sequencing", () => {
 
 		// Balance should be 5,000 not 10,000
 		expect(
-			await t.query(api.ledger.queries.getBalance, {
+			await auth.query(api.ledger.queries.getBalance, {
 				accountId: first.positionAccountId,
 			})
 		).toBe(5_000n);
@@ -869,14 +929,15 @@ describe("Idempotency & Sequencing", () => {
 
 	it("T-066: sequence numbers are monotonic and gap-free", async () => {
 		const t = createTestHarness();
-		await t.mutation(api.ledger.mutations.mintMortgage, {
+		const auth = asLedgerUser(t);
+		await auth.mutation(api.ledger.mutations.mintMortgage, {
 			mortgageId: "m1",
 			effectiveDate: "2026-01-01",
 			idempotencyKey: "mint-m1",
 			source: SYS_SOURCE,
 		});
 
-		await t.mutation(api.ledger.mutations.issueShares, {
+		await auth.mutation(api.ledger.mutations.issueShares, {
 			mortgageId: "m1",
 			lenderId: "lender-a",
 			amount: 5_000n,
@@ -885,7 +946,7 @@ describe("Idempotency & Sequencing", () => {
 			source: SYS_SOURCE,
 		});
 
-		await t.mutation(api.ledger.mutations.issueShares, {
+		await auth.mutation(api.ledger.mutations.issueShares, {
 			mortgageId: "m1",
 			lenderId: "lender-b",
 			amount: 5_000n,
@@ -894,7 +955,7 @@ describe("Idempotency & Sequencing", () => {
 			source: SYS_SOURCE,
 		});
 
-		const history = await t.query(api.ledger.queries.getMortgageHistory, {
+		const history = await auth.query(api.ledger.queries.getMortgageHistory, {
 			mortgageId: "m1",
 		});
 
@@ -910,11 +971,12 @@ describe("Idempotency & Sequencing", () => {
 describe("Lender Position Queries", () => {
 	it("T-022b: getLenderPositions returns positions across multiple mortgages", async () => {
 		const t = createTestHarness();
+		const auth = asLedgerUser(t);
 		await mintAndIssue(t, "m1", "lender-a", 5_000n);
 		await mintAndIssue(t, "m2", "lender-a", 3_000n);
 
 		// Also issue to lender-b on m1 so lender-a doesn't hold everything
-		await t.mutation(api.ledger.mutations.issueShares, {
+		await auth.mutation(api.ledger.mutations.issueShares, {
 			mortgageId: "m1",
 			lenderId: "lender-b",
 			amount: 5_000n,
@@ -923,9 +985,12 @@ describe("Lender Position Queries", () => {
 			source: SYS_SOURCE,
 		});
 
-		const positions = await t.query(api.ledger.queries.getLenderPositions, {
-			lenderId: "lender-a",
-		});
+		const positions = await auth.query(
+			api.ledger.queries.getLenderPositions,
+			{
+				lenderId: "lender-a",
+			}
+		);
 
 		expect(positions).toHaveLength(2);
 		const mortgageIds = positions.map((p) => p.mortgageId).sort();
@@ -939,10 +1004,11 @@ describe("Lender Position Queries", () => {
 
 	it("T-022b-zero: getLenderPositions excludes zero-balance positions", async () => {
 		const t = createTestHarness();
+		const auth = asLedgerUser(t);
 		await mintAndIssue(t, "m1", "lender-a");
 
 		// Transfer all away — lender-a has 0 balance
-		await t.mutation(api.ledger.mutations.transferShares, {
+		await auth.mutation(api.ledger.mutations.transferShares, {
 			mortgageId: "m1",
 			sellerLenderId: "lender-a",
 			buyerLenderId: "lender-b",
@@ -952,9 +1018,12 @@ describe("Lender Position Queries", () => {
 			source: SYS_SOURCE,
 		});
 
-		const positions = await t.query(api.ledger.queries.getLenderPositions, {
-			lenderId: "lender-a",
-		});
+		const positions = await auth.query(
+			api.ledger.queries.getLenderPositions,
+			{
+				lenderId: "lender-a",
+			}
+		);
 		expect(positions).toHaveLength(0);
 	});
 });
@@ -964,6 +1033,7 @@ describe("Lender Position Queries", () => {
 describe("Point-in-Time & History", () => {
 	it("T-067: getPositionsAt shows pre-transfer state", async () => {
 		const t = createTestHarness();
+		const auth = asLedgerUser(t);
 		await mintAndIssue(t, "m1", "lender-a");
 
 		// Record time before transfer
@@ -972,7 +1042,7 @@ describe("Point-in-Time & History", () => {
 		// Small delay to ensure distinct timestamps
 		await new Promise((r) => setTimeout(r, 10));
 
-		await t.mutation(api.ledger.mutations.transferShares, {
+		await auth.mutation(api.ledger.mutations.transferShares, {
 			mortgageId: "m1",
 			sellerLenderId: "lender-a",
 			buyerLenderId: "lender-b",
@@ -983,10 +1053,13 @@ describe("Point-in-Time & History", () => {
 		});
 
 		// Query at time before transfer — should show only lender-a with 10,000
-		const positionsBefore = await t.query(api.ledger.queries.getPositionsAt, {
-			mortgageId: "m1",
-			asOf: beforeTransfer,
-		});
+		const positionsBefore = await auth.query(
+			api.ledger.queries.getPositionsAt,
+			{
+				mortgageId: "m1",
+				asOf: beforeTransfer,
+			}
+		);
 		expect(positionsBefore).toHaveLength(1);
 		expect(positionsBefore[0].lenderId).toBe("lender-a");
 		expect(positionsBefore[0].balance).toBe(10_000n);
@@ -994,7 +1067,8 @@ describe("Point-in-Time & History", () => {
 
 	it("T-068: getBalanceAt reconstructs balance at various timestamps", async () => {
 		const t = createTestHarness();
-		const { treasuryAccountId } = await t.mutation(
+		const auth = asLedgerUser(t);
+		const { treasuryAccountId } = await auth.mutation(
 			api.ledger.mutations.mintMortgage,
 			{
 				mortgageId: "m1",
@@ -1007,7 +1081,7 @@ describe("Point-in-Time & History", () => {
 		const afterMint = Date.now();
 		await new Promise((r) => setTimeout(r, 10));
 
-		const { positionAccountId } = await t.mutation(
+		const { positionAccountId } = await auth.mutation(
 			api.ledger.mutations.issueShares,
 			{
 				mortgageId: "m1",
@@ -1022,31 +1096,41 @@ describe("Point-in-Time & History", () => {
 		const afterIssue = Date.now();
 
 		// At afterMint: treasury = 10,000, position doesn't exist yet in journal
-		const treasuryAtMint = await t.query(api.ledger.queries.getBalanceAt, {
-			accountId: treasuryAccountId,
-			asOf: afterMint,
-		});
+		const treasuryAtMint = await auth.query(
+			api.ledger.queries.getBalanceAt,
+			{
+				accountId: treasuryAccountId,
+				asOf: afterMint,
+			}
+		);
 		expect(treasuryAtMint).toBe(10_000n);
 
 		// At afterIssue: treasury = 4,000, position = 6,000
-		const treasuryAtIssue = await t.query(api.ledger.queries.getBalanceAt, {
-			accountId: treasuryAccountId,
-			asOf: afterIssue,
-		});
+		const treasuryAtIssue = await auth.query(
+			api.ledger.queries.getBalanceAt,
+			{
+				accountId: treasuryAccountId,
+				asOf: afterIssue,
+			}
+		);
 		expect(treasuryAtIssue).toBe(4_000n);
 
-		const positionAtIssue = await t.query(api.ledger.queries.getBalanceAt, {
-			accountId: positionAccountId,
-			asOf: afterIssue,
-		});
+		const positionAtIssue = await auth.query(
+			api.ledger.queries.getBalanceAt,
+			{
+				accountId: positionAccountId,
+				asOf: afterIssue,
+			}
+		);
 		expect(positionAtIssue).toBe(6_000n);
 	});
 
 	it("T-069: getMortgageHistory returns entries in sequence order", async () => {
 		const t = createTestHarness();
+		const auth = asLedgerUser(t);
 		await mintAndIssue(t, "m1", "lender-a");
 
-		const history = await t.query(api.ledger.queries.getMortgageHistory, {
+		const history = await auth.query(api.ledger.queries.getMortgageHistory, {
 			mortgageId: "m1",
 		});
 
@@ -1060,9 +1144,10 @@ describe("Point-in-Time & History", () => {
 
 	it("T-070: getAccountHistory returns entries touching an account", async () => {
 		const t = createTestHarness();
+		const auth = asLedgerUser(t);
 		const { issueResult } = await mintAndIssue(t, "m1", "lender-a");
 
-		await t.mutation(api.ledger.mutations.transferShares, {
+		await auth.mutation(api.ledger.mutations.transferShares, {
 			mortgageId: "m1",
 			sellerLenderId: "lender-a",
 			buyerLenderId: "lender-b",
@@ -1072,7 +1157,7 @@ describe("Point-in-Time & History", () => {
 			source: SYS_SOURCE,
 		});
 
-		const history = await t.query(api.ledger.queries.getAccountHistory, {
+		const history = await auth.query(api.ledger.queries.getAccountHistory, {
 			accountId: issueResult.positionAccountId,
 		});
 
@@ -1082,12 +1167,13 @@ describe("Point-in-Time & History", () => {
 
 	it("T-069b: getMortgageHistory filters by from/to date range", async () => {
 		const t = createTestHarness();
+		const auth = asLedgerUser(t);
 		await mintAndIssue(t, "m1", "lender-a");
 
 		const afterIssue = Date.now();
 		await new Promise((r) => setTimeout(r, 10));
 
-		await t.mutation(api.ledger.mutations.transferShares, {
+		await auth.mutation(api.ledger.mutations.transferShares, {
 			mortgageId: "m1",
 			sellerLenderId: "lender-a",
 			buyerLenderId: "lender-b",
@@ -1098,7 +1184,7 @@ describe("Point-in-Time & History", () => {
 		});
 
 		// Only entries AFTER the issue (should get just the transfer)
-		const filtered = await t.query(api.ledger.queries.getMortgageHistory, {
+		const filtered = await auth.query(api.ledger.queries.getMortgageHistory, {
 			mortgageId: "m1",
 			from: afterIssue + 1,
 		});
@@ -1106,7 +1192,7 @@ describe("Point-in-Time & History", () => {
 		expect(filtered[0].entryType).toBe("SHARES_TRANSFERRED");
 
 		// Only entries BEFORE the transfer (should get mint + issue)
-		const beforeTransfer = await t.query(
+		const beforeTransfer = await auth.query(
 			api.ledger.queries.getMortgageHistory,
 			{
 				mortgageId: "m1",
@@ -1118,9 +1204,10 @@ describe("Point-in-Time & History", () => {
 
 	it("T-069c: getMortgageHistory respects limit", async () => {
 		const t = createTestHarness();
+		const auth = asLedgerUser(t);
 		await mintAndIssue(t, "m1", "lender-a");
 
-		await t.mutation(api.ledger.mutations.transferShares, {
+		await auth.mutation(api.ledger.mutations.transferShares, {
 			mortgageId: "m1",
 			sellerLenderId: "lender-a",
 			buyerLenderId: "lender-b",
@@ -1131,7 +1218,7 @@ describe("Point-in-Time & History", () => {
 		});
 
 		// 3 entries total (mint, issue, transfer) — limit to 2
-		const limited = await t.query(api.ledger.queries.getMortgageHistory, {
+		const limited = await auth.query(api.ledger.queries.getMortgageHistory, {
 			mortgageId: "m1",
 			limit: 2,
 		});
@@ -1143,12 +1230,13 @@ describe("Point-in-Time & History", () => {
 
 	it("T-070b: getAccountHistory filters by from/to date range", async () => {
 		const t = createTestHarness();
+		const auth = asLedgerUser(t);
 		const { issueResult } = await mintAndIssue(t, "m1", "lender-a");
 
 		const afterIssue = Date.now();
 		await new Promise((r) => setTimeout(r, 10));
 
-		await t.mutation(api.ledger.mutations.transferShares, {
+		await auth.mutation(api.ledger.mutations.transferShares, {
 			mortgageId: "m1",
 			sellerLenderId: "lender-a",
 			buyerLenderId: "lender-b",
@@ -1160,7 +1248,7 @@ describe("Point-in-Time & History", () => {
 
 		// lender-a's account: issuance (before afterIssue) + transfer (after afterIssue)
 		// Filter to only entries after issuance
-		const filtered = await t.query(api.ledger.queries.getAccountHistory, {
+		const filtered = await auth.query(api.ledger.queries.getAccountHistory, {
 			accountId: issueResult.positionAccountId,
 			from: afterIssue + 1,
 		});
@@ -1174,9 +1262,10 @@ describe("Point-in-Time & History", () => {
 describe("Validation & Cursors", () => {
 	it("T-071: validateSupplyInvariant returns valid=true for healthy mortgage", async () => {
 		const t = createTestHarness();
+		const auth = asLedgerUser(t);
 		await mintAndIssue(t, "m1", "lender-a", 5_000n);
 
-		const result = await t.query(
+		const result = await auth.query(
 			api.ledger.validation.validateSupplyInvariant,
 			{ mortgageId: "m1" }
 		);
@@ -1187,30 +1276,31 @@ describe("Validation & Cursors", () => {
 
 	it("T-072: consumer cursor lifecycle: create, advance, reset", async () => {
 		const t = createTestHarness();
+		const auth = asLedgerUser(t);
 
 		// Get cursor — should be null initially
-		const initial = await t.query(api.ledger.cursors.getCursor, {
+		const initial = await auth.query(api.ledger.cursors.getCursor, {
 			consumerId: "accrual_engine",
 		});
 		expect(initial).toBeNull();
 
 		// Advance cursor
-		await t.mutation(api.ledger.cursors.advanceCursor, {
+		await auth.mutation(api.ledger.cursors.advanceCursor, {
 			consumerId: "accrual_engine",
 			lastProcessedSequence: 5n,
 		});
 
-		const after = await t.query(api.ledger.cursors.getCursor, {
+		const after = await auth.query(api.ledger.cursors.getCursor, {
 			consumerId: "accrual_engine",
 		});
 		expect(after?.lastProcessedSequence).toBe(5n);
 
 		// Reset cursor
-		await t.mutation(api.ledger.cursors.resetCursor, {
+		await auth.mutation(api.ledger.cursors.resetCursor, {
 			consumerId: "accrual_engine",
 		});
 
-		const reset = await t.query(api.ledger.cursors.getCursor, {
+		const reset = await auth.query(api.ledger.cursors.getCursor, {
 			consumerId: "accrual_engine",
 		});
 		expect(reset?.lastProcessedSequence).toBe(0n);
@@ -1222,6 +1312,7 @@ describe("Validation & Cursors", () => {
 describe("Common Rejections", () => {
 	it("T-073: amount <= 0 is rejected", async () => {
 		const t = createTestHarness();
+		const auth = asLedgerUser(t);
 		const { mintResult, issueResult } = await mintAndIssue(
 			t,
 			"m1",
@@ -1229,7 +1320,7 @@ describe("Common Rejections", () => {
 		);
 
 		await expect(
-			t.mutation(api.ledger.mutations.postEntry, {
+			auth.mutation(api.ledger.mutations.postEntry, {
 				entryType: "CORRECTION",
 				mortgageId: "m1",
 				debitAccountId: issueResult.positionAccountId,
@@ -1246,10 +1337,11 @@ describe("Common Rejections", () => {
 
 	it("T-074: self-transfer (debit == credit) is rejected", async () => {
 		const t = createTestHarness();
+		const auth = asLedgerUser(t);
 		const { issueResult } = await mintAndIssue(t, "m1", "lender-a");
 
 		await expect(
-			t.mutation(api.ledger.mutations.postEntry, {
+			auth.mutation(api.ledger.mutations.postEntry, {
 				entryType: "CORRECTION",
 				mortgageId: "m1",
 				debitAccountId: issueResult.positionAccountId,
@@ -1266,6 +1358,7 @@ describe("Common Rejections", () => {
 
 	it("T-075: SHARES_ISSUED rejects wrong account types (POSITION as credit instead of TREASURY)", async () => {
 		const t = createTestHarness();
+		const auth = asLedgerUser(t);
 		const { mintResult, issueResult } = await mintAndIssue(
 			t,
 			"m1",
@@ -1274,7 +1367,7 @@ describe("Common Rejections", () => {
 		);
 
 		// Issue to a second lender so we have two different POSITION accounts
-		await t.mutation(api.ledger.mutations.issueShares, {
+		await auth.mutation(api.ledger.mutations.issueShares, {
 			mortgageId: "m1",
 			lenderId: "lender-b",
 			amount: 5_000n,
@@ -1286,7 +1379,7 @@ describe("Common Rejections", () => {
 		// SHARES_ISSUED expects debit=POSITION, credit=TREASURY
 		// Pass debit=TREASURY (wrong), credit=POSITION (wrong) — two different IDs
 		await expect(
-			t.mutation(api.ledger.mutations.postEntry, {
+			auth.mutation(api.ledger.mutations.postEntry, {
 				entryType: "SHARES_ISSUED",
 				mortgageId: "m1",
 				debitAccountId: mintResult.treasuryAccountId,
@@ -1301,6 +1394,7 @@ describe("Common Rejections", () => {
 
 	it("T-075b: MORTGAGE_MINTED rejects wrong account types", async () => {
 		const t = createTestHarness();
+		const auth = asLedgerUser(t);
 		const { mintResult, issueResult } = await mintAndIssue(
 			t,
 			"m1",
@@ -1310,7 +1404,7 @@ describe("Common Rejections", () => {
 		// MORTGAGE_MINTED expects debit=TREASURY, credit=WORLD
 		// Pass debit=POSITION (wrong), credit=TREASURY (wrong)
 		await expect(
-			t.mutation(api.ledger.mutations.postEntry, {
+			auth.mutation(api.ledger.mutations.postEntry, {
 				entryType: "MORTGAGE_MINTED",
 				mortgageId: "m1",
 				debitAccountId: issueResult.positionAccountId,
@@ -1325,6 +1419,7 @@ describe("Common Rejections", () => {
 
 	it("T-075c: SHARES_REDEEMED rejects wrong account types", async () => {
 		const t = createTestHarness();
+		const auth = asLedgerUser(t);
 		const { mintResult, issueResult } = await mintAndIssue(
 			t,
 			"m1",
@@ -1334,7 +1429,7 @@ describe("Common Rejections", () => {
 		// SHARES_REDEEMED expects debit=TREASURY, credit=POSITION
 		// Pass debit=POSITION (wrong), credit=TREASURY (wrong)
 		await expect(
-			t.mutation(api.ledger.mutations.postEntry, {
+			auth.mutation(api.ledger.mutations.postEntry, {
 				entryType: "SHARES_REDEEMED",
 				mortgageId: "m1",
 				debitAccountId: issueResult.positionAccountId,

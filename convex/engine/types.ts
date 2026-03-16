@@ -6,11 +6,12 @@ export type EntityType = "onboardingRequest" | "mortgage" | "obligation";
 export type CommandChannel =
 	| "borrower_portal"
 	| "broker_portal"
+	| "onboarding_portal"
 	| "admin_dashboard"
 	| "api_webhook"
 	| "scheduler";
 
-export type ActorType = "borrower" | "broker" | "admin" | "system";
+export type ActorType = "borrower" | "broker" | "member" | "admin" | "system";
 
 export interface CommandSource {
 	actorId?: string;

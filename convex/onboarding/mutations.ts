@@ -7,6 +7,7 @@ import {
 	REQUESTABLE_ROLES,
 	type RequestableRole,
 } from "../constants";
+import { appendAuditJournalEntry } from "../engine/auditJournal";
 import { transitionEntity } from "../engine/transition";
 import { adminMutation, authedMutation, requirePermission } from "../fluent";
 import { referralSourceValidator, requestedRoleValidator } from "./validators";
@@ -113,6 +114,7 @@ export const requestRole = authedMutation
 			args.referralSource,
 			invitingBrokerOrgId
 		);
+		const createdAt = Date.now();
 
 		// Create entity
 		const requestId = await ctx.db.insert("onboardingRequests", {
@@ -122,7 +124,25 @@ export const requestRole = authedMutation
 			referralSource: args.referralSource,
 			invitedByBrokerId: args.invitedByBrokerId,
 			targetOrganizationId,
-			createdAt: Date.now(),
+			createdAt,
+		});
+		const journalEntryId = await appendAuditJournalEntry(ctx, {
+			actorId: ctx.viewer.authId,
+			actorType: "member",
+			channel: "onboarding_portal",
+			entityId: requestId,
+			entityType: "onboardingRequest",
+			eventType: "CREATED",
+			payload: {
+				requestedRole,
+				referralSource: args.referralSource,
+				targetOrganizationId,
+				invitedByBrokerId: args.invitedByBrokerId,
+			},
+			previousState: "none",
+			newState: "pending_review",
+			outcome: "transitioned",
+			timestamp: createdAt,
 		});
 
 		await auditLog.log(ctx, {
@@ -137,6 +157,7 @@ export const requestRole = authedMutation
 				previousState: "none",
 				newState: "pending_review",
 				outcome: "transitioned",
+				journalEntryId,
 				requestedRole,
 				referralSource: args.referralSource,
 				targetOrganizationId,

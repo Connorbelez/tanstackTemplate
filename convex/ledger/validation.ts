@@ -1,12 +1,12 @@
 import { v } from "convex/values";
-import { query } from "../_generated/server";
+import { ledgerQuery } from "../fluent";
 import { getAccountLenderId } from "./accountOwnership";
 import { UNITS_PER_MORTGAGE } from "./constants";
 import { computeBalance } from "./internal";
 
-export const validateSupplyInvariant = query({
-	args: { mortgageId: v.string() },
-	handler: async (ctx, args) => {
+export const validateSupplyInvariant = ledgerQuery
+	.input({ mortgageId: v.string() })
+	.handler(async (ctx, args) => {
 		// Find TREASURY
 		const treasury = await ctx.db
 			.query("ledger_accounts")
@@ -60,5 +60,5 @@ export const validateSupplyInvariant = query({
 			positions,
 			total,
 		};
-	},
-});
+	})
+	.public();

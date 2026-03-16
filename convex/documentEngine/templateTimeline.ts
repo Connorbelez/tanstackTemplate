@@ -1,21 +1,25 @@
 import { v } from "convex/values";
 import { Timeline } from "convex-timeline";
 import { components } from "../_generated/api";
-import { mutation } from "../_generated/server";
+import { authedMutation, requirePermission } from "../fluent";
 import { draftStateValidator } from "./validators";
 
 const timeline = new Timeline(components.timeline);
+
+const docGenMutation = authedMutation.use(
+	requirePermission("document:generate")
+);
 
 function scopeKey(templateId: string): string {
 	return `template:${templateId}`;
 }
 
-export const pushDraftState = mutation({
-	args: {
+export const pushDraftState = docGenMutation
+	.input({
 		templateId: v.id("documentTemplates"),
 		draft: draftStateValidator,
-	},
-	handler: async (ctx, args) => {
+	})
+	.handler(async (ctx, args) => {
 		await timeline.push(ctx, scopeKey(args.templateId), args.draft);
 
 		// Also persist to the template table
@@ -24,12 +28,12 @@ export const pushDraftState = mutation({
 			hasDraftChanges: true,
 			updatedAt: Date.now(),
 		});
-	},
-});
+	})
+	.public();
 
-export const undoDraft = mutation({
-	args: { templateId: v.id("documentTemplates") },
-	handler: async (ctx, args) => {
+export const undoDraft = docGenMutation
+	.input({ templateId: v.id("documentTemplates") })
+	.handler(async (ctx, args) => {
 		const template = await ctx.db.get(args.templateId);
 		if (!template) {
 			return null;
@@ -43,12 +47,12 @@ export const undoDraft = mutation({
 			});
 		}
 		return result;
-	},
-});
+	})
+	.public();
 
-export const redoDraft = mutation({
-	args: { templateId: v.id("documentTemplates") },
-	handler: async (ctx, args) => {
+export const redoDraft = docGenMutation
+	.input({ templateId: v.id("documentTemplates") })
+	.handler(async (ctx, args) => {
 		const template = await ctx.db.get(args.templateId);
 		if (!template) {
 			return null;
@@ -62,15 +66,15 @@ export const redoDraft = mutation({
 			});
 		}
 		return result;
-	},
-});
+	})
+	.public();
 
-export const createDraftCheckpoint = mutation({
-	args: {
+export const createDraftCheckpoint = docGenMutation
+	.input({
 		templateId: v.id("documentTemplates"),
 		name: v.string(),
-	},
-	handler: async (ctx, args) => {
+	})
+	.handler(async (ctx, args) => {
 		await timeline.createCheckpoint(ctx, scopeKey(args.templateId), args.name);
-	},
-});
+	})
+	.public();

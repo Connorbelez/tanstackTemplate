@@ -3,6 +3,7 @@ import { v } from "convex/values";
 export const channelValidator = v.union(
 	v.literal("borrower_portal"),
 	v.literal("broker_portal"),
+	v.literal("onboarding_portal"),
 	v.literal("admin_dashboard"),
 	v.literal("api_webhook"),
 	v.literal("scheduler")
@@ -11,6 +12,7 @@ export const channelValidator = v.union(
 export const actorTypeValidator = v.union(
 	v.literal("borrower"),
 	v.literal("broker"),
+	v.literal("member"),
 	v.literal("admin"),
 	v.literal("system")
 );

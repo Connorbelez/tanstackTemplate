@@ -1,12 +1,16 @@
 import { ConvexError, v } from "convex/values";
-import { mutation, query } from "../_generated/server";
+import { authedMutation, authedQuery, requirePermission } from "../fluent";
 
-export const create = mutation({
-	args: {
+const docGenMutation = authedMutation.use(
+	requirePermission("document:generate")
+);
+
+export const create = docGenMutation
+	.input({
 		name: v.string(),
 		description: v.optional(v.string()),
-	},
-	handler: async (ctx, args) => {
+	})
+	.handler(async (ctx, args) => {
 		const now = Date.now();
 		return await ctx.db.insert("documentTemplateGroups", {
 			name: args.name,
@@ -16,12 +20,12 @@ export const create = mutation({
 			createdAt: now,
 			updatedAt: now,
 		});
-	},
-});
+	})
+	.public();
 
-export const get = query({
-	args: { id: v.id("documentTemplateGroups") },
-	handler: async (ctx, args) => {
+export const get = authedQuery
+	.input({ id: v.id("documentTemplateGroups") })
+	.handler(async (ctx, args) => {
 		const group = await ctx.db.get(args.id);
 		if (!group) {
 			return null;
@@ -37,22 +41,22 @@ export const get = query({
 		const templates = templatesWithNulls.filter((t) => t.template !== null);
 
 		return { ...group, templates };
-	},
-});
+	})
+	.public();
 
-export const list = query({
-	args: {},
-	handler: async (ctx) => {
+export const list = authedQuery
+	.input({})
+	.handler(async (ctx) => {
 		return await ctx.db.query("documentTemplateGroups").order("desc").collect();
-	},
-});
+	})
+	.public();
 
-export const addTemplate = mutation({
-	args: {
+export const addTemplate = docGenMutation
+	.input({
 		groupId: v.id("documentTemplateGroups"),
 		templateId: v.id("documentTemplates"),
-	},
-	handler: async (ctx, args) => {
+	})
+	.handler(async (ctx, args) => {
 		const group = await ctx.db.get(args.groupId);
 		if (!group) {
 			throw new ConvexError("Group not found");
@@ -128,15 +132,15 @@ export const addTemplate = mutation({
 				updatedAt: Date.now(),
 			});
 		}
-	},
-});
+	})
+	.public();
 
-export const removeTemplate = mutation({
-	args: {
+export const removeTemplate = docGenMutation
+	.input({
 		groupId: v.id("documentTemplateGroups"),
 		templateId: v.id("documentTemplates"),
-	},
-	handler: async (ctx, args) => {
+	})
+	.handler(async (ctx, args) => {
 		const group = await ctx.db.get(args.groupId);
 		if (!group) {
 			throw new ConvexError("Group not found");
@@ -157,11 +161,11 @@ export const removeTemplate = mutation({
 		}
 
 		await ctx.db.patch(args.groupId, updates);
-	},
-});
+	})
+	.public();
 
-export const reorderTemplates = mutation({
-	args: {
+export const reorderTemplates = docGenMutation
+	.input({
 		groupId: v.id("documentTemplateGroups"),
 		templateRefs: v.array(
 			v.object({
@@ -170,8 +174,8 @@ export const reorderTemplates = mutation({
 				pinnedVersion: v.optional(v.number()),
 			})
 		),
-	},
-	handler: async (ctx, args) => {
+	})
+	.handler(async (ctx, args) => {
 		const group = await ctx.db.get(args.groupId);
 		if (!group) {
 			throw new ConvexError("Group not found");
@@ -193,16 +197,16 @@ export const reorderTemplates = mutation({
 			templateRefs: args.templateRefs,
 			updatedAt: Date.now(),
 		});
-	},
-});
+	})
+	.public();
 
-export const updateMetadata = mutation({
-	args: {
+export const updateMetadata = docGenMutation
+	.input({
 		id: v.id("documentTemplateGroups"),
 		name: v.optional(v.string()),
 		description: v.optional(v.string()),
-	},
-	handler: async (ctx, args) => {
+	})
+	.handler(async (ctx, args) => {
 		const group = await ctx.db.get(args.id);
 		if (!group) {
 			throw new ConvexError("Group not found");
@@ -217,16 +221,16 @@ export const updateMetadata = mutation({
 		}
 
 		await ctx.db.patch(args.id, updates);
-	},
-});
+	})
+	.public();
 
-export const pinVersion = mutation({
-	args: {
+export const pinVersion = docGenMutation
+	.input({
 		groupId: v.id("documentTemplateGroups"),
 		templateId: v.id("documentTemplates"),
 		pinnedVersion: v.optional(v.number()),
-	},
-	handler: async (ctx, args) => {
+	})
+	.handler(async (ctx, args) => {
 		const group = await ctx.db.get(args.groupId);
 		if (!group) {
 			throw new ConvexError("Group not found");
@@ -249,12 +253,12 @@ export const pinVersion = mutation({
 			templateRefs: updatedRefs,
 			updatedAt: Date.now(),
 		});
-	},
-});
+	})
+	.public();
 
-export const remove = mutation({
-	args: { id: v.id("documentTemplateGroups") },
-	handler: async (ctx, args) => {
+export const remove = docGenMutation
+	.input({ id: v.id("documentTemplateGroups") })
+	.handler(async (ctx, args) => {
 		await ctx.db.delete(args.id);
-	},
-});
+	})
+	.public();

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { api } from "../../../../convex/_generated/api";
+import { api, internal } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import {
 	FAIRLEND_BROKERAGE_ORG_ID,
@@ -13,10 +13,25 @@ interface OnboardingAuditEvent {
 	action?: string;
 	metadata?: {
 		eventType?: string;
+		journalEntryId?: string;
 		newState?: string;
 		outcome?: string;
 		previousState?: string;
 	};
+}
+
+interface AuditJournalRow {
+	_id: Id<"auditJournal">;
+	actorId: string;
+	actorType?: string;
+	channel: string;
+	entityId: string;
+	entityType: string;
+	eventType: string;
+	newState: string;
+	outcome: string;
+	payload?: Record<string, unknown>;
+	previousState: string;
 }
 
 async function getOnboardingAuditEvents(
@@ -29,6 +44,20 @@ async function getOnboardingAuditEvents(
 		.query(api.onboarding.queries.getRequestHistory, {
 			requestId,
 		}) as Promise<OnboardingAuditEvent[]>;
+}
+
+async function getAuditJournalRows(
+	t: ReturnType<typeof createTestConvex>,
+	requestId: Id<"onboardingRequests">
+) {
+	return t.run(async (ctx) => {
+		return ctx.db
+			.query("auditJournal")
+			.withIndex("by_entity", (q) =>
+				q.eq("entityType", "onboardingRequest").eq("entityId", requestId)
+			)
+			.collect();
+	}) as Promise<AuditJournalRow[]>;
 }
 
 describe("onboarding mutations", () => {
@@ -179,6 +208,45 @@ describe("onboarding mutations", () => {
 			expect(createdEvent?.metadata?.previousState).toBe("none");
 			expect(createdEvent?.metadata?.newState).toBe("pending_review");
 			expect(createdEvent?.metadata?.outcome).toBe("transitioned");
+		});
+
+		it("writes a real auditJournal row with flattened source fields", async () => {
+			const t = createTestConvex();
+			await seedFromIdentity(t, MEMBER);
+
+			const asMember = t.withIdentity(MEMBER);
+			const requestId = await asMember.mutation(
+				api.onboarding.mutations.requestRole,
+				{
+					requestedRole: "lender",
+					referralSource: "self_signup",
+				}
+			);
+
+			const journalRows = await getAuditJournalRows(t, requestId);
+			expect(journalRows).toHaveLength(1);
+			expect(journalRows[0]).toMatchObject({
+				actorId: MEMBER.subject,
+				actorType: "member",
+				channel: "onboarding_portal",
+				entityId: requestId,
+				entityType: "onboardingRequest",
+				eventType: "CREATED",
+				previousState: "none",
+				newState: "pending_review",
+				outcome: "transitioned",
+			});
+			expect(journalRows[0].payload).toMatchObject({
+				requestedRole: "lender",
+				referralSource: "self_signup",
+				targetOrganizationId: FAIRLEND_BROKERAGE_ORG_ID,
+			});
+
+			const auditEvents = await getOnboardingAuditEvents(t, requestId);
+			const createdEvent = auditEvents.find(
+				(event) => event.action === "transition.onboardingRequest.created"
+			);
+			expect(createdEvent?.metadata?.journalEntryId).toBeDefined();
 		});
 	});
 
@@ -512,6 +580,150 @@ describe("onboarding mutations", () => {
 			);
 			expect(requests).toHaveLength(1);
 			expect(requests?.[0].requestedRole).toBe("lender");
+		});
+	});
+
+	describe("reconciliation", () => {
+		it("reports healthy when the latest journal state matches the entity", async () => {
+			const t = createTestConvex();
+			await seedFromIdentity(t, MEMBER);
+			await seedFromIdentity(t, FAIRLEND_ADMIN);
+
+			const asMember = t.withIdentity(MEMBER);
+			await asMember.mutation(api.onboarding.mutations.requestRole, {
+				requestedRole: "lender",
+				referralSource: "self_signup",
+			});
+
+			const result = await t
+				.withIdentity(FAIRLEND_ADMIN)
+				.query(api.engine.reconciliation.reconcile, {});
+
+			expect(result.discrepancies).toEqual([]);
+			expect(result.isHealthy).toBe(true);
+		});
+
+		it("records a discrepancy when the entity diverges from the latest journal state", async () => {
+			const t = createTestConvex();
+			await seedFromIdentity(t, MEMBER);
+			await seedFromIdentity(t, FAIRLEND_ADMIN);
+
+			const requestId = await t
+				.withIdentity(MEMBER)
+				.mutation(api.onboarding.mutations.requestRole, {
+					requestedRole: "lender",
+					referralSource: "self_signup",
+				});
+
+			await t.run(async (ctx) => {
+				await ctx.db.patch(requestId, {
+					status: "rejected",
+				});
+			});
+
+			const result = await t
+				.withIdentity(FAIRLEND_ADMIN)
+				.query(api.engine.reconciliation.reconcile, {});
+
+			expect(result.isHealthy).toBe(false);
+			expect(result.discrepancies).toContainEqual(
+				expect.objectContaining({
+					entityId: requestId,
+					entityType: "onboardingRequest",
+					entityStatus: "rejected",
+					journalNewState: "pending_review",
+				})
+			);
+		});
+
+		it("records ENTITY_NOT_FOUND when journal rows exist for a deleted onboarding request", async () => {
+			const t = createTestConvex();
+			await seedFromIdentity(t, MEMBER);
+			await seedFromIdentity(t, FAIRLEND_ADMIN);
+
+			const requestId = await t
+				.withIdentity(MEMBER)
+				.mutation(api.onboarding.mutations.requestRole, {
+					requestedRole: "lender",
+					referralSource: "self_signup",
+				});
+
+			await t.run(async (ctx) => {
+				await ctx.db.delete(requestId);
+			});
+
+			const result = await t
+				.withIdentity(FAIRLEND_ADMIN)
+				.query(api.engine.reconciliation.reconcile, {});
+
+			expect(result.isHealthy).toBe(false);
+			expect(result.discrepancies).toContainEqual(
+				expect.objectContaining({
+					entityId: requestId,
+					entityType: "onboardingRequest",
+					entityStatus: "ENTITY_NOT_FOUND",
+					journalNewState: "pending_review",
+				})
+			);
+		});
+
+		it("reports a missing Layer 2 chain when journal rows exist but workflow has not completed", async () => {
+			const t = createTestConvex();
+			await seedFromIdentity(t, MEMBER);
+			await seedFromIdentity(t, FAIRLEND_ADMIN);
+
+			const requestId = await t
+				.withIdentity(MEMBER)
+				.mutation(api.onboarding.mutations.requestRole, {
+					requestedRole: "lender",
+					referralSource: "self_signup",
+				});
+
+			const result = await t
+				.withIdentity(FAIRLEND_ADMIN)
+				.query(api.engine.reconciliation.reconcileLayer2, {});
+
+			expect(result.isHealthy).toBe(false);
+			expect(result.brokenChains).toContainEqual(
+				expect.objectContaining({
+					entityId: requestId,
+					valid: false,
+					eventCount: 0,
+					error: "No Layer 2 entries found for entity with journal records",
+				})
+			);
+		});
+
+		it("reports healthy Layer 2 chains after scheduled workflow steps complete", async () => {
+			const t = createTestConvex();
+			await seedFromIdentity(t, MEMBER);
+			await seedFromIdentity(t, FAIRLEND_ADMIN);
+
+			const requestId = await t
+				.withIdentity(MEMBER)
+				.mutation(api.onboarding.mutations.requestRole, {
+					requestedRole: "lender",
+					referralSource: "self_signup",
+				});
+
+			const journalRows = await getAuditJournalRows(t, requestId);
+			await t.mutation(internal.engine.hashChain.processHashChainStep, {
+				journalEntryId: journalRows[0]._id,
+			});
+
+			const result = await t
+				.withIdentity(FAIRLEND_ADMIN)
+				.query(api.engine.reconciliation.reconcileLayer2, {});
+
+			expect(result.isHealthy).toBe(true);
+			expect(result.verifications).toContainEqual(
+				expect.objectContaining({
+					entityId: requestId,
+					valid: true,
+					eventCount: 1,
+				})
+			);
+			expect(result.brokenChains).toEqual([]);
 		});
 	});
 });

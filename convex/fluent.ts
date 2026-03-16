@@ -280,10 +280,52 @@ export class TimedBuilder<
 	}
 }
 
+// ── Action Auth Middleware (no db — cannot audit) ───────────────────
+// Actions lack ctx.db, so we can't call auditAuthFailure. This middleware
+// mirrors authMiddleware's Viewer construction without the DB-dependent audit.
+export const actionAuthMiddleware = convex
+	.$context<{ auth: Auth }>()
+	.createMiddleware(async (context, next) => {
+		const identity = await context.auth.getUserIdentity();
+		if (!identity) {
+			throw new ConvexError("Unauthorized: sign in required");
+		}
+		const {
+			subject,
+			org_id,
+			organization_name,
+			permissions,
+			role,
+			roles,
+			user_email,
+			user_first_name,
+			user_last_name,
+		} = identity;
+		const permissionsSet = new Set(parseClaimArray(permissions));
+		const roleSet = new Set(parseClaimArray(roles));
+		return next({
+			...context,
+			viewer: {
+				authId: subject,
+				email: user_email,
+				orgId: org_id,
+				orgName: organization_name,
+				firstName: user_first_name,
+				lastName: user_last_name,
+				role,
+				roles: roleSet,
+				permissions: permissionsSet,
+				isFairLendAdmin:
+					org_id === FAIRLEND_STAFF_ORG_ID && roleSet.has("admin"),
+			} as Viewer,
+		});
+	});
+
 // ── Reusable Chains ─────────────────────────────────────────────────
 // Pre-configured chains with auth middleware baked in.
 export const authedQuery = convex.query().use(authMiddleware);
 export const authedMutation = convex.mutation().use(authMiddleware);
+export const authedAction = convex.action().use(actionAuthMiddleware);
 export const adminMutation = convex
 	.mutation()
 	.use(authMiddleware)
@@ -334,6 +376,9 @@ export const dealMutation = authedMutation.use(
 	requirePermission("deal:manage")
 );
 export const ledgerQuery = authedQuery.use(requirePermission("ledger:view"));
+export const ledgerMutation = authedMutation.use(
+	requirePermission("ledger:correct")
+);
 
 export const whoAmI = convex
 	.query()

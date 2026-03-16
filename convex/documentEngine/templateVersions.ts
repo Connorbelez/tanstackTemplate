@@ -1,39 +1,39 @@
 import { v } from "convex/values";
-import { query } from "../_generated/server";
+import { authedQuery } from "../fluent";
 
-export const listByTemplate = query({
-	args: { templateId: v.id("documentTemplates") },
-	handler: async (ctx, args) => {
+export const listByTemplate = authedQuery
+	.input({ templateId: v.id("documentTemplates") })
+	.handler(async (ctx, args) => {
 		return await ctx.db
 			.query("documentTemplateVersions")
 			.withIndex("by_template", (q) => q.eq("templateId", args.templateId))
 			.order("desc")
 			.collect();
-	},
-});
+	})
+	.public();
 
-export const get = query({
-	args: {
+export const get = authedQuery
+	.input({
 		templateId: v.id("documentTemplates"),
 		version: v.number(),
-	},
-	handler: async (ctx, args) => {
+	})
+	.handler(async (ctx, args) => {
 		return await ctx.db
 			.query("documentTemplateVersions")
 			.withIndex("by_template", (q) =>
 				q.eq("templateId", args.templateId).eq("version", args.version)
 			)
 			.first();
-	},
-});
+	})
+	.public();
 
-export const getLatest = query({
-	args: { templateId: v.id("documentTemplates") },
-	handler: async (ctx, args) => {
+export const getLatest = authedQuery
+	.input({ templateId: v.id("documentTemplates") })
+	.handler(async (ctx, args) => {
 		return await ctx.db
 			.query("documentTemplateVersions")
 			.withIndex("by_template", (q) => q.eq("templateId", args.templateId))
 			.order("desc")
 			.first();
-	},
-});
+	})
+	.public();

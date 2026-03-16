@@ -3,7 +3,8 @@ import type { GenericMutationCtx } from "convex/server";
 import { v } from "convex/values";
 import { components, internal } from "./_generated/api";
 import type { DataModel } from "./_generated/dataModel";
-import { internalAction, internalMutation, query } from "./_generated/server";
+import { internalAction, internalMutation } from "./_generated/server";
+import { convex } from "./fluent";
 
 const authFunctions: AuthFunctions = internal.auth;
 
@@ -292,13 +293,13 @@ export const { authKitEvent } = authKit.events({
 	},
 });
 
-export const getCurrentUser = query({
-	args: {},
-	handler: async (ctx, _args) => {
+export const getCurrentUser = convex
+	.query()
+	.handler(async (ctx) => {
 		const user = await authKit.getAuthUser(ctx);
 		return user;
-	},
-});
+	})
+	.public();
 
 // ── Backfill: sync a user's orgs, memberships, and roles from WorkOS ─
 

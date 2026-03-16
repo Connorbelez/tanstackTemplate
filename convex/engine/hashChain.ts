@@ -2,18 +2,50 @@ import { WorkflowManager } from "@convex-dev/workflow";
 import { v } from "convex/values";
 import { components, internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
+import type { MutationCtx } from "../_generated/server";
 import { internalMutation } from "../_generated/server";
 import { AuditTrail } from "../auditTrailClient";
 
 const auditTrail = new AuditTrail(components.auditTrail);
 const workflow = new WorkflowManager(components.workflow);
 
+export function buildAuditTrailInsertArgs(entry: {
+	actorId: string;
+	channel: string;
+	effectsScheduled?: string[];
+	entityId: string;
+	entityType: string;
+	eventType: string;
+	machineVersion?: string;
+	newState: string;
+	outcome: string;
+	previousState: string;
+	reason?: string;
+	timestamp: number;
+}) {
+	return {
+		entityId: entry.entityId,
+		entityType: entry.entityType,
+		eventType: entry.eventType,
+		actorId: entry.actorId,
+		beforeState: entry.previousState,
+		afterState: entry.newState,
+		metadata: JSON.stringify({
+			outcome: entry.outcome,
+			machineVersion: entry.machineVersion,
+			effectsScheduled: entry.effectsScheduled,
+			channel: entry.channel,
+			reason: entry.reason,
+		}),
+		timestamp: entry.timestamp,
+	};
+}
+
 /**
  * Mutation step: reads a journal entry and inserts it into the auditTrail
  * component for SHA-256 hash-chaining (Layer 2).
  *
- * Fire-and-forget: errors are logged but never thrown so they don't
- * propagate to the calling workflow.
+ * Failures are logged and re-thrown so the workflow can apply retries.
  */
 export const processHashChainStep = internalMutation({
 	args: {
@@ -30,27 +62,13 @@ export const processHashChainStep = internalMutation({
 		}
 
 		try {
-			await auditTrail.insert(ctx, {
-				entityId: entry.entityId,
-				entityType: entry.entityType,
-				eventType: entry.eventType,
-				actorId: entry.actorId,
-				beforeState: entry.previousState,
-				afterState: entry.newState,
-				metadata: JSON.stringify({
-					outcome: entry.outcome,
-					machineVersion: entry.machineVersion,
-					effectsScheduled: entry.effectsScheduled,
-					channel: entry.channel,
-					reason: entry.reason,
-				}),
-				timestamp: entry.timestamp,
-			});
+			await auditTrail.insert(ctx, buildAuditTrailInsertArgs(entry));
 		} catch (error) {
 			console.error(
 				`[GT HashChain] Failed to insert audit trail entry for journal ${args.journalEntryId}:`,
 				error
 			);
+			throw error;
 		}
 	},
 });
@@ -67,7 +85,7 @@ export const processHashChainStep = internalMutation({
  */
 export const hashChainJournalEntry = workflow.define({
 	args: { journalEntryId: v.id("auditJournal") },
-	handler: async (step, args) => {
+	handler: async (step, args): Promise<void> => {
 		await step.runMutation(internal.engine.hashChain.processHashChainStep, {
 			journalEntryId: args.journalEntryId,
 		});
@@ -81,13 +99,24 @@ export const hashChainJournalEntry = workflow.define({
  *   await startHashChain(ctx, journalEntryId);
  */
 export async function startHashChain(
-	ctx: { runMutation: (...args: unknown[]) => Promise<unknown> },
+	ctx: Pick<MutationCtx, "runMutation" | "scheduler">,
 	journalEntryId: Id<"auditJournal">
 ) {
+	if (
+		typeof process !== "undefined" &&
+		process.env.ALLOW_TEST_AUTH_ENDPOINTS === "true"
+	) {
+		return;
+	}
+
 	await workflow.start(
-		// biome-ignore lint/suspicious/noExplicitAny: WorkflowManager.start accepts generic mutation ctx
-		ctx as any,
+		ctx,
 		internal.engine.hashChain.hashChainJournalEntry,
-		{ journalEntryId }
+		{
+			journalEntryId,
+		},
+		{
+			startAsync: true,
+		}
 	);
 }

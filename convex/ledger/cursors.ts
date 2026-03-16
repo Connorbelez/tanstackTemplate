@@ -1,22 +1,22 @@
 import { v } from "convex/values";
-import { mutation, query } from "../_generated/server";
+import { adminMutation, adminQuery } from "../fluent";
 
-export const getCursor = query({
-	args: { consumerId: v.string() },
-	handler: async (ctx, args) => {
+export const getCursor = adminQuery
+	.input({ consumerId: v.string() })
+	.handler(async (ctx, args) => {
 		return ctx.db
 			.query("ledger_cursors")
 			.withIndex("by_consumer", (q) => q.eq("consumerId", args.consumerId))
 			.first();
-	},
-});
+	})
+	.public();
 
-export const advanceCursor = mutation({
-	args: {
+export const advanceCursor = adminMutation
+	.input({
 		consumerId: v.string(),
 		lastProcessedSequence: v.int64(),
-	},
-	handler: async (ctx, args) => {
+	})
+	.handler(async (ctx, args) => {
 		const existing = await ctx.db
 			.query("ledger_cursors")
 			.withIndex("by_consumer", (q) => q.eq("consumerId", args.consumerId))
@@ -34,15 +34,15 @@ export const advanceCursor = mutation({
 				lastProcessedAt: Date.now(),
 			});
 		}
-	},
-});
+	})
+	.public();
 
-export const resetCursor = mutation({
-	args: {
+export const resetCursor = adminMutation
+	.input({
 		consumerId: v.string(),
 		toSequence: v.optional(v.int64()),
-	},
-	handler: async (ctx, args) => {
+	})
+	.handler(async (ctx, args) => {
 		const existing = await ctx.db
 			.query("ledger_cursors")
 			.withIndex("by_consumer", (q) => q.eq("consumerId", args.consumerId))
@@ -62,5 +62,5 @@ export const resetCursor = mutation({
 				lastProcessedAt: Date.now(),
 			});
 		}
-	},
-});
+	})
+	.public();

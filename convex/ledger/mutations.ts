@@ -1,6 +1,6 @@
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
-import { mutation } from "../_generated/server";
+import { ledgerMutation } from "../fluent";
 import { MIN_POSITION_UNITS, UNITS_PER_MORTGAGE } from "./constants";
 import {
 	computeBalance,
@@ -294,16 +294,16 @@ function validateEntryType(
 
 // ── Tier 1: Strict Primitives ─────────────────────────────────────
 
-export const postEntry = mutation({
-	args: postEntryArgsValidator,
-	handler: async (ctx, args) => {
+export const postEntry = ledgerMutation
+	.input(postEntryArgsValidator)
+	.handler(async (ctx, args) => {
 		return postEntryInternal(ctx, args);
-	},
-});
+	})
+	.public();
 
-export const mintMortgage = mutation({
-	args: mintMortgageArgsValidator,
-	handler: async (ctx, args) => {
+export const mintMortgage = ledgerMutation
+	.input(mintMortgageArgsValidator)
+	.handler(async (ctx, args) => {
 		// Idempotency: check if this exact request already succeeded
 		const existingEntry = await ctx.db
 			.query("ledger_journal_entries")
@@ -364,12 +364,12 @@ export const mintMortgage = mutation({
 		});
 
 		return { treasuryAccountId: treasuryId, journalEntry };
-	},
-});
+	})
+	.public();
 
-export const burnMortgage = mutation({
-	args: burnMortgageArgsValidator,
-	handler: async (ctx, args) => {
+export const burnMortgage = ledgerMutation
+	.input(burnMortgageArgsValidator)
+	.handler(async (ctx, args) => {
 		// Idempotency: check if this exact request already succeeded
 		const existingEntry = await ctx.db
 			.query("ledger_journal_entries")
@@ -418,14 +418,14 @@ export const burnMortgage = mutation({
 			reason: args.reason,
 			metadata: args.metadata,
 		});
-	},
-});
+	})
+	.public();
 
 // ── Tier 2: Convenience Mutations ─────────────────────────────────
 
-export const issueShares = mutation({
-	args: issueSharesArgsValidator,
-	handler: async (ctx, args) => {
+export const issueShares = ledgerMutation
+	.input(issueSharesArgsValidator)
+	.handler(async (ctx, args) => {
 		const treasury = await getTreasuryAccount(ctx, args.mortgageId);
 		const position = await getOrCreatePositionAccount(
 			ctx,
@@ -447,12 +447,12 @@ export const issueShares = mutation({
 		});
 
 		return { positionAccountId: position._id, journalEntry };
-	},
-});
+	})
+	.public();
 
-export const transferShares = mutation({
-	args: transferSharesArgsValidator,
-	handler: async (ctx, args) => {
+export const transferShares = ledgerMutation
+	.input(transferSharesArgsValidator)
+	.handler(async (ctx, args) => {
 		const sellerPosition = await getPositionAccount(
 			ctx,
 			args.mortgageId,
@@ -478,12 +478,12 @@ export const transferShares = mutation({
 		});
 
 		return { buyerAccountId: buyerPosition._id, journalEntry };
-	},
-});
+	})
+	.public();
 
-export const redeemShares = mutation({
-	args: redeemSharesArgsValidator,
-	handler: async (ctx, args) => {
+export const redeemShares = ledgerMutation
+	.input(redeemSharesArgsValidator)
+	.handler(async (ctx, args) => {
 		const position = await getPositionAccount(
 			ctx,
 			args.mortgageId,
@@ -504,5 +504,5 @@ export const redeemShares = mutation({
 			reason: args.reason,
 			metadata: args.metadata,
 		});
-	},
-});
+	})
+	.public();

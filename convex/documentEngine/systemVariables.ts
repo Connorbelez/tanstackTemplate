@@ -1,11 +1,11 @@
 import { ConvexError, v } from "convex/values";
-import { mutation, query } from "../_generated/server";
+import { adminMutation, authedQuery } from "../fluent";
 import { formatOptionsValidator, variableTypeValidator } from "./validators";
 
 const SNAKE_CASE_RE = /^[a-z][a-z0-9]*(_[a-z0-9]+)*$/;
 
-export const create = mutation({
-	args: {
+export const create = adminMutation
+	.input({
 		key: v.string(),
 		label: v.string(),
 		type: variableTypeValidator,
@@ -13,8 +13,8 @@ export const create = mutation({
 		systemPath: v.optional(v.string()),
 		formatOptions: formatOptionsValidator,
 		createdBy: v.optional(v.string()),
-	},
-	handler: async (ctx, args) => {
+	})
+	.handler(async (ctx, args) => {
 		if (!SNAKE_CASE_RE.test(args.key)) {
 			throw new ConvexError(
 				"Variable key must be snake_case (e.g. loan_amount)"
@@ -33,19 +33,19 @@ export const create = mutation({
 			...args,
 			createdAt: Date.now(),
 		});
-	},
-});
+	})
+	.public();
 
-export const update = mutation({
-	args: {
+export const update = adminMutation
+	.input({
 		id: v.id("systemVariables"),
 		label: v.optional(v.string()),
 		type: v.optional(variableTypeValidator),
 		description: v.optional(v.string()),
 		systemPath: v.optional(v.string()),
 		formatOptions: v.optional(formatOptionsValidator),
-	},
-	handler: async (ctx, args) => {
+	})
+	.handler(async (ctx, args) => {
 		const existing = await ctx.db.get(args.id);
 		if (!existing) {
 			throw new ConvexError("Variable not found");
@@ -60,12 +60,12 @@ export const update = mutation({
 		}
 
 		await ctx.db.patch(id, filtered);
-	},
-});
+	})
+	.public();
 
-export const remove = mutation({
-	args: { id: v.id("systemVariables") },
-	handler: async (ctx, args) => {
+export const remove = adminMutation
+	.input({ id: v.id("systemVariables") })
+	.handler(async (ctx, args) => {
 		const variable = await ctx.db.get(args.id);
 		if (!variable) {
 			return;
@@ -85,22 +85,22 @@ export const remove = mutation({
 		}
 
 		await ctx.db.delete(args.id);
-	},
-});
+	})
+	.public();
 
-export const list = query({
-	args: {},
-	handler: async (ctx) => {
+export const list = authedQuery
+	.input({})
+	.handler(async (ctx) => {
 		return await ctx.db.query("systemVariables").collect();
-	},
-});
+	})
+	.public();
 
-export const getByKey = query({
-	args: { key: v.string() },
-	handler: async (ctx, args) => {
+export const getByKey = authedQuery
+	.input({ key: v.string() })
+	.handler(async (ctx, args) => {
 		return await ctx.db
 			.query("systemVariables")
 			.withIndex("by_key", (q) => q.eq("key", args.key))
 			.first();
-	},
-});
+	})
+	.public();

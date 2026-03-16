@@ -2,6 +2,7 @@ import { getNextSnapshot } from "xstate";
 import type { Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 import { auditLog } from "../auditLog";
+import { appendAuditJournalEntry } from "./auditJournal";
 import { effectRegistry } from "./effects/registry";
 import { machineRegistry } from "./machines/registry";
 import type { CommandSource, EntityType, TransitionResult } from "./types";
@@ -159,8 +160,9 @@ export async function transitionEntity(
 	const nextSnapshot = getNextSnapshot(machine, currentSnapshot, event);
 	const newState = nextSnapshot.value as string;
 	const resourceType = getAuditResourceType(entityType);
-	const journalEntryId = `${entityType}:${entityId}:${eventType}:${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
 	const defaultSource: CommandSource = { channel: "scheduler" };
+	const resolvedSource = source ?? defaultSource;
+	let journalEntryId = `${entityType}:${entityId}:${eventType}:${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
 
 	// 5. Check if transition occurred (state change) or if targetless transition has effects
 	const scheduledEffects = extractScheduledEffects(
@@ -172,10 +174,28 @@ export async function transitionEntity(
 
 	if (newState === previousState) {
 		if (!hasEffects) {
+			journalEntryId = await appendAuditJournalEntry(ctx, {
+				actorId: resolvedSource.actorId ?? "system",
+				actorType: resolvedSource.actorType,
+				channel: resolvedSource.channel,
+				entityId,
+				entityType,
+				eventType,
+				ip: resolvedSource.ip,
+				sessionId: resolvedSource.sessionId,
+				payload,
+				previousState,
+				newState,
+				outcome: "rejected",
+				reason: `Event "${eventType}" not valid in state "${previousState}"`,
+				machineVersion: machine.id,
+				timestamp: Date.now(),
+			});
+
 			// No state change and no effects — event is ignored/rejected
 			await auditLog.log(ctx, {
 				action: `transition.${entityType}.rejected`,
-				actorId: source?.actorId ?? "system",
+				actorId: resolvedSource.actorId ?? "system",
 				resourceType,
 				resourceId: entityId,
 				severity: "warning",
@@ -188,7 +208,7 @@ export async function transitionEntity(
 					newState,
 					outcome: "rejected",
 					reason: `Event "${eventType}" not valid in state "${previousState}"`,
-					source: source ?? defaultSource,
+					source: resolvedSource,
 					machineVersion: machine.id,
 				},
 			});
@@ -208,7 +228,7 @@ export async function transitionEntity(
 		);
 		await auditLog.log(ctx, {
 			action: `transition.${entityType}.${eventType.toLowerCase()}`,
-			actorId: source?.actorId ?? "system",
+			actorId: resolvedSource.actorId ?? "system",
 			resourceType,
 			resourceId: entityId,
 			severity: "info",
@@ -221,7 +241,7 @@ export async function transitionEntity(
 				newState,
 				outcome: "same_state_with_effects",
 				effectsScheduled: effectNames,
-				source: source ?? defaultSource,
+				source: resolvedSource,
 				machineVersion: machine.id,
 			},
 		});
@@ -240,11 +260,27 @@ export async function transitionEntity(
 		machineContext: nextSnapshot.context,
 		lastTransitionAt: Date.now(),
 	});
+	journalEntryId = await appendAuditJournalEntry(ctx, {
+		actorId: resolvedSource.actorId ?? "system",
+		actorType: resolvedSource.actorType,
+		channel: resolvedSource.channel,
+		entityId,
+		entityType,
+		eventType,
+		ip: resolvedSource.ip,
+		sessionId: resolvedSource.sessionId,
+		payload,
+		previousState,
+		newState,
+		outcome: "transitioned",
+		machineVersion: machine.id,
+		timestamp: Date.now(),
+	});
 
 	// 7. Write audit entry
 	await auditLog.log(ctx, {
 		action: `transition.${entityType}.${eventType.toLowerCase()}`,
-		actorId: source?.actorId ?? "system",
+		actorId: resolvedSource.actorId ?? "system",
 		resourceType,
 		resourceId: entityId,
 		severity: "info",
@@ -256,7 +292,7 @@ export async function transitionEntity(
 			previousState,
 			newState,
 			outcome: "transitioned",
-			source: source ?? defaultSource,
+			source: resolvedSource,
 			machineVersion: machine.id,
 		},
 	});

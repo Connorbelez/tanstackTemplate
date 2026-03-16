@@ -52,8 +52,10 @@ const config = defineConfig({
 		server: {
 			deps: {
 				// fluent-convex uses extensionless ESM imports internally
-				// which fail under Node strict ESM resolution in convex-test
-				inline: ["fluent-convex", "convex-audit-log"],
+				// which fail under Node strict ESM resolution in convex-test.
+				// @convex-dev/aggregate exports src/test.ts with import.meta.glob
+				// that needs Vite transformation.
+				inline: ["fluent-convex"],
 			},
 		},
 	},

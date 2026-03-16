@@ -1,7 +1,8 @@
 import { ConvexError, v } from "convex/values";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
-import { action, internalAction, mutation } from "../_generated/server";
+import { internalAction } from "../_generated/server";
+import { authedAction, authedMutation } from "../fluent";
 
 // ── Types for generation results ──────────────────────────────────
 
@@ -334,119 +335,124 @@ const signatoryMappingArg = v.array(
 	})
 );
 
-export const prepareGeneration = action({
-	args: {
+export const prepareGeneration = authedAction
+	.input({
 		templateId: v.id("documentTemplates"),
 		pinnedVersion: v.optional(v.number()),
 		variables: v.record(v.string(), v.string()),
 		signatoryMapping: signatoryMappingArg,
-	},
-	handler: async (
-		ctx,
-		args
-	): Promise<
-		| {
-				success: false;
-				missingVariables: string[];
-				templateVersionUsed: number;
-		  }
-		| {
-				success: true;
-				missingVariables: string[];
-				templateVersionUsed: number;
-				basePdfUrl: string;
-				basePdfHash: string;
-				fields: FieldConfig[];
-				pageDimensions: PageDimension[];
-				formattedValues: Record<string, string>;
-				documensoConfig: { recipients: DocumensoRecipient[] };
-		  }
-	> => {
-		// Load template, version, base PDF, and variables in one query
-		const data = await ctx.runQuery(
-			internal.documentEngine.generationHelpers.prepareGenerationData,
-			{
-				templateId: args.templateId,
-				pinnedVersion: args.pinnedVersion,
+	})
+	.handler(
+		async (
+			ctx,
+			args
+		): Promise<
+			| {
+					success: false;
+					missingVariables: string[];
+					templateVersionUsed: number;
+			  }
+			| {
+					success: true;
+					missingVariables: string[];
+					templateVersionUsed: number;
+					basePdfUrl: string;
+					basePdfHash: string;
+					fields: FieldConfig[];
+					pageDimensions: PageDimension[];
+					formattedValues: Record<string, string>;
+					documensoConfig: { recipients: DocumensoRecipient[] };
+			  }
+		> => {
+			// Load template, version, base PDF, and variables in one query
+			const data = await ctx.runQuery(
+				internal.documentEngine.generationHelpers.prepareGenerationData,
+				{
+					templateId: args.templateId,
+					pinnedVersion: args.pinnedVersion,
+				}
+			);
+			if (!data) {
+				throw new ConvexError("Template, version, or base PDF not found");
 			}
-		);
-		if (!data) {
-			throw new ConvexError("Template, version, or base PDF not found");
-		}
 
-		const snapshot = data.snapshot as {
-			fields: FieldConfig[];
-			signatories: SignatoryConfig[];
-		};
-		const variableMap = new Map(
-			data.allVariables.map((sysVar: Doc<"systemVariables">) => [
-				sysVar.key,
-				sysVar,
-			])
-		);
+			const snapshot = data.snapshot as {
+				fields: FieldConfig[];
+				signatories: SignatoryConfig[];
+			};
+			const variableMap = new Map(
+				data.allVariables.map((sysVar: Doc<"systemVariables">) => [
+					sysVar.key,
+					sysVar,
+				])
+			);
 
-		// Validate variable presence
-		const requiredKeys = snapshot.fields
-			.filter((f) => f.type === "interpolable" && f.variableKey)
-			.map((f) => f.variableKey as string);
+			// Validate variable presence
+			const requiredKeys = snapshot.fields
+				.filter((f) => f.type === "interpolable" && f.variableKey)
+				.map((f) => f.variableKey as string);
 
-		const missingKeys = requiredKeys.filter((key) => !(key in args.variables));
-		if (missingKeys.length > 0) {
+			const missingKeys = requiredKeys.filter(
+				(key) => !(key in args.variables)
+			);
+			if (missingKeys.length > 0) {
+				return {
+					success: false as const,
+					missingVariables: missingKeys,
+					templateVersionUsed: data.version,
+				};
+			}
+
+			// Validate variable types (REQ-93)
+			validateVariableTypes(
+				requiredKeys,
+				args.variables,
+				variableMap as Map<string, Doc<"systemVariables">>
+			);
+
+			// Validate signatory mappings
+			const signatoryRoleMap = validateSignatoryMappings(
+				snapshot.signatories,
+				args.signatoryMapping
+			);
+
+			// Format values
+			const formattedValues = await formatVariableValues(
+				requiredKeys,
+				args.variables,
+				variableMap as Map<string, Doc<"systemVariables">>
+			);
+
+			// Build Documenso config
+			const documensoConfig = buildDocumensoConfig(
+				snapshot,
+				signatoryRoleMap,
+				data.basePdf.pageDimensions as PageDimension[]
+			);
+
 			return {
-				success: false as const,
-				missingVariables: missingKeys,
+				success: true as const,
+				missingVariables: [] as string[],
 				templateVersionUsed: data.version,
+				basePdfUrl: data.basePdfUrl,
+				basePdfHash: data.basePdfHash,
+				fields: snapshot.fields,
+				pageDimensions: data.basePdf.pageDimensions,
+				formattedValues,
+				documensoConfig,
 			};
 		}
-
-		// Validate variable types (REQ-93)
-		validateVariableTypes(
-			requiredKeys,
-			args.variables,
-			variableMap as Map<string, Doc<"systemVariables">>
-		);
-
-		// Validate signatory mappings
-		const signatoryRoleMap = validateSignatoryMappings(
-			snapshot.signatories,
-			args.signatoryMapping
-		);
-
-		// Format values
-		const formattedValues = await formatVariableValues(
-			requiredKeys,
-			args.variables,
-			variableMap as Map<string, Doc<"systemVariables">>
-		);
-
-		// Build Documenso config
-		const documensoConfig = buildDocumensoConfig(
-			snapshot,
-			signatoryRoleMap,
-			data.basePdf.pageDimensions as PageDimension[]
-		);
-
-		return {
-			success: true as const,
-			missingVariables: [] as string[],
-			templateVersionUsed: data.version,
-			basePdfUrl: data.basePdfUrl,
-			basePdfHash: data.basePdfHash,
-			fields: snapshot.fields,
-			pageDimensions: data.basePdf.pageDimensions,
-			formattedValues,
-			documensoConfig,
-		};
-	},
-});
+	)
+	.public();
 
 // ── Upload URL for client-generated PDFs ────────────────────────
 
-export const generateUploadUrl = mutation({
-	handler: async (ctx) => {
+export const generateUploadUrl = authedMutation
+	.input({})
+	.handler(async (ctx) => {
 		return await ctx.storage.generateUploadUrl();
-	},
-});
+	})
+	.public();
 
 // ── Core generation logic (internal, used by group action) ───────
 // Uses pdf-lib only — pdfme runs client-side for single templates.
@@ -558,75 +564,77 @@ export const generateSingleTemplate = internalAction({
 
 // ── Public actions ────────────────────────────────────────────────
 
-export const generateFromTemplate = action({
-	args: {
+export const generateFromTemplate = authedAction
+	.input({
 		templateId: v.id("documentTemplates"),
 		pinnedVersion: v.optional(v.number()),
 		variables: v.record(v.string(), v.string()),
 		signatoryMapping: signatoryMappingArg,
-	},
-	handler: async (ctx, args): Promise<GenerationResult> => {
+	})
+	.handler(async (ctx, args): Promise<GenerationResult> => {
 		return await ctx.runAction(
 			internal.documentEngine.generation.generateSingleTemplate,
 			args
 		);
-	},
-});
+	})
+	.public();
 
-export const generateFromGroup = action({
-	args: {
+export const generateFromGroup = authedAction
+	.input({
 		groupId: v.id("documentTemplateGroups"),
 		variables: v.record(v.string(), v.string()),
 		signatoryMapping: signatoryMappingArg,
-	},
-	handler: async (
-		ctx,
-		args
-	): Promise<{
-		documents: Array<
-			{ templateId: Id<"documentTemplates"> } & GenerationResult
-		>;
-	}> => {
-		const group = await ctx.runQuery(
-			internal.documentEngine.generationHelpers.getGroup,
-			{ groupId: args.groupId }
-		);
-		if (!group) {
-			throw new ConvexError("Group not found");
-		}
-
-		type GroupDoc = NonNullable<typeof group>;
-		const sortedRefs = [...(group as GroupDoc).templateRefs].sort(
-			(a, b) => a.order - b.order
-		);
-
-		// Pre-validate all templates have published versions (REQ-98)
-		const failures = await ctx.runQuery(
-			internal.documentEngine.generationHelpers.validateGroupTemplates,
-			{ templateRefs: sortedRefs }
-		);
-		if (failures.length > 0) {
-			throw new ConvexError(
-				`Group pre-validation failed: ${failures.map((failure: { templateId: string; reason: string }) => failure.reason).join("; ")}`
+	})
+	.handler(
+		async (
+			ctx,
+			args
+		): Promise<{
+			documents: Array<
+				{ templateId: Id<"documentTemplates"> } & GenerationResult
+			>;
+		}> => {
+			const group = await ctx.runQuery(
+				internal.documentEngine.generationHelpers.getGroup,
+				{ groupId: args.groupId }
 			);
-		}
+			if (!group) {
+				throw new ConvexError("Group not found");
+			}
 
-		const results: Array<
-			{ templateId: Id<"documentTemplates"> } & GenerationResult
-		> = [];
-		for (const ref of sortedRefs) {
-			const result: GenerationResult = await ctx.runAction(
-				internal.documentEngine.generation.generateSingleTemplate,
-				{
-					templateId: ref.templateId,
-					pinnedVersion: ref.pinnedVersion as number | undefined,
-					variables: args.variables,
-					signatoryMapping: args.signatoryMapping,
-				}
+			type GroupDoc = NonNullable<typeof group>;
+			const sortedRefs = [...(group as GroupDoc).templateRefs].sort(
+				(a, b) => a.order - b.order
 			);
-			results.push({ templateId: ref.templateId, ...result });
-		}
 
-		return { documents: results };
-	},
-});
+			// Pre-validate all templates have published versions (REQ-98)
+			const failures = await ctx.runQuery(
+				internal.documentEngine.generationHelpers.validateGroupTemplates,
+				{ templateRefs: sortedRefs }
+			);
+			if (failures.length > 0) {
+				throw new ConvexError(
+					`Group pre-validation failed: ${failures.map((failure: { templateId: string; reason: string }) => failure.reason).join("; ")}`
+				);
+			}
+
+			const results: Array<
+				{ templateId: Id<"documentTemplates"> } & GenerationResult
+			> = [];
+			for (const ref of sortedRefs) {
+				const result: GenerationResult = await ctx.runAction(
+					internal.documentEngine.generation.generateSingleTemplate,
+					{
+						templateId: ref.templateId,
+						pinnedVersion: ref.pinnedVersion as number | undefined,
+						variables: args.variables,
+						signatoryMapping: args.signatoryMapping,
+					}
+				);
+				results.push({ templateId: ref.templateId, ...result });
+			}
+
+			return { documents: results };
+		}
+	)
+	.public();

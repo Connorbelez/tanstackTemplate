@@ -1,7 +1,7 @@
 import { Migrations } from "@convex-dev/migrations";
 import { components, internal } from "../_generated/api";
 import type { DataModel } from "../_generated/dataModel";
-import { mutation, query } from "../_generated/server";
+import { adminMutation, adminQuery } from "../fluent";
 import { getAccountLenderId } from "./accountOwnership";
 
 const migrations = new Migrations<DataModel>(components.migrations);
@@ -23,16 +23,16 @@ export const backfillLenderIds = migrations.define({
 	},
 });
 
-export const runLenderIdBackfill = mutation({
-	args: {},
-	handler: async (ctx) => {
+export const runLenderIdBackfill = adminMutation
+	.input({})
+	.handler(async (ctx) => {
 		await migrations.runOne(ctx, backfillLenderIdsReference);
-	},
-});
+	})
+	.public();
 
-export const getLenderIdBackfillStatus = query({
-	args: {},
-	handler: async (ctx) => {
+export const getLenderIdBackfillStatus = adminQuery
+	.input({})
+	.handler(async (ctx) => {
 		const accounts = await ctx.db.query("ledger_accounts").collect();
 		const positionAccounts = accounts.filter(
 			(account) => account.type === "POSITION"
@@ -46,5 +46,5 @@ export const getLenderIdBackfillStatus = query({
 			missingLenderIdCount: missingLenderId.length,
 			missingAccountIds: missingLenderId.map((account) => account._id),
 		};
-	},
-});
+	})
+	.public();

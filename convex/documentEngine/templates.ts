@@ -1,14 +1,18 @@
 import { ConvexError, v } from "convex/values";
-import { mutation, query } from "../_generated/server";
+import { authedMutation, authedQuery, requirePermission } from "../fluent";
 import { draftStateValidator } from "./validators";
 
-export const create = mutation({
-	args: {
+const docGenMutation = authedMutation.use(
+	requirePermission("document:generate")
+);
+
+export const create = docGenMutation
+	.input({
 		name: v.string(),
 		description: v.optional(v.string()),
 		basePdfId: v.id("documentBasePdfs"),
-	},
-	handler: async (ctx, args) => {
+	})
+	.handler(async (ctx, args) => {
 		const basePdf = await ctx.db.get(args.basePdfId);
 		if (!basePdf) {
 			throw new ConvexError("Base PDF not found");
@@ -25,12 +29,12 @@ export const create = mutation({
 			createdAt: now,
 			updatedAt: now,
 		});
-	},
-});
+	})
+	.public();
 
-export const get = query({
-	args: { id: v.id("documentTemplates") },
-	handler: async (ctx, args) => {
+export const get = authedQuery
+	.input({ id: v.id("documentTemplates") })
+	.handler(async (ctx, args) => {
 		const template = await ctx.db.get(args.id);
 		if (!template) {
 			return null;
@@ -38,22 +42,22 @@ export const get = query({
 
 		const basePdf = await ctx.db.get(template.basePdfId);
 		return { ...template, basePdf };
-	},
-});
+	})
+	.public();
 
-export const list = query({
-	args: {},
-	handler: async (ctx) => {
+export const list = authedQuery
+	.input({})
+	.handler(async (ctx) => {
 		return await ctx.db.query("documentTemplates").order("desc").collect();
-	},
-});
+	})
+	.public();
 
-export const saveDraft = mutation({
-	args: {
+export const saveDraft = docGenMutation
+	.input({
 		id: v.id("documentTemplates"),
 		draft: draftStateValidator,
-	},
-	handler: async (ctx, args) => {
+	})
+	.handler(async (ctx, args) => {
 		const template = await ctx.db.get(args.id);
 		if (!template) {
 			throw new ConvexError("Template not found");
@@ -103,16 +107,16 @@ export const saveDraft = mutation({
 			hasDraftChanges: true,
 			updatedAt: Date.now(),
 		});
-	},
-});
+	})
+	.public();
 
-export const updateMetadata = mutation({
-	args: {
+export const updateMetadata = docGenMutation
+	.input({
 		id: v.id("documentTemplates"),
 		name: v.optional(v.string()),
 		description: v.optional(v.string()),
-	},
-	handler: async (ctx, args) => {
+	})
+	.handler(async (ctx, args) => {
 		const template = await ctx.db.get(args.id);
 		if (!template) {
 			throw new ConvexError("Template not found");
@@ -127,15 +131,15 @@ export const updateMetadata = mutation({
 		}
 
 		await ctx.db.patch(args.id, updates);
-	},
-});
+	})
+	.public();
 
-export const publish = mutation({
-	args: {
+export const publish = docGenMutation
+	.input({
 		id: v.id("documentTemplates"),
 		publishedBy: v.optional(v.string()),
-	},
-	handler: async (ctx, args) => {
+	})
+	.handler(async (ctx, args) => {
 		const template = await ctx.db.get(args.id);
 		if (!template) {
 			throw new ConvexError("Template not found");
@@ -208,12 +212,12 @@ export const publish = mutation({
 		});
 
 		return version;
-	},
-});
+	})
+	.public();
 
-export const remove = mutation({
-	args: { id: v.id("documentTemplates") },
-	handler: async (ctx, args) => {
+export const remove = docGenMutation
+	.input({ id: v.id("documentTemplates") })
+	.handler(async (ctx, args) => {
 		// Check if template is in any group
 		const groups = await ctx.db.query("documentTemplateGroups").collect();
 		for (const group of groups) {
@@ -234,5 +238,5 @@ export const remove = mutation({
 		}
 
 		await ctx.db.delete(args.id);
-	},
-});
+	})
+	.public();

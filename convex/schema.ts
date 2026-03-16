@@ -9,6 +9,11 @@ import {
 	signatoryConfigValidator,
 	variableTypeValidator,
 } from "./documentEngine/validators";
+import {
+	actorTypeValidator,
+	channelValidator,
+	entityTypeValidator,
+} from "./engine/validators";
 
 export default defineSchema({
 	products: defineTable({
@@ -355,7 +360,7 @@ export default defineSchema({
 
 	// ── GT Audit Journal ──────────────────────────────────────────────
 	auditJournal: defineTable({
-		entityType: v.string(),
+		entityType: entityTypeValidator,
 		entityId: v.string(),
 		eventType: v.string(),
 		payload: v.optional(v.any()),
@@ -365,8 +370,8 @@ export default defineSchema({
 		reason: v.optional(v.string()),
 		// Source fields flattened (Convex cannot index nested objects)
 		actorId: v.string(),
-		actorType: v.optional(v.string()),
-		channel: v.string(),
+		actorType: v.optional(actorTypeValidator),
+		channel: channelValidator,
 		ip: v.optional(v.string()),
 		sessionId: v.optional(v.string()),
 		machineVersion: v.optional(v.string()),

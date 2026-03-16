@@ -1,9 +1,12 @@
 import { components } from "../_generated/api";
-import { query } from "../_generated/server";
+import type { Id } from "../_generated/dataModel";
+import type { QueryCtx } from "../_generated/server";
 import { AuditTrail } from "../auditTrailClient";
+import { adminQuery } from "../fluent";
 import { ENTITY_TABLE_MAP } from "./types";
 
 const auditTrail = new AuditTrail(components.auditTrail);
+const RECONCILIATION_PAGE_SIZE = 128;
 
 interface Discrepancy {
 	entityId: string;
@@ -13,56 +16,94 @@ interface Discrepancy {
 	journalNewState: string;
 }
 
+type ReconciliationCtx = Pick<QueryCtx, "db" | "runQuery">;
+interface LatestJournalEntry {
+	_id: string;
+	newState: string;
+}
+
+async function collectLatestJournalEntries(
+	ctx: ReconciliationCtx,
+	entityType: keyof typeof ENTITY_TABLE_MAP
+) {
+	const latestByEntity = new Map<string, LatestJournalEntry>();
+	let cursor: string | null = null;
+
+	while (true) {
+		const { continueCursor, isDone, page } = await ctx.db
+			.query("auditJournal")
+			.withIndex("by_type_and_time", (q) => q.eq("entityType", entityType))
+			.order("desc")
+			.paginate({
+				cursor,
+				numItems: RECONCILIATION_PAGE_SIZE,
+			});
+
+		for (const entry of page) {
+			if (
+				entry.outcome === "transitioned" &&
+				!latestByEntity.has(entry.entityId)
+			) {
+				latestByEntity.set(entry.entityId, {
+					_id: entry._id,
+					newState: entry.newState,
+				});
+			}
+		}
+
+		if (isDone) {
+			return latestByEntity;
+		}
+
+		cursor = continueCursor;
+	}
+}
+
+async function getEntityStatus(
+	ctx: ReconciliationCtx,
+	entityType: keyof typeof ENTITY_TABLE_MAP,
+	entityId: string
+) {
+	switch (entityType) {
+		case "onboardingRequest": {
+			const entity = await ctx.db.get(entityId as Id<"onboardingRequests">);
+			return entity?.status ?? null;
+		}
+		case "mortgage":
+		case "obligation":
+			return null;
+		default: {
+			const exhaustive: never = entityType;
+			return exhaustive;
+		}
+	}
+}
+
 /**
  * Layer 1 reconciliation: verifies each governed entity's current status
  * matches the newState of its most recent "transitioned" journal entry.
  *
  * Any discrepancy means something changed status outside the transition engine.
  */
-export const reconcile = query({
-	args: {},
-	handler: async (ctx) => {
+export const reconcile = adminQuery
+	.input({})
+	.handler(async (ctx) => {
 		const discrepancies: Discrepancy[] = [];
 		const entityTypes = Object.keys(ENTITY_TABLE_MAP) as Array<
 			keyof typeof ENTITY_TABLE_MAP
 		>;
 
 		for (const entityType of entityTypes) {
-			const journalEntries = await ctx.db
-				.query("auditJournal")
-				.withIndex("by_type_and_time", (q) => q.eq("entityType", entityType))
-				.order("desc")
-				.collect();
+			const latestByEntity = await collectLatestJournalEntries(ctx, entityType);
 
 			// Skip entity types with no journal entries (handles missing tables gracefully)
-			if (journalEntries.length === 0) {
+			if (latestByEntity.size === 0) {
 				continue;
 			}
 
-			// Group by entityId, take latest "transitioned" entry per entity
-			const latestByEntity = new Map<
-				string,
-				{ newState: string; _id: string }
-			>();
-			for (const entry of journalEntries) {
-				if (
-					entry.outcome === "transitioned" &&
-					!latestByEntity.has(entry.entityId)
-				) {
-					latestByEntity.set(entry.entityId, {
-						newState: entry.newState,
-						_id: entry._id,
-					});
-				}
-			}
-
 			for (const [entityId, journal] of latestByEntity) {
-				// ENTITY_TABLE_MAP includes future tables (mortgages, obligations) not yet
-				// in schema. Runtime safety: no journal entries for those → skipped above.
-				// TODO(ENG-18): Replace any cast when mortgages/obligations tables exist
-				// biome-ignore lint/suspicious/noExplicitAny: Future table names not in schema yet
-				const entity = await ctx.db.get(entityId as any);
-				if (!entity) {
+				const entityStatus = await getEntityStatus(ctx, entityType, entityId);
+				if (!entityStatus) {
 					discrepancies.push({
 						entityType,
 						entityId,
@@ -73,7 +114,6 @@ export const reconcile = query({
 					continue;
 				}
 
-				const entityStatus = (entity as { status: string }).status;
 				if (entityStatus !== journal.newState) {
 					discrepancies.push({
 						entityType,
@@ -91,8 +131,8 @@ export const reconcile = query({
 			discrepancies,
 			isHealthy: discrepancies.length === 0,
 		};
-	},
-});
+	})
+	.public();
 
 interface ChainVerification {
 	brokenAt?: number;
@@ -102,46 +142,88 @@ interface ChainVerification {
 	valid: boolean;
 }
 
+function buildMissingChainVerification(entityId: string): ChainVerification {
+	return {
+		entityId,
+		valid: false,
+		eventCount: 0,
+		error: "No Layer 2 entries found for entity with journal records",
+	};
+}
+
+function normalizeChainVerification(
+	entityId: string,
+	result: unknown
+): ChainVerification {
+	if (!result || typeof result !== "object") {
+		return buildMissingChainVerification(entityId);
+	}
+
+	const rawResult = result as {
+		brokenAt?: unknown;
+		error?: unknown;
+		eventCount?: unknown;
+		valid?: unknown;
+	};
+	if (typeof rawResult.valid !== "boolean") {
+		return buildMissingChainVerification(entityId);
+	}
+
+	const eventCount =
+		typeof rawResult.eventCount === "number" ? rawResult.eventCount : undefined;
+	if (eventCount === 0) {
+		return buildMissingChainVerification(entityId);
+	}
+
+	return {
+		entityId,
+		valid: rawResult.valid,
+		eventCount,
+		error: typeof rawResult.error === "string" ? rawResult.error : undefined,
+		brokenAt:
+			typeof rawResult.brokenAt === "number" ? rawResult.brokenAt : undefined,
+	};
+}
+
+async function collectEntityIdsWithJournalEntries(ctx: ReconciliationCtx) {
+	const uniqueEntityIds = new Set<string>();
+	let cursor: string | null = null;
+
+	while (true) {
+		const { continueCursor, isDone, page } = await ctx.db
+			.query("auditJournal")
+			.paginate({
+				cursor,
+				numItems: RECONCILIATION_PAGE_SIZE,
+			});
+
+		for (const entry of page) {
+			uniqueEntityIds.add(entry.entityId);
+		}
+
+		if (isDone) {
+			return uniqueEntityIds;
+		}
+
+		cursor = continueCursor;
+	}
+}
+
 /**
  * Layer 2 reconciliation: verifies the SHA-256 hash chain integrity in the
  * auditTrail component for every entity that has journal entries.
  *
  * A broken chain means a Layer 2 entry was tampered with or is missing.
  */
-export const reconcileLayer2 = query({
-	args: {},
-	handler: async (ctx) => {
+export const reconcileLayer2 = adminQuery
+	.input({})
+	.handler(async (ctx) => {
 		const verifications: ChainVerification[] = [];
-
-		// Collect unique entityIds from the journal
-		const allEntries = await ctx.db.query("auditJournal").collect();
-		const uniqueEntityIds = new Set<string>();
-		for (const entry of allEntries) {
-			uniqueEntityIds.add(entry.entityId);
-		}
+		const uniqueEntityIds = await collectEntityIdsWithJournalEntries(ctx);
 
 		for (const entityId of uniqueEntityIds) {
 			const result = await auditTrail.verifyChain(ctx, { entityId });
-
-			if (result && typeof result === "object" && "valid" in result) {
-				verifications.push({
-					entityId,
-					valid: result.valid as boolean,
-					eventCount:
-						"eventCount" in result ? (result.eventCount as number) : undefined,
-					error: "error" in result ? (result.error as string) : undefined,
-					brokenAt:
-						"brokenAt" in result ? (result.brokenAt as number) : undefined,
-				});
-			} else {
-				// No Layer 2 entries for this entity — chain is missing
-				verifications.push({
-					entityId,
-					valid: false,
-					eventCount: 0,
-					error: "No Layer 2 entries found for entity with journal records",
-				});
-			}
+			verifications.push(normalizeChainVerification(entityId, result));
 		}
 
 		const brokenChains = verifications.filter((v) => !v.valid);
@@ -153,5 +235,5 @@ export const reconcileLayer2 = query({
 			brokenChains,
 			isHealthy: brokenChains.length === 0,
 		};
-	},
-});
+	})
+	.public();

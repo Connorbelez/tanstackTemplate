@@ -7,6 +7,7 @@
 
 import auditLogTest from "convex-audit-log/test";
 import { convexTest } from "convex-test";
+import auditTrailSchema from "../../../convex/components/auditTrail/schema";
 import schema from "../../../convex/schema";
 import { lookupPermissions } from "./permissions";
 
@@ -21,6 +22,9 @@ const modules = {
 	...import.meta.glob("../../../convex/constants.ts"),
 	...import.meta.glob("../../../convex/fluent.ts"),
 };
+const auditTrailModules = import.meta.glob(
+	"../../../convex/components/auditTrail/**/*.ts"
+);
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -108,6 +112,7 @@ export function createMockViewer(options: MockViewerOptions): MockIdentity {
 export function createTestConvex() {
 	const t = convexTest(schema, modules);
 	auditLogTest.register(t, "auditLog");
+	t.registerComponent("auditTrail", auditTrailSchema, auditTrailModules);
 	return t;
 }
 
