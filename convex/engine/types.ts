@@ -14,6 +14,14 @@ export type EntityType =
 	| "offerCondition"
 	| "lenderRenewalIntent";
 
+// ── Governed Entity Types ──────────────────────────────────────────
+// Subset of EntityType that have XState machine definitions.
+// TypeScript enforces completeness — machineRegistry must map every GovernedEntityType.
+export type GovernedEntityType =
+	| "onboardingRequest"
+	| "mortgage"
+	| "obligation";
+
 // ── Command Source ──────────────────────────────────────────────────
 export type CommandChannel =
 	| "borrower_portal"
