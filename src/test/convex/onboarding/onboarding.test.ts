@@ -391,7 +391,7 @@ describe("onboarding mutations", () => {
 					referralSource: "self_signup",
 				});
 
-			vi.spyOn(transitionModule, "transitionEntity").mockResolvedValueOnce({
+			vi.spyOn(transitionModule, "executeTransition").mockResolvedValueOnce({
 				success: false,
 				previousState: "pending_review",
 				newState: "pending_review",
@@ -416,7 +416,7 @@ describe("onboarding mutations", () => {
 					referralSource: "self_signup",
 				});
 
-			vi.spyOn(transitionModule, "transitionEntity").mockResolvedValueOnce({
+			vi.spyOn(transitionModule, "executeTransition").mockResolvedValueOnce({
 				success: false,
 				previousState: "pending_review",
 				newState: "pending_review",

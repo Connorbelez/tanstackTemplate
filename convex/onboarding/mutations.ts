@@ -7,7 +7,8 @@ import {
 	type RequestableRole,
 } from "../constants";
 import { appendAuditJournalEntry } from "../engine/auditJournal";
-import { transitionEntity } from "../engine/transition";
+import { buildSource } from "../engine/commands";
+import { executeTransition } from "../engine/transition";
 import { adminMutation, authedMutation, requirePermission } from "../fluent";
 import { referralSourceValidator, requestedRoleValidator } from "./validators";
 
@@ -169,18 +170,13 @@ export const approveRequest = adminMutation
 	.input({ requestId: v.id("onboardingRequests") })
 	.handler(async (ctx, args) => {
 		// Call transition engine
-		const result = await transitionEntity(
-			ctx,
-			"onboardingRequest",
-			args.requestId,
-			"APPROVE",
-			{},
-			{
-				channel: "admin_dashboard",
-				actorId: ctx.viewer.authId,
-				actorType: "admin",
-			}
-		);
+		const result = await executeTransition(ctx, {
+			entityType: "onboardingRequest",
+			entityId: args.requestId,
+			eventType: "APPROVE",
+			payload: {},
+			source: buildSource(ctx.viewer, "admin_dashboard"),
+		});
 
 		if (!result.success) {
 			throw new ConvexError(result.reason ?? "Transition failed");
@@ -216,18 +212,13 @@ export const rejectRequest = adminMutation
 	})
 	.handler(async (ctx, args) => {
 		// Call transition engine
-		const result = await transitionEntity(
-			ctx,
-			"onboardingRequest",
-			args.requestId,
-			"REJECT",
-			{ reason: args.rejectionReason },
-			{
-				channel: "admin_dashboard",
-				actorId: ctx.viewer.authId,
-				actorType: "admin",
-			}
-		);
+		const result = await executeTransition(ctx, {
+			entityType: "onboardingRequest",
+			entityId: args.requestId,
+			eventType: "REJECT",
+			payload: { reason: args.rejectionReason },
+			source: buildSource(ctx.viewer, "admin_dashboard"),
+		});
 
 		if (!result.success) {
 			throw new ConvexError(result.reason ?? "Transition failed");
