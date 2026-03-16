@@ -47,6 +47,7 @@ async function mintAndIssue(
 	amount = 10_000n
 ) {
 	const auth = asLedgerUser(t);
+	// @ts-expect-error — fluent-convex deep generics exceed TS instantiation depth
 	const mintResult = await auth.mutation(api.ledger.mutations.mintMortgage, {
 		mortgageId,
 		effectiveDate: "2026-01-01",

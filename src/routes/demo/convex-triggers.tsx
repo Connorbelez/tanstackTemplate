@@ -36,6 +36,7 @@ function operationVariant(op: string) {
 }
 
 function TriggersDemo() {
+	// @ts-expect-error — fluent-convex deep generics exceed TS instantiation depth
 	const contacts = useQuery(api.demo.triggers.listContacts);
 	const stats = useQuery(api.demo.triggers.getStats);
 	const log = useQuery(api.demo.triggers.getLog);

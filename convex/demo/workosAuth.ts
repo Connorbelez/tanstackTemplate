@@ -145,6 +145,7 @@ export const syncAllFromWorkosApi = authedAction
 
 		// 0. Sync current user to our users table
 		const workosUser = await authKit.workos.userManagement.getUser(userId);
+		// @ts-expect-error — fluent-convex deep generics exceed TS instantiation depth
 		await ctx.runMutation(internal.demo.workosAuth.upsertUserFromApi, {
 			authId: workosUser.id,
 			email: workosUser.email,
