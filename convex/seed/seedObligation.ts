@@ -99,7 +99,7 @@ function buildStatePath(state: ObligationState): readonly string[] {
 			return ["upcoming", "due", "settled"];
 		default:
 			throw new ConvexError(
-`Unsupported obligation seed state: ${String(state)}`
+				`Unsupported obligation seed state: ${String(state)}`
 			);
 	}
 }
@@ -149,7 +149,7 @@ function obligationDates(
 		}
 		default:
 			throw new ConvexError(
-`Unsupported obligation date state: ${String(state)}`
+				`Unsupported obligation date state: ${String(state)}`
 			);
 	}
 }

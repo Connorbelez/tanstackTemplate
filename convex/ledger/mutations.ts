@@ -1,14 +1,14 @@
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 import { ledgerMutation } from "../fluent";
-import { MIN_POSITION_UNITS, UNITS_PER_MORTGAGE } from "./constants";
 import {
-	computeBalance,
 	getOrCreatePositionAccount,
-	getOrCreateWorldAccount,
 	getPositionAccount,
+	getPostedBalance,
 	getTreasuryAccount,
-} from "./internal";
+	initializeWorldAccount,
+} from "./accounts";
+import { MIN_POSITION_UNITS, UNITS_PER_MORTGAGE } from "./constants";
 import { getNextSequenceNumber } from "./sequenceCounter";
 import {
 	burnMortgageArgsValidator,
@@ -314,8 +314,8 @@ function validateEntryType(
 		amountBigInt: BigInt(args.amount),
 		debitAccount,
 		creditAccount,
-		debitBalance: computeBalance(debitAccount),
-		creditBalance: computeBalance(creditAccount),
+		debitBalance: getPostedBalance(debitAccount),
+		creditBalance: getPostedBalance(creditAccount),
 	};
 	VALIDATORS[args.entryType](ctx);
 }
@@ -367,7 +367,7 @@ export const mintMortgage = ledgerMutation
 			);
 		}
 
-		const worldAccount = await getOrCreateWorldAccount(ctx);
+		const worldAccount = await initializeWorldAccount(ctx);
 
 		// Create TREASURY account
 		const treasuryId = await ctx.db.insert("ledger_accounts", {
@@ -412,7 +412,12 @@ export const burnMortgage = ledgerMutation
 		}
 
 		const treasury = await getTreasuryAccount(ctx, args.mortgageId);
-		const treasuryBalance = computeBalance(treasury);
+		if (!treasury) {
+			throw new Error(
+				`No TREASURY account for mortgage ${args.mortgageId}. Mint first.`
+			);
+		}
+		const treasuryBalance = getPostedBalance(treasury);
 
 		if (treasuryBalance !== UNITS_PER_MORTGAGE) {
 			throw new Error(
@@ -426,14 +431,14 @@ export const burnMortgage = ledgerMutation
 			.withIndex("by_mortgage", (q) => q.eq("mortgageId", args.mortgageId))
 			.collect();
 		for (const pos of positions) {
-			if (pos.type === "POSITION" && computeBalance(pos) !== 0n) {
+			if (pos.type === "POSITION" && getPostedBalance(pos) !== 0n) {
 				throw new Error(
 					`Cannot burn: POSITION ${pos._id} (lender ${pos.lenderId}) has non-zero balance`
 				);
 			}
 		}
 
-		const worldAccount = await getOrCreateWorldAccount(ctx);
+		const worldAccount = await initializeWorldAccount(ctx);
 
 		// MORTGAGE_BURNED: TREASURY gives → WORLD receives
 		return postEntryInternal(ctx, {
@@ -457,6 +462,11 @@ export const issueShares = ledgerMutation
 	.input(issueSharesArgsValidator)
 	.handler(async (ctx, args) => {
 		const treasury = await getTreasuryAccount(ctx, args.mortgageId);
+		if (!treasury) {
+			throw new Error(
+				`No TREASURY account for mortgage ${args.mortgageId}. Mint first.`
+			);
+		}
 		const position = await getOrCreatePositionAccount(
 			ctx,
 			args.mortgageId,
@@ -520,6 +530,11 @@ export const redeemShares = ledgerMutation
 			args.lenderId
 		);
 		const treasury = await getTreasuryAccount(ctx, args.mortgageId);
+		if (!treasury) {
+			throw new Error(
+				`No TREASURY account for mortgage ${args.mortgageId}. Mint first.`
+			);
+		}
 
 		// SHARES_REDEEMED: POSITION gives → TREASURY receives
 		return postEntryInternal(ctx, {
