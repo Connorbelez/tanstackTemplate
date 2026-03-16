@@ -9,6 +9,7 @@
   "files": {
     "includes": [
       "!!**/convex/_generated",
+      "!!**/convex/components",
       "!!**/src/routeTree.gen.ts",
       "!!**/src/styles.css",
       "!!**/src/components/ui/*",
@@ -37,7 +38,22 @@
       "recommended": true,
       "style": {
         "noNestedTernary": "warn",
-        "useFilenamingConvention": "off"
+        "useFilenamingConvention": "off",
+        "noRestrictedImports": {
+          "level": "error",
+          "options": {
+            "paths": {
+              "./_generated/server": {
+                "importNames": ["query", "mutation", "action"],
+                "message": "Use fluent chains from './fluent' (e.g. authedQuery, ledgerMutation). See CLAUDE.md."
+              },
+              "../_generated/server": {
+                "importNames": ["query", "mutation", "action"],
+                "message": "Use fluent chains from '../fluent' (e.g. authedQuery, ledgerMutation). See CLAUDE.md."
+              }
+            }
+          }
+        }
       },
       "suspicious": {
         "noTsIgnore": "off",

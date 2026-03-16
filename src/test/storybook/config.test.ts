@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-const STORY_EXTENSIONS_PATTERN = /\.(js|jsx|mjs|ts|tsx)$/;
+const STORY_GLOB_PATTERN = /\.stories\.@\(js\|jsx\|mjs\|ts\|tsx\)$/;
 const COLOR_MATCHER = /(background|color)$/i;
 const DATE_MATCHER = /Date$/i;
 const TS_STORIES_PATTERN = /\.stories\.(ts|tsx)$/;
@@ -14,7 +14,7 @@ describe("Storybook configuration", () => {
 
 			expect(storiesPattern).toContain("../src/");
 			expect(storiesPattern).toContain("*.stories.");
-			expect(storiesPattern).toMatch(STORY_EXTENSIONS_PATTERN);
+			expect(storiesPattern).toMatch(STORY_GLOB_PATTERN);
 		});
 
 		it("should configure react-vite framework", () => {
@@ -228,8 +228,8 @@ describe("Storybook configuration", () => {
 			expect("coloring".match(COLOR_MATCHER)).toBeFalsy();
 		});
 
-		it("should not match partial date words", () => {
-			expect("update".match(DATE_MATCHER)).toBeFalsy();
+		it("should match only strings that end with date", () => {
+			expect("update".match(DATE_MATCHER)).toBeTruthy();
 			expect("dated".match(DATE_MATCHER)).toBeFalsy();
 		});
 

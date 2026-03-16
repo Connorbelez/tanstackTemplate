@@ -1,13 +1,13 @@
 import { v } from "convex/values";
 import { Timeline } from "convex-timeline";
 import { components } from "../_generated/api";
-import { mutation, query } from "../_generated/server";
+import { authedMutation, authedQuery } from "../fluent";
 
 const timeline = new Timeline(components.timeline);
 
-export const pushState = mutation({
-	args: { scope: v.string(), title: v.string(), content: v.string() },
-	handler: async (ctx, args) => {
+export const pushState = authedMutation
+	.input({ scope: v.string(), title: v.string(), content: v.string() })
+	.handler(async (ctx, args) => {
 		await timeline.push(ctx, args.scope, {
 			title: args.title,
 			content: args.content,
@@ -29,12 +29,12 @@ export const pushState = mutation({
 				scope: args.scope,
 			});
 		}
-	},
-});
+	})
+	.public();
 
-export const undo = mutation({
-	args: { scope: v.string() },
-	handler: async (ctx, args) => {
+export const undo = authedMutation
+	.input({ scope: v.string() })
+	.handler(async (ctx, args) => {
 		const result = await timeline.undo(ctx, args.scope);
 		if (
 			result &&
@@ -61,12 +61,12 @@ export const undo = mutation({
 			}
 		}
 		return result;
-	},
-});
+	})
+	.public();
 
-export const redo = mutation({
-	args: { scope: v.string() },
-	handler: async (ctx, args) => {
+export const redo = authedMutation
+	.input({ scope: v.string() })
+	.handler(async (ctx, args) => {
 		const result = await timeline.redo(ctx, args.scope);
 		if (
 			result &&
@@ -93,19 +93,19 @@ export const redo = mutation({
 			}
 		}
 		return result;
-	},
-});
+	})
+	.public();
 
-export const createCheckpoint = mutation({
-	args: { scope: v.string(), name: v.string() },
-	handler: async (ctx, args) => {
+export const createCheckpoint = authedMutation
+	.input({ scope: v.string(), name: v.string() })
+	.handler(async (ctx, args) => {
 		await timeline.createCheckpoint(ctx, args.scope, args.name);
-	},
-});
+	})
+	.public();
 
-export const restoreCheckpoint = mutation({
-	args: { scope: v.string(), name: v.string() },
-	handler: async (ctx, args) => {
+export const restoreCheckpoint = authedMutation
+	.input({ scope: v.string(), name: v.string() })
+	.handler(async (ctx, args) => {
 		const result = await timeline.restoreCheckpoint(ctx, args.scope, args.name);
 		if (result) {
 			const state = result as { title: string; content: string };
@@ -121,15 +121,15 @@ export const restoreCheckpoint = mutation({
 			}
 		}
 		return result;
-	},
-});
+	})
+	.public();
 
-export const getCurrentState = query({
-	args: { scope: v.string() },
-	handler: async (ctx, args) => {
+export const getCurrentState = authedQuery
+	.input({ scope: v.string() })
+	.handler(async (ctx, args) => {
 		return await ctx.db
 			.query("demo_timeline_notes")
 			.filter((q) => q.eq(q.field("scope"), args.scope))
 			.first();
-	},
-});
+	})
+	.public();

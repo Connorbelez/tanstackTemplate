@@ -76,3 +76,50 @@ Proposed CLAUDE.md amendments from issues encountered during development. Review
 **Root cause:** Treated demo code as production code when assessing compliance gaps. Didn't check whether the mutations were actually used in a real workflow.
 **Proposed amendment:**
 > Before recommending production hardening (RBAC, segregation of duties, input validation), verify the code is part of an actual production workflow — not a demo or showcase. Files in `convex/demo/` and `src/routes/demo/` are demo code by convention.
+
+---
+
+## Lesson 9: WorkOS "seed" permissions config can break session cookie storage
+**Date:** 2026-03-15
+**Context:** Sign-in flow completed successfully (OAuth code exchange worked, `onSuccess` fired with user data), but the session cookie was never set on the browser. The `Set-Cookie` header was missing from the 307 callback redirect. Hours of debugging the TanStack Start middleware pipeline, cookie storage internals, and package version conflicts didn't find the issue. Root cause was a WorkOS dashboard configuration: sending the full permissions catalog as "seed" data bloated the session payload beyond the cookie size limit, causing the cookie to silently not be set.
+**Root cause:** WorkOS dashboard config issue, not a code issue. The full permissions catalog was being sent as seed data, which made the encrypted session cookie too large for browser cookie limits (~4KB).
+**Proposed amendment:**
+> When debugging auth issues where the OAuth exchange succeeds but the session isn't persisted, check the WorkOS dashboard configuration (permissions seed, role assignments, etc.) BEFORE diving into middleware/cookie internals. Oversized session payloads can cause cookies to silently fail to set — browsers reject Set-Cookie headers that exceed ~4KB.
+
+---
+
+## Lesson 10: Convex ctx is serialized — no functions on ctx.viewer
+**Date:** 2026-03-15
+**Context:** Created an implementation plan for ENG-6 that described the Viewer object as having `hasRole()`, `hasPermission()`, and `isFairLendAdmin()` helper functions on `ctx.viewer`. The Notion technical design doc also described this pattern. In reality, Convex serializes context between middleware steps, so you CANNOT pass functions through ctx. The actual Viewer uses `roles: Set<string>`, `permissions: Set<string>`, and `isFairLendAdmin: boolean` (pre-computed). Checks use `viewer.roles.has("lender")`, `viewer.permissions.has("broker:access")`, and `viewer.isFairLendAdmin` (boolean).
+**Root cause:** Relied on the Notion architecture doc's pseudocode (which showed an idealized Viewer interface with helper methods) instead of reading the actual `convex/fluent.ts` implementation first. The architecture doc was aspirational, the code is the source of truth.
+**Proposed amendment:**
+> When writing implementation plans that reference existing code patterns, always read the actual source file first — not just architecture docs or specs. Convex serializes context between middleware steps, so `ctx` can only carry plain data (primitives, arrays, Sets, objects), NOT functions or class instances. The Viewer on `ctx.viewer` uses `Set<string>` for roles/permissions and `boolean` for `isFairLendAdmin`.
+
+## Lesson 11: XState v5 actions must be declared in setup(), not as raw strings
+**Date:** 2026-03-15
+**Context:** Created an XState v5 machine definition with `actions: ["assignRoleToUser"]` as a raw string array. XState v5 changed the API — raw strings aren't allowed in transitions anymore. Actions must be declared in the `setup()` call's `actions` property, even if they're no-ops.
+**Root cause:** The Notion implementation plan used XState v5 syntax but the `actions` field pattern was from v4 (raw strings). The `setup()` builder requires all actions be registered.
+**Proposed amendment:**
+> XState v5 `setup()` requires all action names to be declared in `setup({ actions: { ... } })`. For GT machines where "actions" are just effect registry names (not real XState side effects), declare them as no-op functions: `assignRoleToUser: () => { /* resolved by GT effect registry */ }`.
+
+## Lesson 12: convex-test requires explicit modules glob and fluent-convex needs inline deps
+**Date:** 2026-03-15
+**Context:** Integration tests using `convex-test` failed with two issues: (1) `import.meta.glob` not resolved — the second arg to `convexTest()` is `modules` directly, NOT `{ modules }`. (2) `fluent-convex` uses extensionless ESM imports internally which fail under Node strict ESM resolution in convex-test. Fixed by adding `server.deps.inline: ["fluent-convex"]` to vitest config.
+**Root cause:** convex-test docs show `convexTest(schema, modules)` but it's easy to assume `{ modules }` pattern. The fluent-convex ESM issue is a known Node.js strict ESM resolution problem.
+**Proposed amendment:**
+> For `convex-test` integration tests: (1) pass modules as `convexTest(schema, modules)` not `convexTest(schema, { modules })`. (2) Use `import.meta.glob("../../../../convex/**/*.*s")` from `src/test/` directories. (3) Add `fluent-convex` to `test.server.deps.inline` in vite.config.ts to fix ESM resolution.
+
+## Lesson 13 (AMENDED): Convex component registration in convex-test — only when code paths hit them
+**Date:** 2026-03-15
+**Context:** Integration tests for onboarding mutations all failed with `Component "auditLog" is not registered. Call "t.registerComponent"`. The onboarding mutations call `auditLog.log()` which requires the `auditLog` component to be registered with the test instance. The `convex-audit-log` package exports a `register` function from `convex-audit-log/test` that handles this. Also needed to add `convex-audit-log` to `test.server.deps.inline` in vite.config.ts for ESM resolution.
+**Root cause:** Tests used `convexTest(schema, modules)` without registering any Convex components. Any code path that calls a component API (like `auditLog.log()`) will fail unless the component is registered via `t.registerComponent()` or the component's exported `register()` helper.
+**Proposed amendment:**
+> When writing `convex-test` integration tests for code that uses Convex components (audit-log, rate-limiter, etc.), you MUST register each component with the test instance. Most components export a `register()` function from their `/test` entrypoint (e.g. `import auditLogTest from "convex-audit-log/test"; auditLogTest.register(t)`). Also add the component package to `test.server.deps.inline` in vite.config.ts.
+> **IMPORTANT CAVEAT:** Only register components when the tests actually exercise code paths that call those components. Adding `auditLogTest.register()` imports `@convex-dev/aggregate/test` which uses `import.meta.glob` and can break if not properly inlined. The `auditAuthFailure` function (used by auth middleware on FAILED auth) doesn't need registration when all tests pass valid identity — the audit failure path is never hit.
+
+## Lesson 14: Don't narrow convex-test module globs unless you have a specific reason
+**Date:** 2026-03-15
+**Context:** When migrating ledger tests to support fluent auth middleware, an agent narrowed the broad `import.meta.glob("/convex/**/*.ts")` to selective subdirectory globs, then imported `auditLogTest` to register the audit log component. This caused `import.meta.glob is not a function` errors because `@convex-dev/aggregate/test` (transitively imported) wasn't properly inlined. The fix was to revert to the original broad glob and remove the unnecessary `auditLogTest` registration — auth middleware only calls `auditAuthFailure` on FAILED auth, but all test cases pass valid identity.
+**Root cause:** Over-engineering the test setup by adding unnecessary component registration for code paths that tests don't exercise.
+**Proposed amendment:**
+> Keep `convex-test` module globs broad (`import.meta.glob("/convex/**/*.ts")`) unless you have a measured performance reason to narrow them. Don't add component test registrations unless your tests actually exercise code paths that call those components.

@@ -1,5 +1,5 @@
 import { ConvexError, v } from "convex/values";
-import { mutation, query } from "../_generated/server";
+import { adminMutation, authedQuery } from "../fluent";
 import schema from "../schema";
 import { entityFieldValidator } from "./validators";
 
@@ -79,21 +79,21 @@ const SKIP_TABLES = new Set([
 
 // ── Queries ──────────────────────────────────────────────────────────
 
-export const list = query({
-	args: {},
-	handler: async (ctx) => {
+export const list = authedQuery
+	.input({})
+	.handler(async (ctx) => {
 		const entities = await ctx.db.query("dataModelEntities").collect();
 		return entities
 			.filter((e) => !e.hidden)
 			.sort((a, b) => a.name.localeCompare(b.name));
-	},
-});
+	})
+	.public();
 
 // ── Mutations ────────────────────────────────────────────────────────
 
-export const seed = mutation({
-	args: {},
-	handler: async (ctx) => {
+export const seed = adminMutation
+	.input({})
+	.handler(async (ctx) => {
 		const tables = schema.tables;
 		let seeded = 0;
 
@@ -166,16 +166,16 @@ export const seed = mutation({
 		}
 
 		return { seeded };
-	},
-});
+	})
+	.public();
 
-export const createCustomEntity = mutation({
-	args: {
+export const createCustomEntity = adminMutation
+	.input({
 		name: v.string(),
 		label: v.string(),
 		fields: v.array(entityFieldValidator),
-	},
-	handler: async (ctx, args) => {
+	})
+	.handler(async (ctx, args) => {
 		const existing = await ctx.db
 			.query("dataModelEntities")
 			.withIndex("by_name", (q) => q.eq("name", args.name))
@@ -194,15 +194,15 @@ export const createCustomEntity = mutation({
 			createdAt: now,
 			updatedAt: now,
 		});
-	},
-});
+	})
+	.public();
 
-export const addField = mutation({
-	args: {
+export const addField = adminMutation
+	.input({
 		entityId: v.id("dataModelEntities"),
 		field: entityFieldValidator,
-	},
-	handler: async (ctx, args) => {
+	})
+	.handler(async (ctx, args) => {
 		const entity = await ctx.db.get(args.entityId);
 		if (!entity) {
 			throw new ConvexError("Entity not found");
@@ -218,15 +218,15 @@ export const addField = mutation({
 			fields: [...entity.fields, args.field],
 			updatedAt: Date.now(),
 		});
-	},
-});
+	})
+	.public();
 
-export const removeField = mutation({
-	args: {
+export const removeField = adminMutation
+	.input({
 		entityId: v.id("dataModelEntities"),
 		fieldName: v.string(),
-	},
-	handler: async (ctx, args) => {
+	})
+	.handler(async (ctx, args) => {
 		const entity = await ctx.db.get(args.entityId);
 		if (!entity) {
 			throw new ConvexError("Entity not found");
@@ -236,12 +236,12 @@ export const removeField = mutation({
 			fields: entity.fields.filter((f) => f.name !== args.fieldName),
 			updatedAt: Date.now(),
 		});
-	},
-});
+	})
+	.public();
 
-export const toggleHidden = mutation({
-	args: { entityId: v.id("dataModelEntities") },
-	handler: async (ctx, args) => {
+export const toggleHidden = adminMutation
+	.input({ entityId: v.id("dataModelEntities") })
+	.handler(async (ctx, args) => {
 		const entity = await ctx.db.get(args.entityId);
 		if (!entity) {
 			throw new ConvexError("Entity not found");
@@ -251,12 +251,12 @@ export const toggleHidden = mutation({
 			hidden: !entity.hidden,
 			updatedAt: Date.now(),
 		});
-	},
-});
+	})
+	.public();
 
-export const removeEntity = mutation({
-	args: { entityId: v.id("dataModelEntities") },
-	handler: async (ctx, args) => {
+export const removeEntity = adminMutation
+	.input({ entityId: v.id("dataModelEntities") })
+	.handler(async (ctx, args) => {
 		const entity = await ctx.db.get(args.entityId);
 		if (!entity) {
 			throw new ConvexError("Entity not found");
@@ -267,5 +267,5 @@ export const removeEntity = mutation({
 		}
 
 		await ctx.db.delete(args.entityId);
-	},
-});
+	})
+	.public();

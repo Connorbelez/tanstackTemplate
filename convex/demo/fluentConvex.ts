@@ -61,10 +61,14 @@ export const deleteWidget = convex
 export const getMyProfile = authedQuery
 	.input({})
 	.handler(async (ctx) => {
+		const name =
+			`${ctx.viewer.firstName ?? ""} ${ctx.viewer.lastName ?? ""}`.trim() ||
+			ctx.viewer.email ||
+			"Unknown";
 		return {
-			name: `${ctx.user.firstName} ${ctx.user.lastName}`,
-			email: ctx.user.email,
-			authId: ctx.user.authId,
+			name,
+			email: ctx.viewer.email,
+			authId: ctx.viewer.authId,
 		};
 	})
 	.public();
@@ -77,7 +81,7 @@ export const createWidgetLogged = convex
 	.handler(async (ctx, input) => {
 		return await ctx.db.insert("demo_fluent_widgets", {
 			name: input.name,
-			createdBy: ctx.user.email,
+			createdBy: ctx.viewer.email ?? "anonymous",
 			createdAt: Date.now(),
 		});
 	})

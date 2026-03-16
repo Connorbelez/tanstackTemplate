@@ -1,13 +1,16 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 import { getSignUpUrl } from "@workos/authkit-tanstack-react-start";
-import { buildSignUpRedirect, getReturnPathname } from "./-auth-redirect";
+import { sanitizeRedirectPath } from "#/lib/auth-redirect";
 
 export const Route = createFileRoute("/sign-up")({
 	validateSearch: (search: Record<string, unknown>) => ({
-		redirectTo: getReturnPathname(search.redirectTo),
+		redirect: sanitizeRedirectPath(search.redirect ?? search.redirectTo),
 	}),
-	loaderDeps: ({ search: { redirectTo } }) => ({ redirectTo }),
-	loader: async ({ deps: { redirectTo } }) => {
-		throw await buildSignUpRedirect(getSignUpUrl, redirectTo);
+	loaderDeps: ({ search: { redirect } }) => ({ redirect }),
+	loader: async ({ deps: { redirect: redirectTarget } }) => {
+		const signUpUrl = await getSignUpUrl({
+			data: redirectTarget ? { returnPathname: redirectTarget } : undefined,
+		});
+		throw redirect({ href: signUpUrl });
 	},
 });

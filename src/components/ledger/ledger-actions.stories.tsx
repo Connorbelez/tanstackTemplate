@@ -9,19 +9,19 @@ const MOCK_MORTGAGES = [
 		treasuryBalance: 0,
 		positions: [
 			{
-				investorId: "demo-inv-alice",
+				lenderId: "demo-lender-alice",
 				displayName: "Alice",
 				accountId: "acc-1",
 				balance: 5000,
 			},
 			{
-				investorId: "demo-inv-bob",
+				lenderId: "demo-lender-bob",
 				displayName: "Bob",
 				accountId: "acc-2",
 				balance: 3000,
 			},
 			{
-				investorId: "demo-inv-charlie",
+				lenderId: "demo-lender-charlie",
 				displayName: "Charlie",
 				accountId: "acc-3",
 				balance: 2000,
@@ -34,7 +34,7 @@ const MOCK_MORTGAGES = [
 		treasuryBalance: 3000,
 		positions: [
 			{
-				investorId: "demo-inv-alice",
+				lenderId: "demo-lender-alice",
 				displayName: "Alice",
 				accountId: "acc-4",
 				balance: 7000,
@@ -72,9 +72,14 @@ type Story = StoryObj<typeof meta>;
 
 export const EmptyForms: Story = {
 	args: {
-		transferForm: { mortgage: "", seller: "", buyer: "demo-inv-", amount: "" },
-		issueForm: { mortgage: "", investor: "demo-inv-", amount: "" },
-		redeemForm: { mortgage: "", investor: "", amount: "" },
+		transferForm: {
+			mortgage: "",
+			seller: "",
+			buyer: "demo-lender-",
+			amount: "",
+		},
+		issueForm: { mortgage: "", lender: "demo-lender-", amount: "" },
+		redeemForm: { mortgage: "", lender: "", amount: "" },
 	},
 };
 
@@ -82,34 +87,44 @@ export const TransferPreFilled: Story = {
 	args: {
 		transferForm: {
 			mortgage: "demo-mtg-greenfield",
-			seller: "demo-inv-alice",
-			buyer: "demo-inv-dave",
+			seller: "demo-lender-alice",
+			buyer: "demo-lender-dave",
 			amount: "2000",
 		},
-		issueForm: { mortgage: "", investor: "demo-inv-", amount: "" },
-		redeemForm: { mortgage: "", investor: "", amount: "" },
+		issueForm: { mortgage: "", lender: "demo-lender-", amount: "" },
+		redeemForm: { mortgage: "", lender: "", amount: "" },
 	},
 };
 
 export const IssuePreFilled: Story = {
 	args: {
-		transferForm: { mortgage: "", seller: "", buyer: "demo-inv-", amount: "" },
+		transferForm: {
+			mortgage: "",
+			seller: "",
+			buyer: "demo-lender-",
+			amount: "",
+		},
 		issueForm: {
 			mortgage: "demo-mtg-riverside",
-			investor: "demo-inv-eve",
+			lender: "demo-lender-eve",
 			amount: "1000",
 		},
-		redeemForm: { mortgage: "", investor: "", amount: "" },
+		redeemForm: { mortgage: "", lender: "", amount: "" },
 	},
 };
 
 export const RedeemPreFilled: Story = {
 	args: {
-		transferForm: { mortgage: "", seller: "", buyer: "demo-inv-", amount: "" },
-		issueForm: { mortgage: "", investor: "demo-inv-", amount: "" },
+		transferForm: {
+			mortgage: "",
+			seller: "",
+			buyer: "demo-lender-",
+			amount: "",
+		},
+		issueForm: { mortgage: "", lender: "demo-lender-", amount: "" },
 		redeemForm: {
 			mortgage: "demo-mtg-greenfield",
-			investor: "demo-inv-bob",
+			lender: "demo-lender-bob",
 			amount: "3000",
 		},
 	},
@@ -120,11 +135,11 @@ export const LoadingState: Story = {
 		loading: true,
 		transferForm: {
 			mortgage: "demo-mtg-greenfield",
-			seller: "demo-inv-alice",
-			buyer: "demo-inv-dave",
+			seller: "demo-lender-alice",
+			buyer: "demo-lender-dave",
 			amount: "2000",
 		},
-		issueForm: { mortgage: "", investor: "demo-inv-", amount: "" },
-		redeemForm: { mortgage: "", investor: "", amount: "" },
+		issueForm: { mortgage: "", lender: "demo-lender-", amount: "" },
+		redeemForm: { mortgage: "", lender: "", amount: "" },
 	},
 };

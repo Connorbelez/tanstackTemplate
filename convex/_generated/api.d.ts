@@ -8,8 +8,13 @@
  * @module
  */
 
+import type * as audit_queries from "../audit/queries.js";
+import type * as auditLog from "../auditLog.js";
 import type * as auditTrailClient from "../auditTrailClient.js";
 import type * as auth from "../auth.js";
+import type * as auth_auditAuth from "../auth/auditAuth.js";
+import type * as auth_internal from "../auth/internal.js";
+import type * as constants from "../constants.js";
 import type * as crons from "../crons.js";
 import type * as demo_actionCache from "../demo/actionCache.js";
 import type * as demo_aggregate from "../demo/aggregate.js";
@@ -26,6 +31,7 @@ import type * as demo_ledger from "../demo/ledger.js";
 import type * as demo_migrations from "../demo/migrations.js";
 import type * as demo_presence from "../demo/presence.js";
 import type * as demo_rateLimiter from "../demo/rateLimiter.js";
+import type * as demo_rbacAuth from "../demo/rbacAuth.js";
 import type * as demo_timeline from "../demo/timeline.js";
 import type * as demo_tracer from "../demo/tracer.js";
 import type * as demo_triggers from "../demo/triggers.js";
@@ -41,16 +47,34 @@ import type * as documentEngine_templateTimeline from "../documentEngine/templat
 import type * as documentEngine_templateVersions from "../documentEngine/templateVersions.js";
 import type * as documentEngine_templates from "../documentEngine/templates.js";
 import type * as documentEngine_validators from "../documentEngine/validators.js";
+import type * as engine_auditJournal from "../engine/auditJournal.js";
+import type * as engine_effects_onboarding from "../engine/effects/onboarding.js";
+import type * as engine_effects_registry from "../engine/effects/registry.js";
+import type * as engine_effects_workosProvisioning from "../engine/effects/workosProvisioning.js";
+import type * as engine_hashChain from "../engine/hashChain.js";
+import type * as engine_machines_registry from "../engine/machines/registry.js";
+import type * as engine_reconciliation from "../engine/reconciliation.js";
+import type * as engine_transition from "../engine/transition.js";
+import type * as engine_transitionMutation from "../engine/transitionMutation.js";
+import type * as engine_types from "../engine/types.js";
+import type * as engine_validators from "../engine/validators.js";
 import type * as fluent from "../fluent.js";
 import type * as http from "../http.js";
+import type * as ledger_accountOwnership from "../ledger/accountOwnership.js";
 import type * as ledger_constants from "../ledger/constants.js";
 import type * as ledger_cursors from "../ledger/cursors.js";
 import type * as ledger_internal from "../ledger/internal.js";
+import type * as ledger_migrations from "../ledger/migrations.js";
 import type * as ledger_mutations from "../ledger/mutations.js";
 import type * as ledger_queries from "../ledger/queries.js";
 import type * as ledger_validation from "../ledger/validation.js";
 import type * as ledger_validators from "../ledger/validators.js";
 import type * as numbers from "../numbers.js";
+import type * as onboarding_internal from "../onboarding/internal.js";
+import type * as onboarding_mutations from "../onboarding/mutations.js";
+import type * as onboarding_queries from "../onboarding/queries.js";
+import type * as onboarding_validators from "../onboarding/validators.js";
+import type * as test_authTestEndpoints from "../test/authTestEndpoints.js";
 import type * as todos from "../todos.js";
 
 import type {
@@ -60,8 +84,13 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  "audit/queries": typeof audit_queries;
+  auditLog: typeof auditLog;
   auditTrailClient: typeof auditTrailClient;
   auth: typeof auth;
+  "auth/auditAuth": typeof auth_auditAuth;
+  "auth/internal": typeof auth_internal;
+  constants: typeof constants;
   crons: typeof crons;
   "demo/actionCache": typeof demo_actionCache;
   "demo/aggregate": typeof demo_aggregate;
@@ -78,6 +107,7 @@ declare const fullApi: ApiFromModules<{
   "demo/migrations": typeof demo_migrations;
   "demo/presence": typeof demo_presence;
   "demo/rateLimiter": typeof demo_rateLimiter;
+  "demo/rbacAuth": typeof demo_rbacAuth;
   "demo/timeline": typeof demo_timeline;
   "demo/tracer": typeof demo_tracer;
   "demo/triggers": typeof demo_triggers;
@@ -93,16 +123,34 @@ declare const fullApi: ApiFromModules<{
   "documentEngine/templateVersions": typeof documentEngine_templateVersions;
   "documentEngine/templates": typeof documentEngine_templates;
   "documentEngine/validators": typeof documentEngine_validators;
+  "engine/auditJournal": typeof engine_auditJournal;
+  "engine/effects/onboarding": typeof engine_effects_onboarding;
+  "engine/effects/registry": typeof engine_effects_registry;
+  "engine/effects/workosProvisioning": typeof engine_effects_workosProvisioning;
+  "engine/hashChain": typeof engine_hashChain;
+  "engine/machines/registry": typeof engine_machines_registry;
+  "engine/reconciliation": typeof engine_reconciliation;
+  "engine/transition": typeof engine_transition;
+  "engine/transitionMutation": typeof engine_transitionMutation;
+  "engine/types": typeof engine_types;
+  "engine/validators": typeof engine_validators;
   fluent: typeof fluent;
   http: typeof http;
+  "ledger/accountOwnership": typeof ledger_accountOwnership;
   "ledger/constants": typeof ledger_constants;
   "ledger/cursors": typeof ledger_cursors;
   "ledger/internal": typeof ledger_internal;
+  "ledger/migrations": typeof ledger_migrations;
   "ledger/mutations": typeof ledger_mutations;
   "ledger/queries": typeof ledger_queries;
   "ledger/validation": typeof ledger_validation;
   "ledger/validators": typeof ledger_validators;
   numbers: typeof numbers;
+  "onboarding/internal": typeof onboarding_internal;
+  "onboarding/mutations": typeof onboarding_mutations;
+  "onboarding/queries": typeof onboarding_queries;
+  "onboarding/validators": typeof onboarding_validators;
+  "test/authTestEndpoints": typeof test_authTestEndpoints;
   todos: typeof todos;
 }>;
 

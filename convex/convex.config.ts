@@ -21,7 +21,7 @@ import auditLog from "convex-audit-log/convex.config.js";
 import fs from "convex-fs/convex.config.js";
 import timeline from "convex-timeline/convex.config.js";
 import tracer from "convex-tracer/convex.config";
-import auditTrail from "./components/auditTrail/convex.config.js";
+import auditTrail from "./components/auditTrail/convex.config.ts";
 
 const app = defineApp();
 app.use(workOSAuthKit);

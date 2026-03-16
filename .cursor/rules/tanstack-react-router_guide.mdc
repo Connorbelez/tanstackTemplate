@@ -1,8 +1,14 @@
 ---
-description: TanStack Router: Guide
-globs: src/**/*.ts,src/**/*.tsx
+description: Apply when working on TanStack Router route files, router setup, navigation, loaders, search params, route guards, or route tree configuration in the frontend.
+globs:
+  - src/routes/**/*.ts
+  - src/routes/**/*.tsx
+  - src/router.tsx
+  - src/routeTree.gen.ts
+  - src/start.ts
 alwaysApply: false
 ---
+
 # Authenticated Routes
 
 Authentication is an extremely common requirement for web applications. In this guide, we'll walk through how to use TanStack Router to build protected routes, and how to redirect users to login if they try to access them.
@@ -671,7 +677,7 @@ If you are not able to use the automatic code-splitting feature, you can still c
 These are the only options that `createLazyFileRoute` supports:
 
 | Export Name         | Description                                                           |
-| ------------------- | --------------------------------------------------------------------- |
+| ---- | --- |
 | `component`         | The component to render for the route.                                |
 | `errorComponent`    | The component to render when an error occurs while loading the route. |
 | `pendingComponent`  | The component to render while the route is loading.                   |
@@ -9542,7 +9548,7 @@ function Breadcrumbs() {
 ### When to Use staticData vs Context
 
 | staticData                             | context                         |
-| -------------------------------------- | ------------------------------- |
+| ----- | ---- |
 | Synchronous, defined at route creation | Can be async (via `beforeLoad`) |
 | Available before loading starts        | Can depend on params/search     |
 | Same for all instances of a route      | Passed down to child routes     |
@@ -10691,4 +10697,3 @@ Complete working examples are available in the TanStack Router repository:
 - [React + TanStack Start + Paraglide (SSR i18n)](https://github.com/TanStack/router/tree/main/examples/react/start-i18n-paraglide)
 - [Solid + Paraglide (Client-side i18n)](https://github.com/TanStack/router/tree/main/examples/solid/i18n-paraglide)
 - [Solid + TanStack Start + Paraglide (SSR i18n)](https://github.com/TanStack/router/tree/main/examples/solid/start-i18n-paraglide)
-

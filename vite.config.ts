@@ -49,6 +49,37 @@ function skipPdfmeBabelTransform(): Plugin {
 const config = defineConfig({
 	test: {
 		exclude: [...configDefaults.exclude, "e2e/**"],
+		coverage: {
+			provider: "v8",
+			reporter: ["text", "json-summary", "html"],
+			include: [
+				"convex/onboarding/mutations.ts",
+				"convex/onboarding/queries.ts",
+				"convex/onboarding/internal.ts",
+				"convex/engine/transition.ts",
+				"convex/engine/transitionMutation.ts",
+				"convex/engine/effects/onboarding.ts",
+				"convex/engine/auditJournal.ts",
+				"convex/engine/hashChain.ts",
+				"convex/engine/reconciliation.ts",
+			],
+			thresholds: {
+				perFile: true,
+				lines: 100,
+				functions: 100,
+				statements: 100,
+				branches: 95,
+			},
+		},
+		server: {
+			deps: {
+				// fluent-convex uses extensionless ESM imports internally
+				// which fail under Node strict ESM resolution in convex-test.
+				// @convex-dev/aggregate exports src/test.ts with import.meta.glob
+				// that needs Vite transformation.
+				inline: ["fluent-convex"],
+			},
+		},
 	},
 	plugins: [
 		skipPdfmeBabelTransform(),

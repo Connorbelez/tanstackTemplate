@@ -1,11 +1,12 @@
 import { v } from "convex/values";
 import { internal } from "../_generated/api";
-import { action, internalMutation, query } from "../_generated/server";
+import { internalMutation } from "../_generated/server";
 import { authKit } from "../auth";
+import { authedAction, authedQuery } from "../fluent";
 
-export const getUserOrganizations = query({
-	args: { userWorkosId: v.string() },
-	handler: async (ctx, args) => {
+export const getUserOrganizations = authedQuery
+	.input({ userWorkosId: v.string() })
+	.handler(async (ctx, args) => {
 		const memberships = await ctx.db
 			.query("organizationMemberships")
 			.withIndex("byUser", (q) => q.eq("userWorkosId", args.userWorkosId))
@@ -24,22 +25,20 @@ export const getUserOrganizations = query({
 		);
 
 		return results;
-	},
-});
+	})
+	.public();
 
-export const listRoles = query({
-	args: {},
-	handler: async (ctx) => {
+export const listRoles = authedQuery
+	.handler(async (ctx) => {
 		return await ctx.db.query("roles").collect();
-	},
-});
+	})
+	.public();
 
-export const getActionLogs = query({
-	args: {},
-	handler: async (ctx) => {
+export const getActionLogs = authedQuery
+	.handler(async (ctx) => {
 		return await ctx.db.query("demo_auth_action_logs").order("desc").take(50);
-	},
-});
+	})
+	.public();
 
 // ── Internal mutations for syncing API data to Convex ────────────────
 
@@ -131,9 +130,8 @@ export const upsertUserFromApi = internalMutation({
 
 // ── Full sync action ─────────────────────────────────────────────────
 
-export const syncAllFromWorkosApi = action({
-	args: {},
-	handler: async (ctx) => {
+export const syncAllFromWorkosApi = authedAction
+	.handler(async (ctx) => {
 		const identity = await ctx.auth.getUserIdentity();
 		if (!identity) {
 			throw new Error("Not authenticated");
@@ -225,5 +223,5 @@ export const syncAllFromWorkosApi = action({
 		}
 
 		return { userCount, orgCount, membershipCount, roleCount };
-	},
-});
+	})
+	.public();

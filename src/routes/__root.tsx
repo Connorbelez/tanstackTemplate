@@ -8,7 +8,7 @@ import {
 	Scripts,
 } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/react-start";
-import { getAuth } from "@workos/authkit-tanstack-react-start";
+import { getAuth, type UserInfo } from "@workos/authkit-tanstack-react-start";
 import type { ConvexReactClient } from "convex/react";
 import type { ReactNode } from "react";
 import { AppErrorComponent } from "../components/error-boundary";
@@ -25,10 +25,23 @@ const THEME_INIT_SCRIPT = `(function(){try{var stored=window.localStorage.getIte
 const fetchWorkosAuth = createServerFn({ method: "GET" }).handler(async () => {
 	const auth = await getAuth();
 	const { user } = auth;
+	if (!user) {
+		return {
+			userId: null as string | null,
+			token: null as string | null,
+			roles: [] as string[],
+			permissions: [] as string[],
+			orgId: null as string | null,
+		};
+	}
 
+	const info = auth as UserInfo;
 	return {
-		userId: user?.id ?? null,
-		token: user ? auth.accessToken : null,
+		userId: user.id,
+		token: info.accessToken,
+		roles: info.roles ?? [],
+		permissions: info.permissions ?? [],
+		orgId: info.organizationId ?? null,
 	};
 });
 
@@ -71,7 +84,8 @@ export const Route = createRootRouteWithContext<{
 		</RootDocument>
 	),
 	beforeLoad: async (ctx) => {
-		const { userId, token } = await fetchWorkosAuth();
+		const { userId, token, roles, permissions, orgId } =
+			await fetchWorkosAuth();
 
 		// During SSR only (the only time serverHttpClient exists),
 		// set the WorkOS auth token to make HTTP queries with.
@@ -79,7 +93,7 @@ export const Route = createRootRouteWithContext<{
 			ctx.context.convexQueryClient.serverHttpClient?.setAuth(token);
 		}
 
-		return { userId, token };
+		return { userId, token, roles, permissions, orgId };
 	},
 });
 

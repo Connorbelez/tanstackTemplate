@@ -1,11 +1,12 @@
 import { v } from "convex/values";
-import { query } from "../_generated/server";
+import { ledgerQuery } from "../fluent";
+import { getAccountLenderId } from "./accountOwnership";
 import { UNITS_PER_MORTGAGE } from "./constants";
 import { computeBalance } from "./internal";
 
-export const validateSupplyInvariant = query({
-	args: { mortgageId: v.string() },
-	handler: async (ctx, args) => {
+export const validateSupplyInvariant = ledgerQuery
+	.input({ mortgageId: v.string() })
+	.handler(async (ctx, args) => {
 		// Find TREASURY
 		const treasury = await ctx.db
 			.query("ledger_accounts")
@@ -19,7 +20,7 @@ export const validateSupplyInvariant = query({
 				valid: false as const,
 				treasuryBalance: 0n,
 				positions: [] as Array<{
-					investorId: string;
+					lenderId: string;
 					balance: bigint;
 				}>,
 				total: 0n,
@@ -37,10 +38,18 @@ export const validateSupplyInvariant = query({
 
 		const positions = accounts
 			.filter((a) => a.type === "POSITION")
-			.map((a) => ({
-				investorId: a.investorId ?? "",
-				balance: computeBalance(a),
-			}));
+			.map((a) => {
+				const lenderId = getAccountLenderId(a);
+				if (!lenderId) {
+					throw new Error(
+						`POSITION account ${a._id} is missing lenderId for mortgage ${args.mortgageId}`
+					);
+				}
+				return {
+					lenderId,
+					balance: computeBalance(a),
+				};
+			});
 
 		const positionSum = positions.reduce((sum, p) => sum + p.balance, 0n);
 		const total = treasuryBalance + positionSum;
@@ -51,5 +60,5 @@ export const validateSupplyInvariant = query({
 			positions,
 			total,
 		};
-	},
-});
+	})
+	.public();

@@ -1,8 +1,9 @@
 ---
-description: TanStack Router: Routing
-globs: src/**/*.ts,src/**/*.tsx
+description: TanStack Router routing guide for route files, layouts, params, route trees, and route matching when working on route definitions or router configuration
+globs: src/routes/**/*.ts,src/routes/**/*.tsx,src/router.tsx,test/routes/**/*.ts,test/routes/**/*.tsx
 alwaysApply: false
 ---
+
 # Code-Based Routing
 
 > [!TIP]
@@ -217,7 +218,7 @@ Absolutely! The reason for passing the parent route has **everything to do with 
 When configuring route `path` option on a route, it ignores leading and trailing slashes (this does not include "index" route paths `/`). You can include them if you want, but they will be normalized internally by TanStack Router. Here is a table of valid paths and what they will be normalized to:
 
 | Path     | Normalized Path |
-| -------- | --------------- |
+| ----- | --- |
 | `/`      | `/`             |
 | `/about` | `about`         |
 | `about/` | `about`         |
@@ -564,7 +565,7 @@ Directories can be used to denote route hierarchy, which can be useful for organ
 See the example below:
 
 | Filename                | Route Path                | Component Output                  |
-| ----------------------- | ------------------------- | --------------------------------- |
+| ----- | ---- | --- |
 | ʦ `__root.tsx`          |                           | `<Root>`                          |
 | ʦ `index.tsx`           | `/` (exact)               | `<Root><RootIndex>`               |
 | ʦ `about.tsx`           | `/about`                  | `<Root><About>`                   |
@@ -598,7 +599,7 @@ This can be useful when you have a large number of uniquely deeply nested routes
 See the example below:
 
 | Filename                        | Route Path                | Component Output                  |
-| ------------------------------- | ------------------------- | --------------------------------- |
+| ---- | ---- | --- |
 | ʦ `__root.tsx`                  |                           | `<Root>`                          |
 | ʦ `index.tsx`                   | `/` (exact)               | `<Root><RootIndex>`               |
 | ʦ `about.tsx`                   | `/about`                  | `<Root><About>`                   |
@@ -623,7 +624,7 @@ It's extremely likely that a 100% directory or flat route structure won't be the
 See the example below:
 
 | Filename                       | Route Path                | Component Output                  |
-| ------------------------------ | ------------------------- | --------------------------------- |
+| --- | ---- | --- |
 | ʦ `__root.tsx`                 |                           | `<Root>`                          |
 | ʦ `index.tsx`                  | `/` (exact)               | `<Root><RootIndex>`               |
 | ʦ `about.tsx`                  | `/about`                  | `<Root><About>`                   |
@@ -676,7 +677,7 @@ If your bundler is not yet supported, you can reach out to us on Discord or GitH
 File-based routing requires that you follow a few simple file naming conventions to ensure that your routes are generated correctly. The concepts these conventions enable are covered in detail in the [Route Trees & Nesting](./route-trees.md) guide.
 
 | Feature                            | Description                                                                                                                                                                                                                                                                                                                                                                                                          |
-| ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ---- | ----- |
 | **`__root.tsx`**                   | The root route file must be named `__root.tsx` and must be placed in the root of the configured `routesDirectory`.                                                                                                                                                                                                                                                                                                   |
 | **`.` Separator**                  | Routes can use the `.` character to denote a nested route. For example, `blog.post` will be generated as a child of `blog`.                                                                                                                                                                                                                                                                                          |
 | **`$` Token**                      | Route segments with the `$` token are parameterized and will extract the value from the URL pathname as a route `param`.                                                                                                                                                                                                                                                                                             |
@@ -695,7 +696,7 @@ File-based routing requires that you follow a few simple file naming conventions
 Dynamic path params can be used in both flat and directory routes to create routes that can match a dynamic segment of the URL path. Dynamic path params are denoted by the `$` character in the filename:
 
 | Filename              | Route Path       | Component Output      |
-| --------------------- | ---------------- | --------------------- |
+| --- | ---- | --- |
 | ...                   | ...              | ...                   |
 | ʦ `posts.$postId.tsx` | `/posts/$postId` | `<Root><Posts><Post>` |
 
@@ -706,7 +707,7 @@ We'll learn more about dynamic path params in the [Path Params](../guide/path-pa
 Pathless routes wrap child routes with either logic or a component without requiring a URL path. Non-path routes are denoted by the `_` character in the filename:
 
 | Filename       | Route Path | Component Output |
-| -------------- | ---------- | ---------------- |
+| ----- | ---- | ---- |
 | ʦ `_app.tsx`   |            |                  |
 | ʦ `_app.a.tsx` | /a         | `<Root><App><A>` |
 | ʦ `_app.b.tsx` | /b         | `<Root><App><B>` |
@@ -1265,7 +1266,7 @@ function AppLayoutComponent() {
 The following table shows which component(s) will be rendered based on the URL:
 
 | URL Path         | Component                |
-| ---------------- | ------------------------ |
+| ---- | --- |
 | `/app`           | `<AppLayout>`            |
 | `/app/dashboard` | `<AppLayout><Dashboard>` |
 | `/app/settings`  | `<AppLayout><Settings>`  |
@@ -1361,7 +1362,7 @@ function PathlessLayoutComponent() {
 The following table shows which component will be rendered based on the URL:
 
 | URL Path | Component             |
-| -------- | --------------------- |
+| ----- | --- |
 | `/`      | `<Index>`             |
 | `/a`     | `<PathlessLayout><A>` |
 | `/b`     | `<PathlessLayout><B>` |
@@ -1411,7 +1412,7 @@ routes/
 The following table shows which component will be rendered based on the URL:
 
 | URL Path          | Component                    |
-| ----------------- | ---------------------------- |
+| ----- | ---- |
 | `/posts`          | `<Posts>`                    |
 | `/posts/123`      | `<Posts><Post postId="123">` |
 | `/posts/123/edit` | `<PostEditor postId="123">`  |
@@ -1516,7 +1517,7 @@ In the example above, the `app` and `auth` directories are purely organizational
 The following table shows which component will be rendered based on the URL:
 
 | URL Path     | Component     |
-| ------------ | ------------- |
+| --- | ---- |
 | `/`          | `<Index>`     |
 | `/dashboard` | `<Dashboard>` |
 | `/settings`  | `<Settings>`  |
@@ -1985,4 +1986,3 @@ Or you can define the virtual routes directly in the configuration, while much l
   }
 }
 ```
-

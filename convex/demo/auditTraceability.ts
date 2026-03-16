@@ -9,9 +9,10 @@ import { Triggers } from "convex-helpers/server/triggers";
 import { Tracer } from "convex-tracer";
 import { components } from "../_generated/api";
 import type { DataModel, Doc } from "../_generated/dataModel";
-import { query, mutation as rawMutation } from "../_generated/server";
+// biome-ignore lint/style/noRestrictedImports: Triggers require raw mutation for customMutation with wrapDB
+import { mutation as rawMutation } from "../_generated/server";
 import { AuditTrail } from "../auditTrailClient";
-import { convex } from "../fluent";
+import { authedQuery, convex } from "../fluent";
 
 // ── Setup ────────────────────────────────────────────────────────
 // Layer 3: Third-party audit log component (its own PII redaction)
@@ -323,50 +324,48 @@ export const seedData = auditedMutation
 	.public();
 
 // ── Queries (delegate to component) ──────────────────────────────
-export const listMortgages = query({
-	args: {},
-	handler: async (ctx) => {
+export const listMortgages = authedQuery
+	.handler(async (ctx) => {
 		return await ctx.db.query("demo_audit_mortgages").order("desc").collect();
-	},
-});
+	})
+	.public();
 
-export const getAuditEvents = query({
-	args: { entityId: v.string() },
-	handler: async (ctx, args) => {
+export const getAuditEvents = authedQuery
+	.input({ entityId: v.string() })
+	.handler(async (ctx, args) => {
 		return await auditTrail.queryByEntity(ctx, {
 			entityId: args.entityId,
 		});
-	},
-});
+	})
+	.public();
 
-export const verifyChain = query({
-	args: { entityId: v.string() },
-	handler: async (ctx, args) => {
+export const verifyChain = authedQuery
+	.input({ entityId: v.string() })
+	.handler(async (ctx, args) => {
 		return await auditTrail.verifyChain(ctx, { entityId: args.entityId });
-	},
-});
+	})
+	.public();
 
-export const exportAuditTrail = query({
-	args: { entityId: v.string() },
-	handler: async (ctx, args) => {
+export const exportAuditTrail = authedQuery
+	.input({ entityId: v.string() })
+	.handler(async (ctx, args) => {
 		return await auditTrail.exportTrail(ctx, { entityId: args.entityId });
-	},
-});
+	})
+	.public();
 
-export const getOutboxStatus = query({
-	args: {},
-	handler: async (ctx) => {
+export const getOutboxStatus = authedQuery
+	.handler(async (ctx) => {
 		return await auditTrail.getOutboxStatus(ctx);
-	},
-});
+	})
+	.public();
 
-export const getAuditTrail = query({
-	args: {
+export const getAuditTrail = authedQuery
+	.input({
 		mode: v.union(v.literal("resource"), v.literal("actor")),
 		resourceId: v.optional(v.string()),
 		actorId: v.optional(v.string()),
-	},
-	handler: async (ctx, args) => {
+	})
+	.handler(async (ctx, args) => {
 		if (args.mode === "resource" && args.resourceId) {
 			return await auditLog.queryByResource(ctx, {
 				resourceType: "demo_audit_mortgages",
@@ -381,18 +380,17 @@ export const getAuditTrail = query({
 			});
 		}
 		return [];
-	},
-});
+	})
+	.public();
 
-export const watchCritical = query({
-	args: {},
-	handler: async (ctx) => {
+export const watchCritical = authedQuery
+	.handler(async (ctx) => {
 		return await auditLog.watchCritical(ctx, {
 			severity: ["warning", "error", "critical"],
 			limit: 20,
 		});
-	},
-});
+	})
+	.public();
 
 // ── Audit-the-Auditor (read access logging) ─────────────────────
 export const logAuditAccess = auditedMutation
@@ -417,24 +415,23 @@ export const logAuditAccess = auditedMutation
 	})
 	.public();
 
-export const getAccessLog = query({
-	args: {
+export const getAccessLog = authedQuery
+	.input({
 		entityId: v.optional(v.string()),
 		limit: v.optional(v.number()),
-	},
-	handler: async (ctx, args) => {
+	})
+	.handler(async (ctx, args) => {
 		return await auditLog.queryByResource(ctx, {
 			resourceType: "audit_trail",
 			resourceId: args.entityId ?? "global",
 			limit: args.limit ?? 50,
 		});
-	},
-});
+	})
+	.public();
 
 // ── Compliance Report Generation ─────────────────────────────────
-export const generateComplianceReport = query({
-	args: {},
-	handler: async (ctx) => {
+export const generateComplianceReport = authedQuery
+	.handler(async (ctx) => {
 		const mortgages = await ctx.db
 			.query("demo_audit_mortgages")
 			.order("desc")
@@ -540,8 +537,8 @@ export const generateComplianceReport = query({
 			},
 			entityDetails: chainResults,
 		};
-	},
-});
+	})
+	.public();
 
 // ── Manual Outbox Emission (delegates to component) ──────────────
 export const emitPendingEvents = rawMutation({

@@ -1,7 +1,7 @@
 import { MINUTE, RateLimiter, SECOND } from "@convex-dev/rate-limiter";
 import { v } from "convex/values";
 import { components } from "../_generated/api";
-import { mutation, query } from "../_generated/server";
+import { authedMutation, authedQuery } from "../fluent";
 
 const rateLimiter = new RateLimiter(components.rateLimiter, {
 	demoTokenBucket: {
@@ -17,15 +17,15 @@ const rateLimiter = new RateLimiter(components.rateLimiter, {
 	},
 });
 
-export const attemptAction = mutation({
-	args: {
+export const attemptAction = authedMutation
+	.input({
 		limitName: v.union(
 			v.literal("demoTokenBucket"),
 			v.literal("demoFixedWindow")
 		),
 		key: v.string(),
-	},
-	handler: async (ctx, args) => {
+	})
+	.handler(async (ctx, args) => {
 		const status = await rateLimiter.limit(ctx, args.limitName, {
 			key: args.key,
 		});
@@ -33,18 +33,18 @@ export const attemptAction = mutation({
 			ok: status.ok,
 			retryAfter: status.ok ? 0 : status.retryAfter,
 		};
-	},
-});
+	})
+	.public();
 
-export const checkStatus = query({
-	args: {
+export const checkStatus = authedQuery
+	.input({
 		limitName: v.union(
 			v.literal("demoTokenBucket"),
 			v.literal("demoFixedWindow")
 		),
 		key: v.string(),
-	},
-	handler: async (ctx, args) => {
+	})
+	.handler(async (ctx, args) => {
 		const status = await rateLimiter.check(ctx, args.limitName, {
 			key: args.key,
 		});
@@ -52,5 +52,5 @@ export const checkStatus = query({
 			ok: status.ok,
 			retryAfter: status.ok ? 0 : status.retryAfter,
 		};
-	},
-});
+	})
+	.public();

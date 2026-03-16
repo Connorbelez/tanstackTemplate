@@ -1,22 +1,36 @@
 import { v } from "convex/values";
 import type { Id } from "../_generated/dataModel";
-import { query } from "../_generated/server";
+import { ledgerQuery } from "../fluent";
+import { getAccountLenderId } from "./accountOwnership";
 import { computeBalance } from "./internal";
 
-export const getBalance = query({
-	args: { accountId: v.id("ledger_accounts") },
-	handler: async (ctx, args) => {
+function compareSequenceNumbers(
+	left: { sequenceNumber: bigint },
+	right: { sequenceNumber: bigint }
+) {
+	if (left.sequenceNumber < right.sequenceNumber) {
+		return -1;
+	}
+	if (left.sequenceNumber > right.sequenceNumber) {
+		return 1;
+	}
+	return 0;
+}
+
+export const getBalance = ledgerQuery
+	.input({ accountId: v.id("ledger_accounts") })
+	.handler(async (ctx, args) => {
 		const account = await ctx.db.get(args.accountId);
 		if (!account) {
 			throw new Error(`Account ${args.accountId} not found`);
 		}
 		return computeBalance(account);
-	},
-});
+	})
+	.public();
 
-export const getPositions = query({
-	args: { mortgageId: v.string() },
-	handler: async (ctx, args) => {
+export const getPositions = ledgerQuery
+	.input({ mortgageId: v.string() })
+	.handler(async (ctx, args) => {
 		const accounts = await ctx.db
 			.query("ledger_accounts")
 			.withIndex("by_mortgage", (q) => q.eq("mortgageId", args.mortgageId))
@@ -26,30 +40,45 @@ export const getPositions = query({
 			(a) => a.type === "POSITION" && computeBalance(a) > 0n
 		);
 
-		const accountMissingInvestor = positionAccounts.find(
-			(a) => a.investorId == null
+		const accountMissingLender = positionAccounts.find(
+			(a) => getAccountLenderId(a) == null
 		);
-		if (accountMissingInvestor) {
+		if (accountMissingLender) {
 			throw new Error(
-				`POSITION account ${accountMissingInvestor._id} is missing investorId`
+				`POSITION account ${accountMissingLender._id} is missing lenderId`
 			);
 		}
 
 		return positionAccounts.map((a) => ({
-			investorId: a.investorId as string,
+			lenderId: getAccountLenderId(a) as string,
 			accountId: a._id,
 			balance: computeBalance(a),
 		}));
-	},
-});
+	})
+	.public();
 
-export const getInvestorPositions = query({
-	args: { investorId: v.string() },
-	handler: async (ctx, args) => {
-		const accounts = await ctx.db
+export const getLenderPositions = ledgerQuery
+	.input({ lenderId: v.string() })
+	.handler(async (ctx, args) => {
+		const indexedAccounts = await ctx.db
 			.query("ledger_accounts")
-			.withIndex("by_investor", (q) => q.eq("investorId", args.investorId))
+			.withIndex("by_lender", (q) => q.eq("lenderId", args.lenderId))
 			.collect();
+		const legacyAccounts = (
+			await ctx.db.query("ledger_accounts").collect()
+		).filter(
+			(account) =>
+				account.type === "POSITION" &&
+				getAccountLenderId(account) === args.lenderId
+		);
+		const accounts = Array.from(
+			new Map(
+				[...indexedAccounts, ...legacyAccounts].map((account) => [
+					account._id,
+					account,
+				])
+			).values()
+		);
 
 		return accounts
 			.filter((a) => a.type === "POSITION" && computeBalance(a) > 0n)
@@ -58,15 +87,15 @@ export const getInvestorPositions = query({
 				accountId: a._id,
 				balance: computeBalance(a),
 			}));
-	},
-});
+	})
+	.public();
 
-export const getBalanceAt = query({
-	args: {
+export const getBalanceAt = ledgerQuery
+	.input({
 		accountId: v.id("ledger_accounts"),
 		asOf: v.float64(),
-	},
-	handler: async (ctx, args) => {
+	})
+	.handler(async (ctx, args) => {
 		const account = await ctx.db.get(args.accountId);
 		if (!account) {
 			throw new Error(`Account ${args.accountId} not found`);
@@ -95,15 +124,15 @@ export const getBalanceAt = query({
 			balance -= e.amount;
 		}
 		return balance;
-	},
-});
+	})
+	.public();
 
-export const getPositionsAt = query({
-	args: {
+export const getPositionsAt = ledgerQuery
+	.input({
 		mortgageId: v.string(),
 		asOf: v.float64(),
-	},
-	handler: async (ctx, args) => {
+	})
+	.handler(async (ctx, args) => {
 		const entries = await ctx.db
 			.query("ledger_journal_entries")
 			.withIndex("by_mortgage_and_time", (q) =>
@@ -119,12 +148,15 @@ export const getPositionsAt = query({
 		}
 		const accountInfo = new Map<
 			string,
-			{ investorId: string | undefined; type: string }
+			{ lenderId: string | undefined; type: string }
 		>();
 		const accountFetches = [...accountIds].map(async (id) => {
 			const acc = await ctx.db.get(id as Id<"ledger_accounts">);
 			if (acc) {
-				accountInfo.set(id, { investorId: acc.investorId, type: acc.type });
+				accountInfo.set(id, {
+					lenderId: getAccountLenderId(acc),
+					type: acc.type,
+				});
 			}
 		});
 		await Promise.all(accountFetches);
@@ -139,25 +171,25 @@ export const getPositionsAt = query({
 			balances.set(entry.creditAccountId, prevCredit - entry.amount);
 		}
 
-		const results: Array<{ investorId: string; balance: bigint }> = [];
+		const results: Array<{ lenderId: string; balance: bigint }> = [];
 		for (const [accountId, balance] of balances) {
 			const info = accountInfo.get(accountId);
-			if (info?.type === "POSITION" && info.investorId && balance > 0n) {
-				results.push({ investorId: info.investorId, balance });
+			if (info?.type === "POSITION" && info.lenderId && balance > 0n) {
+				results.push({ lenderId: info.lenderId, balance });
 			}
 		}
 		return results;
-	},
-});
+	})
+	.public();
 
-export const getAccountHistory = query({
-	args: {
+export const getAccountHistory = ledgerQuery
+	.input({
 		accountId: v.id("ledger_accounts"),
 		from: v.optional(v.float64()),
 		to: v.optional(v.float64()),
 		limit: v.optional(v.number()),
-	},
-	handler: async (ctx, args) => {
+	})
+	.handler(async (ctx, args) => {
 		const lo = args.from ?? 0;
 		const hi = args.to ?? Number.MAX_SAFE_INTEGER;
 
@@ -190,29 +222,23 @@ export const getAccountHistory = query({
 			seen.add(e._id);
 			return true;
 		});
-		unique.sort((a, b) =>
-			a.sequenceNumber < b.sequenceNumber
-				? -1
-				: a.sequenceNumber > b.sequenceNumber
-					? 1
-					: 0
-		);
+		unique.sort(compareSequenceNumbers);
 
 		if (args.limit) {
 			return unique.slice(0, args.limit);
 		}
 		return unique;
-	},
-});
+	})
+	.public();
 
-export const getMortgageHistory = query({
-	args: {
+export const getMortgageHistory = ledgerQuery
+	.input({
 		mortgageId: v.string(),
 		from: v.optional(v.float64()),
 		to: v.optional(v.float64()),
 		limit: v.optional(v.number()),
-	},
-	handler: async (ctx, args) => {
+	})
+	.handler(async (ctx, args) => {
 		const lo = args.from ?? 0;
 		const hi = args.to ?? Number.MAX_SAFE_INTEGER;
 
@@ -226,16 +252,10 @@ export const getMortgageHistory = query({
 			)
 			.collect();
 
-		entries.sort((a, b) =>
-			a.sequenceNumber < b.sequenceNumber
-				? -1
-				: a.sequenceNumber > b.sequenceNumber
-					? 1
-					: 0
-		);
+		entries.sort(compareSequenceNumbers);
 		if (args.limit) {
 			return entries.slice(0, args.limit);
 		}
 		return entries;
-	},
-});
+	})
+	.public();

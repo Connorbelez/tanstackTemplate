@@ -9,9 +9,18 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as UnauthorizedRouteImport } from './routes/unauthorized'
 import { Route as SignUpRouteImport } from './routes/sign-up'
+import { Route as SignOutRouteImport } from './routes/sign-out'
+import { Route as SignInRouteImport } from './routes/sign-in'
 import { Route as CallbackRouteImport } from './routes/callback'
 import { Route as AboutRouteImport } from './routes/about'
+import { Route as OnboardRouteRouteImport } from './routes/onboard/route'
+import { Route as LenderRouteRouteImport } from './routes/lender/route'
+import { Route as LawyerRouteRouteImport } from './routes/lawyer/route'
+import { Route as BrokerRouteRouteImport } from './routes/broker/route'
+import { Route as BorrowerRouteRouteImport } from './routes/borrower/route'
+import { Route as AdminRouteRouteImport } from './routes/admin/route'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as E2eSwitchOrgRouteImport } from './routes/e2e/switch-org'
 import { Route as DemoWorkosRouteImport } from './routes/demo/workos'
@@ -38,10 +47,19 @@ import { Route as DemoConvexAggregateRouteImport } from './routes/demo/convex-ag
 import { Route as DemoConvexActionCacheRouteImport } from './routes/demo/convex-action-cache'
 import { Route as DemoConvexRouteImport } from './routes/demo/convex'
 import { Route as AuthenticatedAuthenticatedRouteImport } from './routes/_authenticated/authenticated'
+import { Route as DemoRbacAuthRouteRouteImport } from './routes/demo/rbac-auth/route'
+import { Route as DemoRbacRouteRouteImport } from './routes/demo/rbac/route'
 import { Route as DemoDocumentEngineRouteRouteImport } from './routes/demo/document-engine/route'
 import { Route as DemoAuditTraceabilityRouteRouteImport } from './routes/demo/audit-traceability/route'
+import { Route as AdminUnderwritingRouteRouteImport } from './routes/admin/underwriting/route'
+import { Route as DemoRbacIndexRouteImport } from './routes/demo/rbac/index'
+import { Route as DemoRbacAuthIndexRouteImport } from './routes/demo/rbac-auth/index'
 import { Route as DemoDocumentEngineIndexRouteImport } from './routes/demo/document-engine/index'
 import { Route as DemoAuditTraceabilityIndexRouteImport } from './routes/demo/audit-traceability/index'
+import { Route as DemoRbacAuthRolesRouteImport } from './routes/demo/rbac-auth/roles'
+import { Route as DemoRbacAuthOnboardingRouteImport } from './routes/demo/rbac-auth/onboarding'
+import { Route as DemoRbacAuthAuditRouteImport } from './routes/demo/rbac-auth/audit'
+import { Route as DemoRbacAuthAccessControlRouteImport } from './routes/demo/rbac-auth/access-control'
 import { Route as DemoFormSimpleRouteImport } from './routes/demo/form.simple'
 import { Route as DemoFormAddressRouteImport } from './routes/demo/form.address'
 import { Route as DemoDocumentEngineVariablesRouteImport } from './routes/demo/document-engine/variables'
@@ -54,11 +72,32 @@ import { Route as DemoAuditTraceabilityPipelineRouteImport } from './routes/demo
 import { Route as DemoAuditTraceabilityHashChainRouteImport } from './routes/demo/audit-traceability/hash-chain'
 import { Route as DemoAuditTraceabilityAuditTrailRouteImport } from './routes/demo/audit-traceability/audit-trail'
 import { Route as DemoAuditTraceabilityAccessLogRouteImport } from './routes/demo/audit-traceability/access-log'
+import { Route as DemoRbacLenderRouteRouteImport } from './routes/demo/rbac/lender/route'
+import { Route as DemoRbacLawyerRouteRouteImport } from './routes/demo/rbac/lawyer/route'
+import { Route as DemoRbacBrokerRouteRouteImport } from './routes/demo/rbac/broker/route'
+import { Route as DemoRbacBorrowerRouteRouteImport } from './routes/demo/rbac/borrower/route'
+import { Route as DemoRbacAdminRouteRouteImport } from './routes/demo/rbac/admin/route'
 import { Route as DemoDocumentEngineDesignerTemplateIdRouteImport } from './routes/demo/document-engine/designer.$templateId'
+import { Route as DemoRbacAdminUnderwritingRouteRouteImport } from './routes/demo/rbac/admin/underwriting/route'
 
+const UnauthorizedRoute = UnauthorizedRouteImport.update({
+  id: '/unauthorized',
+  path: '/unauthorized',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SignUpRoute = SignUpRouteImport.update({
   id: '/sign-up',
   path: '/sign-up',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SignOutRoute = SignOutRouteImport.update({
+  id: '/sign-out',
+  path: '/sign-out',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SignInRoute = SignInRouteImport.update({
+  id: '/sign-in',
+  path: '/sign-in',
   getParentRoute: () => rootRouteImport,
 } as any)
 const CallbackRoute = CallbackRouteImport.update({
@@ -69,6 +108,36 @@ const CallbackRoute = CallbackRouteImport.update({
 const AboutRoute = AboutRouteImport.update({
   id: '/about',
   path: '/about',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OnboardRouteRoute = OnboardRouteRouteImport.update({
+  id: '/onboard',
+  path: '/onboard',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LenderRouteRoute = LenderRouteRouteImport.update({
+  id: '/lender',
+  path: '/lender',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LawyerRouteRoute = LawyerRouteRouteImport.update({
+  id: '/lawyer',
+  path: '/lawyer',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const BrokerRouteRoute = BrokerRouteRouteImport.update({
+  id: '/broker',
+  path: '/broker',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const BorrowerRouteRoute = BorrowerRouteRouteImport.update({
+  id: '/borrower',
+  path: '/borrower',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminRouteRoute = AdminRouteRouteImport.update({
+  id: '/admin',
+  path: '/admin',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IndexRoute = IndexRouteImport.update({
@@ -205,6 +274,16 @@ const AuthenticatedAuthenticatedRoute =
     path: '/authenticated',
     getParentRoute: () => rootRouteImport,
   } as any)
+const DemoRbacAuthRouteRoute = DemoRbacAuthRouteRouteImport.update({
+  id: '/demo/rbac-auth',
+  path: '/demo/rbac-auth',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DemoRbacRouteRoute = DemoRbacRouteRouteImport.update({
+  id: '/demo/rbac',
+  path: '/demo/rbac',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const DemoDocumentEngineRouteRoute = DemoDocumentEngineRouteRouteImport.update({
   id: '/demo/document-engine',
   path: '/demo/document-engine',
@@ -216,6 +295,21 @@ const DemoAuditTraceabilityRouteRoute =
     path: '/demo/audit-traceability',
     getParentRoute: () => rootRouteImport,
   } as any)
+const AdminUnderwritingRouteRoute = AdminUnderwritingRouteRouteImport.update({
+  id: '/underwriting',
+  path: '/underwriting',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const DemoRbacIndexRoute = DemoRbacIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => DemoRbacRouteRoute,
+} as any)
+const DemoRbacAuthIndexRoute = DemoRbacAuthIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => DemoRbacAuthRouteRoute,
+} as any)
 const DemoDocumentEngineIndexRoute = DemoDocumentEngineIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -226,6 +320,27 @@ const DemoAuditTraceabilityIndexRoute =
     id: '/',
     path: '/',
     getParentRoute: () => DemoAuditTraceabilityRouteRoute,
+  } as any)
+const DemoRbacAuthRolesRoute = DemoRbacAuthRolesRouteImport.update({
+  id: '/roles',
+  path: '/roles',
+  getParentRoute: () => DemoRbacAuthRouteRoute,
+} as any)
+const DemoRbacAuthOnboardingRoute = DemoRbacAuthOnboardingRouteImport.update({
+  id: '/onboarding',
+  path: '/onboarding',
+  getParentRoute: () => DemoRbacAuthRouteRoute,
+} as any)
+const DemoRbacAuthAuditRoute = DemoRbacAuthAuditRouteImport.update({
+  id: '/audit',
+  path: '/audit',
+  getParentRoute: () => DemoRbacAuthRouteRoute,
+} as any)
+const DemoRbacAuthAccessControlRoute =
+  DemoRbacAuthAccessControlRouteImport.update({
+    id: '/access-control',
+    path: '/access-control',
+    getParentRoute: () => DemoRbacAuthRouteRoute,
   } as any)
 const DemoFormSimpleRoute = DemoFormSimpleRouteImport.update({
   id: '/demo/form/simple',
@@ -297,20 +412,63 @@ const DemoAuditTraceabilityAccessLogRoute =
     path: '/access-log',
     getParentRoute: () => DemoAuditTraceabilityRouteRoute,
   } as any)
+const DemoRbacLenderRouteRoute = DemoRbacLenderRouteRouteImport.update({
+  id: '/lender',
+  path: '/lender',
+  getParentRoute: () => DemoRbacRouteRoute,
+} as any)
+const DemoRbacLawyerRouteRoute = DemoRbacLawyerRouteRouteImport.update({
+  id: '/lawyer',
+  path: '/lawyer',
+  getParentRoute: () => DemoRbacRouteRoute,
+} as any)
+const DemoRbacBrokerRouteRoute = DemoRbacBrokerRouteRouteImport.update({
+  id: '/broker',
+  path: '/broker',
+  getParentRoute: () => DemoRbacRouteRoute,
+} as any)
+const DemoRbacBorrowerRouteRoute = DemoRbacBorrowerRouteRouteImport.update({
+  id: '/borrower',
+  path: '/borrower',
+  getParentRoute: () => DemoRbacRouteRoute,
+} as any)
+const DemoRbacAdminRouteRoute = DemoRbacAdminRouteRouteImport.update({
+  id: '/admin',
+  path: '/admin',
+  getParentRoute: () => DemoRbacRouteRoute,
+} as any)
 const DemoDocumentEngineDesignerTemplateIdRoute =
   DemoDocumentEngineDesignerTemplateIdRouteImport.update({
     id: '/designer/$templateId',
     path: '/designer/$templateId',
     getParentRoute: () => DemoDocumentEngineRouteRoute,
   } as any)
+const DemoRbacAdminUnderwritingRouteRoute =
+  DemoRbacAdminUnderwritingRouteRouteImport.update({
+    id: '/underwriting',
+    path: '/underwriting',
+    getParentRoute: () => DemoRbacAdminRouteRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/admin': typeof AdminRouteRouteWithChildren
+  '/borrower': typeof BorrowerRouteRoute
+  '/broker': typeof BrokerRouteRoute
+  '/lawyer': typeof LawyerRouteRoute
+  '/lender': typeof LenderRouteRoute
+  '/onboard': typeof OnboardRouteRoute
   '/about': typeof AboutRoute
   '/callback': typeof CallbackRoute
+  '/sign-in': typeof SignInRoute
+  '/sign-out': typeof SignOutRoute
   '/sign-up': typeof SignUpRoute
+  '/unauthorized': typeof UnauthorizedRoute
+  '/admin/underwriting': typeof AdminUnderwritingRouteRoute
   '/demo/audit-traceability': typeof DemoAuditTraceabilityRouteRouteWithChildren
   '/demo/document-engine': typeof DemoDocumentEngineRouteRouteWithChildren
+  '/demo/rbac': typeof DemoRbacRouteRouteWithChildren
+  '/demo/rbac-auth': typeof DemoRbacAuthRouteRouteWithChildren
   '/authenticated': typeof AuthenticatedAuthenticatedRoute
   '/demo/convex': typeof DemoConvexRoute
   '/demo/convex-action-cache': typeof DemoConvexActionCacheRoute
@@ -336,6 +494,11 @@ export interface FileRoutesByFullPath {
   '/demo/tanstack-query': typeof DemoTanstackQueryRoute
   '/demo/workos': typeof DemoWorkosRoute
   '/e2e/switch-org': typeof E2eSwitchOrgRoute
+  '/demo/rbac/admin': typeof DemoRbacAdminRouteRouteWithChildren
+  '/demo/rbac/borrower': typeof DemoRbacBorrowerRouteRoute
+  '/demo/rbac/broker': typeof DemoRbacBrokerRouteRoute
+  '/demo/rbac/lawyer': typeof DemoRbacLawyerRouteRoute
+  '/demo/rbac/lender': typeof DemoRbacLenderRouteRoute
   '/demo/audit-traceability/access-log': typeof DemoAuditTraceabilityAccessLogRoute
   '/demo/audit-traceability/audit-trail': typeof DemoAuditTraceabilityAuditTrailRoute
   '/demo/audit-traceability/hash-chain': typeof DemoAuditTraceabilityHashChainRoute
@@ -348,15 +511,32 @@ export interface FileRoutesByFullPath {
   '/demo/document-engine/variables': typeof DemoDocumentEngineVariablesRoute
   '/demo/form/address': typeof DemoFormAddressRoute
   '/demo/form/simple': typeof DemoFormSimpleRoute
+  '/demo/rbac-auth/access-control': typeof DemoRbacAuthAccessControlRoute
+  '/demo/rbac-auth/audit': typeof DemoRbacAuthAuditRoute
+  '/demo/rbac-auth/onboarding': typeof DemoRbacAuthOnboardingRoute
+  '/demo/rbac-auth/roles': typeof DemoRbacAuthRolesRoute
   '/demo/audit-traceability/': typeof DemoAuditTraceabilityIndexRoute
   '/demo/document-engine/': typeof DemoDocumentEngineIndexRoute
+  '/demo/rbac-auth/': typeof DemoRbacAuthIndexRoute
+  '/demo/rbac/': typeof DemoRbacIndexRoute
+  '/demo/rbac/admin/underwriting': typeof DemoRbacAdminUnderwritingRouteRoute
   '/demo/document-engine/designer/$templateId': typeof DemoDocumentEngineDesignerTemplateIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/admin': typeof AdminRouteRouteWithChildren
+  '/borrower': typeof BorrowerRouteRoute
+  '/broker': typeof BrokerRouteRoute
+  '/lawyer': typeof LawyerRouteRoute
+  '/lender': typeof LenderRouteRoute
+  '/onboard': typeof OnboardRouteRoute
   '/about': typeof AboutRoute
   '/callback': typeof CallbackRoute
+  '/sign-in': typeof SignInRoute
+  '/sign-out': typeof SignOutRoute
   '/sign-up': typeof SignUpRoute
+  '/unauthorized': typeof UnauthorizedRoute
+  '/admin/underwriting': typeof AdminUnderwritingRouteRoute
   '/authenticated': typeof AuthenticatedAuthenticatedRoute
   '/demo/convex': typeof DemoConvexRoute
   '/demo/convex-action-cache': typeof DemoConvexActionCacheRoute
@@ -382,6 +562,11 @@ export interface FileRoutesByTo {
   '/demo/tanstack-query': typeof DemoTanstackQueryRoute
   '/demo/workos': typeof DemoWorkosRoute
   '/e2e/switch-org': typeof E2eSwitchOrgRoute
+  '/demo/rbac/admin': typeof DemoRbacAdminRouteRouteWithChildren
+  '/demo/rbac/borrower': typeof DemoRbacBorrowerRouteRoute
+  '/demo/rbac/broker': typeof DemoRbacBrokerRouteRoute
+  '/demo/rbac/lawyer': typeof DemoRbacLawyerRouteRoute
+  '/demo/rbac/lender': typeof DemoRbacLenderRouteRoute
   '/demo/audit-traceability/access-log': typeof DemoAuditTraceabilityAccessLogRoute
   '/demo/audit-traceability/audit-trail': typeof DemoAuditTraceabilityAuditTrailRoute
   '/demo/audit-traceability/hash-chain': typeof DemoAuditTraceabilityHashChainRoute
@@ -394,18 +579,37 @@ export interface FileRoutesByTo {
   '/demo/document-engine/variables': typeof DemoDocumentEngineVariablesRoute
   '/demo/form/address': typeof DemoFormAddressRoute
   '/demo/form/simple': typeof DemoFormSimpleRoute
+  '/demo/rbac-auth/access-control': typeof DemoRbacAuthAccessControlRoute
+  '/demo/rbac-auth/audit': typeof DemoRbacAuthAuditRoute
+  '/demo/rbac-auth/onboarding': typeof DemoRbacAuthOnboardingRoute
+  '/demo/rbac-auth/roles': typeof DemoRbacAuthRolesRoute
   '/demo/audit-traceability': typeof DemoAuditTraceabilityIndexRoute
   '/demo/document-engine': typeof DemoDocumentEngineIndexRoute
+  '/demo/rbac-auth': typeof DemoRbacAuthIndexRoute
+  '/demo/rbac': typeof DemoRbacIndexRoute
+  '/demo/rbac/admin/underwriting': typeof DemoRbacAdminUnderwritingRouteRoute
   '/demo/document-engine/designer/$templateId': typeof DemoDocumentEngineDesignerTemplateIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/admin': typeof AdminRouteRouteWithChildren
+  '/borrower': typeof BorrowerRouteRoute
+  '/broker': typeof BrokerRouteRoute
+  '/lawyer': typeof LawyerRouteRoute
+  '/lender': typeof LenderRouteRoute
+  '/onboard': typeof OnboardRouteRoute
   '/about': typeof AboutRoute
   '/callback': typeof CallbackRoute
+  '/sign-in': typeof SignInRoute
+  '/sign-out': typeof SignOutRoute
   '/sign-up': typeof SignUpRoute
+  '/unauthorized': typeof UnauthorizedRoute
+  '/admin/underwriting': typeof AdminUnderwritingRouteRoute
   '/demo/audit-traceability': typeof DemoAuditTraceabilityRouteRouteWithChildren
   '/demo/document-engine': typeof DemoDocumentEngineRouteRouteWithChildren
+  '/demo/rbac': typeof DemoRbacRouteRouteWithChildren
+  '/demo/rbac-auth': typeof DemoRbacAuthRouteRouteWithChildren
   '/_authenticated/authenticated': typeof AuthenticatedAuthenticatedRoute
   '/demo/convex': typeof DemoConvexRoute
   '/demo/convex-action-cache': typeof DemoConvexActionCacheRoute
@@ -431,6 +635,11 @@ export interface FileRoutesById {
   '/demo/tanstack-query': typeof DemoTanstackQueryRoute
   '/demo/workos': typeof DemoWorkosRoute
   '/e2e/switch-org': typeof E2eSwitchOrgRoute
+  '/demo/rbac/admin': typeof DemoRbacAdminRouteRouteWithChildren
+  '/demo/rbac/borrower': typeof DemoRbacBorrowerRouteRoute
+  '/demo/rbac/broker': typeof DemoRbacBrokerRouteRoute
+  '/demo/rbac/lawyer': typeof DemoRbacLawyerRouteRoute
+  '/demo/rbac/lender': typeof DemoRbacLenderRouteRoute
   '/demo/audit-traceability/access-log': typeof DemoAuditTraceabilityAccessLogRoute
   '/demo/audit-traceability/audit-trail': typeof DemoAuditTraceabilityAuditTrailRoute
   '/demo/audit-traceability/hash-chain': typeof DemoAuditTraceabilityHashChainRoute
@@ -443,19 +652,38 @@ export interface FileRoutesById {
   '/demo/document-engine/variables': typeof DemoDocumentEngineVariablesRoute
   '/demo/form/address': typeof DemoFormAddressRoute
   '/demo/form/simple': typeof DemoFormSimpleRoute
+  '/demo/rbac-auth/access-control': typeof DemoRbacAuthAccessControlRoute
+  '/demo/rbac-auth/audit': typeof DemoRbacAuthAuditRoute
+  '/demo/rbac-auth/onboarding': typeof DemoRbacAuthOnboardingRoute
+  '/demo/rbac-auth/roles': typeof DemoRbacAuthRolesRoute
   '/demo/audit-traceability/': typeof DemoAuditTraceabilityIndexRoute
   '/demo/document-engine/': typeof DemoDocumentEngineIndexRoute
+  '/demo/rbac-auth/': typeof DemoRbacAuthIndexRoute
+  '/demo/rbac/': typeof DemoRbacIndexRoute
+  '/demo/rbac/admin/underwriting': typeof DemoRbacAdminUnderwritingRouteRoute
   '/demo/document-engine/designer/$templateId': typeof DemoDocumentEngineDesignerTemplateIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/admin'
+    | '/borrower'
+    | '/broker'
+    | '/lawyer'
+    | '/lender'
+    | '/onboard'
     | '/about'
     | '/callback'
+    | '/sign-in'
+    | '/sign-out'
     | '/sign-up'
+    | '/unauthorized'
+    | '/admin/underwriting'
     | '/demo/audit-traceability'
     | '/demo/document-engine'
+    | '/demo/rbac'
+    | '/demo/rbac-auth'
     | '/authenticated'
     | '/demo/convex'
     | '/demo/convex-action-cache'
@@ -481,6 +709,11 @@ export interface FileRouteTypes {
     | '/demo/tanstack-query'
     | '/demo/workos'
     | '/e2e/switch-org'
+    | '/demo/rbac/admin'
+    | '/demo/rbac/borrower'
+    | '/demo/rbac/broker'
+    | '/demo/rbac/lawyer'
+    | '/demo/rbac/lender'
     | '/demo/audit-traceability/access-log'
     | '/demo/audit-traceability/audit-trail'
     | '/demo/audit-traceability/hash-chain'
@@ -493,15 +726,32 @@ export interface FileRouteTypes {
     | '/demo/document-engine/variables'
     | '/demo/form/address'
     | '/demo/form/simple'
+    | '/demo/rbac-auth/access-control'
+    | '/demo/rbac-auth/audit'
+    | '/demo/rbac-auth/onboarding'
+    | '/demo/rbac-auth/roles'
     | '/demo/audit-traceability/'
     | '/demo/document-engine/'
+    | '/demo/rbac-auth/'
+    | '/demo/rbac/'
+    | '/demo/rbac/admin/underwriting'
     | '/demo/document-engine/designer/$templateId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/admin'
+    | '/borrower'
+    | '/broker'
+    | '/lawyer'
+    | '/lender'
+    | '/onboard'
     | '/about'
     | '/callback'
+    | '/sign-in'
+    | '/sign-out'
     | '/sign-up'
+    | '/unauthorized'
+    | '/admin/underwriting'
     | '/authenticated'
     | '/demo/convex'
     | '/demo/convex-action-cache'
@@ -527,6 +777,11 @@ export interface FileRouteTypes {
     | '/demo/tanstack-query'
     | '/demo/workos'
     | '/e2e/switch-org'
+    | '/demo/rbac/admin'
+    | '/demo/rbac/borrower'
+    | '/demo/rbac/broker'
+    | '/demo/rbac/lawyer'
+    | '/demo/rbac/lender'
     | '/demo/audit-traceability/access-log'
     | '/demo/audit-traceability/audit-trail'
     | '/demo/audit-traceability/hash-chain'
@@ -539,17 +794,36 @@ export interface FileRouteTypes {
     | '/demo/document-engine/variables'
     | '/demo/form/address'
     | '/demo/form/simple'
+    | '/demo/rbac-auth/access-control'
+    | '/demo/rbac-auth/audit'
+    | '/demo/rbac-auth/onboarding'
+    | '/demo/rbac-auth/roles'
     | '/demo/audit-traceability'
     | '/demo/document-engine'
+    | '/demo/rbac-auth'
+    | '/demo/rbac'
+    | '/demo/rbac/admin/underwriting'
     | '/demo/document-engine/designer/$templateId'
   id:
     | '__root__'
     | '/'
+    | '/admin'
+    | '/borrower'
+    | '/broker'
+    | '/lawyer'
+    | '/lender'
+    | '/onboard'
     | '/about'
     | '/callback'
+    | '/sign-in'
+    | '/sign-out'
     | '/sign-up'
+    | '/unauthorized'
+    | '/admin/underwriting'
     | '/demo/audit-traceability'
     | '/demo/document-engine'
+    | '/demo/rbac'
+    | '/demo/rbac-auth'
     | '/_authenticated/authenticated'
     | '/demo/convex'
     | '/demo/convex-action-cache'
@@ -575,6 +849,11 @@ export interface FileRouteTypes {
     | '/demo/tanstack-query'
     | '/demo/workos'
     | '/e2e/switch-org'
+    | '/demo/rbac/admin'
+    | '/demo/rbac/borrower'
+    | '/demo/rbac/broker'
+    | '/demo/rbac/lawyer'
+    | '/demo/rbac/lender'
     | '/demo/audit-traceability/access-log'
     | '/demo/audit-traceability/audit-trail'
     | '/demo/audit-traceability/hash-chain'
@@ -587,18 +866,36 @@ export interface FileRouteTypes {
     | '/demo/document-engine/variables'
     | '/demo/form/address'
     | '/demo/form/simple'
+    | '/demo/rbac-auth/access-control'
+    | '/demo/rbac-auth/audit'
+    | '/demo/rbac-auth/onboarding'
+    | '/demo/rbac-auth/roles'
     | '/demo/audit-traceability/'
     | '/demo/document-engine/'
+    | '/demo/rbac-auth/'
+    | '/demo/rbac/'
+    | '/demo/rbac/admin/underwriting'
     | '/demo/document-engine/designer/$templateId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AdminRouteRoute: typeof AdminRouteRouteWithChildren
+  BorrowerRouteRoute: typeof BorrowerRouteRoute
+  BrokerRouteRoute: typeof BrokerRouteRoute
+  LawyerRouteRoute: typeof LawyerRouteRoute
+  LenderRouteRoute: typeof LenderRouteRoute
+  OnboardRouteRoute: typeof OnboardRouteRoute
   AboutRoute: typeof AboutRoute
   CallbackRoute: typeof CallbackRoute
+  SignInRoute: typeof SignInRoute
+  SignOutRoute: typeof SignOutRoute
   SignUpRoute: typeof SignUpRoute
+  UnauthorizedRoute: typeof UnauthorizedRoute
   DemoAuditTraceabilityRouteRoute: typeof DemoAuditTraceabilityRouteRouteWithChildren
   DemoDocumentEngineRouteRoute: typeof DemoDocumentEngineRouteRouteWithChildren
+  DemoRbacRouteRoute: typeof DemoRbacRouteRouteWithChildren
+  DemoRbacAuthRouteRoute: typeof DemoRbacAuthRouteRouteWithChildren
   AuthenticatedAuthenticatedRoute: typeof AuthenticatedAuthenticatedRoute
   DemoConvexRoute: typeof DemoConvexRoute
   DemoConvexActionCacheRoute: typeof DemoConvexActionCacheRoute
@@ -630,11 +927,32 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/unauthorized': {
+      id: '/unauthorized'
+      path: '/unauthorized'
+      fullPath: '/unauthorized'
+      preLoaderRoute: typeof UnauthorizedRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/sign-up': {
       id: '/sign-up'
       path: '/sign-up'
       fullPath: '/sign-up'
       preLoaderRoute: typeof SignUpRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/sign-out': {
+      id: '/sign-out'
+      path: '/sign-out'
+      fullPath: '/sign-out'
+      preLoaderRoute: typeof SignOutRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/sign-in': {
+      id: '/sign-in'
+      path: '/sign-in'
+      fullPath: '/sign-in'
+      preLoaderRoute: typeof SignInRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/callback': {
@@ -649,6 +967,48 @@ declare module '@tanstack/react-router' {
       path: '/about'
       fullPath: '/about'
       preLoaderRoute: typeof AboutRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/onboard': {
+      id: '/onboard'
+      path: '/onboard'
+      fullPath: '/onboard'
+      preLoaderRoute: typeof OnboardRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/lender': {
+      id: '/lender'
+      path: '/lender'
+      fullPath: '/lender'
+      preLoaderRoute: typeof LenderRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/lawyer': {
+      id: '/lawyer'
+      path: '/lawyer'
+      fullPath: '/lawyer'
+      preLoaderRoute: typeof LawyerRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/broker': {
+      id: '/broker'
+      path: '/broker'
+      fullPath: '/broker'
+      preLoaderRoute: typeof BrokerRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/borrower': {
+      id: '/borrower'
+      path: '/borrower'
+      fullPath: '/borrower'
+      preLoaderRoute: typeof BorrowerRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin': {
+      id: '/admin'
+      path: '/admin'
+      fullPath: '/admin'
+      preLoaderRoute: typeof AdminRouteRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/': {
@@ -833,6 +1193,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAuthenticatedRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/demo/rbac-auth': {
+      id: '/demo/rbac-auth'
+      path: '/demo/rbac-auth'
+      fullPath: '/demo/rbac-auth'
+      preLoaderRoute: typeof DemoRbacAuthRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/demo/rbac': {
+      id: '/demo/rbac'
+      path: '/demo/rbac'
+      fullPath: '/demo/rbac'
+      preLoaderRoute: typeof DemoRbacRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/demo/document-engine': {
       id: '/demo/document-engine'
       path: '/demo/document-engine'
@@ -847,6 +1221,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DemoAuditTraceabilityRouteRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin/underwriting': {
+      id: '/admin/underwriting'
+      path: '/underwriting'
+      fullPath: '/admin/underwriting'
+      preLoaderRoute: typeof AdminUnderwritingRouteRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/demo/rbac/': {
+      id: '/demo/rbac/'
+      path: '/'
+      fullPath: '/demo/rbac/'
+      preLoaderRoute: typeof DemoRbacIndexRouteImport
+      parentRoute: typeof DemoRbacRouteRoute
+    }
+    '/demo/rbac-auth/': {
+      id: '/demo/rbac-auth/'
+      path: '/'
+      fullPath: '/demo/rbac-auth/'
+      preLoaderRoute: typeof DemoRbacAuthIndexRouteImport
+      parentRoute: typeof DemoRbacAuthRouteRoute
+    }
     '/demo/document-engine/': {
       id: '/demo/document-engine/'
       path: '/'
@@ -860,6 +1255,34 @@ declare module '@tanstack/react-router' {
       fullPath: '/demo/audit-traceability/'
       preLoaderRoute: typeof DemoAuditTraceabilityIndexRouteImport
       parentRoute: typeof DemoAuditTraceabilityRouteRoute
+    }
+    '/demo/rbac-auth/roles': {
+      id: '/demo/rbac-auth/roles'
+      path: '/roles'
+      fullPath: '/demo/rbac-auth/roles'
+      preLoaderRoute: typeof DemoRbacAuthRolesRouteImport
+      parentRoute: typeof DemoRbacAuthRouteRoute
+    }
+    '/demo/rbac-auth/onboarding': {
+      id: '/demo/rbac-auth/onboarding'
+      path: '/onboarding'
+      fullPath: '/demo/rbac-auth/onboarding'
+      preLoaderRoute: typeof DemoRbacAuthOnboardingRouteImport
+      parentRoute: typeof DemoRbacAuthRouteRoute
+    }
+    '/demo/rbac-auth/audit': {
+      id: '/demo/rbac-auth/audit'
+      path: '/audit'
+      fullPath: '/demo/rbac-auth/audit'
+      preLoaderRoute: typeof DemoRbacAuthAuditRouteImport
+      parentRoute: typeof DemoRbacAuthRouteRoute
+    }
+    '/demo/rbac-auth/access-control': {
+      id: '/demo/rbac-auth/access-control'
+      path: '/access-control'
+      fullPath: '/demo/rbac-auth/access-control'
+      preLoaderRoute: typeof DemoRbacAuthAccessControlRouteImport
+      parentRoute: typeof DemoRbacAuthRouteRoute
     }
     '/demo/form/simple': {
       id: '/demo/form/simple'
@@ -945,6 +1368,41 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DemoAuditTraceabilityAccessLogRouteImport
       parentRoute: typeof DemoAuditTraceabilityRouteRoute
     }
+    '/demo/rbac/lender': {
+      id: '/demo/rbac/lender'
+      path: '/lender'
+      fullPath: '/demo/rbac/lender'
+      preLoaderRoute: typeof DemoRbacLenderRouteRouteImport
+      parentRoute: typeof DemoRbacRouteRoute
+    }
+    '/demo/rbac/lawyer': {
+      id: '/demo/rbac/lawyer'
+      path: '/lawyer'
+      fullPath: '/demo/rbac/lawyer'
+      preLoaderRoute: typeof DemoRbacLawyerRouteRouteImport
+      parentRoute: typeof DemoRbacRouteRoute
+    }
+    '/demo/rbac/broker': {
+      id: '/demo/rbac/broker'
+      path: '/broker'
+      fullPath: '/demo/rbac/broker'
+      preLoaderRoute: typeof DemoRbacBrokerRouteRouteImport
+      parentRoute: typeof DemoRbacRouteRoute
+    }
+    '/demo/rbac/borrower': {
+      id: '/demo/rbac/borrower'
+      path: '/borrower'
+      fullPath: '/demo/rbac/borrower'
+      preLoaderRoute: typeof DemoRbacBorrowerRouteRouteImport
+      parentRoute: typeof DemoRbacRouteRoute
+    }
+    '/demo/rbac/admin': {
+      id: '/demo/rbac/admin'
+      path: '/admin'
+      fullPath: '/demo/rbac/admin'
+      preLoaderRoute: typeof DemoRbacAdminRouteRouteImport
+      parentRoute: typeof DemoRbacRouteRoute
+    }
     '/demo/document-engine/designer/$templateId': {
       id: '/demo/document-engine/designer/$templateId'
       path: '/designer/$templateId'
@@ -952,8 +1410,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DemoDocumentEngineDesignerTemplateIdRouteImport
       parentRoute: typeof DemoDocumentEngineRouteRoute
     }
+    '/demo/rbac/admin/underwriting': {
+      id: '/demo/rbac/admin/underwriting'
+      path: '/underwriting'
+      fullPath: '/demo/rbac/admin/underwriting'
+      preLoaderRoute: typeof DemoRbacAdminUnderwritingRouteRouteImport
+      parentRoute: typeof DemoRbacAdminRouteRoute
+    }
   }
 }
+
+interface AdminRouteRouteChildren {
+  AdminUnderwritingRouteRoute: typeof AdminUnderwritingRouteRoute
+}
+
+const AdminRouteRouteChildren: AdminRouteRouteChildren = {
+  AdminUnderwritingRouteRoute: AdminUnderwritingRouteRoute,
+}
+
+const AdminRouteRouteWithChildren = AdminRouteRoute._addFileChildren(
+  AdminRouteRouteChildren,
+)
 
 interface DemoAuditTraceabilityRouteRouteChildren {
   DemoAuditTraceabilityAccessLogRoute: typeof DemoAuditTraceabilityAccessLogRoute
@@ -1006,13 +1483,76 @@ const DemoDocumentEngineRouteRouteWithChildren =
     DemoDocumentEngineRouteRouteChildren,
   )
 
+interface DemoRbacAdminRouteRouteChildren {
+  DemoRbacAdminUnderwritingRouteRoute: typeof DemoRbacAdminUnderwritingRouteRoute
+}
+
+const DemoRbacAdminRouteRouteChildren: DemoRbacAdminRouteRouteChildren = {
+  DemoRbacAdminUnderwritingRouteRoute: DemoRbacAdminUnderwritingRouteRoute,
+}
+
+const DemoRbacAdminRouteRouteWithChildren =
+  DemoRbacAdminRouteRoute._addFileChildren(DemoRbacAdminRouteRouteChildren)
+
+interface DemoRbacRouteRouteChildren {
+  DemoRbacAdminRouteRoute: typeof DemoRbacAdminRouteRouteWithChildren
+  DemoRbacBorrowerRouteRoute: typeof DemoRbacBorrowerRouteRoute
+  DemoRbacBrokerRouteRoute: typeof DemoRbacBrokerRouteRoute
+  DemoRbacLawyerRouteRoute: typeof DemoRbacLawyerRouteRoute
+  DemoRbacLenderRouteRoute: typeof DemoRbacLenderRouteRoute
+  DemoRbacIndexRoute: typeof DemoRbacIndexRoute
+}
+
+const DemoRbacRouteRouteChildren: DemoRbacRouteRouteChildren = {
+  DemoRbacAdminRouteRoute: DemoRbacAdminRouteRouteWithChildren,
+  DemoRbacBorrowerRouteRoute: DemoRbacBorrowerRouteRoute,
+  DemoRbacBrokerRouteRoute: DemoRbacBrokerRouteRoute,
+  DemoRbacLawyerRouteRoute: DemoRbacLawyerRouteRoute,
+  DemoRbacLenderRouteRoute: DemoRbacLenderRouteRoute,
+  DemoRbacIndexRoute: DemoRbacIndexRoute,
+}
+
+const DemoRbacRouteRouteWithChildren = DemoRbacRouteRoute._addFileChildren(
+  DemoRbacRouteRouteChildren,
+)
+
+interface DemoRbacAuthRouteRouteChildren {
+  DemoRbacAuthAccessControlRoute: typeof DemoRbacAuthAccessControlRoute
+  DemoRbacAuthAuditRoute: typeof DemoRbacAuthAuditRoute
+  DemoRbacAuthOnboardingRoute: typeof DemoRbacAuthOnboardingRoute
+  DemoRbacAuthRolesRoute: typeof DemoRbacAuthRolesRoute
+  DemoRbacAuthIndexRoute: typeof DemoRbacAuthIndexRoute
+}
+
+const DemoRbacAuthRouteRouteChildren: DemoRbacAuthRouteRouteChildren = {
+  DemoRbacAuthAccessControlRoute: DemoRbacAuthAccessControlRoute,
+  DemoRbacAuthAuditRoute: DemoRbacAuthAuditRoute,
+  DemoRbacAuthOnboardingRoute: DemoRbacAuthOnboardingRoute,
+  DemoRbacAuthRolesRoute: DemoRbacAuthRolesRoute,
+  DemoRbacAuthIndexRoute: DemoRbacAuthIndexRoute,
+}
+
+const DemoRbacAuthRouteRouteWithChildren =
+  DemoRbacAuthRouteRoute._addFileChildren(DemoRbacAuthRouteRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AdminRouteRoute: AdminRouteRouteWithChildren,
+  BorrowerRouteRoute: BorrowerRouteRoute,
+  BrokerRouteRoute: BrokerRouteRoute,
+  LawyerRouteRoute: LawyerRouteRoute,
+  LenderRouteRoute: LenderRouteRoute,
+  OnboardRouteRoute: OnboardRouteRoute,
   AboutRoute: AboutRoute,
   CallbackRoute: CallbackRoute,
+  SignInRoute: SignInRoute,
+  SignOutRoute: SignOutRoute,
   SignUpRoute: SignUpRoute,
+  UnauthorizedRoute: UnauthorizedRoute,
   DemoAuditTraceabilityRouteRoute: DemoAuditTraceabilityRouteRouteWithChildren,
   DemoDocumentEngineRouteRoute: DemoDocumentEngineRouteRouteWithChildren,
+  DemoRbacRouteRoute: DemoRbacRouteRouteWithChildren,
+  DemoRbacAuthRouteRoute: DemoRbacAuthRouteRouteWithChildren,
   AuthenticatedAuthenticatedRoute: AuthenticatedAuthenticatedRoute,
   DemoConvexRoute: DemoConvexRoute,
   DemoConvexActionCacheRoute: DemoConvexActionCacheRoute,

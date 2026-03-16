@@ -5,7 +5,8 @@ import {
 } from "@00akshatsinha00/convex-cascading-delete";
 import { v } from "convex/values";
 import { components } from "../_generated/api";
-import { internalMutation, mutation, query } from "../_generated/server";
+import { internalMutation } from "../_generated/server";
+import { authedMutation, authedQuery } from "../fluent";
 
 const cascadeRules = defineCascadeRules({
 	demo_cascade_authors: [
@@ -25,9 +26,8 @@ export const _cascadeBatchHandler = makeBatchDeleteHandler(
 	components.convexCascadingDelete
 );
 
-export const seedData = mutation({
-	args: {},
-	handler: async (ctx) => {
+export const seedData = authedMutation
+	.handler(async (ctx) => {
 		const existing = await ctx.db.query("demo_cascade_authors").take(1);
 		if (existing.length > 0) {
 			return { seeded: false };
@@ -50,19 +50,18 @@ export const seedData = mutation({
 			}
 		}
 		return { seeded: true };
-	},
-});
+	})
+	.public();
 
-export const deleteAuthor = mutation({
-	args: { id: v.id("demo_cascade_authors") },
-	handler: async (ctx, args) => {
+export const deleteAuthor = authedMutation
+	.input({ id: v.id("demo_cascade_authors") })
+	.handler(async (ctx, args) => {
 		return await cd.deleteWithCascade(ctx, "demo_cascade_authors", args.id);
-	},
-});
+	})
+	.public();
 
-export const getTree = query({
-	args: {},
-	handler: async (ctx) => {
+export const getTree = authedQuery
+	.handler(async (ctx) => {
 		const authors = await ctx.db.query("demo_cascade_authors").collect();
 		const tree = await Promise.all(
 			authors.map(async (author) => {
@@ -83,12 +82,11 @@ export const getTree = query({
 			})
 		);
 		return tree;
-	},
-});
+	})
+	.public();
 
-export const getCounts = query({
-	args: {},
-	handler: async (ctx) => {
+export const getCounts = authedQuery
+	.handler(async (ctx) => {
 		const authors = await ctx.db.query("demo_cascade_authors").collect();
 		const posts = await ctx.db.query("demo_cascade_posts").collect();
 		const comments = await ctx.db.query("demo_cascade_comments").collect();
@@ -97,5 +95,5 @@ export const getCounts = query({
 			posts: posts.length,
 			comments: comments.length,
 		};
-	},
-});
+	})
+	.public();

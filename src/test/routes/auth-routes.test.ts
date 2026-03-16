@@ -1,50 +1,51 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
 	buildSignInRedirect,
 	buildSignUpRedirect,
 	getReturnPathname,
-} from "../../routes/-auth-redirect";
+	sanitizeRedirectPath,
+} from "#/lib/auth-redirect";
 
-describe("shared auth routes", () => {
-	it("keeps only safe in-app return paths", () => {
-		expect(getReturnPathname("/demo/workos")).toBe("/demo/workos");
-		expect(getReturnPathname("https://evil.example.com")).toBeUndefined();
-		expect(getReturnPathname(undefined)).toBeUndefined();
-	});
-
-	it("builds a sign-in redirect that preserves the current pathname", async () => {
-		const getSignInUrl = vi
-			.fn()
-			.mockResolvedValueOnce("https://auth.example.com/sign-in");
-
-		await expect(
-			buildSignInRedirect(getSignInUrl, "/demo/workos")
-		).resolves.toMatchObject({
-			options: {
-				href: "https://auth.example.com/sign-in",
-			},
+describe("auth redirect helpers", () => {
+	describe("sanitizeRedirectPath", () => {
+		it("keeps safe internal redirects including search and hash", () => {
+			expect(sanitizeRedirectPath("/admin?tab=users#members")).toBe(
+				"/admin?tab=users#members"
+			);
 		});
 
-		expect(getSignInUrl).toHaveBeenCalledWith({
-			data: { returnPathname: "/demo/workos" },
+		it("rejects absolute URLs", () => {
+			expect(
+				sanitizeRedirectPath("https://evil.example/phish")
+			).toBeUndefined();
+		});
+
+		it("rejects scheme-relative redirects", () => {
+			expect(sanitizeRedirectPath("//evil.example/phish")).toBeUndefined();
 		});
 	});
 
-	it("builds a sign-up redirect that preserves the current pathname", async () => {
-		const getSignUpUrl = vi
-			.fn()
-			.mockResolvedValueOnce("https://auth.example.com/sign-up");
-
-		await expect(
-			buildSignUpRedirect(getSignUpUrl, "/demo/workos")
-		).resolves.toMatchObject({
-			options: {
-				href: "https://auth.example.com/sign-up",
-			},
+	describe("getReturnPathname", () => {
+		it("falls back to the homepage when the redirect is invalid", () => {
+			expect(getReturnPathname("https://evil.example/phish")).toBe("/");
 		});
+	});
 
-		expect(getSignUpUrl).toHaveBeenCalledWith({
-			data: { returnPathname: "/demo/workos" },
+	describe("buildSignInRedirect", () => {
+		it("builds a sign-in redirect using the redirect search key", () => {
+			expect(buildSignInRedirect("/broker?view=pipeline")).toEqual({
+				to: "/sign-in",
+				search: { redirect: "/broker?view=pipeline" },
+			});
+		});
+	});
+
+	describe("buildSignUpRedirect", () => {
+		it("builds a sign-up redirect using the redirect search key", () => {
+			expect(buildSignUpRedirect("/borrower#documents")).toEqual({
+				to: "/sign-up",
+				search: { redirect: "/borrower#documents" },
+			});
 		});
 	});
 });

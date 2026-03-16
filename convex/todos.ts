@@ -1,30 +1,29 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { authedMutation, authedQuery } from "./fluent";
 
-export const list = query({
-	args: {},
-	handler: async (ctx) => {
+export const list = authedQuery
+	.handler(async (ctx) => {
 		return await ctx.db
 			.query("todos")
 			.withIndex("by_creation_time")
 			.order("desc")
 			.collect();
-	},
-});
+	})
+	.public();
 
-export const add = mutation({
-	args: { text: v.string() },
-	handler: async (ctx, args) => {
+export const add = authedMutation
+	.input({ text: v.string() })
+	.handler(async (ctx, args) => {
 		return await ctx.db.insert("todos", {
 			text: args.text,
 			completed: false,
 		});
-	},
-});
+	})
+	.public();
 
-export const toggle = mutation({
-	args: { id: v.id("todos") },
-	handler: async (ctx, args) => {
+export const toggle = authedMutation
+	.input({ id: v.id("todos") })
+	.handler(async (ctx, args) => {
 		const todo = await ctx.db.get(args.id);
 		if (!todo) {
 			throw new Error("Todo not found");
@@ -32,12 +31,12 @@ export const toggle = mutation({
 		return await ctx.db.patch(args.id, {
 			completed: !todo.completed,
 		});
-	},
-});
+	})
+	.public();
 
-export const remove = mutation({
-	args: { id: v.id("todos") },
-	handler: async (ctx, args) => {
+export const remove = authedMutation
+	.input({ id: v.id("todos") })
+	.handler(async (ctx, args) => {
 		return await ctx.db.delete(args.id);
-	},
-});
+	})
+	.public();

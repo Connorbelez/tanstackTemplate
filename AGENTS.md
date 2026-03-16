@@ -111,6 +111,7 @@ Custom Claims json shape:
 
 ## Workflow 
 - DO NOT try to fix linting/formatting errors BEFORE running `bun check`. Always run `bun check` first as this command also auto formats and fixes some linting errors.
+- TDD/test-first workflows are by request only in this repo. Do not automatically apply TDD, red-green-refactor, or test-first skills for setup scripts, one-off scripts, configuration changes, or routine implementation unless the user explicitly asks for TDD or for tests first.
 - After Completing a Major unit of work like a full SPEC run `coderabbit review --plain` to get a code review summary and check for any potential issues or improvements. 
 - This is an early stage project, feel free to suggest sweeping changes to the schema, architecture etc, but ask your human first. 
 

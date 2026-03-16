@@ -1,6 +1,7 @@
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
-import { mutation, query } from "../_generated/server";
+import { authedMutation, authedQuery } from "../fluent";
+import { getAccountLenderId } from "../ledger/accountOwnership";
 import { UNITS_PER_MORTGAGE } from "../ledger/constants";
 import {
 	computeBalance,
@@ -18,33 +19,33 @@ const DEMO_MORTGAGES = [
 	{
 		mortgageId: "demo-mtg-greenfield",
 		label: "123 Greenfield Rd — Residential",
-		investors: [
-			{ investorId: "demo-inv-alice", amount: 5_000n },
-			{ investorId: "demo-inv-bob", amount: 3_000n },
-			{ investorId: "demo-inv-charlie", amount: 2_000n },
+		lenders: [
+			{ lenderId: "demo-inv-alice", amount: 5_000n },
+			{ lenderId: "demo-inv-bob", amount: 3_000n },
+			{ lenderId: "demo-inv-charlie", amount: 2_000n },
 		],
 	},
 	{
 		mortgageId: "demo-mtg-riverside",
 		label: "456 Riverside Dr — Commercial",
-		investors: [
-			{ investorId: "demo-inv-alice", amount: 7_000n },
-			{ investorId: "demo-inv-dave", amount: 3_000n },
+		lenders: [
+			{ lenderId: "demo-inv-alice", amount: 7_000n },
+			{ lenderId: "demo-inv-dave", amount: 3_000n },
 		],
 	},
 ] as const;
 
-// ── Investor display names ───────────────────────────────────────
+// ── Lender display names ───────────────────────────────────────
 
-const INVESTOR_NAMES: Record<string, string> = {
+const LENDER_NAMES: Record<string, string> = {
 	"demo-inv-alice": "Alice",
 	"demo-inv-bob": "Bob",
 	"demo-inv-charlie": "Charlie",
 	"demo-inv-dave": "Dave",
 };
 
-function investorDisplayName(id: string): string {
-	return INVESTOR_NAMES[id] ?? id.replace("demo-inv-", "");
+function lenderDisplayName(id: string): string {
+	return LENDER_NAMES[id] ?? id.replace("demo-inv-", "");
 }
 
 // ── Seed helpers ─────────────────────────────────────────────────
@@ -100,9 +101,8 @@ async function postSeedEntry(
 
 // ── Mutations ────────────────────────────────────────────────────
 
-export const seedData = mutation({
-	args: {},
-	handler: async (ctx) => {
+export const seedData = authedMutation
+	.handler(async (ctx) => {
 		// Idempotency: check if any demo TREASURY accounts exist for any demo mortgage
 		for (const mortgage of DEMO_MORTGAGES) {
 			const existing = await ctx.db
@@ -141,12 +141,12 @@ export const seedData = mutation({
 				idempotencyKey: `demo-seed-mint-${mortgage.mortgageId}`,
 			});
 
-			// 3. Issue shares to each investor
-			for (const inv of mortgage.investors) {
+			// 3. Issue shares to each lender
+			for (const inv of mortgage.lenders) {
 				const positionId = await ctx.db.insert("ledger_accounts", {
 					type: "POSITION",
 					mortgageId: mortgage.mortgageId,
-					investorId: inv.investorId,
+					lenderId: inv.lenderId,
 					cumulativeDebits: 0n,
 					cumulativeCredits: 0n,
 					createdAt: Date.now(),
@@ -158,21 +158,20 @@ export const seedData = mutation({
 					debitAccountId: positionId,
 					creditAccountId: treasuryId,
 					amount: inv.amount,
-					idempotencyKey: `demo-seed-issue-${mortgage.mortgageId}-${inv.investorId}`,
+					idempotencyKey: `demo-seed-issue-${mortgage.mortgageId}-${inv.lenderId}`,
 				});
 			}
 		}
 
 		return {
 			seeded: true,
-			message: `Seeded ${DEMO_MORTGAGES.length} mortgages with investors.`,
+			message: `Seeded ${DEMO_MORTGAGES.length} mortgages with lenders.`,
 		};
-	},
-});
+	})
+	.public();
 
-export const cleanup = mutation({
-	args: {},
-	handler: async (ctx) => {
+export const cleanup = authedMutation
+	.handler(async (ctx) => {
 		// Collect all demo mortgage IDs by scanning TREASURY and POSITION accounts
 		const allAccounts = await ctx.db.query("ledger_accounts").collect();
 
@@ -242,14 +241,13 @@ export const cleanup = mutation({
 		}
 
 		return { deletedEntries, deletedAccounts: demoAccountIds.length };
-	},
-});
+	})
+	.public();
 
 // ── Queries ──────────────────────────────────────────────────────
 
-export const getDemoState = query({
-	args: {},
-	handler: async (ctx) => {
+export const getDemoState = authedQuery
+	.handler(async (ctx) => {
 		// Find all demo accounts
 		const allAccounts = await ctx.db.query("ledger_accounts").collect();
 
@@ -269,7 +267,7 @@ export const getDemoState = query({
 			label: string;
 			treasuryBalance: number;
 			positions: Array<{
-				investorId: string;
+				lenderId: string;
 				displayName: string;
 				accountId: string;
 				balance: number;
@@ -295,12 +293,15 @@ export const getDemoState = query({
 						a.mortgageId === mortgageId &&
 						computeBalance(a) > 0n
 				)
-				.map((a) => ({
-					investorId: a.investorId ?? "",
-					displayName: investorDisplayName(a.investorId ?? ""),
-					accountId: a._id,
-					balance: Number(computeBalance(a)),
-				}));
+				.map((a) => {
+					const lenderId = getAccountLenderId(a) ?? "";
+					return {
+						lenderId,
+						displayName: lenderDisplayName(lenderId),
+						accountId: a._id,
+						balance: Number(computeBalance(a)),
+					};
+				});
 
 			// Count entries
 			const entries = await ctx.db
@@ -334,12 +335,11 @@ export const getDemoState = query({
 		}
 
 		return { mortgages, totalEntries };
-	},
-});
+	})
+	.public();
 
-export const getDemoJournal = query({
-	args: {},
-	handler: async (ctx) => {
+export const getDemoJournal = authedQuery
+	.handler(async (ctx) => {
 		// Collect demo mortgage IDs
 		const allAccounts = await ctx.db.query("ledger_accounts").collect();
 
@@ -357,12 +357,12 @@ export const getDemoJournal = query({
 		// Build account type lookup
 		const accountTypeMap = new Map<
 			string,
-			{ type: string; investorId?: string }
+			{ type: string; lenderId?: string }
 		>();
 		for (const account of allAccounts) {
 			accountTypeMap.set(account._id, {
 				type: account.type,
-				investorId: account.investorId,
+				lenderId: getAccountLenderId(account),
 			});
 		}
 
@@ -395,11 +395,11 @@ export const getDemoJournal = query({
 
 			const debitLabel =
 				debitInfo?.type === "POSITION"
-					? investorDisplayName(debitInfo.investorId ?? "")
+					? lenderDisplayName(debitInfo.lenderId ?? "")
 					: (debitInfo?.type ?? "?");
 			const creditLabel =
 				creditInfo?.type === "POSITION"
-					? investorDisplayName(creditInfo.investorId ?? "")
+					? lenderDisplayName(creditInfo.lenderId ?? "")
 					: (creditInfo?.type ?? "?");
 
 			const meta = entry.metadata as
@@ -418,5 +418,5 @@ export const getDemoJournal = query({
 				timestamp: entry.timestamp,
 			};
 		});
-	},
-});
+	})
+	.public();

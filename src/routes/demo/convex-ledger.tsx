@@ -63,12 +63,12 @@ function LedgerDemo() {
 	});
 	const [issueForm, setIssueForm] = useState<IssueFormState>({
 		mortgage: "",
-		investor: "demo-inv-",
+		lender: "demo-inv-",
 		amount: "",
 	});
 	const [redeemForm, setRedeemForm] = useState<RedeemFormState>({
 		mortgage: "",
-		investor: "",
+		lender: "",
 		amount: "",
 	});
 
@@ -123,8 +123,8 @@ function LedgerDemo() {
 		try {
 			await transferShares({
 				mortgageId: transferForm.mortgage,
-				sellerInvestorId: transferForm.seller,
-				buyerInvestorId: transferForm.buyer,
+				sellerLenderId: transferForm.seller,
+				buyerLenderId: transferForm.buyer,
 				amount: parseIntegerAmount(transferForm.amount),
 				effectiveDate: new Date().toISOString().split("T")[0],
 				idempotencyKey: crypto.randomUUID(),
@@ -144,23 +144,21 @@ function LedgerDemo() {
 
 	const handleIssue = useCallback(async () => {
 		clearMessages();
-		if (!(issueForm.mortgage && issueForm.investor && issueForm.amount)) {
+		if (!(issueForm.mortgage && issueForm.lender && issueForm.amount)) {
 			return;
 		}
 		setLoading(true);
 		try {
 			await issueSharesMut({
 				mortgageId: issueForm.mortgage,
-				investorId: issueForm.investor,
+				lenderId: issueForm.lender,
 				amount: parseIntegerAmount(issueForm.amount),
 				effectiveDate: new Date().toISOString().split("T")[0],
 				idempotencyKey: crypto.randomUUID(),
 				source: INTERACTIVE_SOURCE,
 				metadata: INTERACTIVE_META,
 			});
-			setSuccessMsg(
-				`Issued ${issueForm.amount} units to ${issueForm.investor}`
-			);
+			setSuccessMsg(`Issued ${issueForm.amount} units to ${issueForm.lender}`);
 			setIssueForm((prev) => ({ ...prev, amount: "" }));
 		} catch (e) {
 			setError(e instanceof Error ? e.message : String(e));
@@ -171,14 +169,14 @@ function LedgerDemo() {
 
 	const handleRedeem = useCallback(async () => {
 		clearMessages();
-		if (!(redeemForm.mortgage && redeemForm.investor && redeemForm.amount)) {
+		if (!(redeemForm.mortgage && redeemForm.lender && redeemForm.amount)) {
 			return;
 		}
 		setLoading(true);
 		try {
 			await redeemSharesMut({
 				mortgageId: redeemForm.mortgage,
-				investorId: redeemForm.investor,
+				lenderId: redeemForm.lender,
 				amount: parseIntegerAmount(redeemForm.amount),
 				effectiveDate: new Date().toISOString().split("T")[0],
 				idempotencyKey: crypto.randomUUID(),
@@ -186,7 +184,7 @@ function LedgerDemo() {
 				metadata: INTERACTIVE_META,
 			});
 			setSuccessMsg(
-				`Redeemed ${redeemForm.amount} units from ${redeemForm.investor}`
+				`Redeemed ${redeemForm.amount} units from ${redeemForm.lender}`
 			);
 			setRedeemForm((prev) => ({ ...prev, amount: "" }));
 		} catch (e) {
@@ -206,7 +204,7 @@ function LedgerDemo() {
 
 	return (
 		<DemoLayout
-			description="Double-entry ownership ledger with 10,000 units per mortgage. Seed data, transfer shares between investors, and watch balances update in real time."
+			description="Double-entry ownership ledger with 10,000 units per mortgage. Seed data, transfer shares between lenders, and watch balances update in real time."
 			title="Mortgage Ownership Ledger"
 		>
 			<div className="space-y-6">

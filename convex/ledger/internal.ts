@@ -1,5 +1,6 @@
 import type { Doc } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
+import { getAccountLenderId } from "./accountOwnership";
 
 /** Compute balance from cumulative fields: debits received minus credits given */
 export function computeBalance(
@@ -56,47 +57,64 @@ export async function getTreasuryAccount(ctx: QueryCtx, mortgageId: string) {
 export async function getPositionAccount(
 	ctx: QueryCtx,
 	mortgageId: string,
-	investorId: string
+	lenderId: string
 ) {
-	const position = await ctx.db
+	const indexedPosition = await ctx.db
 		.query("ledger_accounts")
-		.withIndex("by_mortgage_and_investor", (q) =>
-			q.eq("mortgageId", mortgageId).eq("investorId", investorId)
+		.withIndex("by_mortgage_and_lender", (q) =>
+			q.eq("mortgageId", mortgageId).eq("lenderId", lenderId)
 		)
 		.first();
+	const position =
+		(indexedPosition?.type === "POSITION" ? indexedPosition : null) ??
+		(
+			await ctx.db
+				.query("ledger_accounts")
+				.withIndex("by_mortgage", (q) => q.eq("mortgageId", mortgageId))
+				.collect()
+		).find(
+			(account) =>
+				account.type === "POSITION" && getAccountLenderId(account) === lenderId
+		);
 	if (!position || position.type !== "POSITION") {
 		throw new Error(
-			`No POSITION account for investor ${investorId} on mortgage ${mortgageId}`
+			`No POSITION account for lender ${lenderId} on mortgage ${mortgageId}`
 		);
 	}
 	return position;
 }
 
-/** Find or create POSITION account for an investor×mortgage pair */
+/** Find or create POSITION account for a lender×mortgage pair */
 export async function getOrCreatePositionAccount(
 	ctx: MutationCtx,
 	mortgageId: string,
-	investorId: string
+	lenderId: string
 ) {
-	const existing = await ctx.db
+	const indexedExisting = await ctx.db
 		.query("ledger_accounts")
-		.withIndex("by_mortgage_and_investor", (q) =>
-			q.eq("mortgageId", mortgageId).eq("investorId", investorId)
+		.withIndex("by_mortgage_and_lender", (q) =>
+			q.eq("mortgageId", mortgageId).eq("lenderId", lenderId)
 		)
 		.first();
+	const existing =
+		(indexedExisting?.type === "POSITION" ? indexedExisting : null) ??
+		(
+			await ctx.db
+				.query("ledger_accounts")
+				.withIndex("by_mortgage", (q) => q.eq("mortgageId", mortgageId))
+				.collect()
+		).find(
+			(account) =>
+				account.type === "POSITION" && getAccountLenderId(account) === lenderId
+		);
 	if (existing) {
-		if (existing.type !== "POSITION") {
-			throw new Error(
-				`Account for investor ${investorId} on mortgage ${mortgageId} exists but is type ${existing.type}, not POSITION`
-			);
-		}
 		return existing;
 	}
 
 	const id = await ctx.db.insert("ledger_accounts", {
 		type: "POSITION",
 		mortgageId,
-		investorId,
+		lenderId,
 		cumulativeDebits: 0n,
 		cumulativeCredits: 0n,
 		createdAt: Date.now(),

@@ -29,13 +29,13 @@ export interface TransferFormState {
 
 export interface IssueFormState {
 	amount: string;
-	investor: string;
+	lender: string;
 	mortgage: string;
 }
 
 export interface RedeemFormState {
 	amount: string;
-	investor: string;
+	lender: string;
 	mortgage: string;
 }
 
@@ -76,10 +76,10 @@ export function LedgerActions({
 		transferForm.amount;
 
 	const isIssueValid =
-		issueForm.mortgage && issueForm.investor && issueForm.amount;
+		issueForm.mortgage && issueForm.lender && issueForm.amount;
 
 	const isRedeemValid =
-		redeemForm.mortgage && redeemForm.investor && redeemForm.amount;
+		redeemForm.mortgage && redeemForm.lender && redeemForm.amount;
 
 	return (
 		<Card>
@@ -134,7 +134,7 @@ export function LedgerActions({
 									</SelectTrigger>
 									<SelectContent>
 										{getPositions(transferForm.mortgage).map((p) => (
-											<SelectItem key={p.investorId} value={p.investorId}>
+											<SelectItem key={p.lenderId} value={p.lenderId}>
 												{p.displayName} ({p.balance.toLocaleString()})
 											</SelectItem>
 										))}
@@ -142,10 +142,10 @@ export function LedgerActions({
 								</Select>
 							</div>
 							<div>
-								<Label>Buyer Investor ID</Label>
+								<Label>Buyer Lender ID</Label>
 								<Input
 									onChange={(e) => onTransferChange({ buyer: e.target.value })}
-									placeholder="demo-inv-..."
+									placeholder="demo-lender-..."
 									value={transferForm.buyer}
 								/>
 							</div>
@@ -193,11 +193,11 @@ export function LedgerActions({
 								</Select>
 							</div>
 							<div>
-								<Label>Investor ID</Label>
+								<Label>Lender ID</Label>
 								<Input
-									onChange={(e) => onIssueChange({ investor: e.target.value })}
-									placeholder="demo-inv-..."
-									value={issueForm.investor}
+									onChange={(e) => onIssueChange({ lender: e.target.value })}
+									placeholder="demo-lender-..."
+									value={issueForm.lender}
 								/>
 							</div>
 							<div>
@@ -223,7 +223,7 @@ export function LedgerActions({
 								<Label>Mortgage</Label>
 								<Select
 									onValueChange={(v) =>
-										onRedeemChange({ mortgage: v, investor: "" })
+										onRedeemChange({ mortgage: v, lender: "" })
 									}
 									value={redeemForm.mortgage}
 								>
@@ -240,17 +240,17 @@ export function LedgerActions({
 								</Select>
 							</div>
 							<div>
-								<Label>Investor</Label>
+								<Label>Lender</Label>
 								<Select
-									onValueChange={(v) => onRedeemChange({ investor: v })}
-									value={redeemForm.investor}
+									onValueChange={(v) => onRedeemChange({ lender: v })}
+									value={redeemForm.lender}
 								>
 									<SelectTrigger>
-										<SelectValue placeholder="Select investor" />
+										<SelectValue placeholder="Select lender" />
 									</SelectTrigger>
 									<SelectContent>
 										{getPositions(redeemForm.mortgage).map((p) => (
-											<SelectItem key={p.investorId} value={p.investorId}>
+											<SelectItem key={p.lenderId} value={p.lenderId}>
 												{p.displayName} ({p.balance.toLocaleString()})
 											</SelectItem>
 										))}

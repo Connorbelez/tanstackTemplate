@@ -25,19 +25,19 @@ export const FullyIssued: Story = {
 		treasuryBalance: 0,
 		positions: [
 			{
-				investorId: "inv-alice",
+				lenderId: "lender-alice",
 				displayName: "Alice",
 				accountId: "acc-1",
 				balance: 5000,
 			},
 			{
-				investorId: "inv-bob",
+				lenderId: "lender-bob",
 				displayName: "Bob",
 				accountId: "acc-2",
 				balance: 3000,
 			},
 			{
-				investorId: "inv-charlie",
+				lenderId: "lender-charlie",
 				displayName: "Charlie",
 				accountId: "acc-3",
 				balance: 2000,
@@ -56,7 +56,7 @@ export const PartiallyIssued: Story = {
 		treasuryBalance: 3000,
 		positions: [
 			{
-				investorId: "inv-alice",
+				lenderId: "lender-alice",
 				displayName: "Alice",
 				accountId: "acc-1",
 				balance: 7000,
@@ -68,14 +68,14 @@ export const PartiallyIssued: Story = {
 	},
 };
 
-export const SingleInvestor: Story = {
+export const SingleLender: Story = {
 	args: {
 		mortgageId: "mtg-single",
-		label: "789 Oak Ave — Single Investor",
+		label: "789 Oak Ave — Single Lender",
 		treasuryBalance: 0,
 		positions: [
 			{
-				investorId: "inv-sole",
+				lenderId: "lender-sole",
 				displayName: "Sole Owner",
 				accountId: "acc-sole",
 				balance: 10_000,
@@ -94,7 +94,7 @@ export const InvariantBroken: Story = {
 		treasuryBalance: 3000,
 		positions: [
 			{
-				investorId: "inv-alice",
+				lenderId: "lender-alice",
 				displayName: "Alice",
 				accountId: "acc-1",
 				balance: 5000,
