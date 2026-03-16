@@ -159,10 +159,11 @@ export async function executeTransition(
 		entityId: string;
 		eventType: string;
 		payload?: Record<string, unknown>;
-		source: CommandSource;
+		source?: CommandSource;
 	}
 ): Promise<TransitionResult> {
-	const { entityType, entityId, eventType, payload, source } = command;
+	const { entityType, entityId, eventType, payload } = command;
+	const source: CommandSource = command.source ?? { channel: "scheduler" };
 
 	// ── 1. RESOLVE ──────────────────────────────────────────────────────
 	// Fail fast before any DB reads if the entity type has no registered machine.
