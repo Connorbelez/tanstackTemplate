@@ -125,13 +125,3 @@ export async function getOrCreatePositionAccount(
 	}
 	return account;
 }
-
-/** Get next monotonic gap-free sequence number */
-export async function nextSequenceNumber(ctx: QueryCtx): Promise<bigint> {
-	const latest = await ctx.db
-		.query("ledger_journal_entries")
-		.withIndex("by_sequence")
-		.order("desc")
-		.first();
-	return latest ? latest.sequenceNumber + 1n : 1n;
-}

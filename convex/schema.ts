@@ -896,6 +896,11 @@ export default defineSchema({
 		lastProcessedAt: v.float64(),
 	}).index("by_consumer", ["consumerId"]),
 
+	ledger_sequence_counters: defineTable({
+		name: v.literal("ledger_sequence"),
+		value: v.int64(),
+	}).index("by_name", ["name"]),
+
 	// ══════════════════════════════════════════════════════════
 	// DOCUMENT ENGINE
 	// ══════════════════════════════════════════════════════════

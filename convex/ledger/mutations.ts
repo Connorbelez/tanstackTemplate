@@ -8,8 +8,8 @@ import {
 	getOrCreateWorldAccount,
 	getPositionAccount,
 	getTreasuryAccount,
-	nextSequenceNumber,
 } from "./internal";
+import { getNextSequenceNumber } from "./sequenceCounter";
 import {
 	burnMortgageArgsValidator,
 	issueSharesArgsValidator,
@@ -85,7 +85,7 @@ async function postEntryInternal(
 	validateEntryType(args, debitAccount, creditAccount);
 
 	// 5. Write entry
-	const seqNum = await nextSequenceNumber(ctx);
+	const seqNum = await getNextSequenceNumber(ctx);
 	const entryId = await ctx.db.insert("ledger_journal_entries", {
 		sequenceNumber: seqNum,
 		entryType: args.entryType,
