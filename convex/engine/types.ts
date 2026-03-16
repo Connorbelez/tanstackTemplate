@@ -9,6 +9,7 @@ export type EntityType =
 	| "applicationPackage"
 	| "broker"
 	| "borrower"
+	| "lender"
 	| "lenderOnboarding"
 	| "provisionalOffer"
 	| "offerCondition"
@@ -103,6 +104,7 @@ export const ENTITY_TABLE_MAP = {
 	applicationPackage: "applicationPackages",
 	broker: "brokers",
 	borrower: "borrowers",
+	lender: "lenders",
 	lenderOnboarding: "lenderOnboardings",
 	provisionalOffer: "provisionalOffers",
 	offerCondition: "offerConditions",

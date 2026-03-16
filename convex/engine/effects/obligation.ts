@@ -1,80 +1,145 @@
-import type { Id } from "../../_generated/dataModel";
+import { v } from "convex/values";
+import type { Doc, Id } from "../../_generated/dataModel";
+import type { MutationCtx } from "../../_generated/server";
 import { internalMutation } from "../../_generated/server";
 import { executeTransition } from "../transition";
+import type { CommandSource, TransitionResult } from "../types";
 import { effectPayloadValidator } from "../validators";
+
+const obligationEffectPayloadValidator = {
+	...effectPayloadValidator,
+	entityId: v.id("obligations"),
+	entityType: v.literal("obligation"),
+};
+
+interface ObligationEffectArgs {
+	effectName: string;
+	entityId: Id<"obligations">;
+	entityType: "obligation";
+	eventType: string;
+	journalEntryId: string;
+	payload?: Record<string, unknown>;
+	source: CommandSource;
+}
+
+type ObligationRecord = Doc<"obligations">;
+
+function getTransitionFailureReason(result: TransitionResult) {
+	return result.reason ?? "unknown reason";
+}
+
+function isFiniteNumber(value: unknown): value is number {
+	return typeof value === "number" && Number.isFinite(value);
+}
+
+async function loadObligationOrThrow(
+	ctx: MutationCtx,
+	args: ObligationEffectArgs,
+	effectLabel: string
+): Promise<ObligationRecord> {
+	const obligation = await ctx.db.get(args.entityId);
+	if (!obligation) {
+		throw new Error(`[${effectLabel}] Obligation not found: ${args.entityId}`);
+	}
+
+	return obligation;
+}
+
+function buildPaymentConfirmedPayload(
+	args: ObligationEffectArgs,
+	obligation: ObligationRecord
+) {
+	const amountFromEvent = args.payload?.amount;
+	const paidAtFromEvent = args.payload?.paidAt;
+
+	const amount = isFiniteNumber(amountFromEvent)
+		? amountFromEvent
+		: (obligation.settledAmount ?? obligation.amount);
+	const paidAt = isFiniteNumber(paidAtFromEvent)
+		? paidAtFromEvent
+		: obligation.settledAt;
+
+	if (!isFiniteNumber(paidAt)) {
+		throw new Error(
+			`[emitObligationSettled] Missing canonical paidAt for obligation ${args.entityId}`
+		);
+	}
+
+	return {
+		obligationId: args.entityId,
+		amount,
+		paidAt,
+	};
+}
+
+async function forwardObligationEventToMortgage(
+	ctx: MutationCtx,
+	args: ObligationEffectArgs,
+	config: {
+		buildPayload: (
+			args: ObligationEffectArgs,
+			obligation: ObligationRecord
+		) => Record<string, unknown>;
+		effectLabel: "emitObligationOverdue" | "emitObligationSettled";
+		eventType: "OBLIGATION_OVERDUE" | "PAYMENT_CONFIRMED";
+	}
+) {
+	const obligation = await loadObligationOrThrow(ctx, args, config.effectLabel);
+	const result = await executeTransition(ctx, {
+		entityType: "mortgage",
+		entityId: obligation.mortgageId,
+		eventType: config.eventType,
+		payload: config.buildPayload(args, obligation),
+		source: args.source,
+	});
+
+	if (!result.success) {
+		// Mortgage machines reject these events in terminal/non-accepting states.
+		// Treat that as a no-op so scheduled effects do not retry forever.
+		console.warn(
+			`[${config.effectLabel}] Skipping ${config.eventType} for mortgage=${obligation.mortgageId} from obligation=${args.entityId}: ${getTransitionFailureReason(result)} (state=${result.previousState})`
+		);
+		return;
+	}
+
+	console.info(
+		`[${config.effectLabel}] obligation=${args.entityId} -> mortgage=${obligation.mortgageId}: ${result.previousState} -> ${result.newState}`
+	);
+}
+
+export const obligationEffectTestHelpers = {
+	buildPaymentConfirmedPayload,
+	forwardObligationEventToMortgage,
+};
 
 /**
  * Cross-entity effect: fires OBLIGATION_OVERDUE at the parent mortgage.
  * Triggered when an obligation transitions due → overdue via GRACE_PERIOD_EXPIRED.
  */
 export const emitObligationOverdue = internalMutation({
-	args: effectPayloadValidator,
+	args: obligationEffectPayloadValidator,
 	handler: async (ctx, args) => {
-		const obligation = await ctx.db.get(
-			args.entityId as Id<"obligations">
-		);
-		if (!obligation) {
-			throw new Error(
-				`[emitObligationOverdue] Obligation not found: ${args.entityId}`
-			);
-		}
-
-		const result = await executeTransition(ctx, {
-			entityType: "mortgage",
-			entityId: obligation.mortgageId,
+		await forwardObligationEventToMortgage(ctx, args, {
+			effectLabel: "emitObligationOverdue",
 			eventType: "OBLIGATION_OVERDUE",
-			payload: { obligationId: args.entityId },
-			source: { channel: "scheduler", actorType: "system" },
+			buildPayload: ({ entityId }) => ({
+				obligationId: entityId,
+			}),
 		});
-
-		if (!result.success) {
-			throw new Error(
-				`[emitObligationOverdue] Mortgage transition failed for ${obligation.mortgageId}: ${result.reason}`
-			);
-		}
-
-		console.info(
-			`[emitObligationOverdue] obligation=${args.entityId} → mortgage=${obligation.mortgageId}: ${result.previousState} → ${result.newState}`
-		);
 	},
 });
 
 /**
  * Cross-entity effect: fires PAYMENT_CONFIRMED at the parent mortgage.
- * Triggered when an obligation transitions overdue → settled via PAYMENT_APPLIED.
+ * Triggered when an obligation transitions due → settled or overdue → settled via PAYMENT_APPLIED.
  */
 export const emitObligationSettled = internalMutation({
-	args: effectPayloadValidator,
+	args: obligationEffectPayloadValidator,
 	handler: async (ctx, args) => {
-		const obligation = await ctx.db.get(
-			args.entityId as Id<"obligations">
-		);
-		if (!obligation) {
-			throw new Error(
-				`[emitObligationSettled] Obligation not found: ${args.entityId}`
-			);
-		}
-
-		const result = await executeTransition(ctx, {
-			entityType: "mortgage",
-			entityId: obligation.mortgageId,
+		await forwardObligationEventToMortgage(ctx, args, {
+			effectLabel: "emitObligationSettled",
 			eventType: "PAYMENT_CONFIRMED",
-			payload: {
-				obligationId: args.entityId,
-				amount: obligation.settledAmount ?? obligation.amount,
-				paidAt: obligation.settledAt ?? Date.now(),
-			},
-			source: { channel: "scheduler", actorType: "system" },
+			buildPayload: buildPaymentConfirmedPayload,
 		});
-
-		if (!result.success) {
-			throw new Error(
-				`[emitObligationSettled] Mortgage transition failed for ${obligation.mortgageId}: ${result.reason}`
-			);
-		}
-
-		console.info(
-			`[emitObligationSettled] obligation=${args.entityId} → mortgage=${obligation.mortgageId}: ${result.previousState} → ${result.newState}`
-		);
 	},
 });
