@@ -11,9 +11,19 @@ export function buildSource(
 	viewer: Viewer,
 	channel: CommandSource["channel"]
 ): CommandSource {
+	let actorType: CommandSource["actorType"];
+	if (viewer.isFairLendAdmin) {
+		actorType = "admin";
+	} else if (viewer.roles.has("broker")) {
+		actorType = "broker";
+	} else if (viewer.roles.has("borrower")) {
+		actorType = "borrower";
+	} else if (viewer.roles.has("member")) {
+		actorType = "member";
+	}
 	return {
 		actorId: viewer.authId,
-		actorType: viewer.isFairLendAdmin ? "admin" : undefined,
+		actorType,
 		channel,
 		// ip and sessionId can be added later from request headers
 	};
@@ -24,7 +34,6 @@ export function buildSource(
  * entityType is omitted — each wrapper fixes it at the type level.
  */
 export const transitionCommandArgs = {
-	entityId: v.string(),
 	eventType: v.string(),
 	payload: v.optional(v.any()),
 	source: v.optional(sourceValidator),
@@ -37,7 +46,7 @@ export const transitionCommandArgs = {
  * Requires FairLend admin role (enforced by adminMutation).
  */
 export const transitionOnboardingRequest = adminMutation
-	.input(transitionCommandArgs)
+	.input({ ...transitionCommandArgs, entityId: v.id("onboardingRequests") })
 	.handler(async (ctx, args) => {
 		const source =
 			(args.source as CommandSource | undefined) ??
@@ -58,11 +67,11 @@ export const transitionOnboardingRequest = adminMutation
  */
 export const transitionMortgage = authedMutation
 	.use(requirePermission("mortgage:transition"))
-	.input(transitionCommandArgs)
+	.input({ ...transitionCommandArgs, entityId: v.id("mortgages") })
 	.handler(async (ctx, args) => {
 		const source =
 			(args.source as CommandSource | undefined) ??
-			buildSource(ctx.viewer, "borrower_portal");
+			buildSource(ctx.viewer, "broker_portal");
 		return executeTransition(ctx, {
 			entityType: "mortgage",
 			entityId: args.entityId,
@@ -78,7 +87,7 @@ export const transitionMortgage = authedMutation
  * No auth — intended for scheduler/effects use only.
  */
 export const transitionObligation = internalMutation({
-	args: transitionCommandArgs,
+	args: { ...transitionCommandArgs, entityId: v.id("obligations") },
 	handler: async (ctx, args) => {
 		const source = (args.source as CommandSource | undefined) ?? {
 			channel: "scheduler" as const,

@@ -143,14 +143,14 @@ async function scheduleEffects(
  * Core GT transition engine — called within mutations to maintain atomicity.
  *
  * Implements the 8-step pipeline:
- * 1. LOAD — Read entity record (status + machineContext)
- * 2. RESOLVE — Look up machine from registry
+ * 1. RESOLVE — Look up machine from registry (fail fast for unknown entity types)
+ * 2. LOAD — Read entity record (status + machineContext)
  * 3. HYDRATE — Restore XState snapshot from persisted state
  * 4. COMPUTE — Pure `getNextSnapshot()` call
  * 5. DETECT — Compare new vs previous state; unchanged → rejection path
  * 6. PERSIST — Atomic patch + audit journal entry
- * 7. EFFECTS — Schedule declared actions
- * 8. AUDIT — Layer 2 hash-chain entry (via appendAuditJournalEntry)
+ * 7. AUDIT — Layer 2 hash-chain entry (via appendAuditJournalEntry)
+ * 8. EFFECTS — Schedule declared actions
  */
 export async function executeTransition(
 	ctx: MutationCtx,
@@ -353,7 +353,7 @@ export async function executeTransition(
 		timestamp: Date.now(),
 	});
 
-	// ── 8. AUDIT (Layer 2 — handled inside appendAuditJournalEntry) ────
+	// ── 7. AUDIT (Layer 2 — handled inside appendAuditJournalEntry) ────
 	await auditLog.log(ctx, {
 		action: `transition.${entityType}.${eventType.toLowerCase()}`,
 		actorId: source.actorId ?? "system",
@@ -373,7 +373,7 @@ export async function executeTransition(
 		},
 	});
 
-	// ── 7. EFFECTS ───────────────────────────────────────────────────────
+	// ── 8. EFFECTS ───────────────────────────────────────────────────────
 	const effectNames = await scheduleEffects(
 		ctx,
 		entityId,
