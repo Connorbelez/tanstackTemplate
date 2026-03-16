@@ -215,7 +215,25 @@ export async function transitionEntity(
 				reason: `Event "${eventType}" not valid in state "${previousState}"`,
 			};
 		}
-		// Same state but has effects — run effects only, no persistence
+		// Same state but has effects — write journal entry for traceability and
+		// deterministic idempotency key, then schedule effects.
+		journalEntryId = await appendAuditJournalEntry(ctx, {
+			actorId: resolvedSource.actorId ?? "system",
+			actorType: resolvedSource.actorType,
+			channel: resolvedSource.channel,
+			entityId,
+			entityType,
+			eventType,
+			ip: resolvedSource.ip,
+			sessionId: resolvedSource.sessionId,
+			payload,
+			previousState,
+			newState,
+			outcome: "transitioned",
+			reason: "same_state_with_effects",
+			machineVersion: machine.id,
+			timestamp: Date.now(),
+		});
 		const effectNames = await scheduleEffects(
 			ctx,
 			entityId,

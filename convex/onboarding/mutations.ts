@@ -4,7 +4,6 @@ import {
 	FAIRLEND_BROKERAGE_ORG_ID,
 	FAIRLEND_LAWYERS_ORG_ID,
 	FAIRLEND_STAFF_ORG_ID,
-	REQUESTABLE_ROLES,
 	type RequestableRole,
 } from "../constants";
 import { appendAuditJournalEntry } from "../engine/auditJournal";
@@ -46,13 +45,6 @@ export const requestRole = authedMutation
 	})
 	.handler(async (ctx, args) => {
 		const requestedRole = args.requestedRole as RequestableRole;
-
-		// Validate role is requestable
-		if (!(REQUESTABLE_ROLES as readonly string[]).includes(requestedRole)) {
-			throw new ConvexError(
-				`Role "${requestedRole}" is not available for request`
-			);
-		}
 
 		// Validate broker invite has invitedByBrokerId
 		if (args.referralSource === "broker_invite" && !args.invitedByBrokerId) {

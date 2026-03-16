@@ -1,11 +1,19 @@
-import type { GenericDataModel, GenericMutationCtx } from "convex/server";
+import type {
+	FunctionReference,
+	GenericDataModel,
+	GenericMutationCtx,
+} from "convex/server";
 import { internal } from "../_generated/api";
 import { auditLog } from "../auditLog";
 import type { Viewer } from "../fluent";
 
 const recordAuthFailureReference = (
 	internal as unknown as {
-		auth: { internal: { recordAuthFailure: never } };
+		auth: {
+			internal: {
+				recordAuthFailure: FunctionReference<"mutation", "internal">;
+			};
+		};
 	}
 ).auth.internal.recordAuthFailure;
 

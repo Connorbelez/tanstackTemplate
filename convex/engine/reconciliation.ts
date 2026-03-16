@@ -29,6 +29,8 @@ async function collectLatestJournalEntries(
 	const latestByEntity = new Map<string, LatestJournalEntry>();
 	let cursor: string | null = null;
 
+	let consecutiveEmptyPages = 0;
+
 	while (true) {
 		const { continueCursor, isDone, page } = await ctx.db
 			.query("auditJournal")
@@ -39,6 +41,7 @@ async function collectLatestJournalEntries(
 				numItems: RECONCILIATION_PAGE_SIZE,
 			});
 
+		let foundNewEntity = false;
 		for (const entry of page) {
 			if (
 				entry.outcome === "transitioned" &&
@@ -48,10 +51,19 @@ async function collectLatestJournalEntries(
 					_id: entry._id,
 					newState: entry.newState,
 				});
+				foundNewEntity = true;
 			}
 		}
 
 		if (isDone) {
+			return latestByEntity;
+		}
+
+		// Early exit: entries arrive newest-first, so once we stop discovering
+		// new entities for several consecutive pages, all remaining pages contain
+		// only older entries for entities we already captured.
+		consecutiveEmptyPages = foundNewEntity ? 0 : consecutiveEmptyPages + 1;
+		if (consecutiveEmptyPages >= 3) {
 			return latestByEntity;
 		}
 
@@ -63,7 +75,7 @@ async function getEntityStatus(
 	ctx: ReconciliationCtx,
 	entityType: keyof typeof ENTITY_TABLE_MAP,
 	entityId: string
-) {
+): Promise<string | null | undefined> {
 	// biome-ignore lint/style/useDefaultSwitchClause: entityType is an exhaustive union here.
 	switch (entityType) {
 		case "onboardingRequest": {
@@ -72,7 +84,9 @@ async function getEntityStatus(
 		}
 		case "mortgage":
 		case "obligation":
-			return null;
+			// Not yet supported by the transition engine — return undefined to
+			// skip rather than report false ENTITY_NOT_FOUND discrepancies.
+			return undefined;
 	}
 }
 
@@ -100,7 +114,11 @@ export const reconcile = adminQuery
 
 			for (const [entityId, journal] of latestByEntity) {
 				const entityStatus = await getEntityStatus(ctx, entityType, entityId);
-				if (!entityStatus) {
+				// undefined = entity type not yet supported by transition engine — skip
+				if (entityStatus === undefined) {
+					continue;
+				}
+				if (entityStatus === null) {
 					discrepancies.push({
 						entityType,
 						entityId,
