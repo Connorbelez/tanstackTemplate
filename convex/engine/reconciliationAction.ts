@@ -22,7 +22,7 @@ type ReconciliationCtx = Pick<QueryCtx, "db">;
 
 async function collectLatestEntries(
 	ctx: ReconciliationCtx,
-	entityType: string
+	entityType: keyof typeof ENTITY_TABLE_MAP
 ) {
 	const latestByEntity = new Map<string, LatestJournalEntry>();
 	let cursor: string | null = null;
