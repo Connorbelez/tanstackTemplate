@@ -49,17 +49,21 @@ import { Route as DemoConvexRouteImport } from './routes/demo/convex'
 import { Route as AuthenticatedAuthenticatedRouteImport } from './routes/_authenticated/authenticated'
 import { Route as DemoRbacAuthRouteRouteImport } from './routes/demo/rbac-auth/route'
 import { Route as DemoRbacRouteRouteImport } from './routes/demo/rbac/route'
+import { Route as DemoGovernedTransitionsRouteRouteImport } from './routes/demo/governed-transitions/route'
 import { Route as DemoDocumentEngineRouteRouteImport } from './routes/demo/document-engine/route'
 import { Route as DemoAuditTraceabilityRouteRouteImport } from './routes/demo/audit-traceability/route'
 import { Route as AdminUnderwritingRouteRouteImport } from './routes/admin/underwriting/route'
 import { Route as DemoRbacIndexRouteImport } from './routes/demo/rbac/index'
 import { Route as DemoRbacAuthIndexRouteImport } from './routes/demo/rbac-auth/index'
+import { Route as DemoGovernedTransitionsIndexRouteImport } from './routes/demo/governed-transitions/index'
 import { Route as DemoDocumentEngineIndexRouteImport } from './routes/demo/document-engine/index'
 import { Route as DemoAuditTraceabilityIndexRouteImport } from './routes/demo/audit-traceability/index'
 import { Route as DemoRbacAuthRolesRouteImport } from './routes/demo/rbac-auth/roles'
 import { Route as DemoRbacAuthOnboardingRouteImport } from './routes/demo/rbac-auth/onboarding'
 import { Route as DemoRbacAuthAuditRouteImport } from './routes/demo/rbac-auth/audit'
 import { Route as DemoRbacAuthAccessControlRouteImport } from './routes/demo/rbac-auth/access-control'
+import { Route as DemoGovernedTransitionsMachineRouteImport } from './routes/demo/governed-transitions/machine'
+import { Route as DemoGovernedTransitionsJournalRouteImport } from './routes/demo/governed-transitions/journal'
 import { Route as DemoFormSimpleRouteImport } from './routes/demo/form.simple'
 import { Route as DemoFormAddressRouteImport } from './routes/demo/form.address'
 import { Route as DemoDocumentEngineVariablesRouteImport } from './routes/demo/document-engine/variables'
@@ -284,6 +288,12 @@ const DemoRbacRouteRoute = DemoRbacRouteRouteImport.update({
   path: '/demo/rbac',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DemoGovernedTransitionsRouteRoute =
+  DemoGovernedTransitionsRouteRouteImport.update({
+    id: '/demo/governed-transitions',
+    path: '/demo/governed-transitions',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const DemoDocumentEngineRouteRoute = DemoDocumentEngineRouteRouteImport.update({
   id: '/demo/document-engine',
   path: '/demo/document-engine',
@@ -310,6 +320,12 @@ const DemoRbacAuthIndexRoute = DemoRbacAuthIndexRouteImport.update({
   path: '/',
   getParentRoute: () => DemoRbacAuthRouteRoute,
 } as any)
+const DemoGovernedTransitionsIndexRoute =
+  DemoGovernedTransitionsIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => DemoGovernedTransitionsRouteRoute,
+  } as any)
 const DemoDocumentEngineIndexRoute = DemoDocumentEngineIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -341,6 +357,18 @@ const DemoRbacAuthAccessControlRoute =
     id: '/access-control',
     path: '/access-control',
     getParentRoute: () => DemoRbacAuthRouteRoute,
+  } as any)
+const DemoGovernedTransitionsMachineRoute =
+  DemoGovernedTransitionsMachineRouteImport.update({
+    id: '/machine',
+    path: '/machine',
+    getParentRoute: () => DemoGovernedTransitionsRouteRoute,
+  } as any)
+const DemoGovernedTransitionsJournalRoute =
+  DemoGovernedTransitionsJournalRouteImport.update({
+    id: '/journal',
+    path: '/journal',
+    getParentRoute: () => DemoGovernedTransitionsRouteRoute,
   } as any)
 const DemoFormSimpleRoute = DemoFormSimpleRouteImport.update({
   id: '/demo/form/simple',
@@ -467,6 +495,7 @@ export interface FileRoutesByFullPath {
   '/admin/underwriting': typeof AdminUnderwritingRouteRoute
   '/demo/audit-traceability': typeof DemoAuditTraceabilityRouteRouteWithChildren
   '/demo/document-engine': typeof DemoDocumentEngineRouteRouteWithChildren
+  '/demo/governed-transitions': typeof DemoGovernedTransitionsRouteRouteWithChildren
   '/demo/rbac': typeof DemoRbacRouteRouteWithChildren
   '/demo/rbac-auth': typeof DemoRbacAuthRouteRouteWithChildren
   '/authenticated': typeof AuthenticatedAuthenticatedRoute
@@ -511,12 +540,15 @@ export interface FileRoutesByFullPath {
   '/demo/document-engine/variables': typeof DemoDocumentEngineVariablesRoute
   '/demo/form/address': typeof DemoFormAddressRoute
   '/demo/form/simple': typeof DemoFormSimpleRoute
+  '/demo/governed-transitions/journal': typeof DemoGovernedTransitionsJournalRoute
+  '/demo/governed-transitions/machine': typeof DemoGovernedTransitionsMachineRoute
   '/demo/rbac-auth/access-control': typeof DemoRbacAuthAccessControlRoute
   '/demo/rbac-auth/audit': typeof DemoRbacAuthAuditRoute
   '/demo/rbac-auth/onboarding': typeof DemoRbacAuthOnboardingRoute
   '/demo/rbac-auth/roles': typeof DemoRbacAuthRolesRoute
   '/demo/audit-traceability/': typeof DemoAuditTraceabilityIndexRoute
   '/demo/document-engine/': typeof DemoDocumentEngineIndexRoute
+  '/demo/governed-transitions/': typeof DemoGovernedTransitionsIndexRoute
   '/demo/rbac-auth/': typeof DemoRbacAuthIndexRoute
   '/demo/rbac/': typeof DemoRbacIndexRoute
   '/demo/rbac/admin/underwriting': typeof DemoRbacAdminUnderwritingRouteRoute
@@ -579,12 +611,15 @@ export interface FileRoutesByTo {
   '/demo/document-engine/variables': typeof DemoDocumentEngineVariablesRoute
   '/demo/form/address': typeof DemoFormAddressRoute
   '/demo/form/simple': typeof DemoFormSimpleRoute
+  '/demo/governed-transitions/journal': typeof DemoGovernedTransitionsJournalRoute
+  '/demo/governed-transitions/machine': typeof DemoGovernedTransitionsMachineRoute
   '/demo/rbac-auth/access-control': typeof DemoRbacAuthAccessControlRoute
   '/demo/rbac-auth/audit': typeof DemoRbacAuthAuditRoute
   '/demo/rbac-auth/onboarding': typeof DemoRbacAuthOnboardingRoute
   '/demo/rbac-auth/roles': typeof DemoRbacAuthRolesRoute
   '/demo/audit-traceability': typeof DemoAuditTraceabilityIndexRoute
   '/demo/document-engine': typeof DemoDocumentEngineIndexRoute
+  '/demo/governed-transitions': typeof DemoGovernedTransitionsIndexRoute
   '/demo/rbac-auth': typeof DemoRbacAuthIndexRoute
   '/demo/rbac': typeof DemoRbacIndexRoute
   '/demo/rbac/admin/underwriting': typeof DemoRbacAdminUnderwritingRouteRoute
@@ -608,6 +643,7 @@ export interface FileRoutesById {
   '/admin/underwriting': typeof AdminUnderwritingRouteRoute
   '/demo/audit-traceability': typeof DemoAuditTraceabilityRouteRouteWithChildren
   '/demo/document-engine': typeof DemoDocumentEngineRouteRouteWithChildren
+  '/demo/governed-transitions': typeof DemoGovernedTransitionsRouteRouteWithChildren
   '/demo/rbac': typeof DemoRbacRouteRouteWithChildren
   '/demo/rbac-auth': typeof DemoRbacAuthRouteRouteWithChildren
   '/_authenticated/authenticated': typeof AuthenticatedAuthenticatedRoute
@@ -652,12 +688,15 @@ export interface FileRoutesById {
   '/demo/document-engine/variables': typeof DemoDocumentEngineVariablesRoute
   '/demo/form/address': typeof DemoFormAddressRoute
   '/demo/form/simple': typeof DemoFormSimpleRoute
+  '/demo/governed-transitions/journal': typeof DemoGovernedTransitionsJournalRoute
+  '/demo/governed-transitions/machine': typeof DemoGovernedTransitionsMachineRoute
   '/demo/rbac-auth/access-control': typeof DemoRbacAuthAccessControlRoute
   '/demo/rbac-auth/audit': typeof DemoRbacAuthAuditRoute
   '/demo/rbac-auth/onboarding': typeof DemoRbacAuthOnboardingRoute
   '/demo/rbac-auth/roles': typeof DemoRbacAuthRolesRoute
   '/demo/audit-traceability/': typeof DemoAuditTraceabilityIndexRoute
   '/demo/document-engine/': typeof DemoDocumentEngineIndexRoute
+  '/demo/governed-transitions/': typeof DemoGovernedTransitionsIndexRoute
   '/demo/rbac-auth/': typeof DemoRbacAuthIndexRoute
   '/demo/rbac/': typeof DemoRbacIndexRoute
   '/demo/rbac/admin/underwriting': typeof DemoRbacAdminUnderwritingRouteRoute
@@ -682,6 +721,7 @@ export interface FileRouteTypes {
     | '/admin/underwriting'
     | '/demo/audit-traceability'
     | '/demo/document-engine'
+    | '/demo/governed-transitions'
     | '/demo/rbac'
     | '/demo/rbac-auth'
     | '/authenticated'
@@ -726,12 +766,15 @@ export interface FileRouteTypes {
     | '/demo/document-engine/variables'
     | '/demo/form/address'
     | '/demo/form/simple'
+    | '/demo/governed-transitions/journal'
+    | '/demo/governed-transitions/machine'
     | '/demo/rbac-auth/access-control'
     | '/demo/rbac-auth/audit'
     | '/demo/rbac-auth/onboarding'
     | '/demo/rbac-auth/roles'
     | '/demo/audit-traceability/'
     | '/demo/document-engine/'
+    | '/demo/governed-transitions/'
     | '/demo/rbac-auth/'
     | '/demo/rbac/'
     | '/demo/rbac/admin/underwriting'
@@ -794,12 +837,15 @@ export interface FileRouteTypes {
     | '/demo/document-engine/variables'
     | '/demo/form/address'
     | '/demo/form/simple'
+    | '/demo/governed-transitions/journal'
+    | '/demo/governed-transitions/machine'
     | '/demo/rbac-auth/access-control'
     | '/demo/rbac-auth/audit'
     | '/demo/rbac-auth/onboarding'
     | '/demo/rbac-auth/roles'
     | '/demo/audit-traceability'
     | '/demo/document-engine'
+    | '/demo/governed-transitions'
     | '/demo/rbac-auth'
     | '/demo/rbac'
     | '/demo/rbac/admin/underwriting'
@@ -822,6 +868,7 @@ export interface FileRouteTypes {
     | '/admin/underwriting'
     | '/demo/audit-traceability'
     | '/demo/document-engine'
+    | '/demo/governed-transitions'
     | '/demo/rbac'
     | '/demo/rbac-auth'
     | '/_authenticated/authenticated'
@@ -866,12 +913,15 @@ export interface FileRouteTypes {
     | '/demo/document-engine/variables'
     | '/demo/form/address'
     | '/demo/form/simple'
+    | '/demo/governed-transitions/journal'
+    | '/demo/governed-transitions/machine'
     | '/demo/rbac-auth/access-control'
     | '/demo/rbac-auth/audit'
     | '/demo/rbac-auth/onboarding'
     | '/demo/rbac-auth/roles'
     | '/demo/audit-traceability/'
     | '/demo/document-engine/'
+    | '/demo/governed-transitions/'
     | '/demo/rbac-auth/'
     | '/demo/rbac/'
     | '/demo/rbac/admin/underwriting'
@@ -894,6 +944,7 @@ export interface RootRouteChildren {
   UnauthorizedRoute: typeof UnauthorizedRoute
   DemoAuditTraceabilityRouteRoute: typeof DemoAuditTraceabilityRouteRouteWithChildren
   DemoDocumentEngineRouteRoute: typeof DemoDocumentEngineRouteRouteWithChildren
+  DemoGovernedTransitionsRouteRoute: typeof DemoGovernedTransitionsRouteRouteWithChildren
   DemoRbacRouteRoute: typeof DemoRbacRouteRouteWithChildren
   DemoRbacAuthRouteRoute: typeof DemoRbacAuthRouteRouteWithChildren
   AuthenticatedAuthenticatedRoute: typeof AuthenticatedAuthenticatedRoute
@@ -1207,6 +1258,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DemoRbacRouteRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/demo/governed-transitions': {
+      id: '/demo/governed-transitions'
+      path: '/demo/governed-transitions'
+      fullPath: '/demo/governed-transitions'
+      preLoaderRoute: typeof DemoGovernedTransitionsRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/demo/document-engine': {
       id: '/demo/document-engine'
       path: '/demo/document-engine'
@@ -1241,6 +1299,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/demo/rbac-auth/'
       preLoaderRoute: typeof DemoRbacAuthIndexRouteImport
       parentRoute: typeof DemoRbacAuthRouteRoute
+    }
+    '/demo/governed-transitions/': {
+      id: '/demo/governed-transitions/'
+      path: '/'
+      fullPath: '/demo/governed-transitions/'
+      preLoaderRoute: typeof DemoGovernedTransitionsIndexRouteImport
+      parentRoute: typeof DemoGovernedTransitionsRouteRoute
     }
     '/demo/document-engine/': {
       id: '/demo/document-engine/'
@@ -1283,6 +1348,20 @@ declare module '@tanstack/react-router' {
       fullPath: '/demo/rbac-auth/access-control'
       preLoaderRoute: typeof DemoRbacAuthAccessControlRouteImport
       parentRoute: typeof DemoRbacAuthRouteRoute
+    }
+    '/demo/governed-transitions/machine': {
+      id: '/demo/governed-transitions/machine'
+      path: '/machine'
+      fullPath: '/demo/governed-transitions/machine'
+      preLoaderRoute: typeof DemoGovernedTransitionsMachineRouteImport
+      parentRoute: typeof DemoGovernedTransitionsRouteRoute
+    }
+    '/demo/governed-transitions/journal': {
+      id: '/demo/governed-transitions/journal'
+      path: '/journal'
+      fullPath: '/demo/governed-transitions/journal'
+      preLoaderRoute: typeof DemoGovernedTransitionsJournalRouteImport
+      parentRoute: typeof DemoGovernedTransitionsRouteRoute
     }
     '/demo/form/simple': {
       id: '/demo/form/simple'
@@ -1483,6 +1562,24 @@ const DemoDocumentEngineRouteRouteWithChildren =
     DemoDocumentEngineRouteRouteChildren,
   )
 
+interface DemoGovernedTransitionsRouteRouteChildren {
+  DemoGovernedTransitionsJournalRoute: typeof DemoGovernedTransitionsJournalRoute
+  DemoGovernedTransitionsMachineRoute: typeof DemoGovernedTransitionsMachineRoute
+  DemoGovernedTransitionsIndexRoute: typeof DemoGovernedTransitionsIndexRoute
+}
+
+const DemoGovernedTransitionsRouteRouteChildren: DemoGovernedTransitionsRouteRouteChildren =
+  {
+    DemoGovernedTransitionsJournalRoute: DemoGovernedTransitionsJournalRoute,
+    DemoGovernedTransitionsMachineRoute: DemoGovernedTransitionsMachineRoute,
+    DemoGovernedTransitionsIndexRoute: DemoGovernedTransitionsIndexRoute,
+  }
+
+const DemoGovernedTransitionsRouteRouteWithChildren =
+  DemoGovernedTransitionsRouteRoute._addFileChildren(
+    DemoGovernedTransitionsRouteRouteChildren,
+  )
+
 interface DemoRbacAdminRouteRouteChildren {
   DemoRbacAdminUnderwritingRouteRoute: typeof DemoRbacAdminUnderwritingRouteRoute
 }
@@ -1551,6 +1648,8 @@ const rootRouteChildren: RootRouteChildren = {
   UnauthorizedRoute: UnauthorizedRoute,
   DemoAuditTraceabilityRouteRoute: DemoAuditTraceabilityRouteRouteWithChildren,
   DemoDocumentEngineRouteRoute: DemoDocumentEngineRouteRouteWithChildren,
+  DemoGovernedTransitionsRouteRoute:
+    DemoGovernedTransitionsRouteRouteWithChildren,
   DemoRbacRouteRoute: DemoRbacRouteRouteWithChildren,
   DemoRbacAuthRouteRoute: DemoRbacAuthRouteRouteWithChildren,
   AuthenticatedAuthenticatedRoute: AuthenticatedAuthenticatedRoute,
