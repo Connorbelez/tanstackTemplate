@@ -587,6 +587,18 @@ export const commitReservation = internalMutation({
 			)
 			.first();
 		if (existingEntry) {
+			if (existingEntry.entryType !== "SHARES_COMMITTED") {
+				throw new ConvexError({
+					code: "IDEMPOTENT_REPLAY_FAILED" as const,
+					message: `Idempotent commitReservation replay: existing entry ${existingEntry._id} has entryType ${existingEntry.entryType}, expected SHARES_COMMITTED`,
+				});
+			}
+			if (existingEntry.reservationId !== args.reservationId) {
+				throw new ConvexError({
+					code: "IDEMPOTENT_REPLAY_FAILED" as const,
+					message: `Idempotent commitReservation replay: existing entry ${existingEntry._id} has reservationId ${existingEntry.reservationId}, expected ${args.reservationId}`,
+				});
+			}
 			return { journalEntry: existingEntry };
 		}
 
@@ -660,6 +672,18 @@ export const voidReservation = internalMutation({
 			)
 			.first();
 		if (existingEntry) {
+			if (existingEntry.entryType !== "SHARES_VOIDED") {
+				throw new ConvexError({
+					code: "IDEMPOTENT_REPLAY_FAILED" as const,
+					message: `Idempotent voidReservation replay: existing entry ${existingEntry._id} has entryType ${existingEntry.entryType}, expected SHARES_VOIDED`,
+				});
+			}
+			if (existingEntry.reservationId !== args.reservationId) {
+				throw new ConvexError({
+					code: "IDEMPOTENT_REPLAY_FAILED" as const,
+					message: `Idempotent voidReservation replay: existing entry ${existingEntry._id} has reservationId ${existingEntry.reservationId}, expected ${args.reservationId}`,
+				});
+			}
 			return { journalEntry: existingEntry };
 		}
 
