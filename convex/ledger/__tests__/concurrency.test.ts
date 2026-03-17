@@ -9,60 +9,28 @@
  *
  * @see SPEC 1.3 §6.4, ENG-36 acceptance criteria
  */
-import { ConvexError } from "convex/values";
-import { convexTest } from "convex-test";
 import { describe, expect, it } from "vitest";
 import { api, internal } from "../../_generated/api";
-import type { Doc, Id } from "../../_generated/dataModel";
-import type { MutationCtx } from "../../_generated/server";
-import { FAIRLEND_STAFF_ORG_ID } from "../../constants";
-import schema from "../../schema";
 import { TOTAL_SUPPLY } from "../constants";
-import { commitReservation, reserveShares } from "../mutations";
-
-const modules = import.meta.glob("/convex/**/*.ts");
-
-// ── Auth identity ────────────────────────────────────────────────
-const LEDGER_TEST_IDENTITY = {
-	subject: "test-concurrency-user",
-	issuer: "https://api.workos.com",
-	org_id: FAIRLEND_STAFF_ORG_ID,
-	organization_name: "FairLend Staff",
-	role: "admin",
-	roles: JSON.stringify(["admin"]),
-	permissions: JSON.stringify(["ledger:view", "ledger:correct"]),
-	user_email: "concurrency-test@fairlend.ca",
-	user_first_name: "Concurrency",
-	user_last_name: "Tester",
-};
-
-function createTestHarness() {
-	return convexTest(schema, modules);
-}
-
-function asLedgerUser(t: ReturnType<typeof createTestHarness>) {
-	return t.withIdentity(LEDGER_TEST_IDENTITY);
-}
-
-// ── Helpers ──────────────────────────────────────────────────────
-
-const SYS_SOURCE = { type: "system" as const, channel: "test" };
-
-async function initCounter(auth: ReturnType<typeof asLedgerUser>) {
-	await auth.mutation(
-		api.ledger.sequenceCounter.initializeSequenceCounter,
-		{}
-	);
-}
+import {
+	type AuthenticatedHarness,
+	SYS_SOURCE,
+	asLedgerUser,
+	createTestHarness,
+	executeCommitReservation,
+	executeReserveShares,
+	getConvexErrorCode,
+	initCounter,
+} from "./testUtils";
 
 /**
- * Mint mortgage and issue shares to multiple lenders.
- * Each allocation must be >= MIN_FRACTION (1,000) and sum to amount issued.
+ * Mint a mortgage and issue shares to multiple lenders.
+ * Allocations are validated by the underlying mutations.
  */
 async function mintAndIssueMultiple(
-	auth: ReturnType<typeof asLedgerUser>,
+	auth: AuthenticatedHarness,
 	mortgageId: string,
-	allocations: Array<{ lenderId: string; amount: number }>
+	allocations: Array<{ lenderId: string; amount: number }>,
 ) {
 	await auth.mutation(api.ledger.mutations.mintMortgage, {
 		mortgageId,
@@ -82,124 +50,11 @@ async function mintAndIssueMultiple(
 				effectiveDate: "2026-01-01",
 				idempotencyKey: `issue-${mortgageId}-${lenderId}`,
 				source: SYS_SOURCE,
-			}
+			},
 		);
 		results.push(result);
 	}
 	return results;
-}
-
-function getConvexErrorCode(error: unknown): string {
-	expect(error).toBeInstanceOf(ConvexError);
-	if (!(error instanceof ConvexError)) {
-		throw new Error("Expected ConvexError");
-	}
-
-	const visited = new Set<unknown>();
-
-	function findCode(value: unknown): string {
-		if (typeof value === "string") {
-			try {
-				return findCode(JSON.parse(value));
-			} catch {
-				return "";
-			}
-		}
-
-		if (typeof value !== "object" || value === null || visited.has(value)) {
-			return "";
-		}
-
-		visited.add(value);
-
-		if ("code" in value && typeof value.code === "string") {
-			return value.code;
-		}
-
-		for (const nested of Object.values(value)) {
-			const code = findCode(nested);
-			if (code) {
-				return code;
-			}
-		}
-
-		return "";
-	}
-
-	return findCode(error.data) || findCode(error.message) || findCode(error);
-}
-
-// ── Typed wrappers for internal mutations ────────────────────────
-// These follow the same pattern as reservation.test.ts for calling
-// internalMutation handlers directly via t.run().
-
-type ReserveSharesArgs = {
-	amount: number;
-	buyerLenderId: string;
-	dealId?: string;
-	effectiveDate: string;
-	idempotencyKey: string;
-	metadata?: unknown;
-	mortgageId: string;
-	sellerLenderId: string;
-	source: {
-		actor?: string;
-		channel?: string;
-		type: "cron" | "system" | "user" | "webhook";
-	};
-};
-
-type ReserveSharesResult = {
-	journalEntry: Doc<"ledger_journal_entries">;
-	reservationId: Id<"ledger_reservations">;
-};
-
-type ReserveSharesMutation = {
-	_handler: (
-		ctx: MutationCtx,
-		args: ReserveSharesArgs
-	) => Promise<ReserveSharesResult>;
-};
-
-const reserveSharesMutation = reserveShares as unknown as ReserveSharesMutation;
-
-type CommitReservationArgs = {
-	reservationId: Id<"ledger_reservations">;
-	effectiveDate: string;
-	idempotencyKey: string;
-	source: {
-		actor?: string;
-		channel?: string;
-		type: "cron" | "system" | "user" | "webhook";
-	};
-};
-
-type CommitReservationResult = {
-	journalEntry: Doc<"ledger_journal_entries">;
-};
-
-type CommitReservationMutation = {
-	_handler: (
-		ctx: MutationCtx,
-		args: CommitReservationArgs
-	) => Promise<CommitReservationResult>;
-};
-
-const commitReservationMutation =
-	commitReservation as unknown as CommitReservationMutation;
-
-async function executeReserveShares(
-	t: ReturnType<typeof createTestHarness>,
-	args: ReserveSharesArgs
-) {
-	return t.run(async (ctx) => reserveSharesMutation._handler(ctx, args));
-}
-
-async function executeCommitReservation(
-	t: ReturnType<typeof createTestHarness>,
-	args: CommitReservationArgs
-) {
-	return t.run(async (ctx) => commitReservationMutation._handler(ctx, args));
 }
 
 // ── T-080: Concurrent transfers on same mortgage ────────────────
@@ -245,7 +100,7 @@ describe("concurrent transfers on same mortgage", () => {
 		});
 
 		const positions = new Map(
-			balanceA.map((p) => [p.lenderId, Number(p.balance)])
+			balanceA.map((p) => [p.lenderId, Number(p.balance)]),
 		);
 		expect(positions.get("A")).toBe(1_000);
 		expect(positions.get("B")).toBe(5_000);
@@ -254,7 +109,7 @@ describe("concurrent transfers on same mortgage", () => {
 		// Supply invariant
 		const invariant = await auth.query(
 			api.ledger.validation.validateSupplyInvariant,
-			{ mortgageId: "m-conc-transfer" }
+			{ mortgageId: "m-conc-transfer" },
 		);
 		expect(invariant.valid).toBe(true);
 		expect(invariant.total).toBe(TOTAL_SUPPLY);
@@ -300,7 +155,7 @@ describe("concurrent transfers on same mortgage", () => {
 			const code = getConvexErrorCode(error);
 			// Either insufficient balance or min-fraction violation
 			expect(["INSUFFICIENT_BALANCE", "MIN_FRACTION_VIOLATED"]).toContain(
-				code
+				code,
 			);
 		}
 
@@ -309,7 +164,7 @@ describe("concurrent transfers on same mortgage", () => {
 			mortgageId: "m-conc-reject",
 		});
 		const positions = new Map(
-			balances.map((p) => [p.lenderId, Number(p.balance)])
+			balances.map((p) => [p.lenderId, Number(p.balance)]),
 		);
 		expect(positions.get("A")).toBe(1_000);
 		expect(positions.get("B")).toBe(7_000);
@@ -318,7 +173,7 @@ describe("concurrent transfers on same mortgage", () => {
 		// Supply invariant still holds
 		const invariant = await auth.query(
 			api.ledger.validation.validateSupplyInvariant,
-			{ mortgageId: "m-conc-reject" }
+			{ mortgageId: "m-conc-reject" },
 		);
 		expect(invariant.valid).toBe(true);
 	});
@@ -358,9 +213,9 @@ describe("double-mint prevention", () => {
 			ctx.db
 				.query("ledger_accounts")
 				.withIndex("by_type_and_mortgage", (q) =>
-					q.eq("type", "TREASURY").eq("mortgageId", "m-double-mint")
+					q.eq("type", "TREASURY").eq("mortgageId", "m-double-mint"),
 				)
-				.collect()
+				.collect(),
 		);
 		expect(treasuries).toHaveLength(1);
 
@@ -409,7 +264,7 @@ describe("sequence number integrity under concurrent writes", () => {
 			source: SYS_SOURCE,
 		});
 
-		// Redeem A 1,000 (returns to treasury)
+		// Redeem A 2,000 (returns to treasury)
 		await auth.mutation(api.ledger.mutations.redeemShares, {
 			mortgageId: "m-seq-gap",
 			lenderId: "A",
@@ -484,7 +339,7 @@ describe("supply invariant under concurrent scenarios", () => {
 		// Verify supply invariant: treasury + all positions = 10,000
 		const invariant = await auth.query(
 			api.ledger.validation.validateSupplyInvariant,
-			{ mortgageId: "m-invariant" }
+			{ mortgageId: "m-invariant" },
 		);
 		expect(invariant.valid).toBe(true);
 		expect(invariant.total).toBe(TOTAL_SUPPLY);
@@ -494,7 +349,7 @@ describe("supply invariant under concurrent scenarios", () => {
 			mortgageId: "m-invariant",
 		});
 		const balanceMap = new Map(
-			positions.map((p) => [p.lenderId, Number(p.balance)])
+			positions.map((p) => [p.lenderId, Number(p.balance)]),
 		);
 		expect(balanceMap.get("A")).toBe(2_000);
 		expect(balanceMap.get("B")).toBe(6_000);
@@ -547,7 +402,7 @@ describe("supply invariant under concurrent scenarios", () => {
 		// Verify supply invariant
 		const invariant = await auth.query(
 			api.ledger.validation.validateSupplyInvariant,
-			{ mortgageId: "m-inv-mixed" }
+			{ mortgageId: "m-inv-mixed" },
 		);
 		expect(invariant.valid).toBe(true);
 		expect(invariant.total).toBe(TOTAL_SUPPLY);
@@ -561,7 +416,7 @@ describe("supply invariant under concurrent scenarios", () => {
 			mortgageId: "m-inv-mixed",
 		});
 		const balanceMap = new Map(
-			positions.map((p) => [p.lenderId, Number(p.balance)])
+			positions.map((p) => [p.lenderId, Number(p.balance)]),
 		);
 		expect(balanceMap.get("A")).toBe(4_000);
 		expect(balanceMap.get("B")).toBe(3_000);
