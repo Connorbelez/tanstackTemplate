@@ -52,6 +52,69 @@ export interface Command<TPayload = Record<string, unknown>> {
 	source: CommandSource;
 }
 
+// ── Deal Command Envelopes ─────────────────────────────────────────
+export type DealEventType =
+	| "DEAL_LOCKED"
+	| "LAWYER_VERIFIED"
+	| "REPRESENTATION_CONFIRMED"
+	| "LAWYER_APPROVED_DOCUMENTS"
+	| "ALL_PARTIES_SIGNED"
+	| "FUNDS_RECEIVED"
+	| "DEAL_CANCELLED";
+
+export interface DealLockedPayload {
+	closingDate: number;
+}
+
+export interface LawyerVerifiedPayload {
+	verificationId: string;
+}
+
+export interface FundsReceivedPayload {
+	method: "vopay" | "wire_receipt" | "manual";
+}
+
+export interface DealCancelledPayload {
+	reason: string;
+}
+
+export type DealCommand =
+	| (Command<DealLockedPayload> & {
+			entityType: "deal";
+			eventType: "DEAL_LOCKED";
+			payload: DealLockedPayload;
+	  })
+	| (Command<LawyerVerifiedPayload> & {
+			entityType: "deal";
+			eventType: "LAWYER_VERIFIED";
+			payload: LawyerVerifiedPayload;
+	  })
+	| (Command<Record<string, never>> & {
+			entityType: "deal";
+			eventType: "REPRESENTATION_CONFIRMED";
+			payload?: undefined;
+	  })
+	| (Command<Record<string, never>> & {
+			entityType: "deal";
+			eventType: "LAWYER_APPROVED_DOCUMENTS";
+			payload?: undefined;
+	  })
+	| (Command<Record<string, never>> & {
+			entityType: "deal";
+			eventType: "ALL_PARTIES_SIGNED";
+			payload?: undefined;
+	  })
+	| (Command<FundsReceivedPayload> & {
+			entityType: "deal";
+			eventType: "FUNDS_RECEIVED";
+			payload: FundsReceivedPayload;
+	  })
+	| (Command<DealCancelledPayload> & {
+			entityType: "deal";
+			eventType: "DEAL_CANCELLED";
+			payload: DealCancelledPayload;
+	  });
+
 // ── Transition Result ───────────────────────────────────────────────
 export interface TransitionResult {
 	effectsScheduled?: string[];
