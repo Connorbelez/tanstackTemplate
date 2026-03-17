@@ -4,6 +4,9 @@ const ENTRY_TYPE_COLORS: Record<string, string> = {
 	SHARES_TRANSFERRED: "bg-amber-100 text-amber-800",
 	SHARES_REDEEMED: "bg-orange-100 text-orange-800",
 	MORTGAGE_BURNED: "bg-red-100 text-red-800",
+	SHARES_RESERVED: "bg-yellow-100 text-yellow-800",
+	SHARES_COMMITTED: "bg-teal-100 text-teal-800",
+	SHARES_VOIDED: "bg-gray-100 text-gray-800",
 	CORRECTION: "bg-purple-100 text-purple-800",
 };
 

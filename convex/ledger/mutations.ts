@@ -22,6 +22,7 @@ import {
 	mintAndIssueArgsValidator,
 	mintMortgageArgsValidator,
 	mintMortgageWithAllocationsArgsValidator,
+	postCorrectionArgsValidator,
 	postEntryArgsValidator,
 	redeemSharesArgsValidator,
 	reserveSharesArgsValidator,
@@ -469,6 +470,25 @@ export const transferShares = ledgerMutation
 export const redeemShares = ledgerMutation
 	.input(redeemSharesArgsValidator)
 	.handler(async (ctx, args) => redeemSharesHandler(ctx, args))
+	.public();
+
+export const postCorrection = adminMutation
+	.input(postCorrectionArgsValidator)
+	.handler(async (ctx, args) => {
+		return postEntry(ctx, {
+			entryType: "CORRECTION",
+			mortgageId: args.mortgageId,
+			debitAccountId: args.debitAccountId,
+			creditAccountId: args.creditAccountId,
+			amount: args.amount,
+			effectiveDate: args.effectiveDate,
+			idempotencyKey: args.idempotencyKey,
+			source: args.source,
+			causedBy: args.causedBy,
+			reason: args.reason,
+			metadata: args.metadata,
+		});
+	})
 	.public();
 
 // Optional compatibility endpoint for specs branches that refer to this validator.
