@@ -29,54 +29,39 @@ import {
 
 // ── Tier 1: Strict Primitives ─────────────────────────────────────
 
-export const postEntryDirect = internalMutation({
-	args: postEntryArgsValidator,
-	handler: async (ctx, args) => {
-		return postEntry(ctx, args);
-	},
-});
+export const postEntryDirect = internalMutation({ args: postEntryArgsValidator, handler: async (ctx, args) => { return postEntry(ctx, args); } });
 
-export const mintMortgage = adminMutation
-	.input(mintMortgageArgsValidator)
-	.handler(async (ctx, args) => {
-		const existingEntry = await ctx.db.query("ledger_journal_entries").withIndex("by_idempotency", (q) => q.eq("idempotencyKey", args.idempotencyKey)).first();
-		if (existingEntry) {
-			const treasury = await ctx.db.query("ledger_accounts").withIndex("by_type_and_mortgage", (q) => q.eq("type", "TREASURY").eq("mortgageId", args.mortgageId)).first();
-			if (!treasury) { throw new ConvexError({ code: "IDEMPOTENT_REPLAY_FAILED" as const, message: `Idempotent mint replay: TREASURY for ${args.mortgageId} not found` }); }
-			return { treasuryAccountId: treasury._id, journalEntry: existingEntry };
-		}
-		const existingTreasury = await ctx.db.query("ledger_accounts").withIndex("by_type_and_mortgage", (q) => q.eq("type", "TREASURY").eq("mortgageId", args.mortgageId)).first();
-		if (existingTreasury) { throw new ConvexError({ code: "ALREADY_MINTED" as const, message: `Mortgage ${args.mortgageId} already minted (TREASURY exists)` }); }
-		const worldAccount = await initializeWorldAccount(ctx);
-		const treasuryId = await ctx.db.insert("ledger_accounts", { type: "TREASURY", mortgageId: args.mortgageId, cumulativeDebits: 0n, cumulativeCredits: 0n, pendingDebits: 0n, pendingCredits: 0n, createdAt: Date.now() });
-		const journalEntry = await postEntry(ctx, { entryType: "MORTGAGE_MINTED", mortgageId: args.mortgageId, debitAccountId: treasuryId, creditAccountId: worldAccount._id, amount: Number(TOTAL_SUPPLY), effectiveDate: args.effectiveDate, idempotencyKey: args.idempotencyKey, source: args.source, metadata: args.metadata });
-		return { treasuryAccountId: treasuryId, journalEntry };
-	})
-	.public();
+export const mintMortgage = adminMutation.input(mintMortgageArgsValidator).handler(async (ctx, args) => {
+	const existingEntry = await ctx.db.query("ledger_journal_entries").withIndex("by_idempotency", (q) => q.eq("idempotencyKey", args.idempotencyKey)).first();
+	if (existingEntry) {
+		const treasury = await ctx.db.query("ledger_accounts").withIndex("by_type_and_mortgage", (q) => q.eq("type", "TREASURY").eq("mortgageId", args.mortgageId)).first();
+		if (!treasury) { throw new ConvexError({ code: "IDEMPOTENT_REPLAY_FAILED" as const, message: `Idempotent mint replay: TREASURY for ${args.mortgageId} not found` }); }
+		return { treasuryAccountId: treasury._id, journalEntry: existingEntry };
+	}
+	const existingTreasury = await ctx.db.query("ledger_accounts").withIndex("by_type_and_mortgage", (q) => q.eq("type", "TREASURY").eq("mortgageId", args.mortgageId)).first();
+	if (existingTreasury) { throw new ConvexError({ code: "ALREADY_MINTED" as const, message: `Mortgage ${args.mortgageId} already minted (TREASURY exists)` }); }
+	const worldAccount = await initializeWorldAccount(ctx);
+	const treasuryId = await ctx.db.insert("ledger_accounts", { type: "TREASURY", mortgageId: args.mortgageId, cumulativeDebits: 0n, cumulativeCredits: 0n, pendingDebits: 0n, pendingCredits: 0n, createdAt: Date.now() });
+	const journalEntry = await postEntry(ctx, { entryType: "MORTGAGE_MINTED", mortgageId: args.mortgageId, debitAccountId: treasuryId, creditAccountId: worldAccount._id, amount: Number(TOTAL_SUPPLY), effectiveDate: args.effectiveDate, idempotencyKey: args.idempotencyKey, source: args.source, metadata: args.metadata });
+	return { treasuryAccountId: treasuryId, journalEntry };
+}).public();
 
-export const burnMortgage = adminMutation
-	.input(burnMortgageArgsValidator)
-	.handler(async (ctx, args) => {
-		const existingEntry = await ctx.db.query("ledger_journal_entries").withIndex("by_idempotency", (q) => q.eq("idempotencyKey", args.idempotencyKey)).first();
-		if (existingEntry) { return existingEntry; }
-		const treasury = await getTreasuryAccount(ctx, args.mortgageId);
-		if (!treasury) { throw new ConvexError({ code: "TREASURY_NOT_FOUND" as const, message: `No TREASURY account for mortgage ${args.mortgageId}. Mint first.` }); }
-		const treasuryBalance = getPostedBalance(treasury);
-		if (treasuryBalance !== TOTAL_SUPPLY) { throw new ConvexError({ code: "TREASURY_NOT_FULL" as const, message: `Cannot burn: TREASURY balance is ${treasuryBalance}, must be ${TOTAL_SUPPLY}` }); }
-		const positions = await ctx.db.query("ledger_accounts").withIndex("by_mortgage", (q) => q.eq("mortgageId", args.mortgageId)).collect();
-		for (const pos of positions) {
-			if (pos.type === "POSITION" && getPostedBalance(pos) !== 0n) { throw new ConvexError({ code: "POSITIONS_NOT_ZERO" as const, message: `Cannot burn: POSITION ${pos._id} (lender ${pos.lenderId}) has non-zero balance` }); }
-		}
-		const worldAccount = await getWorldAccount(ctx);
-		return postEntry(ctx, { entryType: "MORTGAGE_BURNED", mortgageId: args.mortgageId, debitAccountId: worldAccount._id, creditAccountId: treasury._id, amount: Number(TOTAL_SUPPLY), effectiveDate: args.effectiveDate, idempotencyKey: args.idempotencyKey, source: args.source, reason: args.reason, metadata: args.metadata });
-	})
-	.public();
+export const burnMortgage = adminMutation.input(burnMortgageArgsValidator).handler(async (ctx, args) => {
+	const existingEntry = await ctx.db.query("ledger_journal_entries").withIndex("by_idempotency", (q) => q.eq("idempotencyKey", args.idempotencyKey)).first();
+	if (existingEntry) { return existingEntry; }
+	const treasury = await getTreasuryAccount(ctx, args.mortgageId);
+	if (!treasury) { throw new ConvexError({ code: "TREASURY_NOT_FOUND" as const, message: `No TREASURY account for mortgage ${args.mortgageId}. Mint first.` }); }
+	const treasuryBalance = getPostedBalance(treasury);
+	if (treasuryBalance !== TOTAL_SUPPLY) { throw new ConvexError({ code: "TREASURY_NOT_FULL" as const, message: `Cannot burn: TREASURY balance is ${treasuryBalance}, must be ${TOTAL_SUPPLY}` }); }
+	const positions = await ctx.db.query("ledger_accounts").withIndex("by_mortgage", (q) => q.eq("mortgageId", args.mortgageId)).collect();
+	for (const pos of positions) { if (pos.type === "POSITION" && getPostedBalance(pos) !== 0n) { throw new ConvexError({ code: "POSITIONS_NOT_ZERO" as const, message: `Cannot burn: POSITION ${pos._id} (lender ${pos.lenderId}) has non-zero balance` }); } }
+	const worldAccount = await getWorldAccount(ctx);
+	return postEntry(ctx, { entryType: "MORTGAGE_BURNED", mortgageId: args.mortgageId, debitAccountId: worldAccount._id, creditAccountId: treasury._id, amount: Number(TOTAL_SUPPLY), effectiveDate: args.effectiveDate, idempotencyKey: args.idempotencyKey, source: args.source, reason: args.reason, metadata: args.metadata });
+}).public();
 
 // ── Tier 2: Convenience Mutation Handlers ────────────────────────
-// Exported as plain functions so wrappers can reuse the logic without duplicating it.
 
 interface IssueSharesArgs { amount: number; effectiveDate: string; idempotencyKey: string; lenderId: string; metadata?: Record<string, unknown>; mortgageId: string; source: EventSource; }
-
 export async function issueSharesHandler(ctx: MutationCtx, args: IssueSharesArgs) {
 	const treasury = await getTreasuryAccount(ctx, args.mortgageId);
 	if (!treasury) { throw new ConvexError({ code: "TREASURY_NOT_FOUND" as const, message: `No TREASURY account for mortgage ${args.mortgageId}. Mint first.` }); }
@@ -86,7 +71,6 @@ export async function issueSharesHandler(ctx: MutationCtx, args: IssueSharesArgs
 }
 
 interface TransferSharesArgs { amount: number; buyerLenderId: string; effectiveDate: string; idempotencyKey: string; metadata?: Record<string, unknown>; mortgageId: string; sellerLenderId: string; source: EventSource; }
-
 export async function transferSharesHandler(ctx: MutationCtx, args: TransferSharesArgs) {
 	const sellerPosition = await getPositionAccount(ctx, args.mortgageId, args.sellerLenderId);
 	const buyerPosition = await getOrCreatePositionAccount(ctx, args.mortgageId, args.buyerLenderId);
@@ -96,7 +80,6 @@ export async function transferSharesHandler(ctx: MutationCtx, args: TransferShar
 }
 
 interface RedeemSharesArgs { amount: number; effectiveDate: string; idempotencyKey: string; lenderId: string; metadata?: Record<string, unknown>; mortgageId: string; reason?: string; source: EventSource; }
-
 export async function redeemSharesHandler(ctx: MutationCtx, args: RedeemSharesArgs) {
 	const position = await getPositionAccount(ctx, args.mortgageId, args.lenderId);
 	const treasury = await getTreasuryAccount(ctx, args.mortgageId);
@@ -106,45 +89,38 @@ export async function redeemSharesHandler(ctx: MutationCtx, args: RedeemSharesAr
 
 // ── Tier 2: Fluent Public Mutation Wrappers ──────────────────────
 
-export const mintAndIssue = ledgerMutation
-	.input(mintAndIssueArgsValidator)
-	.handler(async (ctx, args) => {
-		const totalAllocated = args.allocations.reduce((sum, a) => sum + BigInt(a.amount), 0n);
-		if (totalAllocated !== TOTAL_SUPPLY) { throw new ConvexError({ code: "ALLOCATIONS_SUM_MISMATCH" as const, message: `Allocations sum to ${totalAllocated}, must equal ${TOTAL_SUPPLY}` }); }
-		for (const allocation of args.allocations) { if (BigInt(allocation.amount) < MIN_FRACTION) { throw new ConvexError({ code: "ALLOCATION_BELOW_MINIMUM" as const, message: `Allocation for lender ${allocation.lenderId} is ${allocation.amount}, minimum is ${MIN_FRACTION}` }); } }
-		const existingEntry = await ctx.db.query("ledger_journal_entries").withIndex("by_idempotency", (q) => q.eq("idempotencyKey", args.idempotencyKey)).first();
-		if (existingEntry) {
-			const treasury = await ctx.db.query("ledger_accounts").withIndex("by_type_and_mortgage", (q) => q.eq("type", "TREASURY").eq("mortgageId", args.mortgageId)).first();
-			if (!treasury) { throw new ConvexError({ code: "IDEMPOTENT_REPLAY_FAILED" as const, message: `Idempotent mintAndIssue replay: TREASURY for ${args.mortgageId} not found` }); }
-			const issueEntries = await ctx.db.query("ledger_journal_entries").withIndex("by_mortgage_and_time", (q) => q.eq("mortgageId", args.mortgageId)).collect();
-			return { treasuryAccountId: treasury._id, mintEntry: existingEntry, issueEntries: issueEntries.filter((e) => e.entryType === "SHARES_ISSUED") };
-		}
-		const existingTreasury = await ctx.db.query("ledger_accounts").withIndex("by_type_and_mortgage", (q) => q.eq("type", "TREASURY").eq("mortgageId", args.mortgageId)).first();
-		if (existingTreasury) { throw new ConvexError({ code: "ALREADY_MINTED" as const, message: `Mortgage ${args.mortgageId} already minted (TREASURY exists)` }); }
-		const worldAccount = await initializeWorldAccount(ctx);
-		const treasuryId = await ctx.db.insert("ledger_accounts", { type: "TREASURY", mortgageId: args.mortgageId, cumulativeDebits: 0n, cumulativeCredits: 0n, pendingDebits: 0n, pendingCredits: 0n, createdAt: Date.now() });
-		const mintEntry = await postEntry(ctx, { entryType: "MORTGAGE_MINTED", mortgageId: args.mortgageId, debitAccountId: treasuryId, creditAccountId: worldAccount._id, amount: Number(TOTAL_SUPPLY), effectiveDate: args.effectiveDate, idempotencyKey: args.idempotencyKey, source: args.source, metadata: args.metadata });
-		const issueEntries: Doc<"ledger_journal_entries">[] = [];
-		for (const allocation of args.allocations) {
-			const position = await getOrCreatePositionAccount(ctx, args.mortgageId, allocation.lenderId);
-			const issueEntry = await postEntry(ctx, { entryType: "SHARES_ISSUED", mortgageId: args.mortgageId, debitAccountId: position._id, creditAccountId: treasuryId, amount: allocation.amount, effectiveDate: args.effectiveDate, idempotencyKey: `${args.idempotencyKey}:issue:${allocation.lenderId}`, source: args.source, causedBy: mintEntry._id, metadata: args.metadata });
-			issueEntries.push(issueEntry);
-		}
-		const treasuryDoc = await ctx.db.get(treasuryId);
-		if (!treasuryDoc) { throw new ConvexError({ code: "INVARIANT_VIOLATION" as const, message: "TREASURY account disappeared after mint" }); }
-		const treasuryBalance = getPostedBalance(treasuryDoc);
-		if (treasuryBalance !== 0n) { throw new ConvexError({ code: "INVARIANT_VIOLATION" as const, message: `TREASURY balance is ${treasuryBalance} after full allocation, expected 0` }); }
-		return { treasuryAccountId: treasuryId, mintEntry, issueEntries };
-	})
-	.public();
+export const mintAndIssue = ledgerMutation.input(mintAndIssueArgsValidator).handler(async (ctx, args) => {
+	const totalAllocated = args.allocations.reduce((sum, a) => sum + BigInt(a.amount), 0n);
+	if (totalAllocated !== TOTAL_SUPPLY) { throw new ConvexError({ code: "ALLOCATIONS_SUM_MISMATCH" as const, message: `Allocations sum to ${totalAllocated}, must equal ${TOTAL_SUPPLY}` }); }
+	for (const allocation of args.allocations) { if (BigInt(allocation.amount) < MIN_FRACTION) { throw new ConvexError({ code: "ALLOCATION_BELOW_MINIMUM" as const, message: `Allocation for lender ${allocation.lenderId} is ${allocation.amount}, minimum is ${MIN_FRACTION}` }); } }
+	const existingEntry = await ctx.db.query("ledger_journal_entries").withIndex("by_idempotency", (q) => q.eq("idempotencyKey", args.idempotencyKey)).first();
+	if (existingEntry) {
+		const treasury = await ctx.db.query("ledger_accounts").withIndex("by_type_and_mortgage", (q) => q.eq("type", "TREASURY").eq("mortgageId", args.mortgageId)).first();
+		if (!treasury) { throw new ConvexError({ code: "IDEMPOTENT_REPLAY_FAILED" as const, message: `Idempotent mintAndIssue replay: TREASURY for ${args.mortgageId} not found` }); }
+		const issueEntries = await ctx.db.query("ledger_journal_entries").withIndex("by_mortgage_and_time", (q) => q.eq("mortgageId", args.mortgageId)).collect();
+		return { treasuryAccountId: treasury._id, mintEntry: existingEntry, issueEntries: issueEntries.filter((e) => e.entryType === "SHARES_ISSUED") };
+	}
+	const existingTreasury = await ctx.db.query("ledger_accounts").withIndex("by_type_and_mortgage", (q) => q.eq("type", "TREASURY").eq("mortgageId", args.mortgageId)).first();
+	if (existingTreasury) { throw new ConvexError({ code: "ALREADY_MINTED" as const, message: `Mortgage ${args.mortgageId} already minted (TREASURY exists)` }); }
+	const worldAccount = await initializeWorldAccount(ctx);
+	const treasuryId = await ctx.db.insert("ledger_accounts", { type: "TREASURY", mortgageId: args.mortgageId, cumulativeDebits: 0n, cumulativeCredits: 0n, pendingDebits: 0n, pendingCredits: 0n, createdAt: Date.now() });
+	const mintEntry = await postEntry(ctx, { entryType: "MORTGAGE_MINTED", mortgageId: args.mortgageId, debitAccountId: treasuryId, creditAccountId: worldAccount._id, amount: Number(TOTAL_SUPPLY), effectiveDate: args.effectiveDate, idempotencyKey: args.idempotencyKey, source: args.source, metadata: args.metadata });
+	const issueEntries: Doc<"ledger_journal_entries">[] = [];
+	for (const allocation of args.allocations) {
+		const position = await getOrCreatePositionAccount(ctx, args.mortgageId, allocation.lenderId);
+		const issueEntry = await postEntry(ctx, { entryType: "SHARES_ISSUED", mortgageId: args.mortgageId, debitAccountId: position._id, creditAccountId: treasuryId, amount: allocation.amount, effectiveDate: args.effectiveDate, idempotencyKey: `${args.idempotencyKey}:issue:${allocation.lenderId}`, source: args.source, causedBy: mintEntry._id, metadata: args.metadata });
+		issueEntries.push(issueEntry);
+	}
+	const treasuryDoc = await ctx.db.get(treasuryId);
+	if (!treasuryDoc) { throw new ConvexError({ code: "INVARIANT_VIOLATION" as const, message: "TREASURY account disappeared after mint" }); }
+	const treasuryBalance = getPostedBalance(treasuryDoc);
+	if (treasuryBalance !== 0n) { throw new ConvexError({ code: "INVARIANT_VIOLATION" as const, message: `TREASURY balance is ${treasuryBalance} after full allocation, expected 0` }); }
+	return { treasuryAccountId: treasuryId, mintEntry, issueEntries };
+}).public();
 
 export const transferShares = ledgerMutation.input(transferSharesArgsValidator).handler(async (ctx, args) => transferSharesHandler(ctx, args)).public();
 export const redeemShares = ledgerMutation.input(redeemSharesArgsValidator).handler(async (ctx, args) => redeemSharesHandler(ctx, args)).public();
-
-export const mintMortgageWithAllocations = ledgerMutation
-	.input(mintMortgageWithAllocationsArgsValidator)
-	.handler(async (ctx, args) => { return mintAndIssue.handler(ctx as never, args as never); })
-	.public();
+export const mintMortgageWithAllocations = ledgerMutation.input(mintMortgageWithAllocationsArgsValidator).handler(async (ctx, args) => { return mintAndIssue.handler(ctx as never, args as never); }).public();
 
 // ── Tier 2: Internal Mutation Registrations ──────────────────────
 
