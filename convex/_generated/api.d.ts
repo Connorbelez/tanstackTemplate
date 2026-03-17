@@ -57,6 +57,7 @@ import type * as engine_auditJournal from "../engine/auditJournal.js";
 import type * as engine_commands from "../engine/commands.js";
 import type * as engine_effects_dealAccess from "../engine/effects/dealAccess.js";
 import type * as engine_effects_dealClosing from "../engine/effects/dealClosing.js";
+import type * as engine_effects_dealClosingEffects from "../engine/effects/dealClosingEffects.js";
 import type * as engine_effects_dealClosingPlaceholder from "../engine/effects/dealClosingPlaceholder.js";
 import type * as engine_effects_obligation from "../engine/effects/obligation.js";
 import type * as engine_effects_onboarding from "../engine/effects/onboarding.js";
@@ -159,6 +160,7 @@ declare const fullApi: ApiFromModules<{
   "engine/commands": typeof engine_commands;
   "engine/effects/dealAccess": typeof engine_effects_dealAccess;
   "engine/effects/dealClosing": typeof engine_effects_dealClosing;
+  "engine/effects/dealClosingEffects": typeof engine_effects_dealClosingEffects;
   "engine/effects/dealClosingPlaceholder": typeof engine_effects_dealClosingPlaceholder;
   "engine/effects/obligation": typeof engine_effects_obligation;
   "engine/effects/onboarding": typeof engine_effects_onboarding;

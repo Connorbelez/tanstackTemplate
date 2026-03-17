@@ -20,7 +20,7 @@ export const effectRegistry: Record<
 		internal.engine.effects.obligation.emitObligationOverdue,
 	emitObligationSettled:
 		internal.engine.effects.obligation.emitObligationSettled,
-	// Deal Closing — notifications (ENG-53)
+	// Deal Closing — effects (ENG-53)
 	notifyAllParties: internal.engine.effects.dealClosingEffects.notifyAllParties,
 	notifyCancellation:
 		internal.engine.effects.dealClosingEffects.notifyCancellation,
@@ -30,7 +30,6 @@ export const effectRegistry: Record<
 		internal.engine.effects.dealClosingEffects.archiveSignedDocuments,
 	confirmFundsReceipt:
 		internal.engine.effects.dealClosingEffects.confirmFundsReceipt,
-
 	// Deal Closing — reservations (ENG-49/50)
 	reserveShares: internal.engine.effects.dealClosing.reserveShares,
 	commitReservation: internal.engine.effects.dealClosingPlaceholder.placeholder,
