@@ -1,5 +1,4 @@
 import { ConvexError } from "convex/values";
-
 import type { Doc } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 import { internalMutation } from "../_generated/server";
@@ -39,6 +38,7 @@ export const postEntryDirect = internalMutation({
 export const mintMortgage = adminMutation
 	.input(mintMortgageArgsValidator)
 	.handler(async (ctx, args) => {
+		// Idempotency: check if this exact request already succeeded
 		const existingEntry = await ctx.db
 			.query("ledger_journal_entries")
 			.withIndex("by_idempotency", (q) =>
@@ -61,6 +61,7 @@ export const mintMortgage = adminMutation
 			return { treasuryAccountId: treasury._id, journalEntry: existingEntry };
 		}
 
+		// Prevent double-mint
 		const existingTreasury = await ctx.db
 			.query("ledger_accounts")
 			.withIndex("by_type_and_mortgage", (q) =>
@@ -76,6 +77,7 @@ export const mintMortgage = adminMutation
 
 		const worldAccount = await initializeWorldAccount(ctx);
 
+		// Create TREASURY account
 		const treasuryId = await ctx.db.insert("ledger_accounts", {
 			type: "TREASURY",
 			mortgageId: args.mortgageId,
@@ -86,6 +88,7 @@ export const mintMortgage = adminMutation
 			createdAt: Date.now(),
 		});
 
+		// MORTGAGE_MINTED: WORLD gives → TREASURY receives
 		const journalEntry = await postEntry(ctx, {
 			entryType: "MORTGAGE_MINTED",
 			mortgageId: args.mortgageId,
@@ -105,6 +108,7 @@ export const mintMortgage = adminMutation
 export const burnMortgage = adminMutation
 	.input(burnMortgageArgsValidator)
 	.handler(async (ctx, args) => {
+		// Idempotency: check if this exact request already succeeded
 		const existingEntry = await ctx.db
 			.query("ledger_journal_entries")
 			.withIndex("by_idempotency", (q) =>
@@ -131,6 +135,7 @@ export const burnMortgage = adminMutation
 			});
 		}
 
+		// Verify no non-zero POSITION accounts
 		const positions = await ctx.db
 			.query("ledger_accounts")
 			.withIndex("by_mortgage", (q) => q.eq("mortgageId", args.mortgageId))
@@ -146,6 +151,7 @@ export const burnMortgage = adminMutation
 
 		const worldAccount = await getWorldAccount(ctx);
 
+		// MORTGAGE_BURNED: TREASURY gives → WORLD receives
 		return postEntry(ctx, {
 			entryType: "MORTGAGE_BURNED",
 			mortgageId: args.mortgageId,
@@ -162,8 +168,9 @@ export const burnMortgage = adminMutation
 	.public();
 
 // ── Tier 2: Convenience Mutation Handlers ────────────────────────
-// Exported as plain functions so wrappers can reuse the logic
-// without duplicating it.
+// Exported as plain functions so demo wrappers can reuse the logic
+// without duplicating it. The internalMutation registrations below
+// wire these into Convex's internal namespace.
 
 interface IssueSharesArgs {
 	amount: number;
@@ -192,6 +199,7 @@ export async function issueSharesHandler(
 		args.lenderId
 	);
 
+	// SHARES_ISSUED: TREASURY gives → POSITION receives
 	const journalEntry = await postEntry(ctx, {
 		entryType: "SHARES_ISSUED",
 		mortgageId: args.mortgageId,
@@ -233,6 +241,7 @@ export async function transferSharesHandler(
 		args.buyerLenderId
 	);
 
+	// Belt-and-suspenders: explicit same-mortgage check
 	if (sellerPosition.mortgageId !== buyerPosition.mortgageId) {
 		throw new ConvexError({
 			code: "MORTGAGE_MISMATCH" as const,
@@ -242,6 +251,7 @@ export async function transferSharesHandler(
 		});
 	}
 
+	// SHARES_TRANSFERRED: seller gives → buyer receives
 	const journalEntry = await postEntry(ctx, {
 		entryType: "SHARES_TRANSFERRED",
 		mortgageId: args.mortgageId,
@@ -285,6 +295,7 @@ export async function redeemSharesHandler(
 		});
 	}
 
+	// SHARES_REDEEMED: POSITION gives → TREASURY receives
 	return postEntry(ctx, {
 		entryType: "SHARES_REDEEMED",
 		mortgageId: args.mortgageId,
@@ -299,11 +310,12 @@ export async function redeemSharesHandler(
 	});
 }
 
-// ── Tier 2: Fluent Public Mutation Wrappers ──────────────────────
+// ── Tier 2: Convenience Mutations (authed, public) ───────────────
 
 export const mintAndIssue = ledgerMutation
 	.input(mintAndIssueArgsValidator)
 	.handler(async (ctx, args) => {
+		// ── Pre-validation: allocations sum must equal TOTAL_SUPPLY ──
 		const totalAllocated = args.allocations.reduce(
 			(sum, a) => sum + BigInt(a.amount),
 			0n
@@ -315,6 +327,7 @@ export const mintAndIssue = ledgerMutation
 			});
 		}
 
+		// ── Pre-validation: each allocation must meet minimum fraction ──
 		for (const allocation of args.allocations) {
 			if (BigInt(allocation.amount) < MIN_FRACTION) {
 				throw new ConvexError({
@@ -324,6 +337,7 @@ export const mintAndIssue = ledgerMutation
 			}
 		}
 
+		// ── Idempotency check (on the mint key) ──
 		const existingEntry = await ctx.db
 			.query("ledger_journal_entries")
 			.withIndex("by_idempotency", (q) =>
@@ -343,6 +357,7 @@ export const mintAndIssue = ledgerMutation
 					message: `Idempotent mintAndIssue replay: TREASURY for ${args.mortgageId} not found`,
 				});
 			}
+			// Collect the issue entries for this mortgage
 			const issueEntries = await ctx.db
 				.query("ledger_journal_entries")
 				.withIndex("by_mortgage_and_time", (q) =>
@@ -358,6 +373,7 @@ export const mintAndIssue = ledgerMutation
 			};
 		}
 
+		// ── Double-mint check ──
 		const existingTreasury = await ctx.db
 			.query("ledger_accounts")
 			.withIndex("by_type_and_mortgage", (q) =>
@@ -371,6 +387,7 @@ export const mintAndIssue = ledgerMutation
 			});
 		}
 
+		// ── Create accounts ──
 		const worldAccount = await initializeWorldAccount(ctx);
 
 		const treasuryId = await ctx.db.insert("ledger_accounts", {
@@ -383,6 +400,7 @@ export const mintAndIssue = ledgerMutation
 			createdAt: Date.now(),
 		});
 
+		// ── MORTGAGE_MINTED: WORLD gives → TREASURY receives ──
 		const mintEntry = await postEntry(ctx, {
 			entryType: "MORTGAGE_MINTED",
 			mortgageId: args.mortgageId,
@@ -395,6 +413,7 @@ export const mintAndIssue = ledgerMutation
 			metadata: args.metadata,
 		});
 
+		// ── Issue shares to each allocation ──
 		const issueEntries: Doc<"ledger_journal_entries">[] = [];
 
 		for (const allocation of args.allocations) {
@@ -420,6 +439,7 @@ export const mintAndIssue = ledgerMutation
 			issueEntries.push(issueEntry);
 		}
 
+		// ── Belt-and-suspenders: TREASURY balance must be 0 ──
 		const treasuryDoc = await ctx.db.get(treasuryId);
 		if (!treasuryDoc) {
 			throw new ConvexError({
