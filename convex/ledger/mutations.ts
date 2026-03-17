@@ -19,6 +19,7 @@ import {
 	mintMortgageArgsValidator,
 	postEntryArgsValidator,
 	redeemSharesArgsValidator,
+	reserveSharesArgsValidator,
 	transferSharesArgsValidator,
 } from "./validators";
 
@@ -407,3 +408,85 @@ export const redeemShares = ledgerMutation
 		});
 	})
 	.public();
+
+// ── Tier 3: Two-Phase Reservation ─────────────────────────────────
+
+export const reserveShares = internalMutation({
+	args: reserveSharesArgsValidator,
+	handler: async (ctx, args) => {
+		const existingEntry = await ctx.db
+			.query("ledger_journal_entries")
+			.withIndex("by_idempotency", (q) =>
+				q.eq("idempotencyKey", args.idempotencyKey)
+			)
+			.first();
+		if (existingEntry) {
+			if (!existingEntry.reservationId) {
+				throw new ConvexError({
+					code: "IDEMPOTENT_REPLAY_FAILED" as const,
+					message: `Idempotent reserveShares replay: existing entry ${existingEntry._id} lacks reservation linkage`,
+				});
+			}
+			const reservation = await ctx.db.get(existingEntry.reservationId);
+			if (!reservation) {
+				throw new ConvexError({
+					code: "IDEMPOTENT_REPLAY_FAILED" as const,
+					message: `Idempotent reserveShares replay: reservation ${existingEntry.reservationId} missing`,
+				});
+			}
+			return {
+				reservationId: reservation._id,
+				journalEntry: existingEntry,
+			};
+		}
+
+		const sellerPosition = await getPositionAccount(
+			ctx,
+			args.mortgageId,
+			args.sellerLenderId
+		);
+		const buyerPosition = await getOrCreatePositionAccount(
+			ctx,
+			args.mortgageId,
+			args.buyerLenderId
+		);
+
+		const journalEntry = await postEntry(ctx, {
+			entryType: "SHARES_RESERVED",
+			mortgageId: args.mortgageId,
+			debitAccountId: buyerPosition._id,
+			creditAccountId: sellerPosition._id,
+			amount: args.amount,
+			effectiveDate: args.effectiveDate,
+			idempotencyKey: args.idempotencyKey,
+			source: args.source,
+			metadata: args.metadata,
+		});
+
+		const amountDelta = BigInt(args.amount);
+		await ctx.db.patch(sellerPosition._id, {
+			pendingCredits: sellerPosition.pendingCredits + amountDelta,
+		});
+		await ctx.db.patch(buyerPosition._id, {
+			pendingDebits: buyerPosition.pendingDebits + amountDelta,
+		});
+
+		const reservationId = await ctx.db.insert("ledger_reservations", {
+			mortgageId: args.mortgageId,
+			sellerAccountId: sellerPosition._id,
+			buyerAccountId: buyerPosition._id,
+			amount: args.amount,
+			status: "pending",
+			dealId: args.dealId,
+			reserveJournalEntryId: journalEntry._id,
+			createdAt: Date.now(),
+		});
+
+		await ctx.db.patch(journalEntry._id, { reservationId });
+
+		return {
+			reservationId,
+			journalEntry: { ...journalEntry, reservationId },
+		};
+	},
+});
