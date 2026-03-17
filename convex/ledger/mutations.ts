@@ -1,7 +1,8 @@
 import { ConvexError } from "convex/values";
 import type { Doc } from "../_generated/dataModel";
+import type { MutationCtx } from "../_generated/server";
 import { internalMutation } from "../_generated/server";
-import { ledgerMutation } from "../fluent";
+import { adminMutation, ledgerMutation } from "../fluent";
 import {
 	getOrCreatePositionAccount,
 	getPositionAccount,
@@ -12,6 +13,7 @@ import {
 } from "./accounts";
 import { MIN_FRACTION, TOTAL_SUPPLY } from "./constants";
 import { postEntry } from "./postEntry";
+import type { EventSource } from "./types";
 import {
 	burnMortgageArgsValidator,
 	issueSharesArgsValidator,
@@ -31,7 +33,7 @@ export const postEntryDirect = internalMutation({
 	},
 });
 
-export const mintMortgage = ledgerMutation
+export const mintMortgage = adminMutation
 	.input(mintMortgageArgsValidator)
 	.handler(async (ctx, args) => {
 		// Idempotency: check if this exact request already succeeded
@@ -101,7 +103,7 @@ export const mintMortgage = ledgerMutation
 	})
 	.public();
 
-export const burnMortgage = ledgerMutation
+export const burnMortgage = adminMutation
 	.input(burnMortgageArgsValidator)
 	.handler(async (ctx, args) => {
 		// Idempotency: check if this exact request already succeeded
@@ -163,40 +165,53 @@ export const burnMortgage = ledgerMutation
 	})
 	.public();
 
-// ── Tier 2: Convenience Mutations ─────────────────────────────────
+// ── Tier 2: Convenience Mutation Handlers ────────────────────────
+// Exported as plain functions so demo wrappers can reuse the logic
+// without duplicating it. The internalMutation registrations below
+// wire these into Convex's internal namespace.
 
-export const issueShares = ledgerMutation
-	.input(issueSharesArgsValidator)
-	.handler(async (ctx, args) => {
-		const treasury = await getTreasuryAccount(ctx, args.mortgageId);
-		if (!treasury) {
-			throw new ConvexError({
-				code: "TREASURY_NOT_FOUND" as const,
-				message: `No TREASURY account for mortgage ${args.mortgageId}. Mint first.`,
-			});
-		}
-		const position = await getOrCreatePositionAccount(
-			ctx,
-			args.mortgageId,
-			args.lenderId
-		);
+interface IssueSharesArgs {
+	amount: number;
+	effectiveDate: string;
+	idempotencyKey: string;
+	lenderId: string;
+	metadata?: Record<string, unknown>;
+	mortgageId: string;
+	source: EventSource;
+}
 
-		// SHARES_ISSUED: TREASURY gives → POSITION receives
-		const journalEntry = await postEntry(ctx, {
-			entryType: "SHARES_ISSUED",
-			mortgageId: args.mortgageId,
-			debitAccountId: position._id,
-			creditAccountId: treasury._id,
-			amount: args.amount,
-			effectiveDate: args.effectiveDate,
-			idempotencyKey: args.idempotencyKey,
-			source: args.source,
-			metadata: args.metadata,
+export async function issueSharesHandler(
+	ctx: MutationCtx,
+	args: IssueSharesArgs
+) {
+	const treasury = await getTreasuryAccount(ctx, args.mortgageId);
+	if (!treasury) {
+		throw new ConvexError({
+			code: "TREASURY_NOT_FOUND" as const,
+			message: `No TREASURY account for mortgage ${args.mortgageId}. Mint first.`,
 		});
+	}
+	const position = await getOrCreatePositionAccount(
+		ctx,
+		args.mortgageId,
+		args.lenderId
+	);
 
-		return { positionAccountId: position._id, journalEntry };
-	})
-	.public();
+	// SHARES_ISSUED: TREASURY gives → POSITION receives
+	const journalEntry = await postEntry(ctx, {
+		entryType: "SHARES_ISSUED",
+		mortgageId: args.mortgageId,
+		debitAccountId: position._id,
+		creditAccountId: treasury._id,
+		amount: args.amount,
+		effectiveDate: args.effectiveDate,
+		idempotencyKey: args.idempotencyKey,
+		source: args.source,
+		metadata: args.metadata,
+	});
+
+	return { positionAccountId: position._id, journalEntry };
+}
 
 export const mintAndIssue = ledgerMutation
 	.input(mintAndIssueArgsValidator)
@@ -345,65 +360,114 @@ export const mintAndIssue = ledgerMutation
 	})
 	.public();
 
-export const transferShares = ledgerMutation
-	.input(transferSharesArgsValidator)
-	.handler(async (ctx, args) => {
-		const sellerPosition = await getPositionAccount(
-			ctx,
-			args.mortgageId,
-			args.sellerLenderId
-		);
-		const buyerPosition = await getOrCreatePositionAccount(
-			ctx,
-			args.mortgageId,
-			args.buyerLenderId
-		);
+interface TransferSharesArgs {
+	amount: number;
+	buyerLenderId: string;
+	effectiveDate: string;
+	idempotencyKey: string;
+	metadata?: Record<string, unknown>;
+	mortgageId: string;
+	sellerLenderId: string;
+	source: EventSource;
+}
 
-		// SHARES_TRANSFERRED: seller gives → buyer receives
-		const journalEntry = await postEntry(ctx, {
-			entryType: "SHARES_TRANSFERRED",
-			mortgageId: args.mortgageId,
-			debitAccountId: buyerPosition._id,
-			creditAccountId: sellerPosition._id,
-			amount: args.amount,
-			effectiveDate: args.effectiveDate,
-			idempotencyKey: args.idempotencyKey,
-			source: args.source,
-			metadata: args.metadata,
+export async function transferSharesHandler(
+	ctx: MutationCtx,
+	args: TransferSharesArgs
+) {
+	const sellerPosition = await getPositionAccount(
+		ctx,
+		args.mortgageId,
+		args.sellerLenderId
+	);
+	const buyerPosition = await getOrCreatePositionAccount(
+		ctx,
+		args.mortgageId,
+		args.buyerLenderId
+	);
+
+	// Belt-and-suspenders: explicit same-mortgage check
+	if (sellerPosition.mortgageId !== buyerPosition.mortgageId) {
+		throw new ConvexError({
+			code: "MORTGAGE_MISMATCH" as const,
+			message: "Cannot transfer shares between different mortgages",
+			sellerMortgageId: sellerPosition.mortgageId,
+			buyerMortgageId: buyerPosition.mortgageId,
 		});
+	}
 
-		return { buyerAccountId: buyerPosition._id, journalEntry };
-	})
-	.public();
+	// SHARES_TRANSFERRED: seller gives → buyer receives
+	const journalEntry = await postEntry(ctx, {
+		entryType: "SHARES_TRANSFERRED",
+		mortgageId: args.mortgageId,
+		debitAccountId: buyerPosition._id,
+		creditAccountId: sellerPosition._id,
+		amount: args.amount,
+		effectiveDate: args.effectiveDate,
+		idempotencyKey: args.idempotencyKey,
+		source: args.source,
+		metadata: args.metadata,
+	});
 
-export const redeemShares = ledgerMutation
-	.input(redeemSharesArgsValidator)
-	.handler(async (ctx, args) => {
-		const position = await getPositionAccount(
-			ctx,
-			args.mortgageId,
-			args.lenderId
-		);
-		const treasury = await getTreasuryAccount(ctx, args.mortgageId);
-		if (!treasury) {
-			throw new ConvexError({
-				code: "TREASURY_NOT_FOUND" as const,
-				message: `No TREASURY account for mortgage ${args.mortgageId}. Mint first.`,
-			});
-		}
+	return { buyerAccountId: buyerPosition._id, journalEntry };
+}
 
-		// SHARES_REDEEMED: POSITION gives → TREASURY receives
-		return postEntry(ctx, {
-			entryType: "SHARES_REDEEMED",
-			mortgageId: args.mortgageId,
-			debitAccountId: treasury._id,
-			creditAccountId: position._id,
-			amount: args.amount,
-			effectiveDate: args.effectiveDate,
-			idempotencyKey: args.idempotencyKey,
-			source: args.source,
-			reason: args.reason,
-			metadata: args.metadata,
+interface RedeemSharesArgs {
+	amount: number;
+	effectiveDate: string;
+	idempotencyKey: string;
+	lenderId: string;
+	metadata?: Record<string, unknown>;
+	mortgageId: string;
+	reason?: string;
+	source: EventSource;
+}
+
+export async function redeemSharesHandler(
+	ctx: MutationCtx,
+	args: RedeemSharesArgs
+) {
+	const position = await getPositionAccount(
+		ctx,
+		args.mortgageId,
+		args.lenderId
+	);
+	const treasury = await getTreasuryAccount(ctx, args.mortgageId);
+	if (!treasury) {
+		throw new ConvexError({
+			code: "TREASURY_NOT_FOUND" as const,
+			message: `No TREASURY account for mortgage ${args.mortgageId}. Mint first.`,
 		});
-	})
-	.public();
+	}
+
+	// SHARES_REDEEMED: POSITION gives → TREASURY receives
+	return postEntry(ctx, {
+		entryType: "SHARES_REDEEMED",
+		mortgageId: args.mortgageId,
+		debitAccountId: treasury._id,
+		creditAccountId: position._id,
+		amount: args.amount,
+		effectiveDate: args.effectiveDate,
+		idempotencyKey: args.idempotencyKey,
+		source: args.source,
+		reason: args.reason,
+		metadata: args.metadata,
+	});
+}
+
+// ── Tier 2: Internal Mutation Registrations ──────────────────────
+
+export const issueShares = internalMutation({
+	args: issueSharesArgsValidator,
+	handler: issueSharesHandler,
+});
+
+export const transferShares = internalMutation({
+	args: transferSharesArgsValidator,
+	handler: transferSharesHandler,
+});
+
+export const redeemShares = internalMutation({
+	args: redeemSharesArgsValidator,
+	handler: redeemSharesHandler,
+});

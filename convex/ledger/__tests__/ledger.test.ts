@@ -62,7 +62,7 @@ async function mintAndIssue(
 		idempotencyKey: `mint-${mortgageId}`,
 		source: SYS_SOURCE,
 	});
-	const issueResult = await auth.mutation(api.ledger.mutations.issueShares, {
+	const issueResult = await auth.mutation(internal.ledger.mutations.issueShares, {
 		mortgageId,
 		lenderId,
 		amount,
@@ -100,7 +100,7 @@ describe("Ledger Full Lifecycle", () => {
 
 		// 2. Issue all to lender A
 		const { positionAccountId: posA } = await auth.mutation(
-			api.ledger.mutations.issueShares,
+			internal.ledger.mutations.issueShares,
 			{
 				mortgageId: "m1",
 				lenderId: "lender-a",
@@ -124,7 +124,7 @@ describe("Ledger Full Lifecycle", () => {
 
 		// 3. Transfer 5,000 from A to B
 		const { buyerAccountId: posB } = await auth.mutation(
-			api.ledger.mutations.transferShares,
+			internal.ledger.mutations.transferShares,
 			{
 				mortgageId: "m1",
 				sellerLenderId: "lender-a",
@@ -151,7 +151,7 @@ describe("Ledger Full Lifecycle", () => {
 		expect(invariant.valid).toBe(true);
 
 		// 4. Redeem B's 5,000
-		await auth.mutation(api.ledger.mutations.redeemShares, {
+		await auth.mutation(internal.ledger.mutations.redeemShares, {
 			mortgageId: "m1",
 			lenderId: "lender-b",
 			amount: 5_000,
@@ -165,7 +165,7 @@ describe("Ledger Full Lifecycle", () => {
 		).toBe(0n);
 
 		// 5. Redeem A's 5,000
-		await auth.mutation(api.ledger.mutations.redeemShares, {
+		await auth.mutation(internal.ledger.mutations.redeemShares, {
 			mortgageId: "m1",
 			lenderId: "lender-a",
 			amount: 5_000,
@@ -208,7 +208,7 @@ describe("Transfer Validation", () => {
 		await mintAndIssue(t, "m1", "seller");
 
 		const { buyerAccountId } = await auth.mutation(
-			api.ledger.mutations.transferShares,
+			internal.ledger.mutations.transferShares,
 			{
 				mortgageId: "m1",
 				sellerLenderId: "seller",
@@ -237,7 +237,7 @@ describe("Transfer Validation", () => {
 
 		// Try to transfer from lender-a on m1 to lender-b, but seller has no position on m2
 		await expect(
-			auth.mutation(api.ledger.mutations.transferShares, {
+			auth.mutation(internal.ledger.mutations.transferShares, {
 				mortgageId: "m2",
 				sellerLenderId: "lender-a",
 				buyerLenderId: "lender-c",
@@ -256,7 +256,7 @@ describe("Transfer Validation", () => {
 		await mintAndIssue(t, "m1", "seller");
 
 		// Transfer all 10,000 — full exit is allowed
-		await auth.mutation(api.ledger.mutations.transferShares, {
+		await auth.mutation(internal.ledger.mutations.transferShares, {
 			mortgageId: "m1",
 			sellerLenderId: "seller",
 			buyerLenderId: "buyer",
@@ -283,7 +283,7 @@ describe("Transfer Validation", () => {
 
 		// Transfer 9,500 leaves seller with 500 — below minimum
 		await expect(
-			auth.mutation(api.ledger.mutations.transferShares, {
+			auth.mutation(internal.ledger.mutations.transferShares, {
 				mortgageId: "m1",
 				sellerLenderId: "seller",
 				buyerLenderId: "buyer",
@@ -303,7 +303,7 @@ describe("Transfer Validation", () => {
 
 		// Transfer 500 to buyer — below minimum
 		await expect(
-			auth.mutation(api.ledger.mutations.transferShares, {
+			auth.mutation(internal.ledger.mutations.transferShares, {
 				mortgageId: "m1",
 				sellerLenderId: "seller",
 				buyerLenderId: "buyer",
@@ -322,7 +322,7 @@ describe("Transfer Validation", () => {
 		await mintAndIssue(t, "m1", "seller", 5_000);
 
 		await expect(
-			auth.mutation(api.ledger.mutations.transferShares, {
+			auth.mutation(internal.ledger.mutations.transferShares, {
 				mortgageId: "m1",
 				sellerLenderId: "seller",
 				buyerLenderId: "buyer",
@@ -353,7 +353,7 @@ describe("Transfer Validation", () => {
 
 		// Attempt transfer that exceeds balance — must reject
 		await expect(
-			auth.mutation(api.ledger.mutations.transferShares, {
+			auth.mutation(internal.ledger.mutations.transferShares, {
 				mortgageId: "m1",
 				sellerLenderId: "seller",
 				buyerLenderId: "buyer",
@@ -387,7 +387,7 @@ describe("Transfer Validation", () => {
 
 		// First transfer to buyer
 		const { buyerAccountId: firstId } = await auth.mutation(
-			api.ledger.mutations.transferShares,
+			internal.ledger.mutations.transferShares,
 			{
 				mortgageId: "m1",
 				sellerLenderId: "seller",
@@ -400,7 +400,7 @@ describe("Transfer Validation", () => {
 		);
 
 		// Transfer back to seller (full exit for buyer)
-		await auth.mutation(api.ledger.mutations.transferShares, {
+		await auth.mutation(internal.ledger.mutations.transferShares, {
 			mortgageId: "m1",
 			sellerLenderId: "buyer",
 			buyerLenderId: "seller",
@@ -412,7 +412,7 @@ describe("Transfer Validation", () => {
 
 		// Transfer back to buyer again — same account should be reused
 		const { buyerAccountId: secondId } = await auth.mutation(
-			api.ledger.mutations.transferShares,
+			internal.ledger.mutations.transferShares,
 			{
 				mortgageId: "m1",
 				sellerLenderId: "seller",
@@ -443,7 +443,7 @@ describe("Issuance & Redemption", () => {
 		});
 
 		const { positionAccountId } = await auth.mutation(
-			api.ledger.mutations.issueShares,
+			internal.ledger.mutations.issueShares,
 			{
 				mortgageId: "m1",
 				lenderId: "lender-a",
@@ -470,7 +470,7 @@ describe("Issuance & Redemption", () => {
 
 		// Treasury is now 0 — can't issue more
 		await expect(
-			auth.mutation(api.ledger.mutations.issueShares, {
+			auth.mutation(internal.ledger.mutations.issueShares, {
 				mortgageId: "m1",
 				lenderId: "lender-b",
 				amount: 1_000,
@@ -493,7 +493,7 @@ describe("Issuance & Redemption", () => {
 		});
 
 		await expect(
-			auth.mutation(api.ledger.mutations.issueShares, {
+			auth.mutation(internal.ledger.mutations.issueShares, {
 				mortgageId: "m1",
 				lenderId: "lender-a",
 				amount: 500,
@@ -510,7 +510,7 @@ describe("Issuance & Redemption", () => {
 		const auth = asLedgerUser(t);
 		await mintAndIssue(t, "m1", "lender-a", 5_000);
 
-		await auth.mutation(api.ledger.mutations.redeemShares, {
+		await auth.mutation(internal.ledger.mutations.redeemShares, {
 			mortgageId: "m1",
 			lenderId: "lender-a",
 			amount: 5_000,
@@ -533,7 +533,7 @@ describe("Issuance & Redemption", () => {
 		await mintAndIssue(t, "m1", "lender-a", 5_000);
 
 		await expect(
-			auth.mutation(api.ledger.mutations.redeemShares, {
+			auth.mutation(internal.ledger.mutations.redeemShares, {
 				mortgageId: "m1",
 				lenderId: "lender-a",
 				amount: 4_500,
@@ -556,7 +556,7 @@ describe("Issuance & Redemption", () => {
 		});
 
 		await expect(
-			auth.mutation(api.ledger.mutations.redeemShares, {
+			auth.mutation(internal.ledger.mutations.redeemShares, {
 				mortgageId: "m1",
 				lenderId: "ghost",
 				amount: 1_000,
@@ -933,7 +933,7 @@ describe("Idempotency & Sequencing", () => {
 			source: SYS_SOURCE,
 		});
 
-		const first = await auth.mutation(api.ledger.mutations.issueShares, {
+		const first = await auth.mutation(internal.ledger.mutations.issueShares, {
 			mortgageId: "m1",
 			lenderId: "lender-a",
 			amount: 5_000,
@@ -942,7 +942,7 @@ describe("Idempotency & Sequencing", () => {
 			source: SYS_SOURCE,
 		});
 
-		const second = await auth.mutation(api.ledger.mutations.issueShares, {
+		const second = await auth.mutation(internal.ledger.mutations.issueShares, {
 			mortgageId: "m1",
 			lenderId: "lender-a",
 			amount: 5_000,
@@ -990,7 +990,7 @@ describe("Idempotency & Sequencing", () => {
 			source: SYS_SOURCE,
 		});
 
-		await auth.mutation(api.ledger.mutations.issueShares, {
+		await auth.mutation(internal.ledger.mutations.issueShares, {
 			mortgageId: "m1",
 			lenderId: "lender-a",
 			amount: 5_000,
@@ -999,7 +999,7 @@ describe("Idempotency & Sequencing", () => {
 			source: SYS_SOURCE,
 		});
 
-		await auth.mutation(api.ledger.mutations.issueShares, {
+		await auth.mutation(internal.ledger.mutations.issueShares, {
 			mortgageId: "m1",
 			lenderId: "lender-b",
 			amount: 5_000,
@@ -1030,7 +1030,7 @@ describe("Lender Position Queries", () => {
 		await mintAndIssue(t, "m2", "lender-a", 3_000);
 
 		// Also issue to lender-b on m1 so lender-a doesn't hold everything
-		await auth.mutation(api.ledger.mutations.issueShares, {
+		await auth.mutation(internal.ledger.mutations.issueShares, {
 			mortgageId: "m1",
 			lenderId: "lender-b",
 			amount: 5_000,
@@ -1063,7 +1063,7 @@ describe("Lender Position Queries", () => {
 		await mintAndIssue(t, "m1", "lender-a");
 
 		// Transfer all away — lender-a has 0 balance
-		await auth.mutation(api.ledger.mutations.transferShares, {
+		await auth.mutation(internal.ledger.mutations.transferShares, {
 			mortgageId: "m1",
 			sellerLenderId: "lender-a",
 			buyerLenderId: "lender-b",
@@ -1098,7 +1098,7 @@ describe("Point-in-Time & History", () => {
 		// Small delay to ensure distinct timestamps
 		await new Promise((r) => setTimeout(r, 10));
 
-		await auth.mutation(api.ledger.mutations.transferShares, {
+		await auth.mutation(internal.ledger.mutations.transferShares, {
 			mortgageId: "m1",
 			sellerLenderId: "lender-a",
 			buyerLenderId: "lender-b",
@@ -1139,7 +1139,7 @@ describe("Point-in-Time & History", () => {
 		await new Promise((r) => setTimeout(r, 10));
 
 		const { positionAccountId } = await auth.mutation(
-			api.ledger.mutations.issueShares,
+			internal.ledger.mutations.issueShares,
 			{
 				mortgageId: "m1",
 				lenderId: "lender-a",
@@ -1206,7 +1206,7 @@ describe("Point-in-Time & History", () => {
 		const auth = asLedgerUser(t);
 		const { issueResult } = await mintAndIssue(t, "m1", "lender-a");
 
-		await auth.mutation(api.ledger.mutations.transferShares, {
+		await auth.mutation(internal.ledger.mutations.transferShares, {
 			mortgageId: "m1",
 			sellerLenderId: "lender-a",
 			buyerLenderId: "lender-b",
@@ -1233,7 +1233,7 @@ describe("Point-in-Time & History", () => {
 		const afterIssue = Date.now();
 		await new Promise((r) => setTimeout(r, 10));
 
-		await auth.mutation(api.ledger.mutations.transferShares, {
+		await auth.mutation(internal.ledger.mutations.transferShares, {
 			mortgageId: "m1",
 			sellerLenderId: "lender-a",
 			buyerLenderId: "lender-b",
@@ -1268,7 +1268,7 @@ describe("Point-in-Time & History", () => {
 		const auth = asLedgerUser(t);
 		await mintAndIssue(t, "m1", "lender-a");
 
-		await auth.mutation(api.ledger.mutations.transferShares, {
+		await auth.mutation(internal.ledger.mutations.transferShares, {
 			mortgageId: "m1",
 			sellerLenderId: "lender-a",
 			buyerLenderId: "lender-b",
@@ -1298,7 +1298,7 @@ describe("Point-in-Time & History", () => {
 		const afterIssue = Date.now();
 		await new Promise((r) => setTimeout(r, 10));
 
-		await auth.mutation(api.ledger.mutations.transferShares, {
+		await auth.mutation(internal.ledger.mutations.transferShares, {
 			mortgageId: "m1",
 			sellerLenderId: "lender-a",
 			buyerLenderId: "lender-b",
@@ -1521,7 +1521,7 @@ describe("Common Rejections", () => {
 		);
 
 		// Issue to a second lender so we have two different POSITION accounts
-		await auth.mutation(api.ledger.mutations.issueShares, {
+		await auth.mutation(internal.ledger.mutations.issueShares, {
 			mortgageId: "m1",
 			lenderId: "lender-b",
 			amount: 5_000,

@@ -1,6 +1,6 @@
 import { convexTest } from "convex-test";
 import { describe, expect, it } from "vitest";
-import { api } from "../../_generated/api";
+import { api, internal } from "../../_generated/api";
 import { FAIRLEND_STAFF_ORG_ID } from "../../constants";
 import schema from "../../schema";
 
@@ -59,7 +59,7 @@ async function issueShares(
 	amount: number,
 	idempotencyKey: string
 ) {
-	return auth.mutation(api.ledger.mutations.issueShares, {
+	return auth.mutation(internal.ledger.mutations.issueShares, {
 		mortgageId,
 		lenderId,
 		amount,
@@ -214,7 +214,7 @@ describe("getPositions", () => {
 			"issue-redeem"
 		);
 		// Redeem all shares back to treasury
-		await auth.mutation(api.ledger.mutations.redeemShares, {
+		await auth.mutation(internal.ledger.mutations.redeemShares, {
 			mortgageId: "m-pos-redeemed",
 			lenderId: "lender-redeem",
 			amount: 5_000,
@@ -302,7 +302,7 @@ describe("getLenderPositions", () => {
 			5_000,
 			"issue-lp-zero"
 		);
-		await auth.mutation(api.ledger.mutations.redeemShares, {
+		await auth.mutation(internal.ledger.mutations.redeemShares, {
 			mortgageId: "m-lp-zero",
 			lenderId: "lender-zeroed",
 			amount: 5_000,
@@ -400,7 +400,7 @@ describe("validateSupplyInvariant", () => {
 			5_000,
 			"issue-seller"
 		);
-		await auth.mutation(api.ledger.mutations.transferShares, {
+		await auth.mutation(internal.ledger.mutations.transferShares, {
 			mortgageId: "m-inv-xfer",
 			sellerLenderId: "seller-inv",
 			buyerLenderId: "buyer-inv",

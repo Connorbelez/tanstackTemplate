@@ -1,3 +1,4 @@
+import { ConvexError } from "convex/values";
 import type { Doc } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import { getAccountLenderId } from "./accountOwnership";
@@ -128,9 +129,12 @@ export async function getPositionAccount(
 ) {
 	const position = await findExistingPosition(ctx, mortgageId, lenderId);
 	if (!position) {
-		throw new Error(
-			`No POSITION account for lender ${lenderId} on mortgage ${mortgageId}`
-		);
+		throw new ConvexError({
+			code: "POSITION_NOT_FOUND" as const,
+			message: `No POSITION account for lender ${lenderId} on mortgage ${mortgageId}`,
+			lenderId,
+			mortgageId,
+		});
 	}
 	return position;
 }

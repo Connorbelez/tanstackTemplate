@@ -1,6 +1,6 @@
 import { convexTest } from "convex-test";
 import { describe, expect, it } from "vitest";
-import { api } from "../../_generated/api";
+import { api, internal } from "../../_generated/api";
 import { FAIRLEND_STAFF_ORG_ID } from "../../constants";
 import schema from "../../schema";
 
@@ -149,7 +149,7 @@ describe("Sequence Counter", () => {
 		});
 		expect(mint2.journalEntry.sequenceNumber).toBe(2n);
 
-		const issue = await auth.mutation(api.ledger.mutations.issueShares, {
+		const issue = await auth.mutation(internal.ledger.mutations.issueShares, {
 			mortgageId: "m1",
 			lenderId: "lender-1",
 			amount: 5_000,
@@ -176,7 +176,7 @@ describe("Sequence Counter", () => {
 			idempotencyKey: "mint-m1",
 			source: SYS_SOURCE,
 		});
-		await auth.mutation(api.ledger.mutations.issueShares, {
+		await auth.mutation(internal.ledger.mutations.issueShares, {
 			mortgageId: "m1",
 			lenderId: "lender-1",
 			amount: 5_000,
@@ -184,7 +184,7 @@ describe("Sequence Counter", () => {
 			idempotencyKey: "issue-m1-l1",
 			source: SYS_SOURCE,
 		});
-		await auth.mutation(api.ledger.mutations.issueShares, {
+		await auth.mutation(internal.ledger.mutations.issueShares, {
 			mortgageId: "m1",
 			lenderId: "lender-2",
 			amount: 5_000,

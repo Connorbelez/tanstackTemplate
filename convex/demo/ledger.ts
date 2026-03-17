@@ -4,7 +4,17 @@ import { authedMutation, authedQuery } from "../fluent";
 import { getAccountLenderId } from "../ledger/accountOwnership";
 import { getPostedBalance, initializeWorldAccount } from "../ledger/accounts";
 import { TOTAL_SUPPLY } from "../ledger/constants";
+import {
+	issueSharesHandler,
+	redeemSharesHandler,
+	transferSharesHandler,
+} from "../ledger/mutations";
 import { getNextSequenceNumber } from "../ledger/sequenceCounter";
+import {
+	issueSharesArgsValidator,
+	redeemSharesArgsValidator,
+	transferSharesArgsValidator,
+} from "../ledger/validators";
 
 // ── Constants ────────────────────────────────────────────────────
 
@@ -436,4 +446,24 @@ export const getDemoJournal = authedQuery
 			};
 		});
 	})
+	.public();
+
+// ── Demo wrappers for internal ledger mutations ─────────────────
+// The production issueShares/transferShares/redeemShares are internalMutation
+// (system-only). These wrappers expose the same handler logic behind authedMutation
+// so the demo UI can call them.
+
+export const demoIssueShares = authedMutation
+	.input(issueSharesArgsValidator)
+	.handler(issueSharesHandler)
+	.public();
+
+export const demoTransferShares = authedMutation
+	.input(transferSharesArgsValidator)
+	.handler(transferSharesHandler)
+	.public();
+
+export const demoRedeemShares = authedMutation
+	.input(redeemSharesArgsValidator)
+	.handler(redeemSharesHandler)
 	.public();

@@ -54,9 +54,9 @@ function LedgerDemo() {
 	const seed = useMutation(api.demo.ledger.seedData);
 	const cleanupMut = useMutation(api.demo.ledger.cleanup);
 
-	const transferShares = useMutation(api.ledger.mutations.transferShares);
-	const issueSharesMut = useMutation(api.ledger.mutations.issueShares);
-	const redeemSharesMut = useMutation(api.ledger.mutations.redeemShares);
+	const transferShares = useMutation(api.demo.ledger.demoTransferShares);
+	const issueSharesMut = useMutation(api.demo.ledger.demoIssueShares);
+	const redeemSharesMut = useMutation(api.demo.ledger.demoRedeemShares);
 
 	const [error, setError] = useState<string | null>(null);
 	const [successMsg, setSuccessMsg] = useState<string | null>(null);
