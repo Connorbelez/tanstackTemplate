@@ -357,6 +357,7 @@ export const mintAndIssue = ledgerMutation
 					message: `Idempotent mintAndIssue replay: TREASURY for ${args.mortgageId} not found`,
 				});
 			}
+			// Collect the issue entries for this mortgage
 			const issueEntries = await ctx.db
 				.query("ledger_journal_entries")
 				.withIndex("by_mortgage_and_time", (q) =>
@@ -386,6 +387,7 @@ export const mintAndIssue = ledgerMutation
 			});
 		}
 
+		// ── Create accounts ──
 		const worldAccount = await initializeWorldAccount(ctx);
 
 		const treasuryId = await ctx.db.insert("ledger_accounts", {

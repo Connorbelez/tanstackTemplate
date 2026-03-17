@@ -5,6 +5,7 @@ export const Route = createFileRoute("/about")({
 });
 
 function About() {
+	// Keep the starter page intentionally lightweight for future customization.
 	return (
 		<main className="page-wrap px-4 py-12">
 			<section className="island-shell rounded-2xl p-6 sm:p-8">
