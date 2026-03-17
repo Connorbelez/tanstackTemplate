@@ -1611,13 +1611,99 @@ describe("Point-in-Time & History", () => {
 		}
 	});
 
-	it.skip("T-070f: SHARES_RESERVED entries excluded from point-in-time replay (requires ENG-34)", async () => {
-		// When ENG-34 lands, unskip this test:
-		// 1. Mint+issue to lender-a
-		// 2. reserveShares (lender-a → lender-b)
-		// 3. getPositionsAt should show lender-a with FULL balance (reservation is pending)
-		// 4. commitReservation
-		// 5. getPositionsAt should now show split
+	it("T-070f: SHARES_RESERVED entries excluded from point-in-time replay", async () => {
+		const t = createTestHarness();
+		await initCounter(t);
+		const auth = asLedgerUser(t);
+
+		// Mint+issue 10,000 to seller, issue 0 to buyer (creates position account)
+		await mintAndIssue(t, "m1", "seller", 5_000);
+		const { positionAccountId: buyerAccountId } = await auth.mutation(
+			api.ledger.mutations.issueShares,
+			{
+				mortgageId: "m1",
+				lenderId: "buyer",
+				amount: 5_000,
+				effectiveDate: "2026-01-01",
+				idempotencyKey: "issue-m1-buyer",
+				source: SYS_SOURCE,
+			},
+		);
+
+		// Get seller position account ID
+		const positions = await auth.query(api.ledger.queries.getPositions, {
+			mortgageId: "m1",
+		});
+		const sellerAccountId = positions.find(
+			(p) => p.lenderId === "seller",
+		)!.accountId;
+
+		await new Promise((r) => setTimeout(r, 10));
+
+		// Post SHARES_RESERVED (audit-only) — should NOT affect point-in-time replay
+		await t.mutation(internal.ledger.mutations.postEntryDirect, {
+			entryType: "SHARES_RESERVED",
+			mortgageId: "m1",
+			debitAccountId: buyerAccountId,
+			creditAccountId: sellerAccountId,
+			amount: 2_000,
+			effectiveDate: "2026-01-02",
+			idempotencyKey: "reserve-1",
+			source: SYS_SOURCE,
+		});
+		await new Promise((r) => setTimeout(r, 10));
+		const afterReserve = Date.now();
+		await new Promise((r) => setTimeout(r, 10));
+
+		// Post SHARES_COMMITTED (normal) — DOES affect point-in-time replay
+		await t.mutation(internal.ledger.mutations.postEntryDirect, {
+			entryType: "SHARES_COMMITTED",
+			mortgageId: "m1",
+			debitAccountId: buyerAccountId,
+			creditAccountId: sellerAccountId,
+			amount: 2_000,
+			effectiveDate: "2026-01-02",
+			idempotencyKey: "commit-1",
+			source: SYS_SOURCE,
+		});
+		await new Promise((r) => setTimeout(r, 10));
+		const afterCommit = Date.now();
+
+		// After reserve only: positions should be UNCHANGED (5k/5k)
+		// because SHARES_RESERVED is audit-only and excluded from replay
+		const positionsAfterReserve = await auth.query(
+			api.ledger.queries.getPositionsAt,
+			{ mortgageId: "m1", asOf: afterReserve },
+		);
+		const reserveMap = Object.fromEntries(
+			positionsAfterReserve.map((p) => [p.lenderId, p.balance]),
+		);
+		expect(reserveMap["seller"]).toBe(5_000n);
+		expect(reserveMap["buyer"]).toBe(5_000n);
+
+		// After commit: buyer gained 2k, seller lost 2k (single movement, not double)
+		const positionsAfterCommit = await auth.query(
+			api.ledger.queries.getPositionsAt,
+			{ mortgageId: "m1", asOf: afterCommit },
+		);
+		const commitMap = Object.fromEntries(
+			positionsAfterCommit.map((p) => [p.lenderId, p.balance]),
+		);
+		expect(commitMap["seller"]).toBe(3_000n);
+		expect(commitMap["buyer"]).toBe(7_000n);
+
+		// Also verify getBalanceAt for the buyer account
+		const buyerAfterReserve = await auth.query(
+			api.ledger.queries.getBalanceAt,
+			{ accountId: buyerAccountId, asOf: afterReserve },
+		);
+		expect(buyerAfterReserve).toBe(5_000n); // unchanged by audit-only entry
+
+		const buyerAfterCommit = await auth.query(
+			api.ledger.queries.getBalanceAt,
+			{ accountId: buyerAccountId, asOf: afterCommit },
+		);
+		expect(buyerAfterCommit).toBe(7_000n); // +2k from committed entry only
 	});
 
 	it("T-070g: getBalanceAt tracks balance evolution across lifecycle", async () => {
