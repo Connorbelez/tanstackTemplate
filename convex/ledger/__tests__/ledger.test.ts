@@ -1522,7 +1522,7 @@ describe("Point-in-Time & History", () => {
 		const afterIssue = Date.now();
 		await new Promise((r) => setTimeout(r, 10));
 
-		await auth.mutation(internal.ledger.mutations.transferShares, {
+		await auth.mutation(api.ledger.mutations.transferShares, {
 			mortgageId: "m1",
 			sellerLenderId: "lender-a",
 			buyerLenderId: "lender-b",
@@ -1534,7 +1534,7 @@ describe("Point-in-Time & History", () => {
 		const afterTransfer1 = Date.now();
 		await new Promise((r) => setTimeout(r, 10));
 
-		await auth.mutation(internal.ledger.mutations.transferShares, {
+		await auth.mutation(api.ledger.mutations.transferShares, {
 			mortgageId: "m1",
 			sellerLenderId: "lender-b",
 			buyerLenderId: "lender-c",
@@ -1585,7 +1585,7 @@ describe("Point-in-Time & History", () => {
 		const auth = asLedgerUser(t);
 		await mintAndIssue(t, "m1", "lender-a");
 
-		await auth.mutation(internal.ledger.mutations.transferShares, {
+		await auth.mutation(api.ledger.mutations.transferShares, {
 			mortgageId: "m1",
 			sellerLenderId: "lender-a",
 			buyerLenderId: "lender-b",
@@ -1635,7 +1635,7 @@ describe("Point-in-Time & History", () => {
 		const afterIssue = Date.now();
 		await new Promise((r) => setTimeout(r, 10));
 
-		await auth.mutation(internal.ledger.mutations.redeemShares, {
+		await auth.mutation(api.ledger.mutations.redeemShares, {
 			mortgageId: "m1",
 			lenderId: "lender-a",
 			amount: 3_000,
@@ -1643,6 +1643,7 @@ describe("Point-in-Time & History", () => {
 			idempotencyKey: "redeem-1",
 			source: SYS_SOURCE,
 		});
+		await new Promise((r) => setTimeout(r, 10));
 		const afterRedeem = Date.now();
 
 		// Position after issue: 10,000
