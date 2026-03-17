@@ -18,6 +18,7 @@ const modules = {
 	...import.meta.glob("../../../convex/audit/**/*.*s"),
 	...import.meta.glob("../../../convex/auth/**/*.*s"),
 	...import.meta.glob("../../../convex/engine/**/*.*s"),
+	...import.meta.glob("../../../convex/ledger/**/*.*s"),
 	...import.meta.glob("../../../convex/onboarding/**/*.*s"),
 	...import.meta.glob("../../../convex/seed/**/*.*s"),
 	...import.meta.glob("../../../convex/test/**/*.*s"),

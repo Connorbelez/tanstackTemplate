@@ -68,6 +68,7 @@ import type * as engine_validators from "../engine/validators.js";
 import type * as fluent from "../fluent.js";
 import type * as http from "../http.js";
 import type * as ledger_accountOwnership from "../ledger/accountOwnership.js";
+import type * as ledger_bootstrap from "../ledger/bootstrap.js";
 import type * as ledger_constants from "../ledger/constants.js";
 import type * as ledger_cursors from "../ledger/cursors.js";
 import type * as ledger_internal from "../ledger/internal.js";
@@ -159,6 +160,7 @@ declare const fullApi: ApiFromModules<{
   fluent: typeof fluent;
   http: typeof http;
   "ledger/accountOwnership": typeof ledger_accountOwnership;
+  "ledger/bootstrap": typeof ledger_bootstrap;
   "ledger/constants": typeof ledger_constants;
   "ledger/cursors": typeof ledger_cursors;
   "ledger/internal": typeof ledger_internal;
