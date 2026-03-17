@@ -414,6 +414,14 @@ export const redeemShares = ledgerMutation
 export const reserveShares = internalMutation({
 	args: reserveSharesArgsValidator,
 	handler: async (ctx, args) => {
+		const ensureReplayInvariant = (condition: boolean, message: string) => {
+			if (!condition) {
+				throw new ConvexError({
+					code: "IDEMPOTENT_REPLAY_FAILED" as const,
+					message,
+				});
+			}
+		};
 		const existingEntry = await ctx.db
 			.query("ledger_journal_entries")
 			.withIndex("by_idempotency", (q) =>
@@ -434,6 +442,46 @@ export const reserveShares = internalMutation({
 					message: `Idempotent reserveShares replay: reservation ${existingEntry.reservationId} missing`,
 				});
 			}
+			ensureReplayInvariant(
+				existingEntry.entryType === "SHARES_RESERVED",
+				`Idempotent reserveShares replay: entry ${existingEntry._id} is ${existingEntry.entryType}`
+			);
+			ensureReplayInvariant(
+				existingEntry.mortgageId === args.mortgageId,
+				`Idempotent reserveShares replay: entry ${existingEntry._id} mortgage ${existingEntry.mortgageId} does not match ${args.mortgageId}`
+			);
+			ensureReplayInvariant(
+				existingEntry.amount === args.amount,
+				`Idempotent reserveShares replay: entry ${existingEntry._id} amount ${existingEntry.amount} does not match ${args.amount}`
+			);
+			ensureReplayInvariant(
+				existingEntry.effectiveDate === args.effectiveDate,
+				`Idempotent reserveShares replay: entry ${existingEntry._id} effectiveDate ${existingEntry.effectiveDate} does not match ${args.effectiveDate}`
+			);
+			ensureReplayInvariant(
+				reservation.mortgageId === args.mortgageId,
+				`Idempotent reserveShares replay: reservation ${reservation._id} mortgage ${reservation.mortgageId} does not match ${args.mortgageId}`
+			);
+			ensureReplayInvariant(
+				reservation.amount === args.amount,
+				`Idempotent reserveShares replay: reservation ${reservation._id} amount ${reservation.amount} does not match ${args.amount}`
+			);
+			ensureReplayInvariant(
+				existingEntry.creditAccountId === reservation.sellerAccountId,
+				`Idempotent reserveShares replay: entry ${existingEntry._id} seller ${existingEntry.creditAccountId} does not match reservation ${reservation.sellerAccountId}`
+			);
+			ensureReplayInvariant(
+				existingEntry.debitAccountId === reservation.buyerAccountId,
+				`Idempotent reserveShares replay: entry ${existingEntry._id} buyer ${existingEntry.debitAccountId} does not match reservation ${reservation.buyerAccountId}`
+			);
+			ensureReplayInvariant(
+				reservation.reserveJournalEntryId === existingEntry._id,
+				`Idempotent reserveShares replay: reservation ${reservation._id} journal entry ${reservation.reserveJournalEntryId} does not match entry ${existingEntry._id}`
+			);
+			ensureReplayInvariant(
+				reservation.dealId === args.dealId,
+				`Idempotent reserveShares replay: reservation ${reservation._id} dealId ${reservation.dealId} does not match ${args.dealId}`
+			);
 			return {
 				reservationId: reservation._id,
 				journalEntry: existingEntry,
@@ -464,11 +512,21 @@ export const reserveShares = internalMutation({
 		});
 
 		const amountDelta = BigInt(args.amount);
+		const [freshSeller, freshBuyer] = await Promise.all([
+			ctx.db.get(sellerPosition._id),
+			ctx.db.get(buyerPosition._id),
+		]);
+		if (!(freshSeller && freshBuyer)) {
+			throw new ConvexError({
+				code: "INVARIANT_VIOLATION" as const,
+				message: "Position account disappeared while reserving shares",
+			});
+		}
 		await ctx.db.patch(sellerPosition._id, {
-			pendingCredits: sellerPosition.pendingCredits + amountDelta,
+			pendingCredits: freshSeller.pendingCredits + amountDelta,
 		});
 		await ctx.db.patch(buyerPosition._id, {
-			pendingDebits: buyerPosition.pendingDebits + amountDelta,
+			pendingDebits: freshBuyer.pendingDebits + amountDelta,
 		});
 
 		const reservationId = await ctx.db.insert("ledger_reservations", {

@@ -181,8 +181,8 @@ const { reservationId } = await ctx.runMutation(
   internal.ledger.mutations.reserveShares,
   {
     mortgageId: deal.mortgageId,
-    sellerInvestorId: deal.sellerId,
-    buyerInvestorId: deal.buyerId,
+    sellerLenderId: deal.sellerId,
+    buyerLenderId: deal.buyerId,
     amount: deal.fractionalShare,
     dealId: deal._id,
     effectiveDate: new Date(deal.closingDate).toISOString().split("T")[0],

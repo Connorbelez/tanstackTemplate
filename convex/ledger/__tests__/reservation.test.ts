@@ -1,13 +1,16 @@
-import { ConvexError } from "convex/values";
+import {
+	ConvexError,
+	type OptionalProperty,
+	type Validator,
+} from "convex/values";
 import { convexTest } from "convex-test";
 import { describe, expect, it } from "vitest";
-import { api } from "../../_generated/api";
-import type { Doc, Id } from "../../_generated/dataModel";
-import type { MutationCtx } from "../../_generated/server";
+import { api, internal } from "../../_generated/api";
+import type { Id } from "../../_generated/dataModel";
 import { FAIRLEND_STAFF_ORG_ID } from "../../constants";
 import schema from "../../schema";
 import { getAvailableBalance } from "../accounts";
-import { reserveShares } from "../mutations";
+import { reserveSharesArgsValidator } from "../validators";
 
 const modules = import.meta.glob("/convex/**/*.ts");
 
@@ -33,35 +36,36 @@ function asLedgerUser(t: ReturnType<typeof createTestHarness>) {
 }
 
 const SYS_SOURCE = { type: "system" as const, channel: "test" };
-type ReserveSharesArgs = {
-	amount: number;
-	buyerLenderId: string;
-	dealId?: string;
-	effectiveDate: string;
-	idempotencyKey: string;
-	metadata?: unknown;
-	mortgageId: string;
-	sellerLenderId: string;
-	source: {
-		actor?: string;
-		channel?: string;
-		type: "cron" | "system" | "user" | "webhook";
-	};
-};
 
-type ReserveSharesResult = {
-	journalEntry: Doc<"ledger_journal_entries">;
-	reservationId: Id<"ledger_reservations">;
-};
+type Expand<T> = T extends infer O ? { [K in keyof O]: O[K] } : never;
 
-type ReserveSharesMutation = {
-	_handler: (
-		ctx: MutationCtx,
-		args: ReserveSharesArgs
-	) => Promise<ReserveSharesResult>;
-};
+type InferValidatorValue<T> = T extends Validator<infer V, any, any> ? V : never;
 
-const reserveSharesMutation = reserveShares as unknown as ReserveSharesMutation;
+type OptionalKeys<
+	T extends Record<string, Validator<any, OptionalProperty, any>>
+> = {
+	[K in keyof T]: T[K] extends Validator<any, infer IsOptional, any>
+		? IsOptional extends "optional"
+			? K
+			: never
+		: never;
+}[keyof T];
+
+type RequiredKeys<
+	T extends Record<string, Validator<any, OptionalProperty, any>>
+> = Exclude<keyof T, OptionalKeys<T>>;
+
+type ValidatorInputs<
+	T extends Record<string, Validator<any, OptionalProperty, any>>
+> = Expand<
+	{
+		[K in RequiredKeys<T>]: InferValidatorValue<T[K]>;
+	} & {
+		[K in OptionalKeys<T>]?: InferValidatorValue<T[K]>;
+	}
+>;
+
+type ReserveSharesArgs = ValidatorInputs<typeof reserveSharesArgsValidator>;
 
 function getConvexErrorCode(error: unknown): string {
 	expect(error).toBeInstanceOf(ConvexError);
@@ -77,7 +81,7 @@ function getConvexErrorCode(error: unknown): string {
 				return findCode(JSON.parse(value));
 			} catch {
 				const match = value.match(
-					/\b(INVALID_AMOUNT|SAME_ACCOUNT|ACCOUNT_NOT_FOUND|TYPE_MISMATCH|INSUFFICIENT_BALANCE|MIN_FRACTION_VIOLATED|MORTGAGE_MISMATCH|CORRECTION_REQUIRES_ADMIN|CORRECTION_REQUIRES_CAUSED_BY|CORRECTION_REQUIRES_REASON)\b/
+					/\b(INVALID_AMOUNT|SAME_ACCOUNT|ACCOUNT_NOT_FOUND|TYPE_MISMATCH|INSUFFICIENT_BALANCE|MIN_FRACTION_VIOLATED|MORTGAGE_MISMATCH|CORRECTION_REQUIRES_ADMIN|CORRECTION_REQUIRES_CAUSED_BY|CORRECTION_REQUIRES_REASON|IDEMPOTENT_REPLAY_FAILED)\b/
 				);
 				return match?.[1] ?? "";
 			}
@@ -160,7 +164,7 @@ async function executeReserveShares(
 	t: ReturnType<typeof createTestHarness>,
 	args: ReserveSharesArgs
 ) {
-	return t.run(async (ctx) => reserveSharesMutation._handler(ctx, args));
+	return t.mutation(internal.ledger.mutations.reserveShares, args);
 }
 
 async function getReservation(
@@ -266,6 +270,38 @@ describe("reserveShares", () => {
 		expect(sellerAfter.pendingCredits).toBe(3_000n);
 		expect(buyerAfter.pendingDebits).toBe(3_000n);
 		expect(reservations).toHaveLength(1);
+	});
+
+	it("rejects idempotent replays when invariant fields change", async () => {
+		const t = createTestHarness();
+		const auth = asLedgerUser(t);
+		await initCounter(auth);
+		await mintAndIssue(auth, "m-reserve-replay-conflict", "seller", 5_000);
+
+		await executeReserveShares(t, {
+			mortgageId: "m-reserve-replay-conflict",
+			sellerLenderId: "seller",
+			buyerLenderId: "buyer",
+			amount: 3_000,
+			effectiveDate: "2026-01-02",
+			idempotencyKey: "reserve-replay-conflict",
+			source: SYS_SOURCE,
+		});
+
+		await expect(
+			executeReserveShares(t, {
+				mortgageId: "m-reserve-replay-conflict",
+				sellerLenderId: "seller",
+				buyerLenderId: "buyer",
+				amount: 3_000,
+				effectiveDate: "2026-01-03",
+				idempotencyKey: "reserve-replay-conflict",
+				source: SYS_SOURCE,
+			})
+		).rejects.toSatisfy((error: unknown) => {
+			expect(getConvexErrorCode(error)).toBe("IDEMPOTENT_REPLAY_FAILED");
+			return true;
+		});
 	});
 
 	it("treats existing reservations as a mutex over available balance across multiple deals", async () => {
@@ -376,6 +412,46 @@ describe("reserveShares", () => {
 		} catch (error) {
 			expect(getConvexErrorCode(error)).toBe("MIN_FRACTION_VIOLATED");
 		}
+	});
+
+	it("rejects same-lender reservations", async () => {
+		const t = createTestHarness();
+		const auth = asLedgerUser(t);
+		await initCounter(auth);
+		await mintAndIssue(auth, "m-reserve-same-lender", "seller", 2_000);
+
+		try {
+			await executeReserveShares(t, {
+				mortgageId: "m-reserve-same-lender",
+				sellerLenderId: "seller",
+				buyerLenderId: "seller",
+				amount: 1_000,
+				effectiveDate: "2026-01-02",
+				idempotencyKey: "reserve-same-lender",
+				source: SYS_SOURCE,
+			});
+			expect.fail("Expected same-account reservation to fail");
+		} catch (error) {
+			expect(getConvexErrorCode(error)).toBe("SAME_ACCOUNT");
+		}
+	});
+
+	it("requires the seller to already have a position account", async () => {
+		const t = createTestHarness();
+		const auth = asLedgerUser(t);
+		await initCounter(auth);
+
+		await expect(
+			executeReserveShares(t, {
+				mortgageId: "m-reserve-no-seller",
+				sellerLenderId: "seller",
+				buyerLenderId: "buyer",
+				amount: 1_000,
+				effectiveDate: "2026-01-02",
+				idempotencyKey: "reserve-no-seller",
+				source: SYS_SOURCE,
+			})
+		).rejects.toThrow(/No POSITION account/);
 	});
 
 	it("allows a sell-all reservation that drives the seller's available balance to zero", async () => {
