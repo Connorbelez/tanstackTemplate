@@ -51,8 +51,11 @@ export const seedAll = adminAction
 			obligations,
 			onboardingRequests,
 			summary: {
+				ledgerBootstrap: {
+					worldAccountId: ledgerBootstrap.worldAccountId,
+					sequenceCounterId: ledgerBootstrap.sequenceCounterId,
+				},
 				created: {
-					ledgerBootstrap: "initialized" as const,
 					brokers: brokers.created.brokers,
 					borrowers: borrowers.created.borrowers,
 					lenders: lenders.created.lenders,
