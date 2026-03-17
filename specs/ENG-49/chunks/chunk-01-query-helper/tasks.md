@@ -11,15 +11,14 @@ Add an internalQuery that:
 Follow existing patterns in the file for internalQuery exports.
 
 ## T-002: Create setReservationId internalMutation
-**File:** `convex/engine/effects/dealClosing.ts` (new file)
+**File:** `convex/deals/queries.ts` (add to existing file)
 
-Create a new file with:
-- Imports: v, ConvexError, internalMutation, internal, Id, effectPayloadValidator, DealMachineContext
+Add an internalMutation:
+- Imports: v, ConvexError, internalMutation
 - Export `setReservationId` internalMutation that:
-  - Takes `dealId: v.id("deals")` and `reservationId: v.id("ledger_reservations")`
+  - Takes `dealId: v.id("deals")` and `reservationId: v.optional(v.id("ledger_reservations"))`
   - Gets deal from DB, throws if not found
-  - Patches deal with updated machineContext containing reservationId
-  - Uses `DealMachineContext` type for proper typing
+  - Patches deal with updated top-level `reservationId` field
 
 Note: Create the file with just this mutation first, then the effects will be added in chunk 02.
 

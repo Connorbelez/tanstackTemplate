@@ -2,7 +2,7 @@
 
 ## Tasks
 - T-001: Add `getInternalDeal` internalQuery to convex/deals/queries.ts
-- T-002: Create `setReservationId` internalMutation in convex/engine/effects/dealClosing.ts
+- T-002: Create `setReservationId` internalMutation in convex/deals/queries.ts
 
 ## Relevant Implementation Plan Sections
 
@@ -26,8 +26,8 @@ export const getInternalDeal = internalQuery({
 ```
 
 ### Step 2: Create `setReservationId` internal mutation
-**File:** `convex/engine/effects/dealClosing.ts`
-Helper mutation to store reservationId in deal's machineContext. Must be a separate `internalMutation` because it's called from an `internalAction` via `ctx.runMutation`.
+**File:** `convex/deals/queries.ts`
+Helper mutation to store reservationId in deal's top-level `reservationId` field. Must be a separate `internalMutation` because it's called from an `internalAction` via `ctx.runMutation`.
 ```typescript
 import { v } from "convex/values";
 import { ConvexError } from "convex/values";
@@ -38,14 +38,13 @@ import { effectPayloadValidator } from "../validators";
 import type { DealMachineContext } from "../machines/deal.machine";
 
 /**
- * Patches deal.machineContext with a reservationId.
- * Documented exception to "engine-only writes" rule —
- * reservationId is operational metadata consumed by effects, not state-machine state.
+ * Patches deal.reservationId with the reservation ID.
+ * Updates top-level field (not machineContext) for direct effect access.
  */
 export const setReservationId = internalMutation({
   args: {
     dealId: v.id("deals"),
-    reservationId: v.id("ledger_reservations"),
+    reservationId: v.optional(v.id("ledger_reservations")),
   },
   handler: async (ctx, { dealId, reservationId }) => {
     const deal = await ctx.db.get(dealId);
@@ -55,9 +54,8 @@ export const setReservationId = internalMutation({
         message: `Deal ${dealId} not found`,
       });
     }
-    const currentContext = (deal.machineContext ?? {}) as DealMachineContext;
     await ctx.db.patch(dealId, {
-      machineContext: { ...currentContext, reservationId },
+      reservationId,
     });
   },
 });
@@ -65,12 +63,12 @@ export const setReservationId = internalMutation({
 
 ## Key Constraints
 - From CLAUDE.md: No `any` types unless absolutely necessary
-- From SPEC 1.4 Open Question 3: `setReservationId` uses direct `ctx.db.patch` on `machineContext` — documented exception to "engine-only writes" rule
+- From SPEC 1.4 Open Question 3: `setReservationId` uses direct `ctx.db.patch` on top-level `reservationId` field
 - `getInternalDeal` must be an `internalQuery` (not public) so effects can call it
 
 ## Integration Points
-- `getInternalDeal` returns full deal record including: mortgageId, sellerId, buyerId, fractionalShare, closingDate, machineContext
-- `setReservationId` patches machineContext with reservationId, preserving existing context fields
+- `getInternalDeal` returns full deal record including: mortgageId, sellerId, buyerId, fractionalShare, closingDate, reservationId
+- `setReservationId` patches top-level reservationId field (not machineContext)
 - Both will be used by the effects in chunk 02
 
 ## Ledger Contract (for context)

@@ -14,7 +14,7 @@
 /**
  * Effect: reserves fractional shares in the ownership ledger on DEAL_LOCKED.
  * Calls ledger reserveShares() with idempotency key.
- * Stores returned reservationId in deal's machineContext.
+ * Stores returned reservationId in deal.reservationId (top-level field, not machineContext).
  * On insufficient balance: logs error, does NOT throw (deal stays in lawyerOnboarding.pending).
  */
 export const reserveShares = internalAction({
@@ -90,8 +90,7 @@ export const voidReservation = internalAction({
       { dealId: args.entityId as Id<"deals"> }
     );
 
-    const machineContext = (deal.machineContext ?? {}) as DealMachineContext;
-    if (!machineContext.reservationId) {
+    if (!deal.reservationId) {
       console.info(
         `[voidReservation] No reservationId for deal=${deal._id} — cancelled before lock, exiting cleanly`
       );
@@ -107,7 +106,7 @@ export const voidReservation = internalAction({
       await ctx.runMutation(
         internal.ledger.mutations.voidReservation,
         {
-          reservationId: machineContext.reservationId as Id<"ledger_reservations">,
+          reservationId: deal.reservationId as Id<"ledger_reservations">,
           reason,
           effectiveDate: new Date().toISOString().split("T")[0],
           idempotencyKey: `deal:${deal._id}:void`,
@@ -116,7 +115,7 @@ export const voidReservation = internalAction({
       );
 
       console.info(
-        `[voidReservation] Voided reservation=${machineContext.reservationId} for deal=${deal._id}`
+        `[voidReservation] Voided reservation=${deal.reservationId} for deal=${deal._id}`
       );
     } catch (error) {
       // RESERVATION_NOT_PENDING means already voided (idempotent retry)

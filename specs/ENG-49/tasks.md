@@ -3,7 +3,7 @@
 ## Implementation Tasks
 
 - [ ] T-001 Add `getInternalDeal` internalQuery to convex/deals/queries.ts for effects to load deal data
-- [ ] T-002 Create `setReservationId` internalMutation in convex/engine/effects/dealClosing.ts helper
+- [ ] T-002 Create `setReservationId` internalMutation in convex/deals/queries.ts helper
 - [ ] T-003 Implement `reserveShares` effect (internalAction) in convex/engine/effects/dealClosing.ts
 - [ ] T-004 Implement `voidReservation` effect (internalAction) in convex/engine/effects/dealClosing.ts
 - [ ] T-005 Update Effect Registry in convex/engine/effects/registry.ts to point to real handlers
@@ -15,9 +15,9 @@
 ### Acceptance Criteria (from Linear)
 - `reserveShares` effect calls ledger `reserveShares()` with correct args (mortgageId, sellerLenderId, buyerLenderId, amount, dealId)
 - `reserveShares` uses idempotencyKey `deal:${dealId}:reserve` — re-execution returns existing reservation
-- `reserveShares` stores returned reservationId in deal's machineContext via `setReservationId` helper
+- `reserveShares` stores returned reservationId in deal's top-level reservationId field via `setReservationId` helper
 - `reserveShares` handles ledger rejection gracefully (logs error, doesn't throw — deal remains in lawyerOnboarding.pending)
-- `voidReservation` effect calls ledger `voidReservation()` with machineContext.reservationId
+- `voidReservation` effect calls ledger `voidReservation()` with deal.reservationId
 - `voidReservation` handles missing reservationId (deal cancelled before lock) — exits cleanly
 - `voidReservation` uses idempotencyKey `deal:${dealId}:void`
 - Both effects registered in Effect Registry
@@ -34,7 +34,7 @@
 ### Integration Points
 - **Upstream (ENG-46, DONE)**: Effect registry, effectPayloadValidator, deal machine with action markers
 - **Ledger APIs**: reserveShares() and voidReservation() already implemented
-- **Downstream (ENG-50)**: Will consume reservationId from machineContext
+- **Downstream (ENG-50)**: Will consume reservationId from deal.reservationId
 
 ### Constraints
 - From CLAUDE.md: No `any` types unless absolutely necessary
@@ -47,6 +47,6 @@
 | File | Action | Description |
 |------|--------|-------------|
 | `convex/deals/queries.ts` | MODIFY | Add `getInternalDeal` internalQuery |
-| `convex/engine/effects/dealClosing.ts` | CREATE | reserveShares + voidReservation effects + setReservationId helper |
+| `convex/engine/effects/dealClosing.ts` | CREATE | reserveShares + voidReservation effects (setReservationId in deals/queries.ts) |
 | `convex/engine/effects/registry.ts` | MODIFY | Re-point to real handlers |
 | `convex/deals/__tests__/effects.test.ts` | CREATE | Effect unit tests |
