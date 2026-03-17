@@ -39,63 +39,34 @@ export const mintMortgage = adminMutation
 	.handler(async (ctx, args) => {
 		const existingEntry = await ctx.db
 			.query("ledger_journal_entries")
-			.withIndex("by_idempotency", (q) =>
-				q.eq("idempotencyKey", args.idempotencyKey)
-			)
+			.withIndex("by_idempotency", (q) => q.eq("idempotencyKey", args.idempotencyKey))
 			.first();
 		if (existingEntry) {
 			const treasury = await ctx.db
 				.query("ledger_accounts")
-				.withIndex("by_type_and_mortgage", (q) =>
-					q.eq("type", "TREASURY").eq("mortgageId", args.mortgageId)
-				)
+				.withIndex("by_type_and_mortgage", (q) => q.eq("type", "TREASURY").eq("mortgageId", args.mortgageId))
 				.first();
 			if (!treasury) {
-				throw new ConvexError({
-					code: "IDEMPOTENT_REPLAY_FAILED" as const,
-					message: `Idempotent mint replay: TREASURY for ${args.mortgageId} not found`,
-				});
+				throw new ConvexError({ code: "IDEMPOTENT_REPLAY_FAILED" as const, message: `Idempotent mint replay: TREASURY for ${args.mortgageId} not found` });
 			}
 			return { treasuryAccountId: treasury._id, journalEntry: existingEntry };
 		}
-
 		const existingTreasury = await ctx.db
 			.query("ledger_accounts")
-			.withIndex("by_type_and_mortgage", (q) =>
-				q.eq("type", "TREASURY").eq("mortgageId", args.mortgageId)
-			)
+			.withIndex("by_type_and_mortgage", (q) => q.eq("type", "TREASURY").eq("mortgageId", args.mortgageId))
 			.first();
 		if (existingTreasury) {
-			throw new ConvexError({
-				code: "ALREADY_MINTED" as const,
-				message: `Mortgage ${args.mortgageId} already minted (TREASURY exists)`,
-			});
+			throw new ConvexError({ code: "ALREADY_MINTED" as const, message: `Mortgage ${args.mortgageId} already minted (TREASURY exists)` });
 		}
-
 		const worldAccount = await initializeWorldAccount(ctx);
-
 		const treasuryId = await ctx.db.insert("ledger_accounts", {
-			type: "TREASURY",
-			mortgageId: args.mortgageId,
-			cumulativeDebits: 0n,
-			cumulativeCredits: 0n,
-			pendingDebits: 0n,
-			pendingCredits: 0n,
-			createdAt: Date.now(),
+			type: "TREASURY", mortgageId: args.mortgageId,
+			cumulativeDebits: 0n, cumulativeCredits: 0n, pendingDebits: 0n, pendingCredits: 0n, createdAt: Date.now(),
 		});
-
 		const journalEntry = await postEntry(ctx, {
-			entryType: "MORTGAGE_MINTED",
-			mortgageId: args.mortgageId,
-			debitAccountId: treasuryId,
-			creditAccountId: worldAccount._id,
-			amount: Number(TOTAL_SUPPLY),
-			effectiveDate: args.effectiveDate,
-			idempotencyKey: args.idempotencyKey,
-			source: args.source,
-			metadata: args.metadata,
+			entryType: "MORTGAGE_MINTED", mortgageId: args.mortgageId, debitAccountId: treasuryId, creditAccountId: worldAccount._id,
+			amount: Number(TOTAL_SUPPLY), effectiveDate: args.effectiveDate, idempotencyKey: args.idempotencyKey, source: args.source, metadata: args.metadata,
 		});
-
 		return { treasuryAccountId: treasuryId, journalEntry };
 	})
 	.public();
@@ -105,56 +76,27 @@ export const burnMortgage = adminMutation
 	.handler(async (ctx, args) => {
 		const existingEntry = await ctx.db
 			.query("ledger_journal_entries")
-			.withIndex("by_idempotency", (q) =>
-				q.eq("idempotencyKey", args.idempotencyKey)
-			)
+			.withIndex("by_idempotency", (q) => q.eq("idempotencyKey", args.idempotencyKey))
 			.first();
-		if (existingEntry) {
-			return existingEntry;
-		}
-
+		if (existingEntry) { return existingEntry; }
 		const treasury = await getTreasuryAccount(ctx, args.mortgageId);
 		if (!treasury) {
-			throw new ConvexError({
-				code: "TREASURY_NOT_FOUND" as const,
-				message: `No TREASURY account for mortgage ${args.mortgageId}. Mint first.`,
-			});
+			throw new ConvexError({ code: "TREASURY_NOT_FOUND" as const, message: `No TREASURY account for mortgage ${args.mortgageId}. Mint first.` });
 		}
 		const treasuryBalance = getPostedBalance(treasury);
-
 		if (treasuryBalance !== TOTAL_SUPPLY) {
-			throw new ConvexError({
-				code: "TREASURY_NOT_FULL" as const,
-				message: `Cannot burn: TREASURY balance is ${treasuryBalance}, must be ${TOTAL_SUPPLY}`,
-			});
+			throw new ConvexError({ code: "TREASURY_NOT_FULL" as const, message: `Cannot burn: TREASURY balance is ${treasuryBalance}, must be ${TOTAL_SUPPLY}` });
 		}
-
-		const positions = await ctx.db
-			.query("ledger_accounts")
-			.withIndex("by_mortgage", (q) => q.eq("mortgageId", args.mortgageId))
-			.collect();
+		const positions = await ctx.db.query("ledger_accounts").withIndex("by_mortgage", (q) => q.eq("mortgageId", args.mortgageId)).collect();
 		for (const pos of positions) {
 			if (pos.type === "POSITION" && getPostedBalance(pos) !== 0n) {
-				throw new ConvexError({
-					code: "POSITIONS_NOT_ZERO" as const,
-					message: `Cannot burn: POSITION ${pos._id} (lender ${pos.lenderId}) has non-zero balance`,
-				});
+				throw new ConvexError({ code: "POSITIONS_NOT_ZERO" as const, message: `Cannot burn: POSITION ${pos._id} (lender ${pos.lenderId}) has non-zero balance` });
 			}
 		}
-
 		const worldAccount = await getWorldAccount(ctx);
-
 		return postEntry(ctx, {
-			entryType: "MORTGAGE_BURNED",
-			mortgageId: args.mortgageId,
-			debitAccountId: worldAccount._id,
-			creditAccountId: treasury._id,
-			amount: Number(TOTAL_SUPPLY),
-			effectiveDate: args.effectiveDate,
-			idempotencyKey: args.idempotencyKey,
-			source: args.source,
-			reason: args.reason,
-			metadata: args.metadata,
+			entryType: "MORTGAGE_BURNED", mortgageId: args.mortgageId, debitAccountId: worldAccount._id, creditAccountId: treasury._id,
+			amount: Number(TOTAL_SUPPLY), effectiveDate: args.effectiveDate, idempotencyKey: args.idempotencyKey, source: args.source, reason: args.reason, metadata: args.metadata,
 		});
 	})
 	.public();
@@ -173,35 +115,16 @@ interface IssueSharesArgs {
 	source: EventSource;
 }
 
-export async function issueSharesHandler(
-	ctx: MutationCtx,
-	args: IssueSharesArgs
-) {
+export async function issueSharesHandler(ctx: MutationCtx, args: IssueSharesArgs) {
 	const treasury = await getTreasuryAccount(ctx, args.mortgageId);
 	if (!treasury) {
-		throw new ConvexError({
-			code: "TREASURY_NOT_FOUND" as const,
-			message: `No TREASURY account for mortgage ${args.mortgageId}. Mint first.`,
-		});
+		throw new ConvexError({ code: "TREASURY_NOT_FOUND" as const, message: `No TREASURY account for mortgage ${args.mortgageId}. Mint first.` });
 	}
-	const position = await getOrCreatePositionAccount(
-		ctx,
-		args.mortgageId,
-		args.lenderId
-	);
-
+	const position = await getOrCreatePositionAccount(ctx, args.mortgageId, args.lenderId);
 	const journalEntry = await postEntry(ctx, {
-		entryType: "SHARES_ISSUED",
-		mortgageId: args.mortgageId,
-		debitAccountId: position._id,
-		creditAccountId: treasury._id,
-		amount: args.amount,
-		effectiveDate: args.effectiveDate,
-		idempotencyKey: args.idempotencyKey,
-		source: args.source,
-		metadata: args.metadata,
+		entryType: "SHARES_ISSUED", mortgageId: args.mortgageId, debitAccountId: position._id, creditAccountId: treasury._id,
+		amount: args.amount, effectiveDate: args.effectiveDate, idempotencyKey: args.idempotencyKey, source: args.source, metadata: args.metadata,
 	});
-
 	return { positionAccountId: position._id, journalEntry };
 }
 
@@ -216,42 +139,16 @@ interface TransferSharesArgs {
 	source: EventSource;
 }
 
-export async function transferSharesHandler(
-	ctx: MutationCtx,
-	args: TransferSharesArgs
-) {
-	const sellerPosition = await getPositionAccount(
-		ctx,
-		args.mortgageId,
-		args.sellerLenderId
-	);
-	const buyerPosition = await getOrCreatePositionAccount(
-		ctx,
-		args.mortgageId,
-		args.buyerLenderId
-	);
-
+export async function transferSharesHandler(ctx: MutationCtx, args: TransferSharesArgs) {
+	const sellerPosition = await getPositionAccount(ctx, args.mortgageId, args.sellerLenderId);
+	const buyerPosition = await getOrCreatePositionAccount(ctx, args.mortgageId, args.buyerLenderId);
 	if (sellerPosition.mortgageId !== buyerPosition.mortgageId) {
-		throw new ConvexError({
-			code: "MORTGAGE_MISMATCH" as const,
-			message: "Cannot transfer shares between different mortgages",
-			sellerMortgageId: sellerPosition.mortgageId,
-			buyerMortgageId: buyerPosition.mortgageId,
-		});
+		throw new ConvexError({ code: "MORTGAGE_MISMATCH" as const, message: "Cannot transfer shares between different mortgages", sellerMortgageId: sellerPosition.mortgageId, buyerMortgageId: buyerPosition.mortgageId });
 	}
-
 	const journalEntry = await postEntry(ctx, {
-		entryType: "SHARES_TRANSFERRED",
-		mortgageId: args.mortgageId,
-		debitAccountId: buyerPosition._id,
-		creditAccountId: sellerPosition._id,
-		amount: args.amount,
-		effectiveDate: args.effectiveDate,
-		idempotencyKey: args.idempotencyKey,
-		source: args.source,
-		metadata: args.metadata,
+		entryType: "SHARES_TRANSFERRED", mortgageId: args.mortgageId, debitAccountId: buyerPosition._id, creditAccountId: sellerPosition._id,
+		amount: args.amount, effectiveDate: args.effectiveDate, idempotencyKey: args.idempotencyKey, source: args.source, metadata: args.metadata,
 	});
-
 	return { buyerAccountId: buyerPosition._id, journalEntry };
 }
 
@@ -266,34 +163,15 @@ interface RedeemSharesArgs {
 	source: EventSource;
 }
 
-export async function redeemSharesHandler(
-	ctx: MutationCtx,
-	args: RedeemSharesArgs
-) {
-	const position = await getPositionAccount(
-		ctx,
-		args.mortgageId,
-		args.lenderId
-	);
+export async function redeemSharesHandler(ctx: MutationCtx, args: RedeemSharesArgs) {
+	const position = await getPositionAccount(ctx, args.mortgageId, args.lenderId);
 	const treasury = await getTreasuryAccount(ctx, args.mortgageId);
 	if (!treasury) {
-		throw new ConvexError({
-			code: "TREASURY_NOT_FOUND" as const,
-			message: `No TREASURY account for mortgage ${args.mortgageId}. Mint first.`,
-		});
+		throw new ConvexError({ code: "TREASURY_NOT_FOUND" as const, message: `No TREASURY account for mortgage ${args.mortgageId}. Mint first.` });
 	}
-
 	return postEntry(ctx, {
-		entryType: "SHARES_REDEEMED",
-		mortgageId: args.mortgageId,
-		debitAccountId: treasury._id,
-		creditAccountId: position._id,
-		amount: args.amount,
-		effectiveDate: args.effectiveDate,
-		idempotencyKey: args.idempotencyKey,
-		source: args.source,
-		reason: args.reason,
-		metadata: args.metadata,
+		entryType: "SHARES_REDEEMED", mortgageId: args.mortgageId, debitAccountId: treasury._id, creditAccountId: position._id,
+		amount: args.amount, effectiveDate: args.effectiveDate, idempotencyKey: args.idempotencyKey, source: args.source, reason: args.reason, metadata: args.metadata,
 	});
 }
 
@@ -302,137 +180,53 @@ export async function redeemSharesHandler(
 export const mintAndIssue = ledgerMutation
 	.input(mintAndIssueArgsValidator)
 	.handler(async (ctx, args) => {
-		const totalAllocated = args.allocations.reduce(
-			(sum, a) => sum + BigInt(a.amount),
-			0n
-		);
+		const totalAllocated = args.allocations.reduce((sum, a) => sum + BigInt(a.amount), 0n);
 		if (totalAllocated !== TOTAL_SUPPLY) {
-			throw new ConvexError({
-				code: "ALLOCATIONS_SUM_MISMATCH" as const,
-				message: `Allocations sum to ${totalAllocated}, must equal ${TOTAL_SUPPLY}`,
-			});
+			throw new ConvexError({ code: "ALLOCATIONS_SUM_MISMATCH" as const, message: `Allocations sum to ${totalAllocated}, must equal ${TOTAL_SUPPLY}` });
 		}
-
 		for (const allocation of args.allocations) {
 			if (BigInt(allocation.amount) < MIN_FRACTION) {
-				throw new ConvexError({
-					code: "ALLOCATION_BELOW_MINIMUM" as const,
-					message: `Allocation for lender ${allocation.lenderId} is ${allocation.amount}, minimum is ${MIN_FRACTION}`,
-				});
+				throw new ConvexError({ code: "ALLOCATION_BELOW_MINIMUM" as const, message: `Allocation for lender ${allocation.lenderId} is ${allocation.amount}, minimum is ${MIN_FRACTION}` });
 			}
 		}
-
-		const existingEntry = await ctx.db
-			.query("ledger_journal_entries")
-			.withIndex("by_idempotency", (q) =>
-				q.eq("idempotencyKey", args.idempotencyKey)
-			)
-			.first();
+		const existingEntry = await ctx.db.query("ledger_journal_entries").withIndex("by_idempotency", (q) => q.eq("idempotencyKey", args.idempotencyKey)).first();
 		if (existingEntry) {
-			const treasury = await ctx.db
-				.query("ledger_accounts")
-				.withIndex("by_type_and_mortgage", (q) =>
-					q.eq("type", "TREASURY").eq("mortgageId", args.mortgageId)
-				)
-				.first();
+			const treasury = await ctx.db.query("ledger_accounts").withIndex("by_type_and_mortgage", (q) => q.eq("type", "TREASURY").eq("mortgageId", args.mortgageId)).first();
 			if (!treasury) {
-				throw new ConvexError({
-					code: "IDEMPOTENT_REPLAY_FAILED" as const,
-					message: `Idempotent mintAndIssue replay: TREASURY for ${args.mortgageId} not found`,
-				});
+				throw new ConvexError({ code: "IDEMPOTENT_REPLAY_FAILED" as const, message: `Idempotent mintAndIssue replay: TREASURY for ${args.mortgageId} not found` });
 			}
-			const issueEntries = await ctx.db
-				.query("ledger_journal_entries")
-				.withIndex("by_mortgage_and_time", (q) =>
-					q.eq("mortgageId", args.mortgageId)
-				)
-				.collect();
-			return {
-				treasuryAccountId: treasury._id,
-				mintEntry: existingEntry,
-				issueEntries: issueEntries.filter(
-					(e) => e.entryType === "SHARES_ISSUED"
-				),
-			};
+			const issueEntries = await ctx.db.query("ledger_journal_entries").withIndex("by_mortgage_and_time", (q) => q.eq("mortgageId", args.mortgageId)).collect();
+			return { treasuryAccountId: treasury._id, mintEntry: existingEntry, issueEntries: issueEntries.filter((e) => e.entryType === "SHARES_ISSUED") };
 		}
-
-		const existingTreasury = await ctx.db
-			.query("ledger_accounts")
-			.withIndex("by_type_and_mortgage", (q) =>
-				q.eq("type", "TREASURY").eq("mortgageId", args.mortgageId)
-			)
-			.first();
+		const existingTreasury = await ctx.db.query("ledger_accounts").withIndex("by_type_and_mortgage", (q) => q.eq("type", "TREASURY").eq("mortgageId", args.mortgageId)).first();
 		if (existingTreasury) {
-			throw new ConvexError({
-				code: "ALREADY_MINTED" as const,
-				message: `Mortgage ${args.mortgageId} already minted (TREASURY exists)`,
-			});
+			throw new ConvexError({ code: "ALREADY_MINTED" as const, message: `Mortgage ${args.mortgageId} already minted (TREASURY exists)` });
 		}
-
 		const worldAccount = await initializeWorldAccount(ctx);
-
 		const treasuryId = await ctx.db.insert("ledger_accounts", {
-			type: "TREASURY",
-			mortgageId: args.mortgageId,
-			cumulativeDebits: 0n,
-			cumulativeCredits: 0n,
-			pendingDebits: 0n,
-			pendingCredits: 0n,
-			createdAt: Date.now(),
+			type: "TREASURY", mortgageId: args.mortgageId,
+			cumulativeDebits: 0n, cumulativeCredits: 0n, pendingDebits: 0n, pendingCredits: 0n, createdAt: Date.now(),
 		});
-
 		const mintEntry = await postEntry(ctx, {
-			entryType: "MORTGAGE_MINTED",
-			mortgageId: args.mortgageId,
-			debitAccountId: treasuryId,
-			creditAccountId: worldAccount._id,
-			amount: Number(TOTAL_SUPPLY),
-			effectiveDate: args.effectiveDate,
-			idempotencyKey: args.idempotencyKey,
-			source: args.source,
-			metadata: args.metadata,
+			entryType: "MORTGAGE_MINTED", mortgageId: args.mortgageId, debitAccountId: treasuryId, creditAccountId: worldAccount._id,
+			amount: Number(TOTAL_SUPPLY), effectiveDate: args.effectiveDate, idempotencyKey: args.idempotencyKey, source: args.source, metadata: args.metadata,
 		});
-
 		const issueEntries: Doc<"ledger_journal_entries">[] = [];
-
 		for (const allocation of args.allocations) {
-			const position = await getOrCreatePositionAccount(
-				ctx,
-				args.mortgageId,
-				allocation.lenderId
-			);
-
+			const position = await getOrCreatePositionAccount(ctx, args.mortgageId, allocation.lenderId);
 			const issueEntry = await postEntry(ctx, {
-				entryType: "SHARES_ISSUED",
-				mortgageId: args.mortgageId,
-				debitAccountId: position._id,
-				creditAccountId: treasuryId,
-				amount: allocation.amount,
-				effectiveDate: args.effectiveDate,
-				idempotencyKey: `${args.idempotencyKey}:issue:${allocation.lenderId}`,
-				source: args.source,
-				causedBy: mintEntry._id,
-				metadata: args.metadata,
+				entryType: "SHARES_ISSUED", mortgageId: args.mortgageId, debitAccountId: position._id, creditAccountId: treasuryId,
+				amount: allocation.amount, effectiveDate: args.effectiveDate, idempotencyKey: `${args.idempotencyKey}:issue:${allocation.lenderId}`,
+				source: args.source, causedBy: mintEntry._id, metadata: args.metadata,
 			});
-
 			issueEntries.push(issueEntry);
 		}
-
 		const treasuryDoc = await ctx.db.get(treasuryId);
-		if (!treasuryDoc) {
-			throw new ConvexError({
-				code: "INVARIANT_VIOLATION" as const,
-				message: "TREASURY account disappeared after mint",
-			});
-		}
+		if (!treasuryDoc) { throw new ConvexError({ code: "INVARIANT_VIOLATION" as const, message: "TREASURY account disappeared after mint" }); }
 		const treasuryBalance = getPostedBalance(treasuryDoc);
 		if (treasuryBalance !== 0n) {
-			throw new ConvexError({
-				code: "INVARIANT_VIOLATION" as const,
-				message: `TREASURY balance is ${treasuryBalance} after full allocation, expected 0`,
-			});
+			throw new ConvexError({ code: "INVARIANT_VIOLATION" as const, message: `TREASURY balance is ${treasuryBalance} after full allocation, expected 0` });
 		}
-
 		return { treasuryAccountId: treasuryId, mintEntry, issueEntries };
 	})
 	.public();
@@ -469,79 +263,31 @@ export const redeemSharesInternal = internalMutation({
 export const reserveShares = internalMutation({
 	args: reserveSharesArgsValidator,
 	handler: async (ctx, args) => {
-		const existingEntry = await ctx.db
-			.query("ledger_journal_entries")
-			.withIndex("by_idempotency", (q) =>
-				q.eq("idempotencyKey", args.idempotencyKey)
-			)
-			.first();
+		const existingEntry = await ctx.db.query("ledger_journal_entries").withIndex("by_idempotency", (q) => q.eq("idempotencyKey", args.idempotencyKey)).first();
 		if (existingEntry) {
 			if (!existingEntry.reservationId) {
-				throw new ConvexError({
-					code: "IDEMPOTENT_REPLAY_FAILED" as const,
-					message: `Idempotent reserveShares replay: existing entry ${existingEntry._id} lacks reservation linkage`,
-				});
+				throw new ConvexError({ code: "IDEMPOTENT_REPLAY_FAILED" as const, message: `Idempotent reserveShares replay: existing entry ${existingEntry._id} lacks reservation linkage` });
 			}
 			const reservation = await ctx.db.get(existingEntry.reservationId);
 			if (!reservation) {
-				throw new ConvexError({
-					code: "IDEMPOTENT_REPLAY_FAILED" as const,
-					message: `Idempotent reserveShares replay: reservation ${existingEntry.reservationId} missing`,
-				});
+				throw new ConvexError({ code: "IDEMPOTENT_REPLAY_FAILED" as const, message: `Idempotent reserveShares replay: reservation ${existingEntry.reservationId} missing` });
 			}
-			return {
-				reservationId: reservation._id,
-				journalEntry: existingEntry,
-			};
+			return { reservationId: reservation._id, journalEntry: existingEntry };
 		}
-
-		const sellerPosition = await getPositionAccount(
-			ctx,
-			args.mortgageId,
-			args.sellerLenderId
-		);
-		const buyerPosition = await getOrCreatePositionAccount(
-			ctx,
-			args.mortgageId,
-			args.buyerLenderId
-		);
-
+		const sellerPosition = await getPositionAccount(ctx, args.mortgageId, args.sellerLenderId);
+		const buyerPosition = await getOrCreatePositionAccount(ctx, args.mortgageId, args.buyerLenderId);
 		const journalEntry = await postEntry(ctx, {
-			entryType: "SHARES_RESERVED",
-			mortgageId: args.mortgageId,
-			debitAccountId: buyerPosition._id,
-			creditAccountId: sellerPosition._id,
-			amount: args.amount,
-			effectiveDate: args.effectiveDate,
-			idempotencyKey: args.idempotencyKey,
-			source: args.source,
-			metadata: args.metadata,
+			entryType: "SHARES_RESERVED", mortgageId: args.mortgageId, debitAccountId: buyerPosition._id, creditAccountId: sellerPosition._id,
+			amount: args.amount, effectiveDate: args.effectiveDate, idempotencyKey: args.idempotencyKey, source: args.source, metadata: args.metadata,
 		});
-
 		const amountDelta = BigInt(args.amount);
-		await ctx.db.patch(sellerPosition._id, {
-			pendingCredits: sellerPosition.pendingCredits + amountDelta,
-		});
-		await ctx.db.patch(buyerPosition._id, {
-			pendingDebits: buyerPosition.pendingDebits + amountDelta,
-		});
-
+		await ctx.db.patch(sellerPosition._id, { pendingCredits: sellerPosition.pendingCredits + amountDelta });
+		await ctx.db.patch(buyerPosition._id, { pendingDebits: buyerPosition.pendingDebits + amountDelta });
 		const reservationId = await ctx.db.insert("ledger_reservations", {
-			mortgageId: args.mortgageId,
-			sellerAccountId: sellerPosition._id,
-			buyerAccountId: buyerPosition._id,
-			amount: args.amount,
-			status: "pending",
-			dealId: args.dealId,
-			reserveJournalEntryId: journalEntry._id,
-			createdAt: Date.now(),
+			mortgageId: args.mortgageId, sellerAccountId: sellerPosition._id, buyerAccountId: buyerPosition._id,
+			amount: args.amount, status: "pending", dealId: args.dealId, reserveJournalEntryId: journalEntry._id, createdAt: Date.now(),
 		});
-
 		await ctx.db.patch(journalEntry._id, { reservationId });
-
-		return {
-			reservationId,
-			journalEntry: { ...journalEntry, reservationId },
-		};
+		return { reservationId, journalEntry: { ...journalEntry, reservationId } };
 	},
 });
