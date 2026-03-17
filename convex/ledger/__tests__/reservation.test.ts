@@ -1,246 +1,19 @@
-import { ConvexError } from "convex/values";
-import { convexTest } from "convex-test";
 import { describe, expect, it } from "vitest";
-import { api } from "../../_generated/api";
-import type { Doc, Id } from "../../_generated/dataModel";
-import type { MutationCtx } from "../../_generated/server";
-import { FAIRLEND_STAFF_ORG_ID } from "../../constants";
-import schema from "../../schema";
 import { getAvailableBalance, getPostedBalance } from "../accounts";
-import { commitReservation, reserveShares, voidReservation } from "../mutations";
-
-const modules = import.meta.glob("/convex/**/*.ts");
-
-const LEDGER_TEST_IDENTITY = {
-	subject: "test-ledger-user",
-	issuer: "https://api.workos.com",
-	org_id: FAIRLEND_STAFF_ORG_ID,
-	organization_name: "FairLend Staff",
-	role: "admin",
-	roles: JSON.stringify(["admin"]),
-	permissions: JSON.stringify(["ledger:view", "ledger:correct"]),
-	user_email: "ledger-test@fairlend.ca",
-	user_first_name: "Ledger",
-	user_last_name: "Tester",
-};
-
-function createTestHarness() {
-	return convexTest(schema, modules);
-}
-
-function asLedgerUser(t: ReturnType<typeof createTestHarness>) {
-	return t.withIdentity(LEDGER_TEST_IDENTITY);
-}
-
-const SYS_SOURCE = { type: "system" as const, channel: "test" };
-type ReserveSharesArgs = {
-	amount: number;
-	buyerLenderId: string;
-	dealId?: string;
-	effectiveDate: string;
-	idempotencyKey: string;
-	metadata?: unknown;
-	mortgageId: string;
-	sellerLenderId: string;
-	source: {
-		actor?: string;
-		channel?: string;
-		type: "cron" | "system" | "user" | "webhook";
-	};
-};
-
-type ReserveSharesResult = {
-	journalEntry: Doc<"ledger_journal_entries">;
-	reservationId: Id<"ledger_reservations">;
-};
-
-type ReserveSharesMutation = {
-	_handler: (
-		ctx: MutationCtx,
-		args: ReserveSharesArgs
-	) => Promise<ReserveSharesResult>;
-};
-
-const reserveSharesMutation = reserveShares as unknown as ReserveSharesMutation;
-
-function getConvexErrorCode(error: unknown): string {
-	expect(error).toBeInstanceOf(ConvexError);
-	if (!(error instanceof ConvexError)) {
-		throw new Error("Expected ConvexError");
-	}
-
-	const visited = new Set<unknown>();
-
-	function findCode(value: unknown): string {
-		if (typeof value === "string") {
-			try {
-				return findCode(JSON.parse(value));
-			} catch {
-				const match = value.match(
-					/\b(INVALID_AMOUNT|SAME_ACCOUNT|ACCOUNT_NOT_FOUND|TYPE_MISMATCH|INSUFFICIENT_BALANCE|MIN_FRACTION_VIOLATED|MORTGAGE_MISMATCH|CORRECTION_REQUIRES_ADMIN|CORRECTION_REQUIRES_CAUSED_BY|CORRECTION_REQUIRES_REASON)\b/
-				);
-				return match?.[1] ?? "";
-			}
-		}
-
-		if (typeof value !== "object" || value === null || visited.has(value)) {
-			return "";
-		}
-
-		visited.add(value);
-
-		if ("code" in value && typeof value.code === "string") {
-			return value.code;
-		}
-
-		for (const nested of Object.values(value)) {
-			const code = findCode(nested);
-			if (code) {
-				return code;
-			}
-		}
-
-		return "";
-	}
-
-	return findCode(error.data) || findCode(error.message) || findCode(error);
-}
-
-async function initCounter(auth: ReturnType<typeof asLedgerUser>) {
-	await auth.mutation(api.ledger.sequenceCounter.initializeSequenceCounter, {});
-}
-
-async function mintAndIssue(
-	auth: ReturnType<typeof asLedgerUser>,
-	mortgageId: string,
-	lenderId: string,
-	amount: number
-) {
-	await auth.mutation(api.ledger.mutations.mintMortgage, {
-		mortgageId,
-		effectiveDate: "2026-01-01",
-		idempotencyKey: `mint-${mortgageId}`,
-		source: SYS_SOURCE,
-	});
-
-	return auth.mutation(api.ledger.mutations.issueShares, {
-		mortgageId,
-		lenderId,
-		amount,
-		effectiveDate: "2026-01-01",
-		idempotencyKey: `issue-${mortgageId}-${lenderId}`,
-		source: SYS_SOURCE,
-	});
-}
-
-async function getAccount(
-	t: ReturnType<typeof createTestHarness>,
-	mortgageId: string,
-	lenderId: string
-) {
-	const account = await t.run(async (ctx) =>
-		ctx.db
-			.query("ledger_accounts")
-			.withIndex("by_mortgage_and_lender", (q) =>
-				q.eq("mortgageId", mortgageId).eq("lenderId", lenderId)
-			)
-			.first()
-	);
-
-	if (!account) {
-		throw new Error(
-			`Missing POSITION account for lender ${lenderId} on mortgage ${mortgageId}`
-		);
-	}
-
-	return account;
-}
-
-async function executeReserveShares(
-	t: ReturnType<typeof createTestHarness>,
-	args: ReserveSharesArgs
-) {
-	return t.run(async (ctx) => reserveSharesMutation._handler(ctx, args));
-}
-
-type CommitReservationArgs = {
-	reservationId: Id<"ledger_reservations">;
-	effectiveDate: string;
-	idempotencyKey: string;
-	source: {
-		actor?: string;
-		channel?: string;
-		type: "cron" | "system" | "user" | "webhook";
-	};
-};
-
-type CommitReservationResult = {
-	journalEntry: Doc<"ledger_journal_entries">;
-};
-
-type CommitReservationMutation = {
-	_handler: (
-		ctx: MutationCtx,
-		args: CommitReservationArgs
-	) => Promise<CommitReservationResult>;
-};
-
-const commitReservationMutation =
-	commitReservation as unknown as CommitReservationMutation;
-
-type VoidReservationArgs = {
-	reservationId: Id<"ledger_reservations">;
-	reason: string;
-	effectiveDate: string;
-	idempotencyKey: string;
-	source: {
-		actor?: string;
-		channel?: string;
-		type: "cron" | "system" | "user" | "webhook";
-	};
-};
-
-type VoidReservationResult = {
-	journalEntry: Doc<"ledger_journal_entries">;
-};
-
-type VoidReservationMutation = {
-	_handler: (
-		ctx: MutationCtx,
-		args: VoidReservationArgs
-	) => Promise<VoidReservationResult>;
-};
-
-const voidReservationMutation =
-	voidReservation as unknown as VoidReservationMutation;
-
-async function executeCommitReservation(
-	t: ReturnType<typeof createTestHarness>,
-	args: CommitReservationArgs
-) {
-	return t.run(async (ctx) => commitReservationMutation._handler(ctx, args));
-}
-
-async function executeVoidReservation(
-	t: ReturnType<typeof createTestHarness>,
-	args: VoidReservationArgs
-) {
-	return t.run(async (ctx) => voidReservationMutation._handler(ctx, args));
-}
-
-async function getReservation(
-	t: ReturnType<typeof createTestHarness>,
-	reservationId: Id<"ledger_reservations">
-) {
-	return t.run(async (ctx) => ctx.db.get(reservationId));
-}
-
-async function getJournalEntry(
-	t: ReturnType<typeof createTestHarness>,
-	journalEntryId: Id<"ledger_journal_entries">
-) {
-	return t.run(async (ctx) => ctx.db.get(journalEntryId));
-}
+import {
+	SYS_SOURCE,
+	asLedgerUser,
+	createTestHarness,
+	executeCommitReservation,
+	executeReserveShares,
+	executeVoidReservation,
+	getAccount,
+	getConvexErrorCode,
+	getJournalEntry,
+	getReservation,
+	initCounter,
+	mintAndIssue,
+} from "./testUtils";
 
 describe("reserveShares", () => {
 	it("creates a pending reservation, locks pending fields, and backfills reservationId on the journal entry", async () => {
@@ -380,6 +153,83 @@ describe("reserveShares", () => {
 		const sellerAfter = await getAccount(t, "m-reserve-mutex", "seller");
 		expect(sellerAfter.pendingCredits).toBe(10_000n);
 		expect(getAvailableBalance(sellerAfter)).toBe(0n);
+	});
+
+	it("void of one reservation restores available balance for subsequent reservations", async () => {
+		const t = createTestHarness();
+		const auth = asLedgerUser(t);
+		await initCounter(auth);
+		await mintAndIssue(auth, "m-reserve-void-mutex", "seller", 10_000);
+
+		// Reserve 8,000 for Deal A → available = 2,000
+		const dealA = await executeReserveShares(t, {
+			mortgageId: "m-reserve-void-mutex",
+			sellerLenderId: "seller",
+			buyerLenderId: "buyer-a",
+			amount: 8_000,
+			dealId: "deal-a",
+			effectiveDate: "2026-01-02",
+			idempotencyKey: "reserve-void-mutex-a",
+			source: SYS_SOURCE,
+		});
+
+		// Reserve 2,000 for Deal B → available = 0
+		await executeReserveShares(t, {
+			mortgageId: "m-reserve-void-mutex",
+			sellerLenderId: "seller",
+			buyerLenderId: "buyer-b",
+			amount: 2_000,
+			dealId: "deal-b",
+			effectiveDate: "2026-01-02",
+			idempotencyKey: "reserve-void-mutex-b",
+			source: SYS_SOURCE,
+		});
+
+		const sellerBeforeVoid = await getAccount(
+			t,
+			"m-reserve-void-mutex",
+			"seller"
+		);
+		expect(sellerBeforeVoid.pendingCredits).toBe(10_000n);
+		expect(getAvailableBalance(sellerBeforeVoid)).toBe(0n);
+
+		// Void Deal A → releases 8,000, available = 8,000
+		await executeVoidReservation(t, {
+			reservationId: dealA.reservationId,
+			reason: "deal A cancelled",
+			effectiveDate: "2026-01-03",
+			idempotencyKey: "void-mutex-a",
+			source: SYS_SOURCE,
+		});
+
+		const sellerAfterVoid = await getAccount(
+			t,
+			"m-reserve-void-mutex",
+			"seller"
+		);
+		// Only Deal B's 2,000 remains pending
+		expect(sellerAfterVoid.pendingCredits).toBe(2_000n);
+		expect(getAvailableBalance(sellerAfterVoid)).toBe(8_000n);
+
+		// Now a new 5,000 reservation should succeed
+		await executeReserveShares(t, {
+			mortgageId: "m-reserve-void-mutex",
+			sellerLenderId: "seller",
+			buyerLenderId: "buyer-c",
+			amount: 5_000,
+			dealId: "deal-c",
+			effectiveDate: "2026-01-03",
+			idempotencyKey: "reserve-void-mutex-c",
+			source: SYS_SOURCE,
+		});
+
+		const sellerFinal = await getAccount(
+			t,
+			"m-reserve-void-mutex",
+			"seller"
+		);
+		expect(sellerFinal.pendingCredits).toBe(7_000n);
+		expect(getAvailableBalance(sellerFinal)).toBe(3_000n);
 	});
 
 	it("rejects when seller available balance is below the requested amount", async () => {
