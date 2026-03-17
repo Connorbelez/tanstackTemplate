@@ -492,8 +492,11 @@ export const redeemSharesInternal = internalMutation({
   handler: redeemSharesHandler,
 });
 
+<<<<<<< HEAD
 // ── Tier 3: Two-Phase Reservation ─────────────────────────────────
 
+=======
+>>>>>>> 0f04513 (merge conflicts)
 export const reserveShares = internalMutation({
   args: reserveSharesArgsValidator,
   handler: async (ctx, args) => {
