@@ -3,6 +3,7 @@ import type { Id } from "../_generated/dataModel";
 import { ledgerQuery } from "../fluent";
 import { getAccountLenderId } from "./accountOwnership";
 import { getPostedBalance } from "./accounts";
+import { TOTAL_SUPPLY } from "./constants";
 
 /**
  * Safely convert a journal entry amount to BigInt.
@@ -48,14 +49,14 @@ export const getPositions = ledgerQuery
 	.handler(async (ctx, args) => {
 		const accounts = await ctx.db
 			.query("ledger_accounts")
-			.withIndex("by_mortgage", (q) => q.eq("mortgageId", args.mortgageId))
+			.withIndex("by_type_and_mortgage", (q) =>
+				q.eq("type", "POSITION").eq("mortgageId", args.mortgageId)
+			)
 			.collect();
 
-		const positionAccounts = accounts.filter(
-			(a) => a.type === "POSITION" && getPostedBalance(a) > 0n
-		);
+		const nonZero = accounts.filter((a) => getPostedBalance(a) > 0n);
 
-		const accountMissingLender = positionAccounts.find(
+		const accountMissingLender = nonZero.find(
 			(a) => getAccountLenderId(a) == null
 		);
 		if (accountMissingLender) {
@@ -64,7 +65,7 @@ export const getPositions = ledgerQuery
 			);
 		}
 
-		return positionAccounts.map((a) => ({
+		return nonZero.map((a) => ({
 			lenderId: getAccountLenderId(a) as string,
 			accountId: a._id,
 			balance: getPostedBalance(a),
@@ -102,6 +103,52 @@ export const getLenderPositions = ledgerQuery
 				accountId: a._id,
 				balance: getPostedBalance(a),
 			}));
+	})
+	.public();
+
+export const validateSupplyInvariant = ledgerQuery
+	.input({ mortgageId: v.string() })
+	.handler(async (ctx, args) => {
+		const treasury = await ctx.db
+			.query("ledger_accounts")
+			.withIndex("by_type_and_mortgage", (q) =>
+				q.eq("type", "TREASURY").eq("mortgageId", args.mortgageId)
+			)
+			.unique();
+
+		const positions = await ctx.db
+			.query("ledger_accounts")
+			.withIndex("by_type_and_mortgage", (q) =>
+				q.eq("type", "POSITION").eq("mortgageId", args.mortgageId)
+			)
+			.collect();
+
+		const treasuryBalance = treasury ? getPostedBalance(treasury) : 0n;
+
+		const positionBalances: Record<string, bigint> = {};
+		let positionTotal = 0n;
+		for (const p of positions) {
+			const lenderId = getAccountLenderId(p);
+			if (!lenderId) {
+				throw new Error(`POSITION account ${p._id} is missing lenderId`);
+			}
+			const balance = getPostedBalance(p);
+			if (balance > 0n) {
+				positionBalances[lenderId] =
+					(positionBalances[lenderId] ?? 0n) + balance;
+			}
+			positionTotal += balance;
+		}
+
+		const total = treasuryBalance + positionTotal;
+		const isUnminted = treasury == null && positions.length === 0;
+
+		return {
+			valid: total === TOTAL_SUPPLY || (isUnminted && total === 0n),
+			treasury: treasuryBalance,
+			positions: positionBalances,
+			total,
+		};
 	})
 	.public();
 
