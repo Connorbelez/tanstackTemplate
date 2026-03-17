@@ -21,7 +21,8 @@ export type EntityType =
 export type GovernedEntityType =
 	| "onboardingRequest"
 	| "mortgage"
-	| "obligation";
+	| "obligation"
+	| "deal";
 
 // ── Command Source ──────────────────────────────────────────────────
 export type CommandChannel =
