@@ -296,4 +296,61 @@ describe("Ledger Consumer Cursors", () => {
 			expect(getConvexErrorCode(error)).toBe("INVALID_BATCH_SIZE");
 		}
 	});
+
+	it("resetCursor resets to 0 by default and accepts a valid target sequence", async () => {
+		const t = createTestHarness();
+		await initCounter(t);
+		const auth = asLedgerUser(t);
+
+		await auth.mutation(api.ledger.cursors.registerCursor, {
+			consumerId: "accrual_engine",
+		});
+		await createSevenEntries(t);
+
+		// Advance to sequence 5, then reset to 0
+		await auth.mutation(api.ledger.cursors.advanceCursor, {
+			consumerId: "accrual_engine",
+			lastProcessedSequence: 5n,
+		});
+
+		await auth.mutation(api.ledger.cursors.resetCursor, {
+			consumerId: "accrual_engine",
+		});
+
+		const afterReset = await auth.query(api.ledger.cursors.getCursor, {
+			consumerId: "accrual_engine",
+		});
+		expect(afterReset?.lastProcessedSequence).toBe(0n);
+
+		// Reset to a specific valid sequence
+		await auth.mutation(api.ledger.cursors.resetCursor, {
+			consumerId: "accrual_engine",
+			toSequence: 3n,
+		});
+
+		const afterResetToThree = await auth.query(api.ledger.cursors.getCursor, {
+			consumerId: "accrual_engine",
+		});
+		expect(afterResetToThree?.lastProcessedSequence).toBe(3n);
+	});
+
+	it("resetCursor rejects a non-existent target sequence", async () => {
+		const t = createTestHarness();
+		await initCounter(t);
+		const auth = asLedgerUser(t);
+
+		await auth.mutation(api.ledger.cursors.registerCursor, {
+			consumerId: "accrual_engine",
+		});
+
+		try {
+			await auth.mutation(api.ledger.cursors.resetCursor, {
+				consumerId: "accrual_engine",
+				toSequence: 999n,
+			});
+			expect.unreachable("Expected resetCursor to reject non-existent sequence");
+		} catch (error) {
+			expect(getConvexErrorCode(error)).toBe("INVALID_SEQUENCE");
+		}
+	});
 });

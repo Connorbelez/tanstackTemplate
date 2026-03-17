@@ -98,6 +98,9 @@ export const getNewEntries = ledgerQuery
 		return {
 			entries,
 			cursorPosition: cursor.lastProcessedSequence,
+			// hasMore is true when the batch is full — consumers should poll again.
+			// If the batch happens to land exactly on the last entry, the next poll
+			// will return 0 entries (one harmless extra roundtrip).
 			hasMore: entries.length === batchSize,
 		};
 	})
