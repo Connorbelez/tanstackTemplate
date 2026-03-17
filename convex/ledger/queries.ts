@@ -126,21 +126,25 @@ export const validateSupplyInvariant = ledgerQuery
 		const treasuryBalance = treasury ? getPostedBalance(treasury) : 0n;
 
 		const positionBalances: Record<string, bigint> = {};
+		let positionTotal = 0n;
 		for (const p of positions) {
 			const lenderId = getAccountLenderId(p);
-			if (lenderId) {
-				positionBalances[lenderId] = getPostedBalance(p);
+			if (!lenderId) {
+				throw new Error(`POSITION account ${p._id} is missing lenderId`);
 			}
+			const balance = getPostedBalance(p);
+			if (balance > 0n) {
+				positionBalances[lenderId] =
+					(positionBalances[lenderId] ?? 0n) + balance;
+			}
+			positionTotal += balance;
 		}
 
-		const positionTotal = Object.values(positionBalances).reduce(
-			(sum, b) => sum + b,
-			0n
-		);
 		const total = treasuryBalance + positionTotal;
+		const isUnminted = treasury == null && positions.length === 0;
 
 		return {
-			valid: total === TOTAL_SUPPLY || total === 0n,
+			valid: total === TOTAL_SUPPLY || (isUnminted && total === 0n),
 			treasury: treasuryBalance,
 			positions: positionBalances,
 			total,

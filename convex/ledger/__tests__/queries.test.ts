@@ -72,7 +72,7 @@ async function issueShares(
 // ── getBalance ──────────────────────────────────────────────────
 
 describe("getBalance", () => {
-	it("returns 0n for a fresh account with no entries", async () => {
+	it("returns 0n for treasury after all shares have been issued", async () => {
 		const t = createTestHarness();
 		const auth = asLedgerUser(t);
 
@@ -459,5 +459,34 @@ describe("validateSupplyInvariant", () => {
 		expect(result.total).toBe(10_000n);
 		expect(result.treasury).toBe(2_000n);
 		expect(Object.keys(result.positions)).toHaveLength(3);
+	});
+
+	it("returns valid:false when supply invariant is broken", async () => {
+		const t = createTestHarness();
+		const auth = asLedgerUser(t);
+
+		await mintMortgage(auth, "m-inv-broken", "mint-inv-broken");
+
+		// Directly inject an extra POSITION account to break the invariant
+		await t.run(async (ctx) => {
+			await ctx.db.insert("ledger_accounts", {
+				type: "POSITION",
+				mortgageId: "m-inv-broken",
+				lenderId: "lender-phantom",
+				cumulativeDebits: 5_000n,
+				cumulativeCredits: 0n,
+				pendingDebits: 0n,
+				pendingCredits: 0n,
+				createdAt: Date.now(),
+			});
+		});
+
+		const result = await auth.query(
+			api.ledger.queries.validateSupplyInvariant,
+			{ mortgageId: "m-inv-broken" }
+		);
+
+		expect(result.valid).toBe(false);
+		expect(result.total).toBe(15_000n);
 	});
 });
