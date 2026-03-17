@@ -734,6 +734,85 @@ describe("Mint & Burn", () => {
 			})
 		).rejects.toThrow(/TREASURY balance/);
 	});
+
+	it("T-076: double-burn idempotency — same idempotencyKey returns same entry, no error", async () => {
+		const t = createTestHarness();
+		await initCounter(t);
+		const auth = asLedgerUser(t);
+
+		// Mint mortgage (no shares issued, so treasury stays at 10,000)
+		await auth.mutation(api.ledger.mutations.mintMortgage, {
+			mortgageId: "m1",
+			effectiveDate: "2026-01-01",
+			idempotencyKey: "mint-m1",
+			source: SYS_SOURCE,
+		});
+
+		// First burn succeeds
+		const firstBurn = await auth.mutation(
+			api.ledger.mutations.burnMortgage,
+			{
+				mortgageId: "m1",
+				effectiveDate: "2026-01-02",
+				idempotencyKey: "burn-m1",
+				source: SYS_SOURCE,
+				reason: "Mortgage paid off",
+			},
+		);
+
+		// Second burn with SAME idempotencyKey returns same entry, no error
+		const secondBurn = await auth.mutation(
+			api.ledger.mutations.burnMortgage,
+			{
+				mortgageId: "m1",
+				effectiveDate: "2026-01-02",
+				idempotencyKey: "burn-m1",
+				source: SYS_SOURCE,
+				reason: "Mortgage paid off",
+			},
+		);
+
+		expect(secondBurn._id).toBe(firstBurn._id);
+	});
+
+	it("T-077: validateSupplyInvariant returns valid=true, total=0 after burn", async () => {
+		const t = createTestHarness();
+		await initCounter(t);
+		const auth = asLedgerUser(t);
+
+		// Mint mortgage (no shares issued, so treasury stays at 10,000)
+		await auth.mutation(api.ledger.mutations.mintMortgage, {
+			mortgageId: "m1",
+			effectiveDate: "2026-01-01",
+			idempotencyKey: "mint-m1",
+			source: SYS_SOURCE,
+		});
+
+		// Burn mortgage
+		await auth.mutation(api.ledger.mutations.burnMortgage, {
+			mortgageId: "m1",
+			effectiveDate: "2026-01-02",
+			idempotencyKey: "burn-m1",
+			source: SYS_SOURCE,
+			reason: "Mortgage paid off",
+		});
+
+		// Validate supply invariant via queries.ts version
+		const queriesInvariant = await auth.query(
+			api.ledger.queries.validateSupplyInvariant,
+			{ mortgageId: "m1" },
+		);
+		expect(queriesInvariant.valid).toBe(true);
+		expect(queriesInvariant.total).toBe(0n);
+
+		// Validate supply invariant via validation.ts version
+		const validationInvariant = await auth.query(
+			api.ledger.validation.validateSupplyInvariant,
+			{ mortgageId: "m1" },
+		);
+		expect(validationInvariant.valid).toBe(true);
+		expect(validationInvariant.total).toBe(0n);
+	});
 });
 
 // ── CORRECTION tests ──────────────────────────────────────────────

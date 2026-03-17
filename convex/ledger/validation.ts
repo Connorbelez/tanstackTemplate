@@ -53,9 +53,10 @@ export const validateSupplyInvariant = ledgerQuery
 
 		const positionSum = positions.reduce((sum, p) => sum + p.balance, 0n);
 		const total = treasuryBalance + positionSum;
+		const isBurned = treasuryBalance === 0n && positionSum === 0n;
 
 		return {
-			valid: total === TOTAL_SUPPLY,
+			valid: total === TOTAL_SUPPLY || isBurned,
 			treasuryBalance,
 			positions,
 			total,

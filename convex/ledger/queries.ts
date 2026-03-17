@@ -142,9 +142,11 @@ export const validateSupplyInvariant = ledgerQuery
 
 		const total = treasuryBalance + positionTotal;
 		const isUnminted = treasury == null && positions.length === 0;
+		const isBurned =
+			treasury != null && treasuryBalance === 0n && positionTotal === 0n;
 
 		return {
-			valid: total === TOTAL_SUPPLY || (isUnminted && total === 0n),
+			valid: total === TOTAL_SUPPLY || (isUnminted && total === 0n) || isBurned,
 			treasury: treasuryBalance,
 			positions: positionBalances,
 			total,
