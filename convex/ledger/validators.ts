@@ -11,6 +11,11 @@ import {
 function literalUnion<T extends readonly string[]>(
 	values: T
 ): Validator<T[number], "required", never> {
+	if (values.length < 2) {
+		throw new Error(
+			`literalUnion requires at least 2 values, got ${values.length}`
+		);
+	}
 	const literals = values.map((val) => v.literal(val));
 	return v.union(
 		...(literals as [
@@ -107,6 +112,8 @@ export const postCorrectionArgsValidator = {
 	amount: v.number(),
 	effectiveDate: v.string(),
 	idempotencyKey: v.string(),
+	// Note: source.type MUST be "user" and source.actor MUST be set;
+	// enforced at runtime by validateCorrection() in mutations.ts.
 	source: eventSourceValidator,
 	causedBy: v.id("ledger_journal_entries"),
 	reason: v.string(),

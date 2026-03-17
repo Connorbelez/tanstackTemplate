@@ -7,7 +7,11 @@ const COUNTER_NAME = "ledger_sequence" as const;
 
 /**
  * Plain function: creates the singleton counter document with value 0.
- * Idempotent — safe to call multiple times.
+ * Uses a read-then-insert pattern to avoid creating duplicates. Convex's OCC
+ * (optimistic concurrency control) serializes conflicting mutations that touch
+ * the same documents, making concurrent duplicate creation practically impossible,
+ * though there is no schema-level uniqueness constraint on `by_name`.
+ * Safe to call multiple times under normal usage.
  * Extracted so bootstrap.ts can call it without going through the middleware chain.
  */
 export async function initializeSequenceCounterInternal(
@@ -30,7 +34,7 @@ export async function initializeSequenceCounterInternal(
 
 /**
  * Bootstrap mutation: creates the singleton counter document with value 0.
- * Idempotent — safe to call multiple times.
+ * Safe to call multiple times under normal usage (see initializeSequenceCounterInternal).
  * Delegates to initializeSequenceCounterInternal.
  */
 export const initializeSequenceCounter = ledgerMutation
