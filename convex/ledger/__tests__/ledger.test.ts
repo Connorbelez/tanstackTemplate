@@ -1,6 +1,6 @@
 import { convexTest } from "convex-test";
 import { describe, expect, it } from "vitest";
-import { api } from "../../_generated/api";
+import { api, internal } from "../../_generated/api";
 import { FAIRLEND_STAFF_ORG_ID } from "../../constants";
 import schema from "../../schema";
 
@@ -292,7 +292,7 @@ describe("Transfer Validation", () => {
 				idempotencyKey: "bad-remainder",
 				source: SYS_SOURCE,
 			})
-		).rejects.toThrow(/Seller post-transfer.*violates minimum position/);
+		).rejects.toThrow(/Seller post-transfer.*violates minimum/);
 	});
 
 	it("T-046: transferShares rejects buyer position below 1,000", async () => {
@@ -312,7 +312,7 @@ describe("Transfer Validation", () => {
 				idempotencyKey: "tiny-buy",
 				source: SYS_SOURCE,
 			})
-		).rejects.toThrow(/Buyer post-transfer.*violates minimum position/);
+		).rejects.toThrow(/Buyer post-transfer.*violates minimum/);
 	});
 
 	it("T-047: transferShares rejects insufficient seller balance", async () => {
@@ -331,7 +331,7 @@ describe("Transfer Validation", () => {
 				idempotencyKey: "oversell",
 				source: SYS_SOURCE,
 			})
-		).rejects.toThrow(/Seller balance.*< transfer amount/);
+		).rejects.toThrow(/available balance.*< amount/);
 	});
 
 	it("T-047b: rejected transfer leaves state unchanged", async () => {
@@ -478,7 +478,7 @@ describe("Issuance & Redemption", () => {
 				idempotencyKey: "over-issue",
 				source: SYS_SOURCE,
 			})
-		).rejects.toThrow(/Treasury balance.*< issuance amount/);
+		).rejects.toThrow(/available balance.*< amount/);
 	});
 
 	it("T-051: issueShares rejects resulting position < 1,000", async () => {
@@ -501,7 +501,7 @@ describe("Issuance & Redemption", () => {
 				idempotencyKey: "tiny-issue",
 				source: SYS_SOURCE,
 			})
-		).rejects.toThrow(/Position post-issuance.*violates minimum position/);
+		).rejects.toThrow(/Position post-issuance.*violates minimum/);
 	});
 
 	it("T-052: redeemShares full exit (position → 0) allowed", async () => {
@@ -541,7 +541,7 @@ describe("Issuance & Redemption", () => {
 				idempotencyKey: "bad-redeem",
 				source: SYS_SOURCE,
 			})
-		).rejects.toThrow(/Position post-redemption.*violates minimum position/);
+		).rejects.toThrow(/Position post-redemption.*violates minimum/);
 	});
 
 	it("T-054: redeemShares throws if lender has no POSITION", async () => {
@@ -586,7 +586,7 @@ describe("Tier 1 postEntry Strict Behavior", () => {
 		);
 
 		await expect(
-			auth.mutation(api.ledger.mutations.postEntry, {
+			t.mutation(internal.ledger.mutations.postEntryDirect, {
 				entryType: "SHARES_ISSUED",
 				mortgageId: "m1",
 				debitAccountId:
@@ -611,7 +611,7 @@ describe("Tier 1 postEntry Strict Behavior", () => {
 		);
 
 		// Use Tier 1 postEntry directly to redeem 1,000 shares
-		const entry = await auth.mutation(api.ledger.mutations.postEntry, {
+		const entry = await t.mutation(internal.ledger.mutations.postEntryDirect, {
 			entryType: "SHARES_REDEEMED",
 			mortgageId: "m1",
 			debitAccountId: mintResult.treasuryAccountId,
@@ -662,7 +662,7 @@ describe("Tier 1 postEntry Strict Behavior", () => {
 		);
 
 		await expect(
-			auth.mutation(api.ledger.mutations.postEntry, {
+			t.mutation(internal.ledger.mutations.postEntryDirect, {
 				entryType: "SHARES_ISSUED",
 				mortgageId: "m1",
 				debitAccountId: treasuryAccountId,
@@ -742,19 +742,20 @@ describe("CORRECTION", () => {
 	it("T-061: CORRECTION requires source.type == 'user' with actor", async () => {
 		const t = createTestHarness();
 		await initCounter(t);
-		const auth = asLedgerUser(t);
 		const { mintResult, issueResult } = await mintAndIssue(
 			t,
 			"m1",
 			"lender-a"
 		);
 
+		// Credit = POSITION (has 10,000), debit = TREASURY (receives)
+		// to avoid INSUFFICIENT_BALANCE firing before CORRECTION constraint check
 		await expect(
-			auth.mutation(api.ledger.mutations.postEntry, {
+			t.mutation(internal.ledger.mutations.postEntryDirect, {
 				entryType: "CORRECTION",
 				mortgageId: "m1",
-				debitAccountId: issueResult.positionAccountId,
-				creditAccountId: mintResult.treasuryAccountId,
+				debitAccountId: mintResult.treasuryAccountId,
+				creditAccountId: issueResult.positionAccountId,
 				amount: 1_000,
 				effectiveDate: "2026-01-02",
 				idempotencyKey: "correction-1",
@@ -768,7 +769,6 @@ describe("CORRECTION", () => {
 	it("T-062: CORRECTION requires causedBy reference", async () => {
 		const t = createTestHarness();
 		await initCounter(t);
-		const auth = asLedgerUser(t);
 		const { mintResult, issueResult } = await mintAndIssue(
 			t,
 			"m1",
@@ -776,7 +776,7 @@ describe("CORRECTION", () => {
 		);
 
 		await expect(
-			auth.mutation(api.ledger.mutations.postEntry, {
+			t.mutation(internal.ledger.mutations.postEntryDirect, {
 				entryType: "CORRECTION",
 				mortgageId: "m1",
 				debitAccountId: issueResult.positionAccountId,
@@ -793,19 +793,19 @@ describe("CORRECTION", () => {
 	it("T-063: CORRECTION requires reason string", async () => {
 		const t = createTestHarness();
 		await initCounter(t);
-		const auth = asLedgerUser(t);
 		const { mintResult, issueResult } = await mintAndIssue(
 			t,
 			"m1",
 			"lender-a"
 		);
 
+		// Credit = POSITION (has 10,000), debit = TREASURY (receives)
 		await expect(
-			auth.mutation(api.ledger.mutations.postEntry, {
+			t.mutation(internal.ledger.mutations.postEntryDirect, {
 				entryType: "CORRECTION",
 				mortgageId: "m1",
-				debitAccountId: issueResult.positionAccountId,
-				creditAccountId: mintResult.treasuryAccountId,
+				debitAccountId: mintResult.treasuryAccountId,
+				creditAccountId: issueResult.positionAccountId,
 				amount: 1_000,
 				effectiveDate: "2026-01-02",
 				idempotencyKey: "correction-3",
@@ -826,8 +826,8 @@ describe("CORRECTION", () => {
 		);
 
 		// Correction: move 1,000 units from POSITION back to TREASURY
-		const correctionEntry = await auth.mutation(
-			api.ledger.mutations.postEntry,
+		const correctionEntry = await t.mutation(
+			internal.ledger.mutations.postEntryDirect,
 			{
 				entryType: "CORRECTION",
 				mortgageId: "m1",
@@ -872,7 +872,6 @@ describe("CORRECTION", () => {
 	it("T-064: CORRECTION enforces balance checks", async () => {
 		const t = createTestHarness();
 		await initCounter(t);
-		const auth = asLedgerUser(t);
 		const { mintResult, issueResult } = await mintAndIssue(
 			t,
 			"m1",
@@ -881,7 +880,7 @@ describe("CORRECTION", () => {
 
 		// Try correction that would make position negative (taking 11,000 from a 10,000 position)
 		await expect(
-			auth.mutation(api.ledger.mutations.postEntry, {
+			t.mutation(internal.ledger.mutations.postEntryDirect, {
 				entryType: "CORRECTION",
 				mortgageId: "m1",
 				debitAccountId: mintResult.treasuryAccountId,
@@ -893,19 +892,18 @@ describe("CORRECTION", () => {
 				causedBy: issueResult.journalEntry._id,
 				reason: "bad correction",
 			})
-		).rejects.toThrow(/position balance negative/);
+		).rejects.toThrow(/INSUFFICIENT_BALANCE/);
 	});
 
 	it("T-064c: CORRECTION rejects cross-mortgage unit movement", async () => {
 		const t = createTestHarness();
 		await initCounter(t);
-		const auth = asLedgerUser(t);
 		const m1 = await mintAndIssue(t, "m1", "lender-a");
 		const m2 = await mintAndIssue(t, "m2", "lender-b");
 
 		// Attempt CORRECTION moving units from m1 POSITION to m2 TREASURY
 		await expect(
-			auth.mutation(api.ledger.mutations.postEntry, {
+			t.mutation(internal.ledger.mutations.postEntryDirect, {
 				entryType: "CORRECTION",
 				mortgageId: "m1",
 				debitAccountId: m2.mintResult.treasuryAccountId,
@@ -1379,7 +1377,6 @@ describe("Common Rejections", () => {
 	it("T-073: amount <= 0 is rejected", async () => {
 		const t = createTestHarness();
 		await initCounter(t);
-		const auth = asLedgerUser(t);
 		const { mintResult, issueResult } = await mintAndIssue(
 			t,
 			"m1",
@@ -1387,7 +1384,7 @@ describe("Common Rejections", () => {
 		);
 
 		await expect(
-			auth.mutation(api.ledger.mutations.postEntry, {
+			t.mutation(internal.ledger.mutations.postEntryDirect, {
 				entryType: "CORRECTION",
 				mortgageId: "m1",
 				debitAccountId: issueResult.positionAccountId,
@@ -1404,7 +1401,7 @@ describe("Common Rejections", () => {
 
 	it("T-073b: fractional amount is rejected", async () => {
 		const t = createTestHarness();
-		const auth = asLedgerUser(t);
+		await initCounter(t);
 		const { mintResult, issueResult } = await mintAndIssue(
 			t,
 			"m1",
@@ -1412,7 +1409,7 @@ describe("Common Rejections", () => {
 		);
 
 		await expect(
-			auth.mutation(api.ledger.mutations.postEntry, {
+			t.mutation(internal.ledger.mutations.postEntryDirect, {
 				entryType: "CORRECTION",
 				mortgageId: "m1",
 				debitAccountId: issueResult.positionAccountId,
@@ -1429,7 +1426,7 @@ describe("Common Rejections", () => {
 
 	it("T-073c: amount exceeding Number.MAX_SAFE_INTEGER is rejected", async () => {
 		const t = createTestHarness();
-		const auth = asLedgerUser(t);
+		await initCounter(t);
 		const { mintResult, issueResult } = await mintAndIssue(
 			t,
 			"m1",
@@ -1437,7 +1434,7 @@ describe("Common Rejections", () => {
 		);
 
 		await expect(
-			auth.mutation(api.ledger.mutations.postEntry, {
+			t.mutation(internal.ledger.mutations.postEntryDirect, {
 				entryType: "CORRECTION",
 				mortgageId: "m1",
 				debitAccountId: issueResult.positionAccountId,
@@ -1455,11 +1452,10 @@ describe("Common Rejections", () => {
 	it("T-074: self-transfer (debit == credit) is rejected", async () => {
 		const t = createTestHarness();
 		await initCounter(t);
-		const auth = asLedgerUser(t);
 		const { issueResult } = await mintAndIssue(t, "m1", "lender-a");
 
 		await expect(
-			auth.mutation(api.ledger.mutations.postEntry, {
+			t.mutation(internal.ledger.mutations.postEntryDirect, {
 				entryType: "CORRECTION",
 				mortgageId: "m1",
 				debitAccountId: issueResult.positionAccountId,
@@ -1498,7 +1494,7 @@ describe("Common Rejections", () => {
 		// SHARES_ISSUED expects debit=POSITION, credit=TREASURY
 		// Pass debit=TREASURY (wrong), credit=POSITION (wrong) — two different IDs
 		await expect(
-			auth.mutation(api.ledger.mutations.postEntry, {
+			t.mutation(internal.ledger.mutations.postEntryDirect, {
 				entryType: "SHARES_ISSUED",
 				mortgageId: "m1",
 				debitAccountId: mintResult.treasuryAccountId,
@@ -1508,13 +1504,12 @@ describe("Common Rejections", () => {
 				idempotencyKey: "wrong-types-1",
 				source: SYS_SOURCE,
 			})
-		).rejects.toThrow(/must be POSITION/);
+		).rejects.toThrow(/TYPE_MISMATCH/);
 	});
 
 	it("T-075b: MORTGAGE_MINTED rejects wrong account types", async () => {
 		const t = createTestHarness();
 		await initCounter(t);
-		const auth = asLedgerUser(t);
 		const { mintResult, issueResult } = await mintAndIssue(
 			t,
 			"m1",
@@ -1524,7 +1519,7 @@ describe("Common Rejections", () => {
 		// MORTGAGE_MINTED expects debit=TREASURY, credit=WORLD
 		// Pass debit=POSITION (wrong), credit=TREASURY (wrong)
 		await expect(
-			auth.mutation(api.ledger.mutations.postEntry, {
+			t.mutation(internal.ledger.mutations.postEntryDirect, {
 				entryType: "MORTGAGE_MINTED",
 				mortgageId: "m1",
 				debitAccountId: issueResult.positionAccountId,
@@ -1534,13 +1529,12 @@ describe("Common Rejections", () => {
 				idempotencyKey: "wrong-types-2",
 				source: SYS_SOURCE,
 			})
-		).rejects.toThrow(/must be TREASURY/);
+		).rejects.toThrow(/TYPE_MISMATCH/);
 	});
 
 	it("T-075c: SHARES_REDEEMED rejects wrong account types", async () => {
 		const t = createTestHarness();
 		await initCounter(t);
-		const auth = asLedgerUser(t);
 		const { mintResult, issueResult } = await mintAndIssue(
 			t,
 			"m1",
@@ -1550,7 +1544,7 @@ describe("Common Rejections", () => {
 		// SHARES_REDEEMED expects debit=TREASURY, credit=POSITION
 		// Pass debit=POSITION (wrong), credit=TREASURY (wrong)
 		await expect(
-			auth.mutation(api.ledger.mutations.postEntry, {
+			t.mutation(internal.ledger.mutations.postEntryDirect, {
 				entryType: "SHARES_REDEEMED",
 				mortgageId: "m1",
 				debitAccountId: issueResult.positionAccountId,
@@ -1560,6 +1554,6 @@ describe("Common Rejections", () => {
 				idempotencyKey: "wrong-types-3",
 				source: SYS_SOURCE,
 			})
-		).rejects.toThrow(/must be TREASURY/);
+		).rejects.toThrow(/TYPE_MISMATCH/);
 	});
 });

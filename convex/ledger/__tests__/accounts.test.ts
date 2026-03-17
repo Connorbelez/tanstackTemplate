@@ -160,6 +160,12 @@ describe("getTreasuryAccount", () => {
 		const t = createTestHarness();
 		const auth = asLedgerUser(t);
 
+		// Initialize sequence counter — required by postEntry pipeline
+		await auth.mutation(
+			api.ledger.sequenceCounter.initializeSequenceCounter,
+			{},
+		);
+
 		// mintMortgage creates both the WORLD and TREASURY accounts
 		await auth.mutation(api.ledger.mutations.mintMortgage, {
 			mortgageId: "m-treasury-test",

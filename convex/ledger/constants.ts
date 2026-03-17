@@ -20,3 +20,13 @@ export const TOTAL_SUPPLY = 10_000n;
  * @see SPEC 1.3 — Mortgage Ownership Ledger (ENG-25 AC: "MIN_FRACTION = 1,000")
  */
 export const MIN_FRACTION = 1_000n;
+
+/**
+ * AUDIT_ONLY entry types create journal entries but do NOT update
+ * cumulativeDebits/cumulativeCredits on the accounts.
+ * SHARES_COMMITTED updates cumulatives normally and is intentionally excluded.
+ */
+export const AUDIT_ONLY_ENTRY_TYPES: ReadonlySet<string> = new Set([
+	"SHARES_RESERVED",
+	"SHARES_VOIDED",
+]);
