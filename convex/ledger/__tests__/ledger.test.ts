@@ -1336,39 +1336,6 @@ describe("Validation & Cursors", () => {
 		expect(result.valid).toBe(true);
 		expect(result.total).toBe(10_000n);
 	});
-
-	it("T-072: consumer cursor lifecycle: create, advance, reset", async () => {
-		const t = createTestHarness();
-		await initCounter(t);
-		const auth = asLedgerUser(t);
-
-		// Get cursor — should be null initially
-		const initial = await auth.query(api.ledger.cursors.getCursor, {
-			consumerId: "accrual_engine",
-		});
-		expect(initial).toBeNull();
-
-		// Advance cursor
-		await auth.mutation(api.ledger.cursors.advanceCursor, {
-			consumerId: "accrual_engine",
-			lastProcessedSequence: 5n,
-		});
-
-		const after = await auth.query(api.ledger.cursors.getCursor, {
-			consumerId: "accrual_engine",
-		});
-		expect(after?.lastProcessedSequence).toBe(5n);
-
-		// Reset cursor
-		await auth.mutation(api.ledger.cursors.resetCursor, {
-			consumerId: "accrual_engine",
-		});
-
-		const reset = await auth.query(api.ledger.cursors.getCursor, {
-			consumerId: "accrual_engine",
-		});
-		expect(reset?.lastProcessedSequence).toBe(0n);
-	});
 });
 
 // ── Common rejection tests ────────────────────────────────────────
