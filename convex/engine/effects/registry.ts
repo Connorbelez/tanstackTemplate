@@ -20,22 +20,23 @@ export const effectRegistry: Record<
 		internal.engine.effects.obligation.emitObligationOverdue,
 	emitObligationSettled:
 		internal.engine.effects.obligation.emitObligationSettled,
-	// Deal Closing — ENG-49 real implementations
+	// Deal Closing — effects (ENG-53)
+	notifyAllParties: internal.engine.effects.dealClosingEffects.notifyAllParties,
+	notifyCancellation:
+		internal.engine.effects.dealClosingEffects.notifyCancellation,
+	createDocumentPackage:
+		internal.engine.effects.dealClosingEffects.createDocumentPackage,
+	archiveSignedDocuments:
+		internal.engine.effects.dealClosingEffects.archiveSignedDocuments,
+	confirmFundsReceipt:
+		internal.engine.effects.dealClosingEffects.confirmFundsReceipt,
+	// Deal Closing — reservations (ENG-49/50)
 	reserveShares: internal.engine.effects.dealClosing.reserveShares,
 	commitReservation: internal.engine.effects.dealClosingPlaceholder.placeholder,
 	voidReservation: internal.engine.effects.dealClosing.voidReservation,
 	prorateAccrualBetweenOwners:
 		internal.engine.effects.dealClosingPlaceholder.placeholder,
 	updatePaymentSchedule:
-		internal.engine.effects.dealClosingPlaceholder.placeholder,
-	notifyAllParties: internal.engine.effects.dealClosingPlaceholder.placeholder,
-	notifyCancellation:
-		internal.engine.effects.dealClosingPlaceholder.placeholder,
-	createDocumentPackage:
-		internal.engine.effects.dealClosingPlaceholder.placeholder,
-	archiveSignedDocuments:
-		internal.engine.effects.dealClosingPlaceholder.placeholder,
-	confirmFundsReceipt:
 		internal.engine.effects.dealClosingPlaceholder.placeholder,
 
 	// Deal Access (ENG-48 — real implementations)
