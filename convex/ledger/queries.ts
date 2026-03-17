@@ -255,6 +255,7 @@ export const getAccountHistory = ledgerQuery
 	.handler(async (ctx, args) => {
 		const lo = args.from ?? 0;
 		const hi = args.to ?? Number.MAX_SAFE_INTEGER;
+		const effectiveLimit = args.limit ?? 100;
 
 		const debits = await ctx.db
 			.query("ledger_journal_entries")
@@ -287,10 +288,7 @@ export const getAccountHistory = ledgerQuery
 		});
 		unique.sort(compareSequenceNumbers);
 
-		if (args.limit) {
-			return unique.slice(0, args.limit);
-		}
-		return unique;
+		return unique.slice(0, effectiveLimit);
 	})
 	.public();
 
@@ -304,6 +302,7 @@ export const getMortgageHistory = ledgerQuery
 	.handler(async (ctx, args) => {
 		const lo = args.from ?? 0;
 		const hi = args.to ?? Number.MAX_SAFE_INTEGER;
+		const effectiveLimit = args.limit ?? 100;
 
 		const entries = await ctx.db
 			.query("ledger_journal_entries")
@@ -316,9 +315,6 @@ export const getMortgageHistory = ledgerQuery
 			.collect();
 
 		entries.sort(compareSequenceNumbers);
-		if (args.limit) {
-			return entries.slice(0, args.limit);
-		}
-		return entries;
+		return entries.slice(0, effectiveLimit);
 	})
 	.public();
