@@ -2,7 +2,7 @@ import { v } from "convex/values";
 import type { Id } from "../_generated/dataModel";
 import { ledgerQuery } from "../fluent";
 import { getAccountLenderId } from "./accountOwnership";
-import { computeBalance } from "./internal";
+import { getPostedBalance } from "./accounts";
 
 /**
  * Safely convert a journal entry amount to BigInt.
@@ -39,7 +39,7 @@ export const getBalance = ledgerQuery
 		if (!account) {
 			throw new Error(`Account ${args.accountId} not found`);
 		}
-		return computeBalance(account);
+		return getPostedBalance(account);
 	})
 	.public();
 
@@ -52,7 +52,7 @@ export const getPositions = ledgerQuery
 			.collect();
 
 		const positionAccounts = accounts.filter(
-			(a) => a.type === "POSITION" && computeBalance(a) > 0n
+			(a) => a.type === "POSITION" && getPostedBalance(a) > 0n
 		);
 
 		const accountMissingLender = positionAccounts.find(
@@ -67,7 +67,7 @@ export const getPositions = ledgerQuery
 		return positionAccounts.map((a) => ({
 			lenderId: getAccountLenderId(a) as string,
 			accountId: a._id,
-			balance: computeBalance(a),
+			balance: getPostedBalance(a),
 		}));
 	})
 	.public();
@@ -96,11 +96,11 @@ export const getLenderPositions = ledgerQuery
 		);
 
 		return accounts
-			.filter((a) => a.type === "POSITION" && computeBalance(a) > 0n)
+			.filter((a) => a.type === "POSITION" && getPostedBalance(a) > 0n)
 			.map((a) => ({
 				mortgageId: a.mortgageId ?? "",
 				accountId: a._id,
-				balance: computeBalance(a),
+				balance: getPostedBalance(a),
 			}));
 	})
 	.public();

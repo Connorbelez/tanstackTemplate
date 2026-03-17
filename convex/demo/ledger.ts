@@ -2,8 +2,8 @@ import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 import { authedMutation, authedQuery } from "../fluent";
 import { getAccountLenderId } from "../ledger/accountOwnership";
+import { getPostedBalance, initializeWorldAccount } from "../ledger/accounts";
 import { UNITS_PER_MORTGAGE } from "../ledger/constants";
-import { computeBalance, getOrCreateWorldAccount } from "../ledger/internal";
 import { getNextSequenceNumber } from "../ledger/sequenceCounter";
 
 // ── Constants ────────────────────────────────────────────────────
@@ -132,7 +132,7 @@ export const seedData = authedMutation
 			});
 		}
 
-		const worldAccount = await getOrCreateWorldAccount(ctx);
+		const worldAccount = await initializeWorldAccount(ctx);
 
 		for (const mortgage of DEMO_MORTGAGES) {
 			// 1. Create TREASURY
@@ -300,7 +300,7 @@ export const getDemoState = authedQuery
 			const treasury = allAccounts.find(
 				(a) => a.type === "TREASURY" && a.mortgageId === mortgageId
 			);
-			const treasuryBalance = treasury ? Number(computeBalance(treasury)) : 0;
+			const treasuryBalance = treasury ? Number(getPostedBalance(treasury)) : 0;
 
 			// Find positions
 			const positions = allAccounts
@@ -308,7 +308,7 @@ export const getDemoState = authedQuery
 					(a) =>
 						a.type === "POSITION" &&
 						a.mortgageId === mortgageId &&
-						computeBalance(a) > 0n
+						getPostedBalance(a) > 0n
 				)
 				.map((a) => {
 					const lenderId = getAccountLenderId(a) ?? "";
@@ -316,7 +316,7 @@ export const getDemoState = authedQuery
 						lenderId,
 						displayName: lenderDisplayName(lenderId),
 						accountId: a._id,
-						balance: Number(computeBalance(a)),
+						balance: Number(getPostedBalance(a)),
 					};
 				});
 

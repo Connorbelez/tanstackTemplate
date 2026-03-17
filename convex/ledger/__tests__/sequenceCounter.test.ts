@@ -152,7 +152,7 @@ describe("Sequence Counter", () => {
 		const issue = await auth.mutation(api.ledger.mutations.issueShares, {
 			mortgageId: "m1",
 			lenderId: "lender-1",
-			amount: 5_000n,
+			amount: 5_000,
 			effectiveDate: "2026-01-01",
 			idempotencyKey: "issue-m1-l1",
 			source: SYS_SOURCE,
@@ -179,7 +179,7 @@ describe("Sequence Counter", () => {
 		await auth.mutation(api.ledger.mutations.issueShares, {
 			mortgageId: "m1",
 			lenderId: "lender-1",
-			amount: 5_000n,
+			amount: 5_000,
 			effectiveDate: "2026-01-01",
 			idempotencyKey: "issue-m1-l1",
 			source: SYS_SOURCE,
@@ -187,7 +187,7 @@ describe("Sequence Counter", () => {
 		await auth.mutation(api.ledger.mutations.issueShares, {
 			mortgageId: "m1",
 			lenderId: "lender-2",
-			amount: 5_000n,
+			amount: 5_000,
 			effectiveDate: "2026-01-01",
 			idempotencyKey: "issue-m1-l2",
 			source: SYS_SOURCE,

@@ -2,7 +2,7 @@ import type { Doc, Id } from "../_generated/dataModel";
 import type { QueryCtx } from "../_generated/server";
 import type { Viewer } from "../fluent";
 import { getAccountLenderId } from "../ledger/accountOwnership";
-import { computeBalance } from "../ledger/internal";
+import { getPostedBalance } from "../ledger/accounts";
 
 /** The 4 entity types that generatedDocuments can be linked to. */
 type DocumentEntityType = Doc<"generatedDocuments">["entityType"];
@@ -91,7 +91,7 @@ export async function getLenderMortgageIds(
 		if (account.type !== "POSITION") {
 			continue;
 		}
-		const balance = computeBalance(account);
+		const balance = getPostedBalance(account);
 		if (balance <= 0n) {
 			continue;
 		}

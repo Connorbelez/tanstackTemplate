@@ -1,8 +1,8 @@
 import { v } from "convex/values";
 import { ledgerQuery } from "../fluent";
 import { getAccountLenderId } from "./accountOwnership";
+import { getPostedBalance } from "./accounts";
 import { UNITS_PER_MORTGAGE } from "./constants";
-import { computeBalance } from "./internal";
 
 export const validateSupplyInvariant = ledgerQuery
 	.input({ mortgageId: v.string() })
@@ -28,7 +28,7 @@ export const validateSupplyInvariant = ledgerQuery
 			};
 		}
 
-		const treasuryBalance = computeBalance(treasury);
+		const treasuryBalance = getPostedBalance(treasury);
 
 		// Find all POSITION accounts for this mortgage
 		const accounts = await ctx.db
@@ -47,7 +47,7 @@ export const validateSupplyInvariant = ledgerQuery
 				}
 				return {
 					lenderId,
-					balance: computeBalance(a),
+					balance: getPostedBalance(a),
 				};
 			});
 
