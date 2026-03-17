@@ -15,6 +15,30 @@ function snapshotAt(
 	return dealMachine.resolveState({ value: stateValue, context });
 }
 
+// ── Matrix States ───────────────────────────────────────────────────
+// Every state the matrix describe blocks cover. Used by the sentinel
+// test to verify exhaustive coverage without a tautology.
+
+const MATRIX_STATES: { label: string; value: StateValue }[] = [
+	{ label: "initiated", value: "initiated" },
+	{ label: "lawyerOnboarding.pending", value: { lawyerOnboarding: "pending" } },
+	{
+		label: "lawyerOnboarding.verified",
+		value: { lawyerOnboarding: "verified" },
+	},
+	{
+		label: "lawyerOnboarding.complete",
+		value: { lawyerOnboarding: "complete" },
+	},
+	{ label: "documentReview.pending", value: { documentReview: "pending" } },
+	{ label: "documentReview.signed", value: { documentReview: "signed" } },
+	{ label: "documentReview.complete", value: { documentReview: "complete" } },
+	{ label: "fundsTransfer.pending", value: { fundsTransfer: "pending" } },
+	{ label: "fundsTransfer.complete", value: { fundsTransfer: "complete" } },
+	{ label: "confirmed", value: "confirmed" },
+	{ label: "failed", value: "failed" },
+];
+
 // ── Event Factories ─────────────────────────────────────────────────
 
 const DEAL_LOCKED = {
@@ -283,6 +307,13 @@ describe("deal machine", () => {
 		});
 	});
 
+	// Persistence-restore tests: In a live interpreter, entering a type: "final"
+	// sub-state fires onDone immediately — these states are never stable observation
+	// points at runtime. However, Convex's stateless V8 isolates use a
+	// hydrate-compute-persist pattern where resolveState() can rehydrate a snapshot
+	// at any persisted position, including .complete. These tests verify that a
+	// corrupted or race-condition snapshot at a .complete position does not accept
+	// unexpected events and that DEAL_CANCELLED still reaches "failed".
 	describe("lawyerOnboarding.complete state (transient)", () => {
 		const state = { lawyerOnboarding: "complete" };
 
@@ -473,6 +504,7 @@ describe("deal machine", () => {
 		});
 	});
 
+	// See persistence-restore rationale above lawyerOnboarding.complete.
 	describe("documentReview.complete state (transient)", () => {
 		const state = { documentReview: "complete" };
 
@@ -600,6 +632,7 @@ describe("deal machine", () => {
 		});
 	});
 
+	// See persistence-restore rationale above lawyerOnboarding.complete.
 	describe("fundsTransfer.complete state (transient)", () => {
 		const state = { fundsTransfer: "complete" };
 
@@ -763,29 +796,9 @@ describe("deal machine", () => {
 	// ── DEAL_CANCELLED from every non-terminal state ────────────────
 
 	describe("DEAL_CANCELLED global event", () => {
-		const nonTerminalStates: { label: string; value: StateValue }[] = [
-			{ label: "initiated", value: "initiated" },
-			{
-				label: "lawyerOnboarding.pending",
-				value: { lawyerOnboarding: "pending" },
-			},
-			{
-				label: "lawyerOnboarding.verified",
-				value: { lawyerOnboarding: "verified" },
-			},
-			{
-				label: "lawyerOnboarding.complete",
-				value: { lawyerOnboarding: "complete" },
-			},
-			{ label: "documentReview.pending", value: { documentReview: "pending" } },
-			{ label: "documentReview.signed", value: { documentReview: "signed" } },
-			{
-				label: "documentReview.complete",
-				value: { documentReview: "complete" },
-			},
-			{ label: "fundsTransfer.pending", value: { fundsTransfer: "pending" } },
-			{ label: "fundsTransfer.complete", value: { fundsTransfer: "complete" } },
-		];
+		const nonTerminalStates = MATRIX_STATES.filter(
+			(s) => s.label !== "confirmed" && s.label !== "failed"
+		);
 
 		for (const { label, value } of nonTerminalStates) {
 			it(`${label} → failed on DEAL_CANCELLED`, () => {
@@ -867,12 +880,11 @@ describe("deal machine", () => {
 	// ── Matrix count verification ───────────────────────────────────
 
 	it("covers exactly 77 state × event pairs in the matrix sections", () => {
-		// 9 non-terminal states × 7 events = 63 (in per-state describe blocks)
-		// 2 terminal states × 7 events = 14 (in terminal describe blocks)
-		// Total = 77
-		// This test is a documentation sentinel — the counts are enforced by
-		// the test structure above. If you add/remove states or events, update
-		// the matrix sections to maintain exhaustive coverage.
-		expect(11 * 7).toBe(77);
+		// Derived from the actual MATRIX_STATES and ALL_EVENTS arrays.
+		// If you add/remove states or events, update both arrays and the
+		// corresponding describe blocks to maintain exhaustive coverage.
+		expect(MATRIX_STATES).toHaveLength(11);
+		expect(ALL_EVENTS).toHaveLength(7);
+		expect(MATRIX_STATES.length * ALL_EVENTS.length).toBe(77);
 	});
 });
