@@ -1,33 +1,37 @@
-import { v } from "convex/values";
+import { type Validator, v } from "convex/values";
+import {
+	ACCOUNT_TYPES,
+	ENTRY_TYPES,
+	EVENT_SOURCE_TYPES,
+	RESERVATION_STATUSES,
+} from "./types";
 
-export const entryTypeValidator = v.union(
-	v.literal("MORTGAGE_MINTED"),
-	v.literal("SHARES_ISSUED"),
-	v.literal("SHARES_TRANSFERRED"),
-	v.literal("SHARES_REDEEMED"),
-	v.literal("MORTGAGE_BURNED"),
-	v.literal("SHARES_RESERVED"),
-	v.literal("SHARES_COMMITTED"),
-	v.literal("SHARES_VOIDED"),
-	v.literal("CORRECTION")
-);
+// ── Helper: derive a v.union() validator from a readonly string array ─
+// Single source of truth lives in types.ts; validators are derived here.
+function literalUnion<T extends readonly string[]>(
+	values: T
+): Validator<T[number], "required", never> {
+	const literals = values.map((val) => v.literal(val));
+	return v.union(
+		...(literals as [
+			ReturnType<typeof v.literal>,
+			ReturnType<typeof v.literal>,
+			...ReturnType<typeof v.literal>[],
+		])
+	) as unknown as Validator<T[number], "required", never>;
+}
 
-export const accountTypeValidator = v.union(
-	v.literal("WORLD"),
-	v.literal("TREASURY"),
-	v.literal("POSITION")
-);
+export const entryTypeValidator = literalUnion(ENTRY_TYPES);
+
+export const accountTypeValidator = literalUnion(ACCOUNT_TYPES);
 
 export const eventSourceValidator = v.object({
-	type: v.union(
-		v.literal("user"),
-		v.literal("system"),
-		v.literal("webhook"),
-		v.literal("cron")
-	),
+	type: literalUnion(EVENT_SOURCE_TYPES),
 	actor: v.optional(v.string()),
 	channel: v.optional(v.string()),
 });
+
+export const reservationStatusValidator = literalUnion(RESERVATION_STATUSES);
 
 // ── Tier 1: Strict Primitives ──────────────────────────────────────
 
@@ -94,4 +98,46 @@ export const redeemSharesArgsValidator = {
 	source: eventSourceValidator,
 	reason: v.optional(v.string()),
 	metadata: v.optional(v.any()),
+};
+
+export const postCorrectionArgsValidator = {
+	mortgageId: v.string(),
+	debitAccountId: v.id("ledger_accounts"),
+	creditAccountId: v.id("ledger_accounts"),
+	amount: v.number(),
+	effectiveDate: v.string(),
+	idempotencyKey: v.string(),
+	source: eventSourceValidator,
+	causedBy: v.id("ledger_journal_entries"),
+	reason: v.string(),
+	metadata: v.optional(v.any()),
+};
+
+// ── Tier 3: Two-Phase Reservation ───────────────────────────────────
+
+export const reserveSharesArgsValidator = {
+	mortgageId: v.string(),
+	sellerLenderId: v.string(),
+	buyerLenderId: v.string(),
+	amount: v.number(),
+	effectiveDate: v.string(),
+	idempotencyKey: v.string(),
+	source: eventSourceValidator,
+	dealId: v.optional(v.string()),
+	metadata: v.optional(v.any()),
+};
+
+export const commitReservationArgsValidator = {
+	reservationId: v.id("ledger_reservations"),
+	effectiveDate: v.string(),
+	idempotencyKey: v.string(),
+	source: eventSourceValidator,
+};
+
+export const voidReservationArgsValidator = {
+	reservationId: v.id("ledger_reservations"),
+	reason: v.string(),
+	effectiveDate: v.string(),
+	idempotencyKey: v.string(),
+	source: eventSourceValidator,
 };
