@@ -579,7 +579,7 @@ export const reserveShares = internalMutation({
 export const commitReservation = internalMutation({
 	args: commitReservationArgsValidator,
 	handler: async (ctx, args) => {
-		// 0. Idempotency guard — if this key was already committed, return the existing entry
+		// Idempotency
 		const existingEntry = await ctx.db
 			.query("ledger_journal_entries")
 			.withIndex("by_idempotency", (q) =>
@@ -587,46 +587,57 @@ export const commitReservation = internalMutation({
 			)
 			.first();
 		if (existingEntry) {
+			if (existingEntry.entryType !== "SHARES_COMMITTED") {
+				throw new ConvexError({
+					code: "IDEMPOTENT_REPLAY_FAILED" as const,
+					message: `Idempotent commitReservation replay: existing entry ${existingEntry._id} has entryType ${existingEntry.entryType}, expected SHARES_COMMITTED`,
+				});
+			}
+			if (existingEntry.reservationId !== args.reservationId) {
+				throw new ConvexError({
+					code: "IDEMPOTENT_REPLAY_FAILED" as const,
+					message: `Idempotent commitReservation replay: existing entry ${existingEntry._id} has reservationId ${existingEntry.reservationId}, expected ${args.reservationId}`,
+				});
+			}
 			return { journalEntry: existingEntry };
 		}
 
-		// 1. Load reservation
 		const reservation = await ctx.db.get(args.reservationId);
 		if (!reservation) {
 			throw new ConvexError({
 				code: "RESERVATION_NOT_FOUND" as const,
-				message: `Reservation ${args.reservationId} not found`,
+				message: `Reservation ${args.reservationId} does not exist`,
 			});
 		}
-
-		// 2. Check status === "pending"
 		if (reservation.status !== "pending") {
 			throw new ConvexError({
 				code: "RESERVATION_NOT_PENDING" as const,
-				message: `Reservation already ${reservation.status}`,
-				reservationId: args.reservationId,
-				currentStatus: reservation.status,
+				message: `Reservation ${args.reservationId} is ${reservation.status}, expected pending`,
 			});
 		}
 
-		// 3. Decrement pending fields
-		const seller = await ctx.db.get(reservation.sellerAccountId);
-		const buyer = await ctx.db.get(reservation.buyerAccountId);
-		if (!(seller && buyer)) {
+		const sellerAccount = await ctx.db.get(reservation.sellerAccountId);
+		const buyerAccount = await ctx.db.get(reservation.buyerAccountId);
+		if (!(sellerAccount && buyerAccount)) {
 			throw new ConvexError({
 				code: "ACCOUNT_NOT_FOUND" as const,
-				message: "Seller or buyer account missing for reservation",
+				message: "Seller or buyer account from reservation not found",
 			});
 		}
+
+		// Clear pending fields BEFORE postEntry so that balanceCheck sees
+		// the correct available balance (the reserved units are being committed,
+		// not double-spent). Convex mutations are transactional — if postEntry
+		// fails, this patch rolls back too.
 		const amountDelta = BigInt(reservation.amount);
-		await ctx.db.patch(seller._id, {
-			pendingCredits: seller.pendingCredits - amountDelta,
+		await ctx.db.patch(reservation.sellerAccountId, {
+			pendingCredits: sellerAccount.pendingCredits - amountDelta,
 		});
-		await ctx.db.patch(buyer._id, {
-			pendingDebits: buyer.pendingDebits - amountDelta,
+		await ctx.db.patch(reservation.buyerAccountId, {
+			pendingDebits: buyerAccount.pendingDebits - amountDelta,
 		});
 
-		// 4. Post SHARES_COMMITTED entry (updates cumulative fields via postEntry)
+		// Post SHARES_COMMITTED: buyer receives ← seller gives
 		const journalEntry = await postEntry(ctx, {
 			entryType: "SHARES_COMMITTED",
 			mortgageId: reservation.mortgageId,
@@ -636,11 +647,11 @@ export const commitReservation = internalMutation({
 			effectiveDate: args.effectiveDate,
 			idempotencyKey: args.idempotencyKey,
 			source: args.source,
-			reservationId: args.reservationId,
+			reservationId: reservation._id,
 		});
 
-		// 5. Update reservation status
-		await ctx.db.patch(args.reservationId, {
+		// Finalize reservation
+		await ctx.db.patch(reservation._id, {
 			status: "committed",
 			commitJournalEntryId: journalEntry._id,
 			resolvedAt: Date.now(),
@@ -653,7 +664,7 @@ export const commitReservation = internalMutation({
 export const voidReservation = internalMutation({
 	args: voidReservationArgsValidator,
 	handler: async (ctx, args) => {
-		// 0. Idempotency guard — if this key was already voided, return the existing entry
+		// Idempotency
 		const existingEntry = await ctx.db
 			.query("ledger_journal_entries")
 			.withIndex("by_idempotency", (q) =>
@@ -661,61 +672,69 @@ export const voidReservation = internalMutation({
 			)
 			.first();
 		if (existingEntry) {
+			if (existingEntry.entryType !== "SHARES_VOIDED") {
+				throw new ConvexError({
+					code: "IDEMPOTENT_REPLAY_FAILED" as const,
+					message: `Idempotent voidReservation replay: existing entry ${existingEntry._id} has entryType ${existingEntry.entryType}, expected SHARES_VOIDED`,
+				});
+			}
+			if (existingEntry.reservationId !== args.reservationId) {
+				throw new ConvexError({
+					code: "IDEMPOTENT_REPLAY_FAILED" as const,
+					message: `Idempotent voidReservation replay: existing entry ${existingEntry._id} has reservationId ${existingEntry.reservationId}, expected ${args.reservationId}`,
+				});
+			}
 			return { journalEntry: existingEntry };
 		}
 
-		// 1. Load reservation
 		const reservation = await ctx.db.get(args.reservationId);
 		if (!reservation) {
 			throw new ConvexError({
 				code: "RESERVATION_NOT_FOUND" as const,
-				message: `Reservation ${args.reservationId} not found`,
+				message: `Reservation ${args.reservationId} does not exist`,
 			});
 		}
-
-		// 2. Check status === "pending"
 		if (reservation.status !== "pending") {
 			throw new ConvexError({
 				code: "RESERVATION_NOT_PENDING" as const,
-				message: `Reservation already ${reservation.status}`,
-				reservationId: args.reservationId,
-				currentStatus: reservation.status,
+				message: `Reservation ${args.reservationId} is ${reservation.status}, expected pending`,
 			});
 		}
 
-		// 3. Decrement pending fields (release the lock)
-		const seller = await ctx.db.get(reservation.sellerAccountId);
-		const buyer = await ctx.db.get(reservation.buyerAccountId);
-		if (!(seller && buyer)) {
+		const sellerAccount = await ctx.db.get(reservation.sellerAccountId);
+		const buyerAccount = await ctx.db.get(reservation.buyerAccountId);
+		if (!(sellerAccount && buyerAccount)) {
 			throw new ConvexError({
 				code: "ACCOUNT_NOT_FOUND" as const,
-				message: "Seller or buyer account missing for reservation",
+				message: "Seller or buyer account from reservation not found",
 			});
 		}
+
+		// Release pending fields before posting audit entry
 		const amountDelta = BigInt(reservation.amount);
-		await ctx.db.patch(seller._id, {
-			pendingCredits: seller.pendingCredits - amountDelta,
+		await ctx.db.patch(reservation.sellerAccountId, {
+			pendingCredits: sellerAccount.pendingCredits - amountDelta,
 		});
-		await ctx.db.patch(buyer._id, {
-			pendingDebits: buyer.pendingDebits - amountDelta,
+		await ctx.db.patch(reservation.buyerAccountId, {
+			pendingDebits: buyerAccount.pendingDebits - amountDelta,
 		});
 
-		// 4. Post SHARES_VOIDED journal entry (audit only — does NOT update cumulatives)
+		// Post SHARES_VOIDED: reverse direction (seller receives ← buyer gives)
 		const journalEntry = await postEntry(ctx, {
 			entryType: "SHARES_VOIDED",
 			mortgageId: reservation.mortgageId,
-			debitAccountId: reservation.sellerAccountId, // reverse: seller gets "back"
-			creditAccountId: reservation.buyerAccountId, // reverse: buyer gives "back"
+			debitAccountId: reservation.sellerAccountId,
+			creditAccountId: reservation.buyerAccountId,
 			amount: reservation.amount,
 			effectiveDate: args.effectiveDate,
 			idempotencyKey: args.idempotencyKey,
 			source: args.source,
 			reason: args.reason,
-			reservationId: args.reservationId,
+			reservationId: reservation._id,
 		});
 
-		// 5. Update reservation status
-		await ctx.db.patch(args.reservationId, {
+		// Finalize reservation
+		await ctx.db.patch(reservation._id, {
 			status: "voided",
 			voidJournalEntryId: journalEntry._id,
 			resolvedAt: Date.now(),
