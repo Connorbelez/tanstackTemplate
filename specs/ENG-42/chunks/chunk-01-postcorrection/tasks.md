@@ -31,7 +31,7 @@ export const postCorrection = adminMutation
 **Key constraints (enforced by postEntry typeCheck step 4):**
 - `source.type` must be `"user"`
 - `source.actor` must be set
-- `causedBy` must reference an existing journal entry ID
+- `causedBy` must be provided (presence check only — referenced entry existence is NOT verified at runtime)
 - `reason` must be a non-empty string
 
 ### T-002: Import `postCorrectionArgsValidator`
@@ -49,7 +49,7 @@ Add a new `describe("postCorrection")` block with these test scenarios:
    - postCorrection: debit=TREASURY, credit=A.position, amount=500, causedBy=originalEntry._id
    - Original entry unchanged (immutability)
    - New CORRECTION entry has causedBy pointing to original
-   - A.posted = 4500, TREASURY.posted = 500
+   - A.posted = 4500, TREASURY.posted = 5500
 
 2. **Requires admin source (source.type='user' with actor)**
    - Attempt with source.type='system' → CORRECTION_REQUIRES_ADMIN

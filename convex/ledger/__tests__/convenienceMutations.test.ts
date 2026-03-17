@@ -764,6 +764,44 @@ describe("postCorrection", () => {
 		}
 	});
 
+	it("rejects correction with empty reason", async () => {
+		const t = createSharedTestHarness();
+		const auth = asLedgerUser(t);
+		await initCounter(auth);
+		await mintAndIssue(auth, "m-correction-empty-reason", "lender-a", 5000);
+
+		const treasury = await getTreasuryAccount(
+			t,
+			"m-correction-empty-reason",
+		);
+		const position = await getPositionAccount(
+			t,
+			"m-correction-empty-reason",
+			"lender-a",
+		);
+		const originalEntry = await getOriginalEntry(
+			t,
+			"issue-m-correction-empty-reason-lender-a",
+		);
+
+		try {
+			await asAdmin(t).mutation(api.ledger.mutations.postCorrection, {
+				mortgageId: "m-correction-empty-reason",
+				debitAccountId: treasury!._id,
+				creditAccountId: position!._id,
+				amount: 500,
+				effectiveDate: "2026-01-15",
+				idempotencyKey: "correction-empty-reason",
+				source: ADMIN_SOURCE,
+				causedBy: originalEntry!._id,
+				reason: "",
+			});
+			expect.fail("Should have thrown");
+		} catch (error) {
+			expect(getConvexErrorCode(error)).toBe("CORRECTION_REQUIRES_REASON");
+		}
+	});
+
 	it("idempotency: same idempotencyKey returns existing entry", async () => {
 		const t = createSharedTestHarness();
 		const auth = asLedgerUser(t);

@@ -72,12 +72,15 @@ describe("point-in-time determinism", () => {
 		// Read timestamp t1 from the transfer entry
 		const t1 = await getEntryTimestamp(t, "xfer-pit-M1-A-C");
 
-		// getPositionsAt(M1, t1 + 1) -> snapshot S1
-		// Using t1 + 1 to ensure we capture entries at exactly t1
+		// getPositionsAt(M1, t1) -> snapshot S1
+		// Using exact timestamp — lte("timestamp", t1) includes entries at t1
 		const s1 = await auth.query(api.ledger.queries.getPositionsAt, {
 			mortgageId: "M1",
-			asOf: t1 + 1,
+			asOf: t1,
 		});
+
+		// Force a timestamp gap so B->D gets a strictly later timestamp
+		await new Promise((r) => setTimeout(r, 2));
 
 		// transferShares(B->D, 1000) -- add more entries after t1
 		await auth.mutation(api.ledger.mutations.transferShares, {
@@ -90,10 +93,14 @@ describe("point-in-time determinism", () => {
 			source: SYS_SOURCE,
 		});
 
-		// getPositionsAt(M1, t1 + 1) -> snapshot S2
+		// Verify the later entry has a strictly greater timestamp
+		const t2 = await getEntryTimestamp(t, "xfer-pit-M1-B-D");
+		expect(t2).toBeGreaterThan(t1);
+
+		// getPositionsAt(M1, t1) -> snapshot S2 (same asOf, after more entries exist)
 		const s2 = await auth.query(api.ledger.queries.getPositionsAt, {
 			mortgageId: "M1",
-			asOf: t1 + 1,
+			asOf: t1,
 		});
 
 		// S1 deep-equals S2 (deterministic)
@@ -156,6 +163,9 @@ describe("point-in-time balances", () => {
 		});
 		expect(balA_before).toBe(0n);
 
+		// Force a timestamp gap so the transfer gets a strictly later timestamp than t0
+		await new Promise((r) => setTimeout(r, 2));
+
 		// transferShares(A->C, 2000), read t1
 		await auth.mutation(api.ledger.mutations.transferShares, {
 			mortgageId: "M1",
@@ -167,6 +177,7 @@ describe("point-in-time balances", () => {
 			source: SYS_SOURCE,
 		});
 		const t1 = await getEntryTimestamp(t, "xfer-bal-M1-A-C");
+		expect(t1).toBeGreaterThan(t0);
 
 		const accountC = await getAccount(t, "M1", "C");
 

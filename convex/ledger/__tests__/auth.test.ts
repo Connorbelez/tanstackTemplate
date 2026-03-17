@@ -6,12 +6,13 @@
  * any handler logic executes.
  */
 import { describe, expect, it } from "vitest";
-import { api } from "../../_generated/api";
+import { api, internal } from "../../_generated/api";
 import {
 	SYS_SOURCE,
 	asLedgerUser,
 	createTestHarness,
 	initCounter,
+	mintAndIssue,
 } from "./testUtils";
 
 // ── Auth Gates: Admin Mutations ──────────────────────────────────
@@ -32,13 +33,42 @@ describe("auth gates — admin mutations", () => {
 		}
 	});
 
-	it("burnMortgage rejects unauthenticated calls", async () => {
+	it("burnMortgage rejects unauthenticated calls (with valid args that would succeed if auth bypassed)", async () => {
 		const t = createTestHarness();
+		const auth = asLedgerUser(t);
+		await initCounter(auth);
+
+		// Set up a burnable mortgage: mint → issue → redeem all back to treasury
+		await auth.mutation(api.ledger.mutations.mintMortgage, {
+			mortgageId: "auth-test-burn",
+			effectiveDate: "2026-01-01",
+			idempotencyKey: "auth-mint-burn",
+			source: SYS_SOURCE,
+		});
+		await auth.mutation(internal.ledger.mutations.issueShares, {
+			mortgageId: "auth-test-burn",
+			lenderId: "auth-lender",
+			amount: 10_000,
+			effectiveDate: "2026-01-01",
+			idempotencyKey: "auth-issue-burn",
+			source: SYS_SOURCE,
+		});
+		await auth.mutation(api.ledger.mutations.redeemShares, {
+			mortgageId: "auth-test-burn",
+			lenderId: "auth-lender",
+			amount: 10_000,
+			effectiveDate: "2026-01-02",
+			idempotencyKey: "auth-redeem-burn",
+			source: SYS_SOURCE,
+		});
+
+		// Treasury is now at TOTAL_SUPPLY with zero positions — burnMortgage
+		// would succeed if auth were bypassed
 		try {
 			await t.mutation(api.ledger.mutations.burnMortgage, {
 				mortgageId: "auth-test-burn",
-				effectiveDate: "2026-01-01",
-				idempotencyKey: "auth-test-burn",
+				effectiveDate: "2026-01-03",
+				idempotencyKey: "auth-test-burn-unauthed",
 				source: SYS_SOURCE,
 				reason: "test burn",
 			});
@@ -48,22 +78,54 @@ describe("auth gates — admin mutations", () => {
 		}
 	});
 
-	it("postCorrection rejects unauthenticated calls", async () => {
+	it("postCorrection rejects unauthenticated calls (with valid args that would succeed if auth bypassed)", async () => {
 		const t = createTestHarness();
-		// postCorrection requires v.id() args — but auth should reject before
-		// reaching the handler. Any error (auth or arg validation) confirms
-		// unauthenticated users cannot reach the handler.
+		const auth = asLedgerUser(t);
+		await initCounter(auth);
+
+		// Set up real data so postCorrection has valid IDs
+		await mintAndIssue(auth, "auth-test-correct", "auth-lender", 5_000);
+
+		// Get real account IDs and a journal entry for causedBy
+		const treasury = await t.run(async (ctx) =>
+			ctx.db
+				.query("ledger_accounts")
+				.withIndex("by_type_and_mortgage", (q) =>
+					q.eq("type", "TREASURY").eq("mortgageId", "auth-test-correct"),
+				)
+				.first(),
+		);
+		const position = await t.run(async (ctx) =>
+			ctx.db
+				.query("ledger_accounts")
+				.withIndex("by_mortgage_and_lender", (q) =>
+					q
+						.eq("mortgageId", "auth-test-correct")
+						.eq("lenderId", "auth-lender"),
+				)
+				.first(),
+		);
+		const originalEntry = await t.run(async (ctx) =>
+			ctx.db
+				.query("ledger_journal_entries")
+				.withIndex("by_idempotency", (q) =>
+					q.eq("idempotencyKey", "issue-auth-test-correct-auth-lender"),
+				)
+				.first(),
+		);
+
+		// With valid IDs, postCorrection would succeed if auth were bypassed
 		try {
 			await t.mutation(api.ledger.mutations.postCorrection, {
 				mortgageId: "auth-test-correct",
-				debitAccountId: "placeholder" as never,
-				creditAccountId: "placeholder" as never,
-				amount: 100,
-				effectiveDate: "2026-01-01",
-				idempotencyKey: "auth-test-correct",
-				source: { type: "user", actor: "test", channel: "test" },
-				causedBy: "placeholder" as never,
-				reason: "test correction",
+				debitAccountId: treasury!._id,
+				creditAccountId: position!._id,
+				amount: 500,
+				effectiveDate: "2026-01-15",
+				idempotencyKey: "auth-test-correct-unauthed",
+				source: { type: "user", actor: "test-admin", channel: "test" },
+				causedBy: originalEntry!._id,
+				reason: "auth test correction",
 			});
 			expect.fail("Expected auth rejection");
 		} catch (error) {

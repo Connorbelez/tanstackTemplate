@@ -15,9 +15,9 @@ The Notion implementation plan was written before PR #105 merged. Actual state:
 | `voidReservation` | ❌ Missing | ✅ mutations.ts:664 |
 | `concurrency.test.ts` | ❌ Missing | ✅ 8+ tests |
 | `reservation.test.ts` commit/void | ❌ Missing | ✅ 18+ tests |
-| `postCorrection` | ❌ Missing | ❌ Still missing |
-| `lifecycle.test.ts` | ❌ Missing | ❌ Still missing |
-| `pointInTime.test.ts` | ❌ Missing | ❌ Still missing |
+| `postCorrection` | ❌ Missing | ✅ mutations.ts (adminMutation) |
+| `lifecycle.test.ts` | ❌ Missing | ✅ 4 lifecycle tests |
+| `pointInTime.test.ts` | ❌ Missing | ✅ 4 determinism tests |
 | `getBalanceAt`/`getPositionsAt` | ⏳ ENG-38 in review | ✅ Merged in queries.ts |
 
 ## Tasks

@@ -22,7 +22,7 @@ export const postCorrectionArgsValidator = {
 The typeCheck step already validates CORRECTION entries:
 - `source.type` must be `"user"` → error code `CORRECTION_REQUIRES_ADMIN`
 - `source.actor` must be set → error code `CORRECTION_REQUIRES_ADMIN`
-- `causedBy` must be provided → error code `CORRECTION_REQUIRES_CAUSED_BY`
+- `causedBy` must be provided (presence check only — postEntry does NOT verify the referenced entry exists at runtime) → error code `CORRECTION_REQUIRES_CAUSED_BY`
 - `reason` must be provided → error code `CORRECTION_REQUIRES_REASON`
 
 ## CORRECTION constraint check (postEntry.ts:434-448)
