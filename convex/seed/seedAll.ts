@@ -1,44 +1,119 @@
-import type { FunctionReference } from "convex/server";
-import { api } from "../_generated/api";
+import { makeFunctionReference } from "convex/server";
+import type { Id } from "../_generated/dataModel";
 import { adminAction } from "../fluent";
 
-// These references resolve after `convex codegen` picks up the new seed files.
-// Until then, cast through the api object to avoid TS errors.
-const seedApi = api.seed as Record<
-	string,
-	Record<string, FunctionReference<"mutation", "public">>
->;
+interface LedgerBootstrapResult {
+	sequenceCounterId: Id<"ledger_sequence_counters">;
+	worldAccountId: Id<"ledger_accounts">;
+}
+
+interface SeedBrokerResult {
+	brokerIds: Id<"brokers">[];
+	created: { brokers: number; organizations: number; users: number };
+	reused: { brokers: number; organizations: number; users: number };
+}
+
+interface SeedBorrowerResult {
+	borrowerIds: Id<"borrowers">[];
+	created: { borrowers: number; users: number };
+	reused: { borrowers: number; users: number };
+}
+
+interface SeedLenderResult {
+	created: { lenders: number };
+	lenderIds: Id<"lenders">[];
+	reused: { lenders: number };
+}
+
+interface SeedMortgageBorrowerLink {
+	borrowerId: Id<"borrowers">;
+	mortgageId: Id<"mortgages">;
+}
+
+interface SeedMortgageResult {
+	created: { mortgages: number; properties: number };
+	mortgageBorrowers: SeedMortgageBorrowerLink[];
+	reused: { mortgages: number; properties: number };
+}
+
+interface SeedObligationResult {
+	created: { obligations: number };
+	obligationIds: Id<"obligations">[];
+	reused: { obligations: number };
+}
+
+interface SeedOnboardingRequestResult {
+	created: { onboardingRequests: number };
+	requestIds: Id<"onboardingRequests">[];
+	reused: { onboardingRequests: number };
+}
+
+const bootstrapLedgerRef = makeFunctionReference<
+	"mutation",
+	Record<string, never>,
+	LedgerBootstrapResult
+>("ledger/bootstrap:bootstrapLedger");
+
+const seedBrokerRef = makeFunctionReference<
+	"mutation",
+	Record<string, never>,
+	SeedBrokerResult
+>("seed/seedBroker:seedBroker");
+
+const seedBorrowerRef = makeFunctionReference<
+	"mutation",
+	Record<string, never>,
+	SeedBorrowerResult
+>("seed/seedBorrower:seedBorrower");
+
+const seedLenderRef = makeFunctionReference<
+	"mutation",
+	{ brokerIds?: Id<"brokers">[] },
+	SeedLenderResult
+>("seed/seedLender:seedLender");
+
+const seedMortgageRef = makeFunctionReference<
+	"mutation",
+	{ borrowerIds?: Id<"borrowers">[]; brokerIds?: Id<"brokers">[] },
+	SeedMortgageResult
+>("seed/seedMortgage:seedMortgage");
+
+const seedObligationRef = makeFunctionReference<
+	"mutation",
+	{
+		borrowerIds?: Id<"borrowers">[];
+		mortgageBorrowers?: SeedMortgageBorrowerLink[];
+	},
+	SeedObligationResult
+>("seed/seedObligation:seedObligation");
+
+const seedOnboardingRequestRef = makeFunctionReference<
+	"mutation",
+	{ reviewerId?: string },
+	SeedOnboardingRequestResult
+>("seed/seedOnboardingRequest:seedOnboardingRequest");
 
 export const seedAll = adminAction
 	.input({})
 	.handler(async (ctx) => {
 		// Bootstrap ledger singletons (WORLD account + sequence counter) before anything else
-		const ledgerBootstrap = await ctx.runMutation(
-			api.ledger.bootstrap.bootstrapLedger,
-			{}
-		);
+		const ledgerBootstrap = await ctx.runMutation(bootstrapLedgerRef, {});
 
-		const brokers = await ctx.runMutation(api.seed.seedBroker.seedBroker, {});
-		const borrowers = await ctx.runMutation(
-			api.seed.seedBorrower.seedBorrower,
-			{}
-		);
-		const lenders = await ctx.runMutation(api.seed.seedLender.seedLender, {
+		const brokers = await ctx.runMutation(seedBrokerRef, {});
+		const borrowers = await ctx.runMutation(seedBorrowerRef, {});
+		const lenders = await ctx.runMutation(seedLenderRef, {
 			brokerIds: brokers.brokerIds,
 		});
-		const mortgages = await ctx.runMutation(seedApi.seedMortgage.seedMortgage, {
+		const mortgages = await ctx.runMutation(seedMortgageRef, {
 			borrowerIds: borrowers.borrowerIds,
 			brokerIds: brokers.brokerIds,
 		});
-		const obligations = await ctx.runMutation(
-			seedApi.seedObligation.seedObligation,
-			{
-				borrowerIds: borrowers.borrowerIds,
-				mortgageBorrowers: mortgages.mortgageBorrowers,
-			}
-		);
+		const obligations = await ctx.runMutation(seedObligationRef, {
+			borrowerIds: borrowers.borrowerIds,
+			mortgageBorrowers: mortgages.mortgageBorrowers,
+		});
 		const onboardingRequests = await ctx.runMutation(
-			seedApi.seedOnboardingRequest.seedOnboardingRequest,
+			seedOnboardingRequestRef,
 			{}
 		);
 

@@ -11,7 +11,6 @@ const crons = cronJobs();
 crons.daily(
 	"daily reconciliation check",
 	{ hourUTC: 6, minuteUTC: 0 },
-	// @ts-expect-error — resolves after `convex codegen` (new file not yet in generated API)
 	internal.engine.reconciliationAction.dailyReconciliation
 );
 
