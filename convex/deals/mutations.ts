@@ -2,6 +2,10 @@ import { v } from "convex/values";
 import type { Id } from "../_generated/dataModel";
 import type { DatabaseWriter } from "../_generated/server";
 import { internalMutation } from "../_generated/server";
+import { buildSource, transitionCommandArgs } from "../engine/commands";
+import { executeTransition } from "../engine/transition";
+import type { CommandSource } from "../engine/types";
+import { adminMutation } from "../fluent";
 
 type DealAccessRole =
 	| "platform_lawyer"
@@ -95,3 +99,34 @@ export const revokeAccess = internalMutation({
 		});
 	},
 });
+
+// ── Deal Transition Mutations ──────────────────────────────────────────
+
+/**
+ * Admin-gated transition for deals.
+ * Requires FairLend admin role (enforced by adminMutation).
+ *
+ * Deal event types:
+ * - DEAL_LOCKED: payload: { closingDate: number }
+ * - LAWYER_VERIFIED: payload: { verificationId: string }
+ * - REPRESENTATION_CONFIRMED: no payload
+ * - LAWYER_APPROVED_DOCUMENTS: no payload
+ * - ALL_PARTIES_SIGNED: no payload
+ * - FUNDS_RECEIVED: payload: { method: "vopay" | "wire_receipt" | "manual" }
+ * - DEAL_CANCELLED: payload: { reason: string }
+ */
+export const transitionDeal = adminMutation
+	.input({ ...transitionCommandArgs, entityId: v.id("deals") })
+	.handler(async (ctx, args) => {
+		const source =
+			(args.source as CommandSource | undefined) ??
+			buildSource(ctx.viewer, "admin_dashboard");
+		return executeTransition(ctx, {
+			entityType: "deal",
+			entityId: args.entityId,
+			eventType: args.eventType,
+			payload: args.payload as Record<string, unknown> | undefined,
+			source,
+		});
+	})
+	.public();
