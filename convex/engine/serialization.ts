@@ -38,7 +38,20 @@ export function deserializeState(status: string): StateValue {
 		throw new Error("deserializeState requires a non-empty status string");
 	}
 
+	const trimmedStatus = status.trim();
 	if (!status.includes(".")) {
+		if (trimmedStatus.startsWith("{")) {
+			try {
+				const parsed = JSON.parse(trimmedStatus) as StateValue;
+				serializeState(parsed);
+				return parsed;
+			} catch {
+				throw new Error(
+					`deserializeState could not parse legacy JSON status: "${status}"`
+				);
+			}
+		}
+
 		return status;
 	}
 
@@ -49,10 +62,7 @@ export function deserializeState(status: string): StateValue {
 		);
 	}
 
-	const leaf = parts.at(-1);
-	if (leaf === undefined) {
-		throw new Error("deserializeState requires at least one state segment");
-	}
+	const leaf = parts[parts.length - 1]!;
 	let result: StateValue = leaf;
 
 	for (let index = parts.length - 2; index >= 0; index--) {

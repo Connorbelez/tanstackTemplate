@@ -31,6 +31,11 @@ interface ScheduledEffectDescriptor {
 	params?: Record<string, unknown>;
 }
 
+interface MachineConfigStateNode {
+	on?: Record<string, unknown>;
+	states?: Record<string, MachineConfigStateNode>;
+}
+
 function normalizeActionDescriptors(
 	actions: unknown
 ): ScheduledEffectDescriptor[] {
@@ -65,29 +70,65 @@ function normalizeActionDescriptors(
 	return descriptors;
 }
 
+function getActiveStatePath(stateValue: StateValue): string[] {
+	if (typeof stateValue === "string") {
+		return [stateValue];
+	}
+
+	const entries = Object.entries(stateValue);
+	if (entries.length !== 1) {
+		throw new Error(
+			`extractScheduledEffects only supports a single active state path; got: ${Object.keys(stateValue).join(", ")}`
+		);
+	}
+
+	const [region, subState] = entries[0]!;
+	if (typeof subState === "string") {
+		return [region, subState];
+	}
+
+	return [region, ...getActiveStatePath(subState)];
+}
+
+function getActiveStateNodes(
+	machine: AnyStateMachine,
+	activeStatePath: string[]
+): MachineConfigStateNode[] {
+	const nodes: MachineConfigStateNode[] = [];
+	let states = machine.config.states as Record<string, MachineConfigStateNode> | undefined;
+
+	for (const segment of activeStatePath) {
+		if (!states) {
+			break;
+		}
+
+		const stateNode = states[segment];
+		if (!stateNode) {
+			break;
+		}
+
+		nodes.push(stateNode);
+		states = stateNode.states;
+	}
+
+	return nodes;
+}
+
 function extractScheduledEffects(
 	machine: AnyStateMachine,
 	previousStateValue: StateValue,
 	eventType: string
 ): ScheduledEffectDescriptor[] {
-	// For config inspection we use the string form of the state (top-level key)
-	const stateKeys =
-		typeof previousStateValue === "string"
-			? [previousStateValue]
-			: Object.keys(previousStateValue);
-	if (stateKeys.length !== 1) {
-		throw new Error(
-			`extractScheduledEffects only supports a single active top-level state node; got: ${stateKeys.join(", ")}`
-		);
-	}
-	const stateKey = stateKeys[0];
-
-	const stateNode =
-		machine.config.states?.[stateKey as keyof typeof machine.config.states];
+	const activeStateNodes = getActiveStateNodes(
+		machine,
+		getActiveStatePath(previousStateValue)
+	);
 	const eventConfig =
-		stateNode && "on" in stateNode
-			? (stateNode.on as Record<string, unknown>)?.[eventType]
-			: undefined;
+		[...activeStateNodes]
+			.reverse()
+			.find((stateNode) => stateNode.on?.[eventType] !== undefined)?.on?.[
+				eventType
+			] ?? (machine.config.on as Record<string, unknown> | undefined)?.[eventType];
 	let candidates: unknown[] = [];
 	if (eventConfig) {
 		candidates = Array.isArray(eventConfig) ? eventConfig : [eventConfig];

@@ -58,12 +58,12 @@ Implement `serializeState()` and `deserializeState()` utility functions that con
 **Recommendation:** Replace the current JSON-based implementation with dot-notation. The spec's rationale is sound — dot-notation is human-readable in audit journals and simplifies kanban phase grouping (`status.split(".")[0]`). The JSON approach is technically correct but fails the readability requirement from R8 and the kanban logic in spec section 7.1.
 
 ### No drift on other aspects
-- `convex/engine/transition.ts` already calls `deserializeStatus()` before hydration (step 3) and `serializeStatus()` after transition (step 5) — the call sites exist and are correct
+- `convex/engine/transition.ts` now calls `deserializeState(governedEntity.status)` before hydration, `serializeState(previousStateValue)` for the comparison baseline, and `serializeState(newStateValue)` after transition before persist — the call sites are wired correctly
 - `convex/schema.ts` has `deals` table with `status: v.string()` — matches spec
 - `convex/engine/machines/deal.machine.ts` exists with all 11 states (ENG-44 complete)
 - `convex/engine/machines/registry.ts` registers `deal: dealMachine` (ENG-46 complete)
 - `convex/engine/types.ts` includes `"deal"` in `GovernedEntityType` (ENG-46 complete)
-- No existing serialization tests exist — this is greenfield
+- Serialization tests exist in `src/test/convex/engine/serialization.test.ts` and cover flat, compound, round-trip, and rehydration flows
 
 ---
 
@@ -81,11 +81,11 @@ Implement `serializeState()` and `deserializeState()` utility functions that con
 
 ### ENG-46 (already implemented): Transition Engine compound state support
 The transition engine already calls the serialization functions at the correct points:
-- Line 227: `deserializeStatus(governedEntity.status)` — HYDRATE step
-- Line 228: `serializeStatus(previousStateValue)` — for comparison baseline
-- Line 245: `serializeStatus(newStateValue)` — PERSIST step
+- Line 227: `deserializeState(governedEntity.status)` — HYDRATE step
+- Line 228: `serializeState(previousStateValue)` — comparison baseline before `getNextSnapshot`
+- Line 245: `serializeState(newStateValue)` — serialize the next state before the persist step
 
-ENG-45 only needs to rename the function references (3 occurrences) and the import (line 11).
+ENG-45's integration points are now implemented in `transition.ts`; future changes should preserve these three serialization call sites.
 
 ### Downstream consumers (ENG-49, ENG-50, ENG-51, ENG-53)
 All downstream deal-closing issues expect dot-notation strings in the `status` field and audit journal `previousState`/`newState`. This is the critical path.
@@ -511,8 +511,8 @@ Modify the Transition Engine (`engine/transition.ts`) to use `deserializeState()
 
 ## Local Codebase Notes
 
-- Current serializer file is `convex/engine/serialization.ts` and still exports `serializeStatus` / `deserializeStatus` with JSON behavior.
-- Current transition file is `convex/engine/transition.ts` and imports the old names at line 11 with three usage sites.
+- Current serializer file is `convex/engine/serialization.ts` and exports `serializeState` / `deserializeState`, including dot-notation handling plus legacy JSON deserialization for backward compatibility.
+- Current transition file is `convex/engine/transition.ts` and imports `serializeState` / `deserializeState` at line 11 with three usage sites in the hydration/compare/persist flow.
 - Current serialization tests live in `src/test/convex/engine/serialization.test.ts`, not `convex/engine/__tests__/serialize.test.ts`.
 - Current deal machine test file is `convex/engine/machines/__tests__/deal.machine.test.ts` and already defines the full 11-state matrix with real `StateValue` objects.
 - `git status --short` was clean on 2026-03-17 before planning artifacts were created.
