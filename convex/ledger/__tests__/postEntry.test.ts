@@ -94,7 +94,7 @@ async function mintAndIssue(
 		idempotencyKey: `mint-${mortgageId}`,
 		source: SYS_SOURCE,
 	});
-	const issueResult = await auth.mutation(api.ledger.mutations.issueShares, {
+	const issueResult = await auth.mutation(internal.ledger.mutations.issueShares, {
 		mortgageId,
 		lenderId,
 		amount,
@@ -164,7 +164,7 @@ describe("PostEntry Pipeline — Happy Path (6 original entry types)", () => {
 
 		await mintAndIssue(t, "m1", "seller");
 		const { buyerAccountId, journalEntry } = await auth.mutation(
-			api.ledger.mutations.transferShares,
+			internal.ledger.mutations.transferShares,
 			{
 				mortgageId: "m1",
 				sellerLenderId: "seller",
@@ -205,7 +205,7 @@ describe("PostEntry Pipeline — Happy Path (6 original entry types)", () => {
 		);
 
 		const redeemEntry = await auth.mutation(
-			api.ledger.mutations.redeemShares,
+			internal.ledger.mutations.redeemShares,
 			{
 				mortgageId: "m1",
 				lenderId: "lender-a",
@@ -240,7 +240,7 @@ describe("PostEntry Pipeline — Happy Path (6 original entry types)", () => {
 		const { mintResult } = await mintAndIssue(t, "m1", "lender-a");
 
 		// Redeem all first
-		await auth.mutation(api.ledger.mutations.redeemShares, {
+		await auth.mutation(internal.ledger.mutations.redeemShares, {
 			mortgageId: "m1",
 			lenderId: "lender-a",
 			amount: 10_000,
@@ -329,7 +329,7 @@ describe("PostEntry Pipeline — Reservation Types", () => {
 		await mintAndIssue(t, "m1", "seller", 5_000);
 		const auth = asLedgerUser(t);
 		const { positionAccountId: buyerAccountId } = await auth.mutation(
-			api.ledger.mutations.issueShares,
+			internal.ledger.mutations.issueShares,
 			{
 				mortgageId: "m1",
 				lenderId: "buyer",
@@ -404,7 +404,7 @@ describe("PostEntry Pipeline — Reservation Types", () => {
 		await mintAndIssue(t, "m1", "seller", 5_000);
 		const auth = asLedgerUser(t);
 		const { positionAccountId: buyerAccountId } = await auth.mutation(
-			api.ledger.mutations.issueShares,
+			internal.ledger.mutations.issueShares,
 			{
 				mortgageId: "m1",
 				lenderId: "buyer",
@@ -471,7 +471,7 @@ describe("PostEntry Pipeline — Reservation Types", () => {
 		await mintAndIssue(t, "m1", "seller", 5_000);
 		const auth = asLedgerUser(t);
 		const { positionAccountId: buyerAccountId } = await auth.mutation(
-			api.ledger.mutations.issueShares,
+			internal.ledger.mutations.issueShares,
 			{
 				mortgageId: "m1",
 				lenderId: "buyer",
@@ -677,7 +677,7 @@ describe("PostEntry Pipeline — Rejection Tests (ConvexError codes)", () => {
 
 		// Transfer 9,500 leaves seller with 500 < MIN_FRACTION (1,000)
 		try {
-			await auth.mutation(api.ledger.mutations.transferShares, {
+			await auth.mutation(internal.ledger.mutations.transferShares, {
 				mortgageId: "m1",
 				sellerLenderId: "seller",
 				buyerLenderId: "buyer",
@@ -813,7 +813,7 @@ describe("PostEntry Pipeline — Special Cases", () => {
 		await mintMortgage(t, "m1");
 
 		// First issue
-		const first = await auth.mutation(api.ledger.mutations.issueShares, {
+		const first = await auth.mutation(internal.ledger.mutations.issueShares, {
 			mortgageId: "m1",
 			lenderId: "lender-a",
 			amount: 5_000,
@@ -828,7 +828,7 @@ describe("PostEntry Pipeline — Special Cases", () => {
 		);
 
 		// Second call with same key
-		const second = await auth.mutation(api.ledger.mutations.issueShares, {
+		const second = await auth.mutation(internal.ledger.mutations.issueShares, {
 			mortgageId: "m1",
 			lenderId: "lender-a",
 			amount: 5_000,
@@ -861,7 +861,7 @@ describe("PostEntry Pipeline — Special Cases", () => {
 		await mintMortgage(t, "m1");
 
 		// Entry 2: issue
-		await auth.mutation(api.ledger.mutations.issueShares, {
+		await auth.mutation(internal.ledger.mutations.issueShares, {
 			mortgageId: "m1",
 			lenderId: "lender-a",
 			amount: 5_000,
@@ -871,7 +871,7 @@ describe("PostEntry Pipeline — Special Cases", () => {
 		});
 
 		// Entry 3: issue another
-		await auth.mutation(api.ledger.mutations.issueShares, {
+		await auth.mutation(internal.ledger.mutations.issueShares, {
 			mortgageId: "m1",
 			lenderId: "lender-b",
 			amount: 5_000,
@@ -900,7 +900,7 @@ describe("PostEntry Pipeline — Special Cases", () => {
 
 		// Transfer all 10,000 units — full exit is allowed
 		const { buyerAccountId } = await auth.mutation(
-			api.ledger.mutations.transferShares,
+			internal.ledger.mutations.transferShares,
 			{
 				mortgageId: "m1",
 				sellerLenderId: "seller",
