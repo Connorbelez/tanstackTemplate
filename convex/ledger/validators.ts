@@ -97,6 +97,10 @@ export const mintAndIssueArgsValidator = {
 	metadata: v.optional(v.any()),
 };
 
+// Alias for backward compatibility
+export const mintMortgageWithAllocationsArgsValidator =
+	mintAndIssueArgsValidator;
+
 export const transferSharesArgsValidator = {
 	mortgageId: v.string(),
 	sellerLenderId: v.string(),

@@ -492,10 +492,12 @@ export const postCorrection = adminMutation
 	.public();
 
 // Optional compatibility endpoint for specs branches that refer to this validator.
+// The type system doesn't expose .handler on public mutations, so we need to cast
 export const mintMortgageWithAllocations = ledgerMutation
 	.input(mintMortgageWithAllocationsArgsValidator)
 	.handler(async (ctx, args) => {
-		return mintAndIssue.handler(ctx as never, args as never);
+		// @ts-expect-error - Handler is not exposed in public mutation type
+		return mintAndIssue.handler(ctx, args);
 	})
 	.public();
 
