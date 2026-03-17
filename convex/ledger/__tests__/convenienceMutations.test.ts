@@ -4,6 +4,15 @@ import { describe, expect, it } from "vitest";
 import { api, internal } from "../../_generated/api";
 import { FAIRLEND_STAFF_ORG_ID } from "../../constants";
 import schema from "../../schema";
+import { getPostedBalance } from "../accounts";
+import {
+	type TestHarness,
+	asLedgerUser,
+	createTestHarness as createSharedTestHarness,
+	getConvexErrorCode,
+	initCounter,
+	mintAndIssue,
+} from "./testUtils";
 
 const modules = import.meta.glob("/convex/**/*.ts");
 
@@ -575,5 +584,311 @@ describe("redeemShares", () => {
 		// Balance should reflect only one redemption
 		const balance = await getBalance(t, first.creditAccountId);
 		expect(balance).toBe(7000n);
+	});
+});
+
+// ── postCorrection ───────────────────────────────────────────────
+
+describe("postCorrection", () => {
+	const ADMIN_SOURCE = { type: "user" as const, actor: "admin-user-123" };
+
+	async function getTreasuryAccount(t: TestHarness, mortgageId: string) {
+		return t.run(async (ctx) =>
+			ctx.db
+				.query("ledger_accounts")
+				.withIndex("by_type_and_mortgage", (q) =>
+					q.eq("type", "TREASURY").eq("mortgageId", mortgageId),
+				)
+				.first(),
+		);
+	}
+
+	async function getPositionAccount(
+		t: TestHarness,
+		mortgageId: string,
+		lenderId: string,
+	) {
+		return t.run(async (ctx) =>
+			ctx.db
+				.query("ledger_accounts")
+				.withIndex("by_mortgage_and_lender", (q) =>
+					q.eq("mortgageId", mortgageId).eq("lenderId", lenderId),
+				)
+				.first(),
+		);
+	}
+
+	async function getOriginalEntry(t: TestHarness, idempotencyKey: string) {
+		return t.run(async (ctx) =>
+			ctx.db
+				.query("ledger_journal_entries")
+				.withIndex("by_idempotency", (q) =>
+					q.eq("idempotencyKey", idempotencyKey),
+				)
+				.first(),
+		);
+	}
+
+	it("creates offset entry referencing original, original unmodified", async () => {
+		const t = createSharedTestHarness();
+		const auth = asLedgerUser(t);
+		await initCounter(auth);
+		await mintAndIssue(auth, "m-correction-happy", "lender-a", 5000);
+
+		const treasury = await getTreasuryAccount(t, "m-correction-happy");
+		const position = await getPositionAccount(
+			t,
+			"m-correction-happy",
+			"lender-a",
+		);
+		expect(treasury).not.toBeNull();
+		expect(position).not.toBeNull();
+
+		const originalEntry = await getOriginalEntry(
+			t,
+			"issue-m-correction-happy-lender-a",
+		);
+		expect(originalEntry).not.toBeNull();
+
+		// Save original entry state for comparison
+		const originalEntrySnapshot = { ...originalEntry };
+
+		const correctionResult = await asAdmin(t).mutation(
+			api.ledger.mutations.postCorrection,
+			{
+				mortgageId: "m-correction-happy",
+				debitAccountId: treasury!._id,
+				creditAccountId: position!._id,
+				amount: 500,
+				effectiveDate: "2026-01-15",
+				idempotencyKey: "correction-happy",
+				source: ADMIN_SOURCE,
+				causedBy: originalEntry!._id,
+				reason: "test correction",
+			},
+		);
+
+		// Assert: new CORRECTION journal entry exists with causedBy pointing to original
+		expect(correctionResult.entryType).toBe("CORRECTION");
+		expect(correctionResult.causedBy).toBe(originalEntry!._id);
+		expect(correctionResult.reason).toBe("test correction");
+		expect(correctionResult.source).toMatchObject(ADMIN_SOURCE);
+
+		// Assert: original journal entry is unchanged
+		const originalAfter = await getOriginalEntry(
+			t,
+			"issue-m-correction-happy-lender-a",
+		);
+		expect(originalAfter!._id).toBe(originalEntrySnapshot!._id);
+		expect(originalAfter!.entryType).toBe(originalEntrySnapshot!.entryType);
+		expect(originalAfter!.amount).toBe(originalEntrySnapshot!.amount);
+
+		// Assert: A.posted = 4500 (5000 - 500), TREASURY.posted = 5500 (5000 + 500)
+		const positionAfter = await getPositionAccount(
+			t,
+			"m-correction-happy",
+			"lender-a",
+		);
+		const treasuryAfter = await getTreasuryAccount(t, "m-correction-happy");
+		expect(getPostedBalance(positionAfter!)).toBe(4500n);
+		expect(getPostedBalance(treasuryAfter!)).toBe(5500n);
+	});
+
+	it("rejects correction with system source (requires source.type='user')", async () => {
+		const t = createSharedTestHarness();
+		const auth = asLedgerUser(t);
+		await initCounter(auth);
+		await mintAndIssue(auth, "m-correction-sys", "lender-a", 5000);
+
+		const treasury = await getTreasuryAccount(t, "m-correction-sys");
+		const position = await getPositionAccount(
+			t,
+			"m-correction-sys",
+			"lender-a",
+		);
+		const originalEntry = await getOriginalEntry(
+			t,
+			"issue-m-correction-sys-lender-a",
+		);
+
+		try {
+			await asAdmin(t).mutation(api.ledger.mutations.postCorrection, {
+				mortgageId: "m-correction-sys",
+				debitAccountId: treasury!._id,
+				creditAccountId: position!._id,
+				amount: 500,
+				effectiveDate: "2026-01-15",
+				idempotencyKey: "correction-sys-source",
+				source: { type: "system" as const },
+				causedBy: originalEntry!._id,
+				reason: "test correction",
+			});
+			expect.fail("Should have thrown");
+		} catch (error) {
+			expect(getConvexErrorCode(error)).toBe("CORRECTION_REQUIRES_ADMIN");
+		}
+	});
+
+	it("rejects correction with user source but no actor", async () => {
+		const t = createSharedTestHarness();
+		const auth = asLedgerUser(t);
+		await initCounter(auth);
+		await mintAndIssue(auth, "m-correction-no-actor", "lender-a", 5000);
+
+		const treasury = await getTreasuryAccount(t, "m-correction-no-actor");
+		const position = await getPositionAccount(
+			t,
+			"m-correction-no-actor",
+			"lender-a",
+		);
+		const originalEntry = await getOriginalEntry(
+			t,
+			"issue-m-correction-no-actor-lender-a",
+		);
+
+		try {
+			await asAdmin(t).mutation(api.ledger.mutations.postCorrection, {
+				mortgageId: "m-correction-no-actor",
+				debitAccountId: treasury!._id,
+				creditAccountId: position!._id,
+				amount: 500,
+				effectiveDate: "2026-01-15",
+				idempotencyKey: "correction-no-actor",
+				source: { type: "user" as const },
+				causedBy: originalEntry!._id,
+				reason: "test correction",
+			});
+			expect.fail("Should have thrown");
+		} catch (error) {
+			expect(getConvexErrorCode(error)).toBe("CORRECTION_REQUIRES_ADMIN");
+		}
+	});
+
+	it("idempotency: same idempotencyKey returns existing entry", async () => {
+		const t = createSharedTestHarness();
+		const auth = asLedgerUser(t);
+		await initCounter(auth);
+		await mintAndIssue(auth, "m-correction-idem", "lender-a", 5000);
+
+		const treasury = await getTreasuryAccount(t, "m-correction-idem");
+		const position = await getPositionAccount(
+			t,
+			"m-correction-idem",
+			"lender-a",
+		);
+		const originalEntry = await getOriginalEntry(
+			t,
+			"issue-m-correction-idem-lender-a",
+		);
+
+		const correctionArgs = {
+			mortgageId: "m-correction-idem",
+			debitAccountId: treasury!._id,
+			creditAccountId: position!._id,
+			amount: 500,
+			effectiveDate: "2026-01-15",
+			idempotencyKey: "correction-idem",
+			source: ADMIN_SOURCE,
+			causedBy: originalEntry!._id,
+			reason: "test correction",
+		};
+
+		const first = await asAdmin(t).mutation(
+			api.ledger.mutations.postCorrection,
+			correctionArgs,
+		);
+
+		const second = await asAdmin(t).mutation(
+			api.ledger.mutations.postCorrection,
+			correctionArgs,
+		);
+
+		expect(first._id).toBe(second._id);
+
+		// Balance should reflect only one correction
+		const positionAfter = await getPositionAccount(
+			t,
+			"m-correction-idem",
+			"lender-a",
+		);
+		expect(getPostedBalance(positionAfter!)).toBe(4500n);
+	});
+
+	it("enforces min-fraction on corrected POSITION: leaves balance at 500 → rejected", async () => {
+		const t = createSharedTestHarness();
+		const auth = asLedgerUser(t);
+		await initCounter(auth);
+		await mintAndIssue(auth, "m-correction-minfrac", "lender-a", 5000);
+
+		const treasury = await getTreasuryAccount(t, "m-correction-minfrac");
+		const position = await getPositionAccount(
+			t,
+			"m-correction-minfrac",
+			"lender-a",
+		);
+		const originalEntry = await getOriginalEntry(
+			t,
+			"issue-m-correction-minfrac-lender-a",
+		);
+
+		// Correct 4500 units away from A, leaving 500 (between 1 and 999) → MIN_FRACTION_VIOLATED
+		try {
+			await asAdmin(t).mutation(api.ledger.mutations.postCorrection, {
+				mortgageId: "m-correction-minfrac",
+				debitAccountId: treasury!._id,
+				creditAccountId: position!._id,
+				amount: 4500,
+				effectiveDate: "2026-01-15",
+				idempotencyKey: "correction-minfrac-reject",
+				source: ADMIN_SOURCE,
+				causedBy: originalEntry!._id,
+				reason: "test min fraction",
+			});
+			expect.fail("Should have thrown");
+		} catch (error) {
+			expect(getConvexErrorCode(error)).toBe("MIN_FRACTION_VIOLATED");
+		}
+	});
+
+	it("enforces min-fraction sell-all exception: leaves balance at exactly 0 → accepted", async () => {
+		const t = createSharedTestHarness();
+		const auth = asLedgerUser(t);
+		await initCounter(auth);
+		await mintAndIssue(auth, "m-correction-sellall", "lender-a", 5000);
+
+		const treasury = await getTreasuryAccount(t, "m-correction-sellall");
+		const position = await getPositionAccount(
+			t,
+			"m-correction-sellall",
+			"lender-a",
+		);
+		const originalEntry = await getOriginalEntry(
+			t,
+			"issue-m-correction-sellall-lender-a",
+		);
+
+		// Correct all 5000 units away from A, leaving 0 → sell-all exception → accepted
+		const result = await asAdmin(t).mutation(
+			api.ledger.mutations.postCorrection,
+			{
+				mortgageId: "m-correction-sellall",
+				debitAccountId: treasury!._id,
+				creditAccountId: position!._id,
+				amount: 5000,
+				effectiveDate: "2026-01-15",
+				idempotencyKey: "correction-sellall",
+				source: ADMIN_SOURCE,
+				causedBy: originalEntry!._id,
+				reason: "test sell-all exception",
+			},
+		);
+
+		expect(result.entryType).toBe("CORRECTION");
+		const positionAfter = await getPositionAccount(
+			t,
+			"m-correction-sellall",
+			"lender-a",
+		);
+		expect(getPostedBalance(positionAfter!)).toBe(0n);
 	});
 });
