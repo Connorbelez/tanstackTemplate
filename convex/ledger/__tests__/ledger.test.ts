@@ -1512,6 +1512,254 @@ describe("Point-in-Time & History", () => {
 		expect(accountHistory[0].sequenceNumber).toBe(2n);
 		expect(accountHistory[99].sequenceNumber).toBe(101n);
 	});
+
+	it("T-070d: multi-step transfer sequence, query at intermediate points", async () => {
+		const t = createTestHarness();
+		await initCounter(t);
+		const auth = asLedgerUser(t);
+
+		await mintAndIssue(t, "m1", "lender-a");
+		const afterIssue = Date.now();
+		await new Promise((r) => setTimeout(r, 10));
+
+		await auth.mutation(api.ledger.mutations.transferShares, {
+			mortgageId: "m1",
+			sellerLenderId: "lender-a",
+			buyerLenderId: "lender-b",
+			amount: 5_000,
+			effectiveDate: "2026-01-02",
+			idempotencyKey: "transfer-1",
+			source: SYS_SOURCE,
+		});
+		const afterTransfer1 = Date.now();
+		await new Promise((r) => setTimeout(r, 10));
+
+		await auth.mutation(api.ledger.mutations.transferShares, {
+			mortgageId: "m1",
+			sellerLenderId: "lender-b",
+			buyerLenderId: "lender-c",
+			amount: 2_000,
+			effectiveDate: "2026-01-03",
+			idempotencyKey: "transfer-2",
+			source: SYS_SOURCE,
+		});
+
+		// At afterIssue: only lender-a with full 10,000
+		const positionsAtIssue = await auth.query(
+			api.ledger.queries.getPositionsAt,
+			{ mortgageId: "m1", asOf: afterIssue },
+		);
+		expect(positionsAtIssue).toHaveLength(1);
+		expect(positionsAtIssue[0].lenderId).toBe("lender-a");
+		expect(positionsAtIssue[0].balance).toBe(10_000n);
+
+		// At afterTransfer1: lender-a=5,000 lender-b=5,000
+		const positionsAtT1 = await auth.query(
+			api.ledger.queries.getPositionsAt,
+			{ mortgageId: "m1", asOf: afterTransfer1 },
+		);
+		expect(positionsAtT1).toHaveLength(2);
+		const t1Map = Object.fromEntries(
+			positionsAtT1.map((p) => [p.lenderId, p.balance]),
+		);
+		expect(t1Map["lender-a"]).toBe(5_000n);
+		expect(t1Map["lender-b"]).toBe(5_000n);
+
+		// Now: lender-a=5,000 lender-b=3,000 lender-c=2,000
+		const positionsNow = await auth.query(
+			api.ledger.queries.getPositionsAt,
+			{ mortgageId: "m1", asOf: Date.now() },
+		);
+		expect(positionsNow).toHaveLength(3);
+		const nowMap = Object.fromEntries(
+			positionsNow.map((p) => [p.lenderId, p.balance]),
+		);
+		expect(nowMap["lender-a"]).toBe(5_000n);
+		expect(nowMap["lender-b"]).toBe(3_000n);
+		expect(nowMap["lender-c"]).toBe(2_000n);
+	});
+
+	it("T-070e: determinism — same query returns identical results across multiple calls", async () => {
+		const t = createTestHarness();
+		await initCounter(t);
+		const auth = asLedgerUser(t);
+		await mintAndIssue(t, "m1", "lender-a");
+
+		await auth.mutation(api.ledger.mutations.transferShares, {
+			mortgageId: "m1",
+			sellerLenderId: "lender-a",
+			buyerLenderId: "lender-b",
+			amount: 4_000,
+			effectiveDate: "2026-01-02",
+			idempotencyKey: "transfer-det",
+			source: SYS_SOURCE,
+		});
+
+		const asOf = Date.now();
+
+		const results = await Promise.all(
+			Array.from({ length: 5 }, () =>
+				auth.query(api.ledger.queries.getPositionsAt, {
+					mortgageId: "m1",
+					asOf,
+				}),
+			),
+		);
+
+		for (let i = 1; i < results.length; i++) {
+			expect(results[i]).toEqual(results[0]);
+		}
+	});
+
+	it("T-070f: SHARES_RESERVED entries excluded from point-in-time replay", async () => {
+		const t = createTestHarness();
+		await initCounter(t);
+		const auth = asLedgerUser(t);
+
+		// Mint+issue 10,000 to seller, issue 0 to buyer (creates position account)
+		await mintAndIssue(t, "m1", "seller", 5_000);
+		const { positionAccountId: buyerAccountId } = await auth.mutation(
+			api.ledger.mutations.issueShares,
+			{
+				mortgageId: "m1",
+				lenderId: "buyer",
+				amount: 5_000,
+				effectiveDate: "2026-01-01",
+				idempotencyKey: "issue-m1-buyer",
+				source: SYS_SOURCE,
+			},
+		);
+
+		// Get seller position account ID
+		const positions = await auth.query(api.ledger.queries.getPositions, {
+			mortgageId: "m1",
+		});
+		const sellerAccountId = positions.find(
+			(p) => p.lenderId === "seller",
+		)!.accountId;
+
+		await new Promise((r) => setTimeout(r, 10));
+
+		// Post SHARES_RESERVED (audit-only) — should NOT affect point-in-time replay
+		await t.mutation(internal.ledger.mutations.postEntryDirect, {
+			entryType: "SHARES_RESERVED",
+			mortgageId: "m1",
+			debitAccountId: buyerAccountId,
+			creditAccountId: sellerAccountId,
+			amount: 2_000,
+			effectiveDate: "2026-01-02",
+			idempotencyKey: "reserve-1",
+			source: SYS_SOURCE,
+		});
+		await new Promise((r) => setTimeout(r, 10));
+		const afterReserve = Date.now();
+		await new Promise((r) => setTimeout(r, 10));
+
+		// Post SHARES_COMMITTED (normal) — DOES affect point-in-time replay
+		await t.mutation(internal.ledger.mutations.postEntryDirect, {
+			entryType: "SHARES_COMMITTED",
+			mortgageId: "m1",
+			debitAccountId: buyerAccountId,
+			creditAccountId: sellerAccountId,
+			amount: 2_000,
+			effectiveDate: "2026-01-02",
+			idempotencyKey: "commit-1",
+			source: SYS_SOURCE,
+		});
+		await new Promise((r) => setTimeout(r, 10));
+		const afterCommit = Date.now();
+
+		// After reserve only: positions should be UNCHANGED (5k/5k)
+		// because SHARES_RESERVED is audit-only and excluded from replay
+		const positionsAfterReserve = await auth.query(
+			api.ledger.queries.getPositionsAt,
+			{ mortgageId: "m1", asOf: afterReserve },
+		);
+		const reserveMap = Object.fromEntries(
+			positionsAfterReserve.map((p) => [p.lenderId, p.balance]),
+		);
+		expect(reserveMap["seller"]).toBe(5_000n);
+		expect(reserveMap["buyer"]).toBe(5_000n);
+
+		// After commit: buyer gained 2k, seller lost 2k (single movement, not double)
+		const positionsAfterCommit = await auth.query(
+			api.ledger.queries.getPositionsAt,
+			{ mortgageId: "m1", asOf: afterCommit },
+		);
+		const commitMap = Object.fromEntries(
+			positionsAfterCommit.map((p) => [p.lenderId, p.balance]),
+		);
+		expect(commitMap["seller"]).toBe(3_000n);
+		expect(commitMap["buyer"]).toBe(7_000n);
+
+		// Also verify getBalanceAt for the buyer account
+		const buyerAfterReserve = await auth.query(
+			api.ledger.queries.getBalanceAt,
+			{ accountId: buyerAccountId, asOf: afterReserve },
+		);
+		expect(buyerAfterReserve).toBe(5_000n); // unchanged by audit-only entry
+
+		const buyerAfterCommit = await auth.query(
+			api.ledger.queries.getBalanceAt,
+			{ accountId: buyerAccountId, asOf: afterCommit },
+		);
+		expect(buyerAfterCommit).toBe(7_000n); // +2k from committed entry only
+	});
+
+	it("T-070g: getBalanceAt tracks balance evolution across lifecycle", async () => {
+		const t = createTestHarness();
+		await initCounter(t);
+		const auth = asLedgerUser(t);
+
+		const { mintResult, issueResult } = await mintAndIssue(
+			t,
+			"m1",
+			"lender-a",
+		);
+		const treasuryAccountId = mintResult.treasuryAccountId;
+		const positionAccountId = issueResult.positionAccountId;
+		const afterIssue = Date.now();
+		await new Promise((r) => setTimeout(r, 10));
+
+		await auth.mutation(api.ledger.mutations.redeemShares, {
+			mortgageId: "m1",
+			lenderId: "lender-a",
+			amount: 3_000,
+			effectiveDate: "2026-02-01",
+			idempotencyKey: "redeem-1",
+			source: SYS_SOURCE,
+		});
+		await new Promise((r) => setTimeout(r, 10));
+		const afterRedeem = Date.now();
+
+		// Position after issue: 10,000
+		const posAfterIssue = await auth.query(
+			api.ledger.queries.getBalanceAt,
+			{ accountId: positionAccountId, asOf: afterIssue },
+		);
+		expect(posAfterIssue).toBe(10_000n);
+
+		// Position after redeem: 7,000
+		const posAfterRedeem = await auth.query(
+			api.ledger.queries.getBalanceAt,
+			{ accountId: positionAccountId, asOf: afterRedeem },
+		);
+		expect(posAfterRedeem).toBe(7_000n);
+
+		// Treasury after issue: 0 (all shares issued out)
+		const treasuryAfterIssue = await auth.query(
+			api.ledger.queries.getBalanceAt,
+			{ accountId: treasuryAccountId, asOf: afterIssue },
+		);
+		expect(treasuryAfterIssue).toBe(0n);
+
+		// Treasury after redeem: 3,000 (shares redeemed back)
+		const treasuryAfterRedeem = await auth.query(
+			api.ledger.queries.getBalanceAt,
+			{ accountId: treasuryAccountId, asOf: afterRedeem },
+		);
+		expect(treasuryAfterRedeem).toBe(3_000n);
+	});
 });
 
 // ── Validation & Cursor tests ─────────────────────────────────────

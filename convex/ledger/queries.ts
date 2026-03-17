@@ -3,7 +3,7 @@ import type { Id } from "../_generated/dataModel";
 import { ledgerQuery } from "../fluent";
 import { getAccountLenderId } from "./accountOwnership";
 import { getPostedBalance } from "./accounts";
-import { TOTAL_SUPPLY } from "./constants";
+import { AUDIT_ONLY_ENTRY_TYPES, TOTAL_SUPPLY } from "./constants";
 
 /**
  * Safely convert a journal entry amount to BigInt.
@@ -182,9 +182,15 @@ export const getBalanceAt = ledgerQuery
 
 		let balance = 0n;
 		for (const e of debits) {
+			if (AUDIT_ONLY_ENTRY_TYPES.has(e.entryType)) {
+				continue;
+			}
 			balance += safeBigIntAmount(e.amount, e._id);
 		}
 		for (const e of credits) {
+			if (AUDIT_ONLY_ENTRY_TYPES.has(e.entryType)) {
+				continue;
+			}
 			balance -= safeBigIntAmount(e.amount, e._id);
 		}
 		return balance;
@@ -204,9 +210,16 @@ export const getPositionsAt = ledgerQuery
 			)
 			.collect();
 
+		// Sort entries by sequence number for same-millisecond determinism
+		entries.sort(compareSequenceNumbers);
+
 		// Collect unique account IDs and batch-fetch them upfront
+		// Skip audit-only entries — no need to fetch accounts only referenced by skipped entries
 		const accountIds = new Set<string>();
 		for (const entry of entries) {
+			if (AUDIT_ONLY_ENTRY_TYPES.has(entry.entryType)) {
+				continue;
+			}
 			accountIds.add(entry.debitAccountId);
 			accountIds.add(entry.creditAccountId);
 		}
@@ -225,9 +238,12 @@ export const getPositionsAt = ledgerQuery
 		});
 		await Promise.all(accountFetches);
 
-		// Replay all entries tracking per-account balances
+		// Replay all entries tracking per-account balances (skip audit-only)
 		const balances = new Map<string, bigint>();
 		for (const entry of entries) {
+			if (AUDIT_ONLY_ENTRY_TYPES.has(entry.entryType)) {
+				continue;
+			}
 			const amt = safeBigIntAmount(entry.amount, entry._id);
 			const prevDebit = balances.get(entry.debitAccountId) ?? 0n;
 			balances.set(entry.debitAccountId, prevDebit + amt);
