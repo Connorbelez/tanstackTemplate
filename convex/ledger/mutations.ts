@@ -579,6 +579,17 @@ export const reserveShares = internalMutation({
 export const commitReservation = internalMutation({
 	args: commitReservationArgsValidator,
 	handler: async (ctx, args) => {
+		// 0. Idempotency guard — if this key was already committed, return the existing entry
+		const existingEntry = await ctx.db
+			.query("ledger_journal_entries")
+			.withIndex("by_idempotency", (q) =>
+				q.eq("idempotencyKey", args.idempotencyKey)
+			)
+			.first();
+		if (existingEntry) {
+			return { journalEntry: existingEntry };
+		}
+
 		// 1. Load reservation
 		const reservation = await ctx.db.get(args.reservationId);
 		if (!reservation) {
@@ -642,6 +653,17 @@ export const commitReservation = internalMutation({
 export const voidReservation = internalMutation({
 	args: voidReservationArgsValidator,
 	handler: async (ctx, args) => {
+		// 0. Idempotency guard — if this key was already voided, return the existing entry
+		const existingEntry = await ctx.db
+			.query("ledger_journal_entries")
+			.withIndex("by_idempotency", (q) =>
+				q.eq("idempotencyKey", args.idempotencyKey)
+			)
+			.first();
+		if (existingEntry) {
+			return { journalEntry: existingEntry };
+		}
+
 		// 1. Load reservation
 		const reservation = await ctx.db.get(args.reservationId);
 		if (!reservation) {

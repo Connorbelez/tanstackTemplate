@@ -528,6 +528,94 @@ describe("commitReservation", () => {
 		);
 	});
 
+	it("is idempotent on retry with same idempotencyKey", async () => {
+		const t = createTestHarness();
+		const auth = asLedgerUser(t);
+		await initCounter(auth);
+		await mintAndIssue(auth, "m-commit-idempotent", "seller", 5_000);
+
+		const reserveResult = await executeReserveShares(t, {
+			mortgageId: "m-commit-idempotent",
+			sellerLenderId: "seller",
+			buyerLenderId: "buyer",
+			amount: 3_000,
+			effectiveDate: "2026-01-02",
+			idempotencyKey: "reserve-commit-idempotent",
+			source: SYS_SOURCE,
+		});
+
+		// First commit
+		const firstResult = await executeCommitReservation(t, {
+			reservationId: reserveResult.reservationId,
+			effectiveDate: "2026-01-03",
+			idempotencyKey: "commit-idempotent",
+			source: SYS_SOURCE,
+		});
+
+		// Record all account balances after first commit
+		const sellerAfterFirst = await getAccount(
+			t,
+			"m-commit-idempotent",
+			"seller"
+		);
+		const buyerAfterFirst = await getAccount(
+			t,
+			"m-commit-idempotent",
+			"buyer"
+		);
+
+		// Retry with same idempotencyKey
+		const secondResult = await executeCommitReservation(t, {
+			reservationId: reserveResult.reservationId,
+			effectiveDate: "2026-01-03",
+			idempotencyKey: "commit-idempotent",
+			source: SYS_SOURCE,
+		});
+
+		// Record all account balances after retry
+		const sellerAfterSecond = await getAccount(
+			t,
+			"m-commit-idempotent",
+			"seller"
+		);
+		const buyerAfterSecond = await getAccount(
+			t,
+			"m-commit-idempotent",
+			"buyer"
+		);
+
+		// Same journal entry returned
+		expect(secondResult.journalEntry._id).toBe(
+			firstResult.journalEntry._id
+		);
+
+		// All account balances unchanged
+		expect(sellerAfterSecond.cumulativeDebits).toBe(
+			sellerAfterFirst.cumulativeDebits
+		);
+		expect(sellerAfterSecond.cumulativeCredits).toBe(
+			sellerAfterFirst.cumulativeCredits
+		);
+		expect(sellerAfterSecond.pendingCredits).toBe(
+			sellerAfterFirst.pendingCredits
+		);
+		expect(sellerAfterSecond.pendingDebits).toBe(
+			sellerAfterFirst.pendingDebits
+		);
+		expect(buyerAfterSecond.cumulativeDebits).toBe(
+			buyerAfterFirst.cumulativeDebits
+		);
+		expect(buyerAfterSecond.cumulativeCredits).toBe(
+			buyerAfterFirst.cumulativeCredits
+		);
+		expect(buyerAfterSecond.pendingCredits).toBe(
+			buyerAfterFirst.pendingCredits
+		);
+		expect(buyerAfterSecond.pendingDebits).toBe(
+			buyerAfterFirst.pendingDebits
+		);
+	});
+
 	it("rejects double-commit with ConvexError and zero side effects", async () => {
 		const t = createTestHarness();
 		const auth = asLedgerUser(t);
@@ -767,6 +855,96 @@ describe("voidReservation", () => {
 		expect(typeof reservation?.resolvedAt).toBe("number");
 		expect(reservation?.voidJournalEntryId).toBe(
 			voidResult.journalEntry._id
+		);
+	});
+
+	it("is idempotent on retry with same idempotencyKey", async () => {
+		const t = createTestHarness();
+		const auth = asLedgerUser(t);
+		await initCounter(auth);
+		await mintAndIssue(auth, "m-void-idempotent", "seller", 5_000);
+
+		const reserveResult = await executeReserveShares(t, {
+			mortgageId: "m-void-idempotent",
+			sellerLenderId: "seller",
+			buyerLenderId: "buyer",
+			amount: 3_000,
+			effectiveDate: "2026-01-02",
+			idempotencyKey: "reserve-void-idempotent",
+			source: SYS_SOURCE,
+		});
+
+		// First void
+		const firstResult = await executeVoidReservation(t, {
+			reservationId: reserveResult.reservationId,
+			reason: "deal cancelled",
+			effectiveDate: "2026-01-03",
+			idempotencyKey: "void-idempotent",
+			source: SYS_SOURCE,
+		});
+
+		// Record all account balances after first void
+		const sellerAfterFirst = await getAccount(
+			t,
+			"m-void-idempotent",
+			"seller"
+		);
+		const buyerAfterFirst = await getAccount(
+			t,
+			"m-void-idempotent",
+			"buyer"
+		);
+
+		// Retry with same idempotencyKey
+		const secondResult = await executeVoidReservation(t, {
+			reservationId: reserveResult.reservationId,
+			reason: "deal cancelled",
+			effectiveDate: "2026-01-03",
+			idempotencyKey: "void-idempotent",
+			source: SYS_SOURCE,
+		});
+
+		// Record all account balances after retry
+		const sellerAfterSecond = await getAccount(
+			t,
+			"m-void-idempotent",
+			"seller"
+		);
+		const buyerAfterSecond = await getAccount(
+			t,
+			"m-void-idempotent",
+			"buyer"
+		);
+
+		// Same journal entry returned
+		expect(secondResult.journalEntry._id).toBe(
+			firstResult.journalEntry._id
+		);
+
+		// All account balances unchanged
+		expect(sellerAfterSecond.cumulativeDebits).toBe(
+			sellerAfterFirst.cumulativeDebits
+		);
+		expect(sellerAfterSecond.cumulativeCredits).toBe(
+			sellerAfterFirst.cumulativeCredits
+		);
+		expect(sellerAfterSecond.pendingCredits).toBe(
+			sellerAfterFirst.pendingCredits
+		);
+		expect(sellerAfterSecond.pendingDebits).toBe(
+			sellerAfterFirst.pendingDebits
+		);
+		expect(buyerAfterSecond.cumulativeDebits).toBe(
+			buyerAfterFirst.cumulativeDebits
+		);
+		expect(buyerAfterSecond.cumulativeCredits).toBe(
+			buyerAfterFirst.cumulativeCredits
+		);
+		expect(buyerAfterSecond.pendingCredits).toBe(
+			buyerAfterFirst.pendingCredits
+		);
+		expect(buyerAfterSecond.pendingDebits).toBe(
+			buyerAfterFirst.pendingDebits
 		);
 	});
 
