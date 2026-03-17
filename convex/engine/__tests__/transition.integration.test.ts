@@ -34,13 +34,13 @@ describe("Transition Engine — backward compatibility (flat-state machines)", (
 
 		it.each(
 			flatStates
-		)("serializeState('%s') === '%s' (passthrough)", (state) => {
+		)("serializeState('%s') passes through unchanged", (state) => {
 			expect(serializeState(state)).toBe(state);
 		});
 
 		it.each(
 			flatStates
-		)("deserializeState('%s') === '%s' (passthrough)", (state) => {
+		)("deserializeState('%s') passes through unchanged", (state) => {
 			expect(deserializeState(state)).toBe(state);
 		});
 	});
@@ -212,9 +212,6 @@ describe("Transition Engine — audit journal compound state format", () => {
 		});
 		const newState = serializeState(next.value);
 
-		// Both are strings (suitable for audit journal string fields)
-		expect(typeof previousState).toBe("string");
-		expect(typeof newState).toBe("string");
 		// Both use dot-notation
 		expect(previousState).toBe("lawyerOnboarding.pending");
 		expect(newState).toBe("lawyerOnboarding.verified");
@@ -294,9 +291,7 @@ describe("Transition Engine — DEAL_CANCELLED from compound states", () => {
 			reason: "test cancellation",
 		});
 
-		const previousStateSerialized = serializeState(
-			deserializeState(compoundState)
-		);
+		const previousStateSerialized = serializeState(snapshot.value);
 		const newStateSerialized = serializeState(next.value);
 
 		expect(previousStateSerialized).toBe(compoundState);
