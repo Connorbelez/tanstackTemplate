@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import type { Id } from "../_generated/dataModel";
+import { internalQuery } from "../_generated/server";
 import { ledgerQuery } from "../fluent";
 import { getAccountLenderId } from "./accountOwnership";
 import { getPostedBalance } from "./accounts";
@@ -336,3 +337,49 @@ export const getMortgageHistory = ledgerQuery
 		return entries.slice(0, effectiveLimit);
 	})
 	.public();
+
+/**
+ * Internal query: Get pending reservation by dealId.
+ * Used by dealClosing effects to check for existing reservations.
+ */
+export const getReservationByDealId = internalQuery
+	.input({ dealId: v.string() })
+	.handler(async (ctx, args) => {
+		return await ctx.db
+			.query("ledger_reservations")
+			.withIndex("by_deal", (q) => q.eq("dealId", args.dealId))
+			.filter((q) => q.eq(q.field("status"), "pending"))
+			.first();
+	})
+	.internal();
+
+/**
+ * Internal query: Get a POSITION account by mortgageId and lenderId.
+ * Used by dealClosing effects to find seller/buyer position accounts.
+ */
+export const getAccountByMortgageAndLender = internalQuery
+	.input({
+		mortgageId: v.string(),
+		lenderId: v.string(),
+	})
+	.handler(async (ctx, args) => {
+		return await ctx.db
+			.query("ledger_accounts")
+			.withIndex("by_mortgage_and_lender", (q) =>
+				q.eq("mortgageId", args.mortgageId).eq("lenderId", args.lenderId)
+			)
+			.filter((q) => q.eq(q.field("type"), "POSITION"))
+			.first();
+	})
+	.internal();
+
+/**
+ * Internal query: Get a reservation by its ID.
+ * Used by dealClosing effects to check reservation status before voiding.
+ */
+export const getReservationById = internalQuery
+	.input({ reservationId: v.id("ledger_reservations") })
+	.handler(async (ctx, args) => {
+		return await ctx.db.get(args.reservationId);
+	})
+	.internal();

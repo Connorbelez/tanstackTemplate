@@ -1,6 +1,18 @@
+import { v } from "convex/values";
 import { internal } from "../../_generated/api";
 import { internalAction } from "../../_generated/server";
 import { effectPayloadValidator } from "../validators";
+
+const dealEffectPayloadValidator = {
+	...effectPayloadValidator,
+	entityId: v.id("deals"),
+	entityType: v.literal("deal"),
+	payload: v.optional(
+		v.object({
+			reason: v.optional(v.string()),
+		})
+	),
+};
 
 /**
  * Effect: reserves shares in the ledger for a deal.
@@ -8,12 +20,12 @@ import { effectPayloadValidator } from "../validators";
  * (i.e., the shares reservation happens when the lawyer approves the deal).
  */
 export const reserveShares = internalAction({
-	args: effectPayloadValidator,
+	args: dealEffectPayloadValidator,
 	handler: async (ctx, args) => {
 		const dealId = args.entityId;
 
 		// 1. Fetch the deal to get mortgageId and fractional share amount
-		const deal = await ctx.runQuery(internal.deals.internal.getInternalDeal, {
+		const deal = await ctx.runQuery(internal.deals.queries.getInternalDeal, {
 			dealId,
 		});
 
@@ -23,11 +35,10 @@ export const reserveShares = internalAction({
 		}
 
 		// 2. Look up any existing reservation for this deal
-		const existingReservation = await ctx.db
-			.query("ledger_reservations")
-			.withIndex("by_deal", (q) => q.eq("dealId", dealId))
-			.filter((q) => q.eq(q.field("status"), "pending"))
-			.first();
+		const existingReservation = await ctx.runQuery(
+			internal.ledger.queries.getReservationByDealId,
+			{ dealId }
+		);
 
 		if (existingReservation) {
 			console.info(
@@ -35,7 +46,7 @@ export const reserveShares = internalAction({
 			);
 			// Link the reservation to the deal if not already linked
 			if (!deal.reservationId) {
-				await ctx.runMutation(internal.deals.internal.setReservationId, {
+				await ctx.runMutation(internal.deals.queries.setReservationId, {
 					dealId,
 					reservationId: existingReservation._id,
 				});
@@ -44,22 +55,22 @@ export const reserveShares = internalAction({
 		}
 
 		// 3. Look up the seller's position account to get the sellerLenderId
-		const sellerAccount = await ctx.db
-			.query("ledger_accounts")
-			.withIndex("by_mortgage_and_lender", (q) =>
-				q.eq("mortgageId", deal.mortgageId).eq("type", "POSITION")
-			)
-			.filter((q) => q.eq(q.field("lenderId"), deal.sellerId))
-			.first();
+		const sellerAccount = await ctx.runQuery(
+			internal.ledger.queries.getAccountByMortgageAndLender,
+			{
+				mortgageId: deal.mortgageId,
+				lenderId: deal.sellerId,
+			}
+		);
 
 		// 4. Look up the buyer's position account to get the buyerLenderId
-		const buyerAccount = await ctx.db
-			.query("ledger_accounts")
-			.withIndex("by_mortgage_and_lender", (q) =>
-				q.eq("mortgageId", deal.mortgageId).eq("type", "POSITION")
-			)
-			.filter((q) => q.eq(q.field("lenderId"), deal.buyerId))
-			.first();
+		const buyerAccount = await ctx.runQuery(
+			internal.ledger.queries.getAccountByMortgageAndLender,
+			{
+				mortgageId: deal.mortgageId,
+				lenderId: deal.buyerId,
+			}
+		);
 
 		if (!(sellerAccount && buyerAccount)) {
 			console.error(
@@ -87,14 +98,14 @@ export const reserveShares = internalAction({
 					buyerLenderId,
 					amount,
 					effectiveDate: today,
-					idempotencyKey: `reserve-${dealId}-${Date.now()}`,
+					idempotencyKey: `deal:${dealId}:reserve`,
 					source: { type: "system", channel: "effect" },
 					dealId,
 				}
 			);
 
 			// 7. Link the reservation to the deal
-			await ctx.runMutation(internal.deals.internal.setReservationId, {
+			await ctx.runMutation(internal.deals.queries.setReservationId, {
 				dealId,
 				reservationId: result.reservationId,
 			});
@@ -117,12 +128,12 @@ export const reserveShares = internalAction({
  * Fires when a deal is cancelled (any state → CANCELLED).
  */
 export const voidReservation = internalAction({
-	args: effectPayloadValidator,
+	args: dealEffectPayloadValidator,
 	handler: async (ctx, args) => {
 		const dealId = args.entityId;
 
 		// 1. Fetch the deal to get the reservationId
-		const deal = await ctx.runQuery(internal.deals.internal.getInternalDeal, {
+		const deal = await ctx.runQuery(internal.deals.queries.getInternalDeal, {
 			dealId,
 		});
 
@@ -140,7 +151,10 @@ export const voidReservation = internalAction({
 		}
 
 		// 3. Check if reservation is in a voidable state
-		const reservation = await ctx.db.get(deal.reservationId);
+		const reservation = await ctx.runQuery(
+			internal.ledger.queries.getReservationById,
+			{ reservationId: deal.reservationId }
+		);
 
 		if (!reservation) {
 			console.error(
@@ -169,21 +183,17 @@ export const voidReservation = internalAction({
 		try {
 			await ctx.runMutation(internal.ledger.mutations.voidReservation, {
 				reservationId: deal.reservationId,
-				reason: `Deal cancelled: ${dealId}`,
+				reason: args.payload?.reason ?? `Deal cancelled: ${dealId}`,
 				effectiveDate: today,
-				idempotencyKey: `void-${dealId}-${Date.now()}`,
+				idempotencyKey: `deal:${dealId}:void`,
 				source: { type: "system", channel: "effect" },
 			});
 
 			// 5. Clear the reservationId from the deal
-			await ctx.runMutation(internal.deals.internal.setReservationId, {
+			await ctx.runMutation(internal.deals.queries.setReservationId, {
 				dealId,
 				reservationId: undefined,
 			});
-
-			// Actually, we need to set it to undefined or null. Let me check the schema.
-			// The schema has: reservationId: v.optional(v.id("ledger_reservations"))
-			// So we need to patch with undefined to clear it.
 
 			console.info(
 				`[voidReservation] Voided reservation ${deal.reservationId} for deal ${dealId}`

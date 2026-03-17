@@ -1,4 +1,4 @@
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import type { Id } from "../_generated/dataModel";
 import { internalMutation, internalQuery } from "../_generated/server";
 import { adminQuery, authedQuery } from "../fluent";
@@ -73,7 +73,11 @@ export interface DealsByPhase {
 export const getInternalDeal = internalQuery({
 	args: { dealId: v.id("deals") },
 	handler: async (ctx, { dealId }) => {
-		return await ctx.db.get(dealId);
+		const deal = await ctx.db.get(dealId);
+		if (!deal) {
+			throw new ConvexError("DEAL_NOT_FOUND");
+		}
+		return deal;
 	},
 });
 
@@ -88,6 +92,10 @@ export const setReservationId = internalMutation({
 		reservationId: v.optional(v.id("ledger_reservations")),
 	},
 	handler: async (ctx, { dealId, reservationId }) => {
+		const deal = await ctx.db.get(dealId);
+		if (!deal) {
+			throw new ConvexError("DEAL_NOT_FOUND");
+		}
 		await ctx.db.patch(dealId, { reservationId });
 	},
 });
