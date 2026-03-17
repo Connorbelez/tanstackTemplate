@@ -34,9 +34,6 @@ export const mortgageMachine = setup({
 		incrementMissedPayments: assign({
 			missedPayments: ({ context }) => context.missedPayments + 1,
 		}),
-		decrementMissedPayments: assign({
-			missedPayments: ({ context }) => Math.max(0, context.missedPayments - 1),
-		}),
 		recordPayment: assign({
 			lastPaymentAt: ({ event }) => {
 				if ("paidAt" in event) {
