@@ -1,11 +1,31 @@
 import type { StateValue } from "xstate";
 
+function parseLegacyObjectStatus(status: string): StateValue {
+	try {
+		const parsed = JSON.parse(status) as unknown;
+		if (
+			parsed === null ||
+			typeof parsed !== "object" ||
+			Array.isArray(parsed)
+		) {
+			throw new Error("Legacy JSON status must decode to an object");
+		}
+
+		serializeState(parsed as StateValue);
+		return parsed as StateValue;
+	} catch {
+		throw new Error(
+			`deserializeState could not parse legacy JSON status: "${status}"`
+		);
+	}
+}
+
 /**
  * Serialization helpers for XState compound state values.
  *
  * Flat string states pass through unchanged.
  * Compound states (single-region objects) serialize to dot-notation:
- *   { lawyerOnboarding: "verified" } → "lawyerOnboarding.verified"
+ *   { lawyerOnboarding: "verified" } -> "lawyerOnboarding.verified"
  */
 export function serializeState(stateValue: StateValue): string {
 	if (typeof stateValue === "string") {
@@ -13,9 +33,15 @@ export function serializeState(stateValue: StateValue): string {
 	}
 
 	const entries = Object.entries(stateValue);
-	if (entries.length !== 1) {
+	if (entries.length === 0) {
 		throw new Error(
-			`serializeState only supports single-region compound states; got keys: ${Object.keys(stateValue).join(", ")}`
+			"serializeStateValue: cannot serialize an empty state object"
+		);
+	}
+
+	if (entries.length > 1) {
+		throw new Error(
+			"serializeStateValue: parallel states with multiple active regions are not supported by dot-notation serialization"
 		);
 	}
 
@@ -34,28 +60,20 @@ export function serializeState(stateValue: StateValue): string {
 }
 
 export function deserializeState(status: string): StateValue {
-	if (status.trim() === "") {
+	const trimmedStatus = status.trim();
+	if (trimmedStatus === "") {
 		throw new Error("deserializeState requires a non-empty status string");
 	}
 
-	const trimmedStatus = status.trim();
-	if (!status.includes(".")) {
+	if (!trimmedStatus.includes(".")) {
 		if (trimmedStatus.startsWith("{")) {
-			try {
-				const parsed = JSON.parse(trimmedStatus) as StateValue;
-				serializeState(parsed);
-				return parsed;
-			} catch {
-				throw new Error(
-					`deserializeState could not parse legacy JSON status: "${status}"`
-				);
-			}
+			return parseLegacyObjectStatus(trimmedStatus);
 		}
 
-		return status;
+		return trimmedStatus;
 	}
 
-	const parts = status.split(".");
+	const parts = trimmedStatus.split(".");
 	if (parts.some((part) => part === "")) {
 		throw new Error(
 			`deserializeState requires non-empty state segments; got "${status}"`
@@ -63,7 +81,7 @@ export function deserializeState(status: string): StateValue {
 	}
 
 	let result: StateValue = parts.at(-1) ?? "";
-	for (let index = parts.length - 2; index >= 0; index--) {
+	for (let index = parts.length - 2; index >= 0; index -= 1) {
 		result = { [parts[index]]: result };
 	}
 
@@ -80,5 +98,23 @@ export function serializeStatus(
 export function deserializeStatus(
 	status: string
 ): string | Record<string, unknown> {
-	return deserializeState(status) as string | Record<string, unknown>;
+	const trimmedStatus = status.trim();
+	if (trimmedStatus.startsWith("{") || trimmedStatus.startsWith("[")) {
+		try {
+			const parsedStatus = JSON.parse(trimmedStatus) as unknown;
+			if (
+				parsedStatus !== null &&
+				typeof parsedStatus === "object" &&
+				!Array.isArray(parsedStatus)
+			) {
+				return parsedStatus as Record<string, unknown>;
+			}
+
+			return status;
+		} catch {
+			return status;
+		}
+	}
+
+	return deserializeState(trimmedStatus) as string | Record<string, unknown>;
 }

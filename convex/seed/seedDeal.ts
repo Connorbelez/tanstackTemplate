@@ -106,6 +106,16 @@ const DEAL_FIXTURES: readonly DealSeedFixture[] = [
 	},
 ];
 
+const REQUIRED_MORTGAGE_COUNT =
+	Math.max(...DEAL_FIXTURES.map((fixture) => fixture.mortgageIndex)) + 1;
+
+const REQUIRED_LENDER_AUTH_ID_COUNT =
+	Math.max(
+		...DEAL_FIXTURES.map((fixture) =>
+			Math.max(fixture.buyerIndex, fixture.sellerIndex)
+		)
+	) + 1;
+
 async function resolveMortgageIds(
 	ctx: Pick<MutationCtx, "db">,
 	provided?: readonly Id<"mortgages">[]
@@ -167,14 +177,14 @@ export const seedDeal = adminMutation
 		const mortgageIds = await resolveMortgageIds(ctx, args.mortgageIds);
 		const lenderAuthIds = resolveLenderAuthIds(args.lenderAuthIds);
 
-		if (mortgageIds.length < DEAL_FIXTURES.length) {
+		if (mortgageIds.length < REQUIRED_MORTGAGE_COUNT) {
 			throw new ConvexError(
-				`Need at least ${DEAL_FIXTURES.length} mortgages to seed deals.`
+				`Need at least ${REQUIRED_MORTGAGE_COUNT} mortgages to seed deals.`
 			);
 		}
-		if (lenderAuthIds.length < SEED_LENDER_AUTH_IDS.length) {
+		if (lenderAuthIds.length < REQUIRED_LENDER_AUTH_ID_COUNT) {
 			throw new ConvexError(
-				`Need at least ${SEED_LENDER_AUTH_IDS.length} lender auth IDs to seed deals.`
+				`Need at least ${REQUIRED_LENDER_AUTH_ID_COUNT} lender auth IDs to seed deals (fixtures reference index ${REQUIRED_LENDER_AUTH_ID_COUNT - 1}).`
 			);
 		}
 

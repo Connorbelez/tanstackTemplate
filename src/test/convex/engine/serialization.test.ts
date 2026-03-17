@@ -3,7 +3,9 @@ import { getNextSnapshot } from "xstate";
 import { dealMachine } from "../../../../convex/engine/machines/deal.machine";
 import {
 	deserializeState,
+	deserializeStatus,
 	serializeState,
+	serializeStatus,
 } from "../../../../convex/engine/serialization";
 
 describe("serializeState", () => {
@@ -34,10 +36,31 @@ describe("serializeState", () => {
 		);
 	});
 
-	it("throws on parallel states with multiple active regions", () => {
-		expect(() => serializeState({ underwriting: "active", legal: "pending" })).toThrow(
-			"single-region"
+	it("throws for empty state objects", () => {
+		expect(() => serializeState({})).toThrow(
+			"serializeStateValue: cannot serialize an empty state object"
 		);
+	});
+
+	it("throws on parallel states with multiple active regions", () => {
+		expect(() =>
+			serializeState({ underwriting: "active", legal: "pending" })
+		).toThrow(
+			"serializeStateValue: parallel states with multiple active regions are not supported by dot-notation serialization"
+		);
+	});
+});
+
+describe("serializeStatus compatibility", () => {
+	it("serializes single-region compound states to dot-notation", () => {
+		expect(serializeStatus({ lawyerOnboarding: "verified" })).toBe(
+			"lawyerOnboarding.verified"
+		);
+	});
+
+	it("serializes nested state objects to dot-notation", () => {
+		const nested = { phase: { review: "active" } };
+		expect(serializeStatus(nested)).toBe("phase.review.active");
 	});
 });
 
@@ -52,9 +75,7 @@ describe("deserializeState", () => {
 		expect(deserializeState('{"lawyerOnboarding":"verified"}')).toEqual({
 			lawyerOnboarding: "verified",
 		});
-		expect(
-			deserializeState('{"phase":{"review":"active"}}')
-		).toEqual({
+		expect(deserializeState('{"phase":{"review":"active"}}')).toEqual({
 			phase: { review: "active" },
 		});
 	});
@@ -79,13 +100,44 @@ describe("deserializeState", () => {
 
 	it("rejects empty or malformed state strings", () => {
 		expect(() => deserializeState("")).toThrow("non-empty status string");
-		expect(() => deserializeState(".verified")).toThrow("non-empty state segments");
+		expect(() => deserializeState(".verified")).toThrow(
+			"non-empty state segments"
+		);
 		expect(() => deserializeState("lawyerOnboarding.")).toThrow(
 			"non-empty state segments"
 		);
 		expect(() => deserializeState('{"lawyerOnboarding":}')).toThrow(
 			"could not parse legacy JSON status"
 		);
+	});
+});
+
+describe("deserializeStatus compatibility", () => {
+	it("parses dot-notation states back to objects", () => {
+		expect(deserializeStatus("lawyerOnboarding.verified")).toEqual({
+			lawyerOnboarding: "verified",
+		});
+	});
+
+	it("parses nested dot-notation states", () => {
+		expect(deserializeStatus("phase.review.active")).toEqual({
+			phase: { review: "active" },
+		});
+	});
+
+	it("parses legacy JSON object strings back to objects", () => {
+		const nested = { phase: { review: "active" } };
+		expect(deserializeStatus(JSON.stringify(nested))).toEqual(nested);
+	});
+
+	it("returns malformed JSON starting with '{' as the raw string", () => {
+		const malformed = "{not valid json at all";
+		expect(deserializeStatus(malformed)).toBe(malformed);
+	});
+
+	it("returns non-object JSON strings as-is", () => {
+		expect(deserializeStatus("[1,2,3]")).toBe("[1,2,3]");
+		expect(deserializeStatus("123")).toBe("123");
 	});
 });
 
@@ -110,6 +162,16 @@ describe("round-trip serialization", () => {
 			expect(serializeState(deserializeState(state))).toBe(state);
 		}
 	);
+
+	it("round-trips supported compound state objects through compatibility wrappers", () => {
+		const state = { lawyerOnboarding: { review: "active" } };
+		expect(deserializeStatus(serializeStatus(state))).toEqual(state);
+	});
+
+	it("preserves legacy JSON object states during compatibility deserialization", () => {
+		const state = { phase: { review: "active" } };
+		expect(deserializeStatus(JSON.stringify(state))).toEqual(state);
+	});
 });
 
 describe("XState rehydration with dealMachine", () => {
