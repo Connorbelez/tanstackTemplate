@@ -247,6 +247,17 @@ export async function findMortgageByPropertyId(
 		.first();
 }
 
+export async function findDealByMortgageAndBuyer(
+	ctx: Pick<MutationCtx, "db">,
+	args: { mortgageId: Id<"mortgages">; buyerId: string }
+): Promise<Doc<"deals"> | null> {
+	return ctx.db
+		.query("deals")
+		.withIndex("by_mortgage", (q) => q.eq("mortgageId", args.mortgageId))
+		.filter((q) => q.eq(q.field("buyerId"), args.buyerId))
+		.first();
+}
+
 export async function ensureMortgageBorrowerLink(
 	ctx: Pick<MutationCtx, "db">,
 	args: {
@@ -382,6 +393,7 @@ function isGovernedEntityType(
 	entityType: EntityType
 ): entityType is GovernedEntityType {
 	switch (entityType) {
+		case "deal":
 		case "onboardingRequest":
 		case "mortgage":
 		case "obligation":

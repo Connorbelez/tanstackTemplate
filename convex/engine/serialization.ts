@@ -62,12 +62,23 @@ export function deserializeState(status: string): StateValue {
 		);
 	}
 
-	const leaf = parts.at(-1) as string;
-	let result: StateValue = leaf;
-
+	let result: StateValue = parts.at(-1) ?? "";
 	for (let index = parts.length - 2; index >= 0; index--) {
 		result = { [parts[index]]: result };
 	}
 
 	return result;
+}
+
+// Compatibility wrappers for older call sites that still use the *Status names.
+export function serializeStatus(
+	stateValue: string | Record<string, unknown>
+): string {
+	return serializeState(stateValue as StateValue);
+}
+
+export function deserializeStatus(
+	status: string
+): string | Record<string, unknown> {
+	return deserializeState(status) as string | Record<string, unknown>;
 }

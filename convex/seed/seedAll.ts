@@ -33,7 +33,14 @@ interface SeedMortgageBorrowerLink {
 interface SeedMortgageResult {
 	created: { mortgages: number; properties: number };
 	mortgageBorrowers: SeedMortgageBorrowerLink[];
+	mortgageIds: Id<"mortgages">[];
 	reused: { mortgages: number; properties: number };
+}
+
+interface SeedDealResult {
+	created: { deals: number };
+	dealIds: Id<"deals">[];
+	reused: { deals: number };
 }
 
 interface SeedObligationResult {
@@ -78,6 +85,12 @@ const seedMortgageRef = makeFunctionReference<
 	SeedMortgageResult
 >("seed/seedMortgage:seedMortgage");
 
+const seedDealRef = makeFunctionReference<
+	"mutation",
+	{ mortgageIds?: Id<"mortgages">[]; lenderAuthIds?: string[] },
+	SeedDealResult
+>("seed/seedDeal:seedDeal");
+
 const seedObligationRef = makeFunctionReference<
 	"mutation",
 	{
@@ -108,6 +121,9 @@ export const seedAll = adminAction
 			borrowerIds: borrowers.borrowerIds,
 			brokerIds: brokers.brokerIds,
 		});
+		const deals = await ctx.runMutation(seedDealRef, {
+			mortgageIds: mortgages.mortgageIds,
+		});
 		const obligations = await ctx.runMutation(seedObligationRef, {
 			borrowerIds: borrowers.borrowerIds,
 			mortgageBorrowers: mortgages.mortgageBorrowers,
@@ -123,6 +139,7 @@ export const seedAll = adminAction
 			borrowers,
 			lenders,
 			mortgages,
+			deals,
 			obligations,
 			onboardingRequests,
 			summary: {
@@ -136,6 +153,7 @@ export const seedAll = adminAction
 					lenders: lenders.created.lenders,
 					properties: mortgages.created.properties,
 					mortgages: mortgages.created.mortgages,
+					deals: deals.created.deals,
 					obligations: obligations.created.obligations,
 					onboardingRequests: onboardingRequests.created.onboardingRequests,
 				},
@@ -145,6 +163,7 @@ export const seedAll = adminAction
 					lenders: lenders.reused.lenders,
 					properties: mortgages.reused.properties,
 					mortgages: mortgages.reused.mortgages,
+					deals: deals.reused.deals,
 					obligations: obligations.reused.obligations,
 					onboardingRequests: onboardingRequests.reused.onboardingRequests,
 				},
