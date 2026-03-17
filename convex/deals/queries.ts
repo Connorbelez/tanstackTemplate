@@ -30,13 +30,13 @@ export const getActiveLawyerAccess = internalQuery({
 	},
 });
 
-// ── Public: closingTeamAssignments ─────────────────────────────────
+// ── Public: activeDealAccessRecords ──────────────────────────────────
 
 /**
  * Returns all active dealAccess records for a deal.
  * Enforces two-layer authorization: admin bypass → dealAccess check.
  */
-export const closingTeamAssignments = authedQuery
+export const activeDealAccessRecords = authedQuery
 	.input({ dealId: v.id("deals") })
 	.handler(async (ctx, { dealId }) => {
 		await assertDealAccess(ctx, ctx.viewer, dealId);

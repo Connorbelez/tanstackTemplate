@@ -413,7 +413,7 @@ describe("dealAccess effects", () => {
 	});
 });
 
-describe("closingTeamAssignments query", () => {
+describe("activeDealAccessRecords query", () => {
 	let t: TestHarness;
 	let dealId: Id<"deals">;
 
@@ -433,7 +433,7 @@ describe("closingTeamAssignments query", () => {
 
 		const asLawyer = t.withIdentity(LAWYER_IDENTITY);
 		const result = await asLawyer.query(
-			api.deals.queries.closingTeamAssignments,
+			api.deals.queries.activeDealAccessRecords,
 			{ dealId }
 		);
 
@@ -445,7 +445,7 @@ describe("closingTeamAssignments query", () => {
 	it("throws ConvexError for user without access", async () => {
 		const asNoAccess = t.withIdentity(NO_ACCESS_IDENTITY);
 		await expect(
-			asNoAccess.query(api.deals.queries.closingTeamAssignments, {
+			asNoAccess.query(api.deals.queries.activeDealAccessRecords, {
 				dealId,
 			})
 		).rejects.toThrow(ConvexError);
@@ -462,7 +462,7 @@ describe("closingTeamAssignments query", () => {
 
 		const asLawyer = t.withIdentity(LAWYER_IDENTITY);
 		await expect(
-			asLawyer.query(api.deals.queries.closingTeamAssignments, {
+			asLawyer.query(api.deals.queries.activeDealAccessRecords, {
 				dealId,
 			})
 		).rejects.toThrow(ConvexError);
@@ -472,7 +472,7 @@ describe("closingTeamAssignments query", () => {
 		// No dealAccess record for admin — should still work
 		const asAdmin = t.withIdentity(ADMIN_IDENTITY);
 		const result = await asAdmin.query(
-			api.deals.queries.closingTeamAssignments,
+			api.deals.queries.activeDealAccessRecords,
 			{ dealId }
 		);
 		expect(result).toEqual([]);
@@ -496,14 +496,14 @@ describe("closingTeamAssignments query", () => {
 
 		// Can access first deal
 		const result = await asLawyer.query(
-			api.deals.queries.closingTeamAssignments,
+			api.deals.queries.activeDealAccessRecords,
 			{ dealId }
 		);
 		expect(result).toHaveLength(1);
 
 		// Cannot access second deal
 		await expect(
-			asLawyer.query(api.deals.queries.closingTeamAssignments, {
+			asLawyer.query(api.deals.queries.activeDealAccessRecords, {
 				dealId: seed2.dealId,
 			})
 		).rejects.toThrow(ConvexError);

@@ -27,6 +27,13 @@ export const createDealAccess = internalMutation({
 			return;
 		}
 
+		if (!deal.lawyerType) {
+			console.warn(
+				`[createDealAccess] Deal ${args.entityId} has lawyerId but no lawyerType — skipping access grant`
+			);
+			return;
+		}
+
 		// Idempotency: check for existing active record
 		const existing = await ctx.db
 			.query("dealAccess")
@@ -43,14 +50,14 @@ export const createDealAccess = internalMutation({
 		await ctx.db.insert("dealAccess", {
 			userId: lawyerId,
 			dealId: args.entityId,
-			role: deal.lawyerType ?? "guest_lawyer",
+			role: deal.lawyerType,
 			grantedAt: Date.now(),
 			grantedBy: args.source.actorId ?? "system",
 			status: "active",
 		});
 
 		console.info(
-			`[createDealAccess] Granted ${deal.lawyerType ?? "guest_lawyer"} access to deal=${args.entityId} for lawyer=${lawyerId}`
+			`[createDealAccess] Granted ${deal.lawyerType} access to deal=${args.entityId} for lawyer=${lawyerId}`
 		);
 	},
 });

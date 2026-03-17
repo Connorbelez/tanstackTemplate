@@ -3,7 +3,9 @@ import { internalMutation } from "../_generated/server";
 
 /**
  * Grants deal access to a user with a specific role.
- * Idempotent: if an active record already exists for (userId, dealId), returns it.
+ * Idempotent: if an active record already exists for (userId, dealId) with the
+ * same role, returns it unchanged. If the role differs (e.g. guest_lawyer ->
+ * platform_lawyer), the existing record is patched to the new role and returned.
  */
 export const grantAccess = internalMutation({
 	args: {
@@ -27,6 +29,13 @@ export const grantAccess = internalMutation({
 			.first();
 
 		if (existing) {
+			if (existing.role !== args.role) {
+				await ctx.db.patch(existing._id, {
+					role: args.role,
+					grantedBy: args.grantedBy,
+					grantedAt: Date.now(),
+				});
+			}
 			return existing._id;
 		}
 
