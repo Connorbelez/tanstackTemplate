@@ -6,8 +6,8 @@ import type { Doc, Id } from "../../_generated/dataModel";
 import type { MutationCtx } from "../../_generated/server";
 import { FAIRLEND_STAFF_ORG_ID } from "../../constants";
 import schema from "../../schema";
-import { getAvailableBalance } from "../accounts";
-import { reserveShares } from "../mutations";
+import { getAvailableBalance, getPostedBalance } from "../accounts";
+import { commitReservation, reserveShares, voidReservation } from "../mutations";
 
 const modules = import.meta.glob("/convex/**/*.ts");
 
@@ -161,6 +161,71 @@ async function executeReserveShares(
 	args: ReserveSharesArgs
 ) {
 	return t.run(async (ctx) => reserveSharesMutation._handler(ctx, args));
+}
+
+type CommitReservationArgs = {
+	reservationId: Id<"ledger_reservations">;
+	effectiveDate: string;
+	idempotencyKey: string;
+	source: {
+		actor?: string;
+		channel?: string;
+		type: "cron" | "system" | "user" | "webhook";
+	};
+};
+
+type CommitReservationResult = {
+	journalEntry: Doc<"ledger_journal_entries">;
+};
+
+type CommitReservationMutation = {
+	_handler: (
+		ctx: MutationCtx,
+		args: CommitReservationArgs
+	) => Promise<CommitReservationResult>;
+};
+
+const commitReservationMutation =
+	commitReservation as unknown as CommitReservationMutation;
+
+type VoidReservationArgs = {
+	reservationId: Id<"ledger_reservations">;
+	reason: string;
+	effectiveDate: string;
+	idempotencyKey: string;
+	source: {
+		actor?: string;
+		channel?: string;
+		type: "cron" | "system" | "user" | "webhook";
+	};
+};
+
+type VoidReservationResult = {
+	journalEntry: Doc<"ledger_journal_entries">;
+};
+
+type VoidReservationMutation = {
+	_handler: (
+		ctx: MutationCtx,
+		args: VoidReservationArgs
+	) => Promise<VoidReservationResult>;
+};
+
+const voidReservationMutation =
+	voidReservation as unknown as VoidReservationMutation;
+
+async function executeCommitReservation(
+	t: ReturnType<typeof createTestHarness>,
+	args: CommitReservationArgs
+) {
+	return t.run(async (ctx) => commitReservationMutation._handler(ctx, args));
+}
+
+async function executeVoidReservation(
+	t: ReturnType<typeof createTestHarness>,
+	args: VoidReservationArgs
+) {
+	return t.run(async (ctx) => voidReservationMutation._handler(ctx, args));
 }
 
 async function getReservation(
@@ -398,5 +463,474 @@ describe("reserveShares", () => {
 		expect(result.journalEntry.entryType).toBe("SHARES_RESERVED");
 		expect(sellerAfter.pendingCredits).toBe(3_000n);
 		expect(getAvailableBalance(sellerAfter)).toBe(0n);
+	});
+});
+
+describe("commitReservation", () => {
+	it("converts a pending reservation to a posted transfer, updating cumulative and pending fields", async () => {
+		const t = createTestHarness();
+		const auth = asLedgerUser(t);
+		await initCounter(auth);
+		await mintAndIssue(auth, "m-commit-happy", "seller", 5_000);
+
+		const sellerBefore = await getAccount(t, "m-commit-happy", "seller");
+
+		const reserveResult = await executeReserveShares(t, {
+			mortgageId: "m-commit-happy",
+			sellerLenderId: "seller",
+			buyerLenderId: "buyer",
+			amount: 3_000,
+			effectiveDate: "2026-01-02",
+			idempotencyKey: "reserve-commit-happy",
+			source: SYS_SOURCE,
+		});
+
+		const sellerAfterReserve = await getAccount(t, "m-commit-happy", "seller");
+
+		const commitResult = await executeCommitReservation(t, {
+			reservationId: reserveResult.reservationId,
+			effectiveDate: "2026-01-03",
+			idempotencyKey: "commit-happy",
+			source: SYS_SOURCE,
+		});
+
+		const sellerAfter = await getAccount(t, "m-commit-happy", "seller");
+		const buyerAfter = await getAccount(t, "m-commit-happy", "buyer");
+		const reservation = await getReservation(t, reserveResult.reservationId);
+
+		// Journal entry assertions
+		expect(commitResult.journalEntry.entryType).toBe("SHARES_COMMITTED");
+		expect(commitResult.journalEntry.reservationId).toBe(
+			reserveResult.reservationId
+		);
+
+		// Seller posted balance decreased by 3,000 (cumulativeCredits increased)
+		expect(sellerAfter.cumulativeCredits).toBe(
+			sellerAfterReserve.cumulativeCredits + 3_000n
+		);
+		expect(getPostedBalance(sellerAfter)).toBe(
+			getPostedBalance(sellerBefore) - 3_000n
+		);
+
+		// Buyer posted balance increased by 3,000 (cumulativeDebits increased)
+		expect(buyerAfter.cumulativeDebits).toBe(3_000n);
+		expect(getPostedBalance(buyerAfter)).toBe(3_000n);
+
+		// Pending fields zeroed
+		expect(sellerAfter.pendingCredits).toBe(0n);
+		expect(buyerAfter.pendingDebits).toBe(0n);
+
+		// Reservation status
+		expect(reservation?.status).toBe("committed");
+		expect(typeof reservation?.resolvedAt).toBe("number");
+		expect(reservation?.commitJournalEntryId).toBe(
+			commitResult.journalEntry._id
+		);
+	});
+
+	it("rejects double-commit with ConvexError and zero side effects", async () => {
+		const t = createTestHarness();
+		const auth = asLedgerUser(t);
+		await initCounter(auth);
+		await mintAndIssue(auth, "m-double-commit", "seller", 5_000);
+
+		const reserveResult = await executeReserveShares(t, {
+			mortgageId: "m-double-commit",
+			sellerLenderId: "seller",
+			buyerLenderId: "buyer",
+			amount: 3_000,
+			effectiveDate: "2026-01-02",
+			idempotencyKey: "reserve-double-commit",
+			source: SYS_SOURCE,
+		});
+
+		await executeCommitReservation(t, {
+			reservationId: reserveResult.reservationId,
+			effectiveDate: "2026-01-03",
+			idempotencyKey: "commit-double-1",
+			source: SYS_SOURCE,
+		});
+
+		// Record state after first commit
+		const sellerAfterCommit = await getAccount(
+			t,
+			"m-double-commit",
+			"seller"
+		);
+		const buyerAfterCommit = await getAccount(
+			t,
+			"m-double-commit",
+			"buyer"
+		);
+		const reservationAfterCommit = await getReservation(
+			t,
+			reserveResult.reservationId
+		);
+
+		// Attempt second commit
+		try {
+			await executeCommitReservation(t, {
+				reservationId: reserveResult.reservationId,
+				effectiveDate: "2026-01-04",
+				idempotencyKey: "commit-double-2",
+				source: SYS_SOURCE,
+			});
+			expect.fail("Expected double-commit to fail");
+		} catch (error) {
+			expect(getConvexErrorCode(error)).toBe("RESERVATION_NOT_PENDING");
+		}
+
+		// Verify zero side effects
+		const sellerAfter = await getAccount(t, "m-double-commit", "seller");
+		const buyerAfter = await getAccount(t, "m-double-commit", "buyer");
+		const reservationAfter = await getReservation(
+			t,
+			reserveResult.reservationId
+		);
+
+		expect(sellerAfter.cumulativeDebits).toBe(
+			sellerAfterCommit.cumulativeDebits
+		);
+		expect(sellerAfter.cumulativeCredits).toBe(
+			sellerAfterCommit.cumulativeCredits
+		);
+		expect(sellerAfter.pendingCredits).toBe(
+			sellerAfterCommit.pendingCredits
+		);
+		expect(buyerAfter.cumulativeDebits).toBe(
+			buyerAfterCommit.cumulativeDebits
+		);
+		expect(buyerAfter.cumulativeCredits).toBe(
+			buyerAfterCommit.cumulativeCredits
+		);
+		expect(buyerAfter.pendingDebits).toBe(buyerAfterCommit.pendingDebits);
+		expect(reservationAfter?.status).toBe(reservationAfterCommit?.status);
+	});
+
+	it("rejects commit after void with ConvexError and zero side effects", async () => {
+		const t = createTestHarness();
+		const auth = asLedgerUser(t);
+		await initCounter(auth);
+		await mintAndIssue(auth, "m-commit-after-void", "seller", 5_000);
+
+		const reserveResult = await executeReserveShares(t, {
+			mortgageId: "m-commit-after-void",
+			sellerLenderId: "seller",
+			buyerLenderId: "buyer",
+			amount: 3_000,
+			effectiveDate: "2026-01-02",
+			idempotencyKey: "reserve-commit-after-void",
+			source: SYS_SOURCE,
+		});
+
+		await executeVoidReservation(t, {
+			reservationId: reserveResult.reservationId,
+			reason: "deal cancelled",
+			effectiveDate: "2026-01-03",
+			idempotencyKey: "void-before-commit",
+			source: SYS_SOURCE,
+		});
+
+		// Record state after void
+		const sellerAfterVoid = await getAccount(
+			t,
+			"m-commit-after-void",
+			"seller"
+		);
+		const buyerAfterVoid = await getAccount(
+			t,
+			"m-commit-after-void",
+			"buyer"
+		);
+		const reservationAfterVoid = await getReservation(
+			t,
+			reserveResult.reservationId
+		);
+
+		// Attempt commit after void
+		try {
+			await executeCommitReservation(t, {
+				reservationId: reserveResult.reservationId,
+				effectiveDate: "2026-01-04",
+				idempotencyKey: "commit-after-void",
+				source: SYS_SOURCE,
+			});
+			expect.fail("Expected commit-after-void to fail");
+		} catch (error) {
+			expect(getConvexErrorCode(error)).toBe("RESERVATION_NOT_PENDING");
+		}
+
+		// Verify reservation still voided, accounts unchanged
+		const sellerAfter = await getAccount(
+			t,
+			"m-commit-after-void",
+			"seller"
+		);
+		const buyerAfter = await getAccount(
+			t,
+			"m-commit-after-void",
+			"buyer"
+		);
+		const reservationAfter = await getReservation(
+			t,
+			reserveResult.reservationId
+		);
+
+		expect(reservationAfter?.status).toBe("voided");
+		expect(sellerAfter.cumulativeDebits).toBe(
+			sellerAfterVoid.cumulativeDebits
+		);
+		expect(sellerAfter.cumulativeCredits).toBe(
+			sellerAfterVoid.cumulativeCredits
+		);
+		expect(sellerAfter.pendingCredits).toBe(
+			sellerAfterVoid.pendingCredits
+		);
+		expect(buyerAfter.cumulativeDebits).toBe(
+			buyerAfterVoid.cumulativeDebits
+		);
+		expect(buyerAfter.cumulativeCredits).toBe(
+			buyerAfterVoid.cumulativeCredits
+		);
+		expect(buyerAfter.pendingDebits).toBe(buyerAfterVoid.pendingDebits);
+		expect(reservationAfter?.resolvedAt).toBe(
+			reservationAfterVoid?.resolvedAt
+		);
+	});
+});
+
+describe("voidReservation", () => {
+	it("releases a pending reservation, restoring available balance with no cumulative changes", async () => {
+		const t = createTestHarness();
+		const auth = asLedgerUser(t);
+		await initCounter(auth);
+		await mintAndIssue(auth, "m-void-happy", "seller", 5_000);
+
+		const sellerBeforeReserve = await getAccount(
+			t,
+			"m-void-happy",
+			"seller"
+		);
+
+		const reserveResult = await executeReserveShares(t, {
+			mortgageId: "m-void-happy",
+			sellerLenderId: "seller",
+			buyerLenderId: "buyer",
+			amount: 3_000,
+			effectiveDate: "2026-01-02",
+			idempotencyKey: "reserve-void-happy",
+			source: SYS_SOURCE,
+		});
+
+		const voidResult = await executeVoidReservation(t, {
+			reservationId: reserveResult.reservationId,
+			reason: "deal cancelled",
+			effectiveDate: "2026-01-03",
+			idempotencyKey: "void-happy",
+			source: SYS_SOURCE,
+		});
+
+		const sellerAfter = await getAccount(t, "m-void-happy", "seller");
+		const buyerAfter = await getAccount(t, "m-void-happy", "buyer");
+		const reservation = await getReservation(t, reserveResult.reservationId);
+
+		// Journal entry assertions
+		expect(voidResult.journalEntry.entryType).toBe("SHARES_VOIDED");
+		expect(voidResult.journalEntry.reason).toBe("deal cancelled");
+		expect(voidResult.journalEntry.reservationId).toBe(
+			reserveResult.reservationId
+		);
+
+		// Seller cumulatives UNCHANGED from before reservation
+		expect(sellerAfter.cumulativeDebits).toBe(
+			sellerBeforeReserve.cumulativeDebits
+		);
+		expect(sellerAfter.cumulativeCredits).toBe(
+			sellerBeforeReserve.cumulativeCredits
+		);
+
+		// Buyer cumulatives unchanged (still 0)
+		expect(buyerAfter.cumulativeDebits).toBe(0n);
+		expect(buyerAfter.cumulativeCredits).toBe(0n);
+
+		// Pending fields zeroed
+		expect(sellerAfter.pendingCredits).toBe(0n);
+		expect(buyerAfter.pendingDebits).toBe(0n);
+
+		// Available balance equals posted balance (no pending)
+		expect(getAvailableBalance(sellerAfter)).toBe(
+			getPostedBalance(sellerAfter)
+		);
+
+		// Reservation status
+		expect(reservation?.status).toBe("voided");
+		expect(typeof reservation?.resolvedAt).toBe("number");
+		expect(reservation?.voidJournalEntryId).toBe(
+			voidResult.journalEntry._id
+		);
+	});
+
+	it("rejects double-void with ConvexError and zero side effects", async () => {
+		const t = createTestHarness();
+		const auth = asLedgerUser(t);
+		await initCounter(auth);
+		await mintAndIssue(auth, "m-double-void", "seller", 5_000);
+
+		const reserveResult = await executeReserveShares(t, {
+			mortgageId: "m-double-void",
+			sellerLenderId: "seller",
+			buyerLenderId: "buyer",
+			amount: 3_000,
+			effectiveDate: "2026-01-02",
+			idempotencyKey: "reserve-double-void",
+			source: SYS_SOURCE,
+		});
+
+		await executeVoidReservation(t, {
+			reservationId: reserveResult.reservationId,
+			reason: "deal cancelled",
+			effectiveDate: "2026-01-03",
+			idempotencyKey: "void-double-1",
+			source: SYS_SOURCE,
+		});
+
+		// Record state after first void
+		const sellerAfterVoid = await getAccount(t, "m-double-void", "seller");
+		const buyerAfterVoid = await getAccount(t, "m-double-void", "buyer");
+		const reservationAfterVoid = await getReservation(
+			t,
+			reserveResult.reservationId
+		);
+
+		// Attempt second void
+		try {
+			await executeVoidReservation(t, {
+				reservationId: reserveResult.reservationId,
+				reason: "deal cancelled again",
+				effectiveDate: "2026-01-04",
+				idempotencyKey: "void-double-2",
+				source: SYS_SOURCE,
+			});
+			expect.fail("Expected double-void to fail");
+		} catch (error) {
+			expect(getConvexErrorCode(error)).toBe("RESERVATION_NOT_PENDING");
+		}
+
+		// Verify zero side effects
+		const sellerAfter = await getAccount(t, "m-double-void", "seller");
+		const buyerAfter = await getAccount(t, "m-double-void", "buyer");
+		const reservationAfter = await getReservation(
+			t,
+			reserveResult.reservationId
+		);
+
+		expect(sellerAfter.cumulativeDebits).toBe(
+			sellerAfterVoid.cumulativeDebits
+		);
+		expect(sellerAfter.cumulativeCredits).toBe(
+			sellerAfterVoid.cumulativeCredits
+		);
+		expect(sellerAfter.pendingCredits).toBe(
+			sellerAfterVoid.pendingCredits
+		);
+		expect(buyerAfter.cumulativeDebits).toBe(
+			buyerAfterVoid.cumulativeDebits
+		);
+		expect(buyerAfter.cumulativeCredits).toBe(
+			buyerAfterVoid.cumulativeCredits
+		);
+		expect(buyerAfter.pendingDebits).toBe(buyerAfterVoid.pendingDebits);
+		expect(reservationAfter?.status).toBe(reservationAfterVoid?.status);
+	});
+
+	it("rejects void after commit with ConvexError and zero side effects", async () => {
+		const t = createTestHarness();
+		const auth = asLedgerUser(t);
+		await initCounter(auth);
+		await mintAndIssue(auth, "m-void-after-commit", "seller", 5_000);
+
+		const reserveResult = await executeReserveShares(t, {
+			mortgageId: "m-void-after-commit",
+			sellerLenderId: "seller",
+			buyerLenderId: "buyer",
+			amount: 3_000,
+			effectiveDate: "2026-01-02",
+			idempotencyKey: "reserve-void-after-commit",
+			source: SYS_SOURCE,
+		});
+
+		await executeCommitReservation(t, {
+			reservationId: reserveResult.reservationId,
+			effectiveDate: "2026-01-03",
+			idempotencyKey: "commit-before-void",
+			source: SYS_SOURCE,
+		});
+
+		// Record state after commit
+		const sellerAfterCommit = await getAccount(
+			t,
+			"m-void-after-commit",
+			"seller"
+		);
+		const buyerAfterCommit = await getAccount(
+			t,
+			"m-void-after-commit",
+			"buyer"
+		);
+		const reservationAfterCommit = await getReservation(
+			t,
+			reserveResult.reservationId
+		);
+
+		// Attempt void after commit
+		try {
+			await executeVoidReservation(t, {
+				reservationId: reserveResult.reservationId,
+				reason: "too late",
+				effectiveDate: "2026-01-04",
+				idempotencyKey: "void-after-commit",
+				source: SYS_SOURCE,
+			});
+			expect.fail("Expected void-after-commit to fail");
+		} catch (error) {
+			expect(getConvexErrorCode(error)).toBe("RESERVATION_NOT_PENDING");
+		}
+
+		// Verify reservation still committed, accounts unchanged
+		const sellerAfter = await getAccount(
+			t,
+			"m-void-after-commit",
+			"seller"
+		);
+		const buyerAfter = await getAccount(
+			t,
+			"m-void-after-commit",
+			"buyer"
+		);
+		const reservationAfter = await getReservation(
+			t,
+			reserveResult.reservationId
+		);
+
+		expect(reservationAfter?.status).toBe("committed");
+		expect(sellerAfter.cumulativeDebits).toBe(
+			sellerAfterCommit.cumulativeDebits
+		);
+		expect(sellerAfter.cumulativeCredits).toBe(
+			sellerAfterCommit.cumulativeCredits
+		);
+		expect(sellerAfter.pendingCredits).toBe(
+			sellerAfterCommit.pendingCredits
+		);
+		expect(buyerAfter.cumulativeDebits).toBe(
+			buyerAfterCommit.cumulativeDebits
+		);
+		expect(buyerAfter.cumulativeCredits).toBe(
+			buyerAfterCommit.cumulativeCredits
+		);
+		expect(buyerAfter.pendingDebits).toBe(buyerAfterCommit.pendingDebits);
+		expect(reservationAfter?.resolvedAt).toBe(
+			reservationAfterCommit?.resolvedAt
+		);
 	});
 });

@@ -17,6 +17,7 @@ import { postEntry } from "./postEntry";
 import type { EventSource } from "./types";
 import {
 	burnMortgageArgsValidator,
+	commitReservationArgsValidator,
 	issueSharesArgsValidator,
 	mintAndIssueArgsValidator,
 	mintMortgageArgsValidator,
@@ -25,6 +26,7 @@ import {
 	redeemSharesArgsValidator,
 	reserveSharesArgsValidator,
 	transferSharesArgsValidator,
+	voidReservationArgsValidator,
 } from "./validators";
 
 // ── Tier 1: Strict Primitives ─────────────────────────────────────
@@ -571,5 +573,132 @@ export const reserveShares = internalMutation({
 			reservationId,
 			journalEntry: { ...journalEntry, reservationId },
 		};
+	},
+});
+
+export const commitReservation = internalMutation({
+	args: commitReservationArgsValidator,
+	handler: async (ctx, args) => {
+		// 1. Load reservation
+		const reservation = await ctx.db.get(args.reservationId);
+		if (!reservation) {
+			throw new ConvexError({
+				code: "RESERVATION_NOT_FOUND" as const,
+				message: `Reservation ${args.reservationId} not found`,
+			});
+		}
+
+		// 2. Check status === "pending"
+		if (reservation.status !== "pending") {
+			throw new ConvexError({
+				code: "RESERVATION_NOT_PENDING" as const,
+				message: `Reservation already ${reservation.status}`,
+				reservationId: args.reservationId,
+				currentStatus: reservation.status,
+			});
+		}
+
+		// 3. Decrement pending fields
+		const seller = await ctx.db.get(reservation.sellerAccountId);
+		const buyer = await ctx.db.get(reservation.buyerAccountId);
+		if (!(seller && buyer)) {
+			throw new ConvexError({
+				code: "ACCOUNT_NOT_FOUND" as const,
+				message: "Seller or buyer account missing for reservation",
+			});
+		}
+		const amountDelta = BigInt(reservation.amount);
+		await ctx.db.patch(seller._id, {
+			pendingCredits: seller.pendingCredits - amountDelta,
+		});
+		await ctx.db.patch(buyer._id, {
+			pendingDebits: buyer.pendingDebits - amountDelta,
+		});
+
+		// 4. Post SHARES_COMMITTED entry (updates cumulative fields via postEntry)
+		const journalEntry = await postEntry(ctx, {
+			entryType: "SHARES_COMMITTED",
+			mortgageId: reservation.mortgageId,
+			debitAccountId: reservation.buyerAccountId,
+			creditAccountId: reservation.sellerAccountId,
+			amount: reservation.amount,
+			effectiveDate: args.effectiveDate,
+			idempotencyKey: args.idempotencyKey,
+			source: args.source,
+			reservationId: args.reservationId,
+		});
+
+		// 5. Update reservation status
+		await ctx.db.patch(args.reservationId, {
+			status: "committed",
+			commitJournalEntryId: journalEntry._id,
+			resolvedAt: Date.now(),
+		});
+
+		return { journalEntry };
+	},
+});
+
+export const voidReservation = internalMutation({
+	args: voidReservationArgsValidator,
+	handler: async (ctx, args) => {
+		// 1. Load reservation
+		const reservation = await ctx.db.get(args.reservationId);
+		if (!reservation) {
+			throw new ConvexError({
+				code: "RESERVATION_NOT_FOUND" as const,
+				message: `Reservation ${args.reservationId} not found`,
+			});
+		}
+
+		// 2. Check status === "pending"
+		if (reservation.status !== "pending") {
+			throw new ConvexError({
+				code: "RESERVATION_NOT_PENDING" as const,
+				message: `Reservation already ${reservation.status}`,
+				reservationId: args.reservationId,
+				currentStatus: reservation.status,
+			});
+		}
+
+		// 3. Decrement pending fields (release the lock)
+		const seller = await ctx.db.get(reservation.sellerAccountId);
+		const buyer = await ctx.db.get(reservation.buyerAccountId);
+		if (!(seller && buyer)) {
+			throw new ConvexError({
+				code: "ACCOUNT_NOT_FOUND" as const,
+				message: "Seller or buyer account missing for reservation",
+			});
+		}
+		const amountDelta = BigInt(reservation.amount);
+		await ctx.db.patch(seller._id, {
+			pendingCredits: seller.pendingCredits - amountDelta,
+		});
+		await ctx.db.patch(buyer._id, {
+			pendingDebits: buyer.pendingDebits - amountDelta,
+		});
+
+		// 4. Post SHARES_VOIDED journal entry (audit only — does NOT update cumulatives)
+		const journalEntry = await postEntry(ctx, {
+			entryType: "SHARES_VOIDED",
+			mortgageId: reservation.mortgageId,
+			debitAccountId: reservation.sellerAccountId, // reverse: seller gets "back"
+			creditAccountId: reservation.buyerAccountId, // reverse: buyer gives "back"
+			amount: reservation.amount,
+			effectiveDate: args.effectiveDate,
+			idempotencyKey: args.idempotencyKey,
+			source: args.source,
+			reason: args.reason,
+			reservationId: args.reservationId,
+		});
+
+		// 5. Update reservation status
+		await ctx.db.patch(args.reservationId, {
+			status: "voided",
+			voidJournalEntryId: journalEntry._id,
+			resolvedAt: Date.now(),
+		});
+
+		return { journalEntry };
 	},
 });
