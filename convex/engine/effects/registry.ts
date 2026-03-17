@@ -28,9 +28,6 @@ export const effectRegistry: Record<
 		internal.engine.effects.dealClosingPlaceholder.placeholder,
 	updatePaymentSchedule:
 		internal.engine.effects.dealClosingPlaceholder.placeholder,
-	createDealAccess: internal.engine.effects.dealClosingPlaceholder.placeholder,
-	revokeAllDealAccess:
-		internal.engine.effects.dealClosingPlaceholder.placeholder,
 	notifyAllParties: internal.engine.effects.dealClosingPlaceholder.placeholder,
 	notifyCancellation:
 		internal.engine.effects.dealClosingPlaceholder.placeholder,
@@ -40,4 +37,9 @@ export const effectRegistry: Record<
 		internal.engine.effects.dealClosingPlaceholder.placeholder,
 	confirmFundsReceipt:
 		internal.engine.effects.dealClosingPlaceholder.placeholder,
+
+	// Deal Access (ENG-48 — real implementations)
+	createDealAccess: internal.engine.effects.dealAccess.createDealAccess,
+	revokeAllDealAccess: internal.engine.effects.dealAccess.revokeAllDealAccess,
+	revokeLawyerAccess: internal.engine.effects.dealAccess.revokeLawyerAccess,
 };
