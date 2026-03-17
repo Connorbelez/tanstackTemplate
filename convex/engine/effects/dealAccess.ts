@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { internalMutation } from "../../_generated/server";
+import { grantDealAccess } from "../../deals/mutations";
 import { effectPayloadValidator } from "../validators";
 
 const dealEffectPayloadValidator = {
@@ -11,7 +12,7 @@ const dealEffectPayloadValidator = {
 /**
  * Effect: creates a dealAccess record for the assigned lawyer.
  * Fires on LAWYER_VERIFIED transition (lawyerOnboarding.pending → verified).
- * Idempotent: checks for existing active record before inserting.
+ * Delegates to the shared `grantDealAccess` helper for idempotent upsert logic.
  */
 export const createDealAccess = internalMutation({
 	args: dealEffectPayloadValidator,
@@ -34,30 +35,15 @@ export const createDealAccess = internalMutation({
 			return;
 		}
 
-		// Idempotency: check for existing active record
-		const existing = await ctx.db
-			.query("dealAccess")
-			.withIndex("by_user_and_deal", (q) =>
-				q.eq("userId", lawyerId).eq("dealId", args.entityId)
-			)
-			.filter((q) => q.eq(q.field("status"), "active"))
-			.first();
-
-		if (existing) {
-			return;
-		}
-
-		await ctx.db.insert("dealAccess", {
+		const accessId = await grantDealAccess(ctx.db, {
 			userId: lawyerId,
 			dealId: args.entityId,
 			role: deal.lawyerType,
-			grantedAt: Date.now(),
 			grantedBy: args.source.actorId ?? "system",
-			status: "active",
 		});
 
 		console.info(
-			`[createDealAccess] Granted ${deal.lawyerType} access to deal=${args.entityId} for lawyer=${lawyerId}`
+			`[createDealAccess] Granted ${deal.lawyerType} access to deal=${args.entityId} for lawyer=${lawyerId} (accessId=${accessId})`
 		);
 	},
 });

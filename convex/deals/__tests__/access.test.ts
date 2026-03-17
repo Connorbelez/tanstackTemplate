@@ -69,7 +69,7 @@ type TestHarness = ReturnType<typeof convexTest>;
 async function seedDealWithLawyer(
 	t: TestHarness,
 	overrides?: {
-		lawyerId?: string;
+		lawyerId?: string | null; // null = explicitly no lawyer
 		lawyerType?: "platform_lawyer" | "guest_lawyer";
 		status?: string;
 	}
@@ -119,7 +119,11 @@ async function seedDealWithLawyer(
 			buyerId: "buyer-user-1",
 			sellerId: "seller-user-1",
 			fractionalShare: 5000,
-			lawyerId: overrides?.lawyerId ?? LAWYER_IDENTITY.subject,
+			...(overrides?.lawyerId === null
+				? {}
+				: {
+						lawyerId: overrides?.lawyerId ?? LAWYER_IDENTITY.subject,
+					}),
 			lawyerType: overrides?.lawyerType ?? "platform_lawyer",
 			createdAt: Date.now(),
 			createdBy: "test-admin",
@@ -316,7 +320,7 @@ describe("dealAccess effects", () => {
 
 		it("no-ops when deal has no lawyerId", async () => {
 			const seed = await seedDealWithLawyer(t, {
-				lawyerId: undefined,
+				lawyerId: null,
 			});
 
 			await t.mutation(internal.engine.effects.dealAccess.createDealAccess, {
