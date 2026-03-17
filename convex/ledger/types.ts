@@ -36,10 +36,9 @@ export interface EventSource {
 }
 
 // ── Entry-Type-to-Account-Type Mapping ──────────────────────────────
-// Contract definition per ENG-25 spec: each entry type constrains which
-// account types are valid for debit/credit legs. This map will be wired
-// into account-type validation when the reservation mutations (commit,
-// void) and the full postEntry pipeline are implemented in ENG-25.
+// Defines the required (debitAccountType, creditAccountType) for each
+// entry type. Used in the TYPE_CHECK step of the postEntry pipeline.
+// TODO: Wire into postEntry validation pipeline and remove this TODO once consumed.
 //
 // Convention (D-7): debitAccountId = account RECEIVING units,
 //                   creditAccountId = account GIVING units.

@@ -12,6 +12,12 @@ const seedApi = api.seed as Record<
 export const seedAll = adminAction
 	.input({})
 	.handler(async (ctx) => {
+		// Bootstrap ledger singletons (WORLD account + sequence counter) before anything else
+		const ledgerBootstrap = await ctx.runMutation(
+			api.ledger.bootstrap.bootstrapLedger,
+			{}
+		);
+
 		const brokers = await ctx.runMutation(api.seed.seedBroker.seedBroker, {});
 		const borrowers = await ctx.runMutation(
 			api.seed.seedBorrower.seedBorrower,
@@ -37,6 +43,7 @@ export const seedAll = adminAction
 		);
 
 		return {
+			ledgerBootstrap,
 			brokers,
 			borrowers,
 			lenders,
@@ -44,6 +51,10 @@ export const seedAll = adminAction
 			obligations,
 			onboardingRequests,
 			summary: {
+				ledgerBootstrap: {
+					worldAccountId: ledgerBootstrap.worldAccountId,
+					sequenceCounterId: ledgerBootstrap.sequenceCounterId,
+				},
 				created: {
 					brokers: brokers.created.brokers,
 					borrowers: borrowers.created.borrowers,
