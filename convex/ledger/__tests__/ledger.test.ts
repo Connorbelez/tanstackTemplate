@@ -1317,6 +1317,45 @@ describe("Point-in-Time & History", () => {
 		expect(filtered).toHaveLength(1);
 		expect(filtered[0].entryType).toBe("SHARES_TRANSFERRED");
 	});
+
+	it("T-070c: history queries default to limit=100 when omitted", async () => {
+		const t = createTestHarness();
+		await initCounter(t);
+		const auth = asLedgerUser(t);
+		const { issueResult } = await mintAndIssue(t, "m1", "lender-a");
+
+		for (let i = 0; i < 101; i++) {
+			const sellerLenderId = i % 2 === 0 ? "lender-a" : "lender-b";
+			const buyerLenderId = i % 2 === 0 ? "lender-b" : "lender-a";
+
+			await auth.mutation(api.ledger.mutations.transferShares, {
+				mortgageId: "m1",
+				sellerLenderId,
+				buyerLenderId,
+				amount: 5_000,
+				effectiveDate: "2026-01-02",
+				idempotencyKey: `transfer-default-limit-${i}`,
+				source: SYS_SOURCE,
+			});
+		}
+
+		const mortgageHistory = await auth.query(
+			api.ledger.queries.getMortgageHistory,
+			{
+				mortgageId: "m1",
+			}
+		);
+		expect(mortgageHistory).toHaveLength(100);
+		expect(mortgageHistory[0].sequenceNumber).toBe(1n);
+		expect(mortgageHistory[99].sequenceNumber).toBe(100n);
+
+		const accountHistory = await auth.query(api.ledger.queries.getAccountHistory, {
+			accountId: issueResult.positionAccountId,
+		});
+		expect(accountHistory).toHaveLength(100);
+		expect(accountHistory[0].sequenceNumber).toBe(2n);
+		expect(accountHistory[99].sequenceNumber).toBe(101n);
+	});
 });
 
 // ── Validation & Cursor tests ─────────────────────────────────────
