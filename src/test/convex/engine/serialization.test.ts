@@ -57,6 +57,9 @@ describe("deserializeState", () => {
 		).toEqual({
 			phase: { review: "active" },
 		});
+		expect(
+			serializeState(deserializeState('{"lawyerOnboarding":"verified"}'))
+		).toBe("lawyerOnboarding.verified");
 	});
 
 	it("deserializes dot-notation to compound state objects", () => {
@@ -83,8 +86,11 @@ describe("deserializeState", () => {
 		expect(() => deserializeState("lawyerOnboarding.")).toThrow(
 			"non-empty state segments"
 		);
-		expect(() => deserializeState('{"lawyerOnboarding":}')).toThrow(
-			"could not parse legacy JSON status"
+	});
+
+	it("treats malformed legacy JSON-looking values as flat strings", () => {
+		expect(deserializeState('{"lawyerOnboarding":')).toBe(
+			'{"lawyerOnboarding":'
 		);
 	});
 });

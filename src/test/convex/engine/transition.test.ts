@@ -663,6 +663,78 @@ describe("transition engine", () => {
 		});
 	});
 
+	it("schedules effects declared on the active compound sub-state", async () => {
+		const t = createGovernedTestConvex();
+		await seedDefaultGovernedActors(t);
+		const requestId = await createSelfSignupRequest(t, "lender");
+
+		const compoundMachine = setup({
+			types: {
+				context: {} as Record<string, never>,
+				events: {} as { type: "ADVANCE" },
+			},
+			actions: {
+				testEffect: () => {
+					// noop test action
+				},
+			},
+		}).createMachine({
+			id: "onboardingRequest",
+			initial: "review",
+			context: {},
+			states: {
+				review: {
+					initial: "pending",
+					states: {
+						pending: {
+							on: {
+								ADVANCE: {
+									target: "verified",
+									actions: ["testEffect"],
+								},
+							},
+						},
+						verified: {},
+					},
+				},
+				approved: {},
+			},
+		});
+
+		await t.run(async (ctx) => {
+			await ctx.db.patch(requestId, {
+				status: "review.pending",
+				machineContext: {},
+			});
+		});
+
+		machineRegistry.onboardingRequest =
+			compoundMachine as unknown as typeof originalMachine;
+		effectRegistry.testEffect = internal.engine.effects.onboarding.assignRole;
+
+		const result = await t.mutation(
+			internal.engine.transitionMutation.transitionMutation,
+			{
+				entityType: "onboardingRequest",
+				entityId: requestId,
+				eventType: "ADVANCE",
+				payload: {},
+				source: {
+					actorType: "system",
+					channel: "scheduler",
+				},
+			}
+		);
+
+		expect(result).toMatchObject({
+			success: true,
+			previousState: "review.pending",
+			newState: "review.verified",
+			effectsScheduled: ["testEffect"],
+		});
+		expect((await getRequest(t, requestId))?.status).toBe("review.verified");
+	});
+
 	it("uses scheduler channel when source specifies scheduler", async () => {
 		const t = createGovernedTestConvex();
 		await seedDefaultGovernedActors(t);

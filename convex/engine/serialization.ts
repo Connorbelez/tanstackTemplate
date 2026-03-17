@@ -19,12 +19,7 @@ export function serializeState(stateValue: StateValue): string {
 		);
 	}
 
-	const [region, subState] = entries[0];
-	if (subState === undefined) {
-		throw new Error(
-			`serializeState encountered an undefined sub-state for region "${region}"`
-		);
-	}
+	const [region, subState] = entries[0]!;
 
 	if (typeof subState === "string") {
 		return `${region}.${subState}`;
@@ -34,21 +29,22 @@ export function serializeState(stateValue: StateValue): string {
 }
 
 export function deserializeState(status: string): StateValue {
-	if (status.trim() === "") {
+	const trimmedStatus = status.trim();
+	if (trimmedStatus === "") {
 		throw new Error("deserializeState requires a non-empty status string");
 	}
 
-	const trimmedStatus = status.trim();
 	if (!status.includes(".")) {
+		// Support legacy persisted JSON strings from the pre-dot-notation serializer.
 		if (trimmedStatus.startsWith("{")) {
 			try {
-				const parsed = JSON.parse(trimmedStatus) as StateValue;
-				serializeState(parsed);
-				return parsed;
+				const parsed = JSON.parse(trimmedStatus) as unknown;
+				if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+					serializeState(parsed as StateValue);
+					return parsed as StateValue;
+				}
 			} catch {
-				throw new Error(
-					`deserializeState could not parse legacy JSON status: "${status}"`
-				);
+				// Fall through and treat malformed JSON-like input as a flat string.
 			}
 		}
 
@@ -62,7 +58,7 @@ export function deserializeState(status: string): StateValue {
 		);
 	}
 
-	const leaf = parts.at(-1) as string;
+	const leaf = parts[parts.length - 1]!;
 	let result: StateValue = leaf;
 
 	for (let index = parts.length - 2; index >= 0; index--) {

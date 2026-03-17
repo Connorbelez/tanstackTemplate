@@ -116,6 +116,18 @@ function getActiveStateNodes(
 	return nodes;
 }
 
+function getEventCandidatesForNode(
+	stateNode: MachineConfigStateNode | undefined,
+	eventType: string
+): unknown[] {
+	const eventConfig = stateNode?.on?.[eventType];
+	if (!eventConfig) {
+		return [];
+	}
+
+	return Array.isArray(eventConfig) ? eventConfig : [eventConfig];
+}
+
 function extractScheduledEffects(
 	machine: AnyStateMachine,
 	previousStateValue: StateValue,
@@ -125,16 +137,19 @@ function extractScheduledEffects(
 		machine,
 		getActiveStatePath(previousStateValue)
 	);
-	const eventConfig =
-		[...activeStateNodes]
-			.reverse()
-			.find((stateNode) => stateNode.on?.[eventType] !== undefined)?.on?.[
-			eventType
-		] ??
-		(machine.config.on as Record<string, unknown> | undefined)?.[eventType];
 	let candidates: unknown[] = [];
-	if (eventConfig) {
-		candidates = Array.isArray(eventConfig) ? eventConfig : [eventConfig];
+	for (let index = activeStateNodes.length - 1; index >= 0; index--) {
+		candidates = getEventCandidatesForNode(activeStateNodes[index], eventType);
+		if (candidates.length > 0) {
+			break;
+		}
+	}
+
+	if (candidates.length === 0) {
+		candidates = getEventCandidatesForNode(
+			machine.config as MachineConfigStateNode,
+			eventType
+		);
 	}
 
 	return candidates.flatMap((candidate) => {

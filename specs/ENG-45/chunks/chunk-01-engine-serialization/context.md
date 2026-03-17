@@ -47,15 +47,15 @@ Implement `serializeState()` and `deserializeState()` utility functions that con
 ---
 
 ## Drift Report
-### CRITICAL: Serialization format mismatch
+### Previously critical: serialization format mismatch (now resolved)
 
-| Aspect | Spec says | Code has | Impact |
+| Aspect | Spec says | Code now has | Status |
 | ----- | ----- | ----- | ----- |
-| **Serialization format** | Dot-notation: `"lawyerOnboarding.verified"` | JSON: `'{"lawyerOnboarding":"verified"}'` | Audit journal readability, kanban grouping logic, all downstream consumers |
-| **Function names** | `serializeState()` / `deserializeState()` | `serializeStatus()` / `deserializeStatus()` | All call sites need updating |
-| **Detection logic** | `status.includes(".")` for compound check | `status.startsWith("{")` for JSON check | Deserialization heuristic changes |
+| **Serialization format** | Dot-notation: `"lawyerOnboarding.verified"` | Dot-notation for persisted states, with legacy JSON deserialization compatibility | Resolved |
+| **Function names** | `serializeState()` / `deserializeState()` | `serializeState()` / `deserializeState()` | Resolved |
+| **Detection logic** | Dot-notation for compound state strings | Legacy JSON rehydration support first, then dot-notation / flat-string handling | Resolved |
 
-**Recommendation:** Replace the current JSON-based implementation with dot-notation. The spec's rationale is sound — dot-notation is human-readable in audit journals and simplifies kanban phase grouping (`status.split(".")[0]`). The JSON approach is technically correct but fails the readability requirement from R8 and the kanban logic in spec section 7.1.
+**Outcome:** The implementation now matches the spec's readability goal for audit journals and kanban grouping (`status.split(".")[0]`) while still rehydrating legacy JSON-encoded persisted statuses.
 
 ### No drift on other aspects
 - `convex/engine/transition.ts` now calls `deserializeState(governedEntity.status)` before hydration, `serializeState(previousStateValue)` for the comparison baseline, and `serializeState(newStateValue)` after transition before persist — the call sites are wired correctly
@@ -71,8 +71,8 @@ Implement `serializeState()` and `deserializeState()` utility functions that con
 
 | File | Action | Purpose |
 | ----- | ----- | ----- |
-| `convex/engine/serialization.ts` | **Modify** | Replace JSON serialization with dot-notation; rename exports to `serializeState`/`deserializeState` |
-| `convex/engine/transition.ts` | **Modify** | Update import names from `serializeStatus`→`serializeState`, `deserializeStatus`→`deserializeState`; update all 3 call sites |
+| `convex/engine/serialization.ts` | **Modify** | Persist dot-notation compound states while preserving legacy JSON deserialization compatibility |
+| `convex/engine/transition.ts` | **Modify** | Ensure hydrate / compare / persist call sites keep using `deserializeState` / `serializeState` consistently |
 | `src/test/convex/engine/serialization.test.ts` | **Modify** | Unit tests for serialization helpers + XState rehydration using real `dealMachine` |
 
 ---
@@ -156,10 +156,10 @@ import { deserializeStatus, serializeStatus } from "./serialization";
 import { deserializeState, serializeState } from "./serialization";
 ```
 
-Then rename all usages in the file (3 occurrences):
-- Line 227: `deserializeStatus` → `deserializeState`
-- Line 228: `serializeStatus` → `serializeState`
-- Line 245: `serializeStatus` → `serializeState`
+The implemented call sites now use the current API in all 3 places:
+- Line 227: `deserializeState(governedEntity.status)`
+- Line 228: `serializeState(previousStateValue)`
+- Line 245: `serializeState(newStateValue)`
 
 ### Step 3: Verify backward compatibility
 Run existing machine tests to confirm flat-state machines are unaffected:
