@@ -52,6 +52,7 @@ export const dealMachine = setup({
 		voidReservation: noopAction,
 		notifyCancellation: noopAction,
 		revokeAllDealAccess: noopAction,
+		revokeLawyerAccess: noopAction,
 	},
 }).createMachine({
 	id: "deal",
@@ -173,6 +174,7 @@ export const dealMachine = setup({
 					"commitReservation",
 					"prorateAccrualBetweenOwners",
 					"updatePaymentSchedule",
+					"revokeLawyerAccess",
 				],
 			},
 		},
