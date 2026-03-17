@@ -382,6 +382,83 @@ describe("reserveShares", () => {
 		expect(getAvailableBalance(sellerAfter)).toBe(0n);
 	});
 
+	it("void of one reservation restores available balance for subsequent reservations", async () => {
+		const t = createTestHarness();
+		const auth = asLedgerUser(t);
+		await initCounter(auth);
+		await mintAndIssue(auth, "m-reserve-void-mutex", "seller", 10_000);
+
+		// Reserve 8,000 for Deal A → available = 2,000
+		const dealA = await executeReserveShares(t, {
+			mortgageId: "m-reserve-void-mutex",
+			sellerLenderId: "seller",
+			buyerLenderId: "buyer-a",
+			amount: 8_000,
+			dealId: "deal-a",
+			effectiveDate: "2026-01-02",
+			idempotencyKey: "reserve-void-mutex-a",
+			source: SYS_SOURCE,
+		});
+
+		// Reserve 2,000 for Deal B → available = 0
+		await executeReserveShares(t, {
+			mortgageId: "m-reserve-void-mutex",
+			sellerLenderId: "seller",
+			buyerLenderId: "buyer-b",
+			amount: 2_000,
+			dealId: "deal-b",
+			effectiveDate: "2026-01-02",
+			idempotencyKey: "reserve-void-mutex-b",
+			source: SYS_SOURCE,
+		});
+
+		const sellerBeforeVoid = await getAccount(
+			t,
+			"m-reserve-void-mutex",
+			"seller"
+		);
+		expect(sellerBeforeVoid.pendingCredits).toBe(10_000n);
+		expect(getAvailableBalance(sellerBeforeVoid)).toBe(0n);
+
+		// Void Deal A → releases 8,000, available = 8,000
+		await executeVoidReservation(t, {
+			reservationId: dealA.reservationId,
+			reason: "deal A cancelled",
+			effectiveDate: "2026-01-03",
+			idempotencyKey: "void-mutex-a",
+			source: SYS_SOURCE,
+		});
+
+		const sellerAfterVoid = await getAccount(
+			t,
+			"m-reserve-void-mutex",
+			"seller"
+		);
+		// Only Deal B's 2,000 remains pending
+		expect(sellerAfterVoid.pendingCredits).toBe(2_000n);
+		expect(getAvailableBalance(sellerAfterVoid)).toBe(8_000n);
+
+		// Now a new 5,000 reservation should succeed
+		await executeReserveShares(t, {
+			mortgageId: "m-reserve-void-mutex",
+			sellerLenderId: "seller",
+			buyerLenderId: "buyer-c",
+			amount: 5_000,
+			dealId: "deal-c",
+			effectiveDate: "2026-01-03",
+			idempotencyKey: "reserve-void-mutex-c",
+			source: SYS_SOURCE,
+		});
+
+		const sellerFinal = await getAccount(
+			t,
+			"m-reserve-void-mutex",
+			"seller"
+		);
+		expect(sellerFinal.pendingCredits).toBe(7_000n);
+		expect(getAvailableBalance(sellerFinal)).toBe(3_000n);
+	});
+
 	it("rejects when seller available balance is below the requested amount", async () => {
 		const t = createTestHarness();
 		const auth = asLedgerUser(t);
