@@ -65,15 +65,15 @@ Note: This file already handles the "no treasury" case by returning `valid: fals
 
 ## File: convex/ledger/__tests__/ledger.test.ts — Add missing tests
 
-**IMPORTANT**: Test IDs T-061 through T-064 are ALREADY USED by CORRECTION tests in this file (lines 742-850). Use T-065 and T-066 for new tests.
+**IMPORTANT**: Test IDs T-061 through T-064 are ALREADY USED by CORRECTION tests in this file (lines 742-850). Use T-076 and T-077 for new tests.
 
-### Test T-065: Double-burn idempotency
+### Test T-076: Double-burn idempotency
 Add to the "Mint & Burn" describe block (after T-060, around line 737).
 
 Pattern: Mint → redeem all → burn with key "burn-m1" → burn again with SAME key "burn-m1" → should return same entry, no error.
 
 ```typescript
-it("T-065: burnMortgage is idempotent on same idempotencyKey", async () => {
+it("T-076: burnMortgage is idempotent on same idempotencyKey", async () => {
   const t = createTestHarness();
   await initCounter(t);
   const auth = asLedgerUser(t);
@@ -108,13 +108,13 @@ it("T-065: burnMortgage is idempotent on same idempotencyKey", async () => {
 });
 ```
 
-### Test T-066: validateSupplyInvariant returns valid after burn
+### Test T-077: validateSupplyInvariant returns valid after burn
 Add to the "Mint & Burn" describe block.
 
 Pattern: Mint → burn → call both validateSupplyInvariant queries → assert valid === true and total === 0n.
 
 ```typescript
-it("T-066: validateSupplyInvariant returns valid: true, total: 0 after burn", async () => {
+it("T-077: validateSupplyInvariant returns valid: true, total: 0 after burn", async () => {
   const t = createTestHarness();
   await initCounter(t);
   const auth = asLedgerUser(t);

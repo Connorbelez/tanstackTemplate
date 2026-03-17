@@ -813,6 +813,83 @@ describe("Mint & Burn", () => {
 		expect(validationInvariant.valid).toBe(true);
 		expect(validationInvariant.total).toBe(0n);
 	});
+
+	it("T-078: double-burn idempotency across full lifecycle (mint → issue → redeem → burn → burn)", async () => {
+		const t = createTestHarness();
+		await initCounter(t);
+		const auth = asLedgerUser(t);
+
+		// 1. Mint mortgage
+		const { treasuryAccountId } = await auth.mutation(
+			api.ledger.mutations.mintMortgage,
+			{
+				mortgageId: "m1",
+				effectiveDate: "2026-01-01",
+				idempotencyKey: "mint-m1",
+				source: SYS_SOURCE,
+			},
+		);
+
+		// 2. Issue 5,000 shares to a lender
+		await auth.mutation(internal.ledger.mutations.issueShares, {
+			mortgageId: "m1",
+			lenderId: "lender-a",
+			amount: 5_000,
+			effectiveDate: "2026-01-01",
+			idempotencyKey: "issue-m1-lender-a",
+			source: SYS_SOURCE,
+		});
+
+		// Treasury should be 5,000 after issuing 5,000
+		expect(
+			await auth.query(api.ledger.queries.getBalance, {
+				accountId: treasuryAccountId,
+			}),
+		).toBe(5_000n);
+
+		// 3. Redeem those 5,000 shares back to treasury
+		await auth.mutation(internal.ledger.mutations.redeemShares, {
+			mortgageId: "m1",
+			lenderId: "lender-a",
+			amount: 5_000,
+			effectiveDate: "2026-01-02",
+			idempotencyKey: "redeem-m1-lender-a",
+			source: SYS_SOURCE,
+		});
+
+		// Treasury should be back to 10,000
+		expect(
+			await auth.query(api.ledger.queries.getBalance, {
+				accountId: treasuryAccountId,
+			}),
+		).toBe(10_000n);
+
+		// 4. First burn succeeds
+		const firstBurn = await auth.mutation(
+			api.ledger.mutations.burnMortgage,
+			{
+				mortgageId: "m1",
+				effectiveDate: "2026-01-03",
+				idempotencyKey: "burn-m1",
+				source: SYS_SOURCE,
+				reason: "Mortgage paid off",
+			},
+		);
+
+		// 5. Second burn with SAME idempotencyKey returns same entry
+		const secondBurn = await auth.mutation(
+			api.ledger.mutations.burnMortgage,
+			{
+				mortgageId: "m1",
+				effectiveDate: "2026-01-03",
+				idempotencyKey: "burn-m1",
+				source: SYS_SOURCE,
+				reason: "Mortgage paid off",
+			},
+		);
+
+		expect(secondBurn._id).toBe(firstBurn._id);
+	});
 });
 
 // ── CORRECTION tests ──────────────────────────────────────────────
