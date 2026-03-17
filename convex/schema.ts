@@ -717,6 +717,7 @@ export default defineSchema({
 		fractionalShare: v.number(),
 		closingDate: v.optional(v.number()),
 		lawyerId: v.optional(v.string()),
+		reservationId: v.optional(v.id("ledger_reservations")),
 		lawyerType: v.optional(
 			v.union(v.literal("platform_lawyer"), v.literal("guest_lawyer"))
 		),

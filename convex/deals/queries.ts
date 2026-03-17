@@ -1,6 +1,6 @@
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import type { Id } from "../_generated/dataModel";
-import { internalQuery } from "../_generated/server";
+import { internalMutation, internalQuery } from "../_generated/server";
 import { adminQuery, authedQuery } from "../fluent";
 import { assertDealAccess } from "./accessCheck";
 
@@ -65,6 +65,40 @@ export interface DealsByPhase {
 }
 
 // ── Internal: used by effects ──────────────────────────────────────
+
+/**
+ * Internal query to fetch a deal by ID.
+ * Used by effects that need to read deal data without auth checks.
+ */
+export const getInternalDeal = internalQuery({
+	args: { dealId: v.id("deals") },
+	handler: async (ctx, { dealId }) => {
+		const deal = await ctx.db.get(dealId);
+		if (!deal) {
+			throw new ConvexError("DEAL_NOT_FOUND");
+		}
+		return deal;
+	},
+});
+
+/**
+ * Internal mutation to set or clear the reservationId on a deal.
+ * Called by the reserveShares effect after successfully creating a reservation.
+ * Pass undefined for reservationId to clear it.
+ */
+export const setReservationId = internalMutation({
+	args: {
+		dealId: v.id("deals"),
+		reservationId: v.optional(v.id("ledger_reservations")),
+	},
+	handler: async (ctx, { dealId, reservationId }) => {
+		const deal = await ctx.db.get(dealId);
+		if (!deal) {
+			throw new ConvexError("DEAL_NOT_FOUND");
+		}
+		await ctx.db.patch(dealId, { reservationId });
+	},
+});
 
 export const getActiveDealAccess = internalQuery({
 	args: { dealId: v.id("deals") },
