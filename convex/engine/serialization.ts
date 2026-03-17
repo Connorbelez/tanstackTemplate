@@ -19,7 +19,7 @@ export function serializeState(stateValue: StateValue): string {
 		);
 	}
 
-	const [region, subState] = entries[0]!;
+	const [region, subState] = entries[0] as [string, StateValue];
 
 	if (typeof subState === "string") {
 		return `${region}.${subState}`;
@@ -58,7 +58,7 @@ export function deserializeState(status: string): StateValue {
 		);
 	}
 
-	const leaf = parts[parts.length - 1]!;
+	const leaf = parts.at(-1) as string;
 	let result: StateValue = leaf;
 
 	for (let index = parts.length - 2; index >= 0; index--) {
