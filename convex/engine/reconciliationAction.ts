@@ -1,3 +1,5 @@
+import type { FunctionReference, FunctionType } from "convex/server";
+import { makeFunctionReference } from "convex/server";
 import { v } from "convex/values";
 import type { Id } from "../_generated/dataModel";
 import type { QueryCtx } from "../_generated/server";
@@ -24,7 +26,39 @@ interface Discrepancy {
 	journalNewState: string;
 }
 
+interface ReconciliationResult {
+	checkedAt: number;
+	discrepancies: Discrepancy[];
+	isHealthy: boolean;
+}
+
 type ReconciliationCtx = Pick<QueryCtx, "db">;
+
+function makeInternalFunctionReference<
+	Type extends FunctionType,
+	Args extends Record<string, unknown>,
+	ReturnType,
+>(name: string) {
+	return makeFunctionReference<Type, Args, ReturnType>(
+		name
+	) as unknown as FunctionReference<Type, "internal", Args, ReturnType>;
+}
+
+const reconcileInternalRef = makeInternalFunctionReference<
+	"query",
+	Record<string, never>,
+	ReconciliationResult
+>("engine/reconciliationAction:reconcileInternal");
+
+const logReconciliationDiscrepanciesRef = makeInternalFunctionReference<
+	"mutation",
+	{
+		checkedAt: number;
+		discrepancies: Discrepancy[];
+		discrepancyCount: number;
+	},
+	null
+>("engine/reconciliationAction:logReconciliationDiscrepancies");
 
 async function collectLatestEntries(
 	ctx: ReconciliationCtx,
@@ -184,12 +218,7 @@ export const logReconciliationDiscrepancies = internalMutation({
  */
 export const dailyReconciliation = internalAction({
 	handler: async (ctx) => {
-		const { internal } = await import("../_generated/api");
-		const result = await ctx.runQuery(
-			// @ts-expect-error — resolves after `convex codegen` (new file not yet in generated API)
-			internal.engine.reconciliationAction.reconcileInternal,
-			{}
-		);
+		const result = await ctx.runQuery(reconcileInternalRef, {});
 
 		if (result.isHealthy) {
 			console.info("[RECONCILIATION] Daily check passed — zero discrepancies.");
@@ -199,15 +228,11 @@ export const dailyReconciliation = internalAction({
 				JSON.stringify(result.discrepancies, null, 2)
 			);
 
-			await ctx.runMutation(
-				// @ts-expect-error — resolves after `convex codegen` (new file not yet in generated API)
-				internal.engine.reconciliationAction.logReconciliationDiscrepancies,
-				{
-					discrepancyCount: result.discrepancies.length,
-					discrepancies: result.discrepancies,
-					checkedAt: result.checkedAt,
-				}
-			);
+			await ctx.runMutation(logReconciliationDiscrepanciesRef, {
+				discrepancyCount: result.discrepancies.length,
+				discrepancies: result.discrepancies,
+				checkedAt: result.checkedAt,
+			});
 		}
 
 		return result;
