@@ -82,7 +82,7 @@ function getActiveStatePath(stateValue: StateValue): string[] {
 		);
 	}
 
-	const [region, subState] = entries[0]!;
+	const [region, subState] = entries[0] as [string, StateValue];
 	if (typeof subState === "string") {
 		return [region, subState];
 	}
@@ -95,7 +95,9 @@ function getActiveStateNodes(
 	activeStatePath: string[]
 ): MachineConfigStateNode[] {
 	const nodes: MachineConfigStateNode[] = [];
-	let states = machine.config.states as Record<string, MachineConfigStateNode> | undefined;
+	let states = machine.config.states as
+		| Record<string, MachineConfigStateNode>
+		| undefined;
 
 	for (const segment of activeStatePath) {
 		if (!states) {
@@ -127,8 +129,9 @@ function extractScheduledEffects(
 		[...activeStateNodes]
 			.reverse()
 			.find((stateNode) => stateNode.on?.[eventType] !== undefined)?.on?.[
-				eventType
-			] ?? (machine.config.on as Record<string, unknown> | undefined)?.[eventType];
+			eventType
+		] ??
+		(machine.config.on as Record<string, unknown> | undefined)?.[eventType];
 	let candidates: unknown[] = [];
 	if (eventConfig) {
 		candidates = Array.isArray(eventConfig) ? eventConfig : [eventConfig];

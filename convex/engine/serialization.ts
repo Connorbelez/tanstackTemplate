@@ -62,7 +62,7 @@ export function deserializeState(status: string): StateValue {
 		);
 	}
 
-	const leaf = parts[parts.length - 1]!;
+	const leaf = parts.at(-1) as string;
 	let result: StateValue = leaf;
 
 	for (let index = parts.length - 2; index >= 0; index--) {

@@ -2,6 +2,10 @@ import { setup } from "xstate";
 
 export const DEAL_MACHINE_VERSION = "1.0.0";
 
+const noopAction = () => {
+	// Effect-marker stub for XState action typing.
+};
+
 export interface DealMachineContext {
 	dealId: string;
 	reservationId?: string;
@@ -36,18 +40,18 @@ export const dealMachine = setup({
 	// The actual side effects are resolved at runtime by the Effect Registry
 	// via the Transition Engine's extractScheduledEffects + scheduleEffects pipeline.
 	actions: {
-		reserveShares: () => {},
-		notifyAllParties: () => {},
-		createDocumentPackage: () => {},
-		createDealAccess: () => {},
-		archiveSignedDocuments: () => {},
-		confirmFundsReceipt: () => {},
-		commitReservation: () => {},
-		prorateAccrualBetweenOwners: () => {},
-		updatePaymentSchedule: () => {},
-		voidReservation: () => {},
-		notifyCancellation: () => {},
-		revokeAllDealAccess: () => {},
+		reserveShares: noopAction,
+		notifyAllParties: noopAction,
+		createDocumentPackage: noopAction,
+		createDealAccess: noopAction,
+		archiveSignedDocuments: noopAction,
+		confirmFundsReceipt: noopAction,
+		commitReservation: noopAction,
+		prorateAccrualBetweenOwners: noopAction,
+		updatePaymentSchedule: noopAction,
+		voidReservation: noopAction,
+		notifyCancellation: noopAction,
+		revokeAllDealAccess: noopAction,
 	},
 }).createMachine({
 	id: "deal",
