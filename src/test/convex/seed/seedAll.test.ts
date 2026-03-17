@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
+import { dealMachine } from "../../../../convex/engine/machines/deal.machine";
+import {
+	deserializeStatus,
+	serializeStatus,
+} from "../../../../convex/engine/serialization";
 import { createTestConvex, ensureSeededIdentity } from "../../auth/helpers";
 import { FAIRLEND_ADMIN } from "../../auth/identities";
 
@@ -8,7 +13,7 @@ async function latestTransitionStateForEntity(
 	t: ReturnType<typeof createTestConvex>,
 	args: {
 		entityId: string;
-		entityType: "mortgage" | "obligation" | "onboardingRequest";
+		entityType: "deal" | "mortgage" | "obligation" | "onboardingRequest";
 	}
 ) {
 	return t.run(async (ctx) => {
@@ -43,6 +48,7 @@ describe("seedAll", () => {
 			lenders: 3,
 			properties: 5,
 			mortgages: 5,
+			deals: 3,
 			obligations: 15,
 			onboardingRequests: 3,
 		});
@@ -54,6 +60,7 @@ describe("seedAll", () => {
 				lenders,
 				properties,
 				mortgages,
+				deals,
 				obligations,
 				onboardingRequests,
 			] = await Promise.all([
@@ -62,6 +69,7 @@ describe("seedAll", () => {
 				ctx.db.query("lenders").collect(),
 				ctx.db.query("properties").collect(),
 				ctx.db.query("mortgages").collect(),
+				ctx.db.query("deals").collect(),
 				ctx.db.query("obligations").collect(),
 				ctx.db.query("onboardingRequests").collect(),
 			]);
@@ -72,6 +80,7 @@ describe("seedAll", () => {
 				lenders,
 				properties,
 				mortgages,
+				deals,
 				obligations,
 				onboardingRequests,
 			};
@@ -82,6 +91,7 @@ describe("seedAll", () => {
 		expect(countsAfterFirstRun.lenders).toHaveLength(3);
 		expect(countsAfterFirstRun.properties).toHaveLength(5);
 		expect(countsAfterFirstRun.mortgages).toHaveLength(5);
+		expect(countsAfterFirstRun.deals).toHaveLength(3);
 		expect(countsAfterFirstRun.obligations).toHaveLength(15);
 		expect(countsAfterFirstRun.onboardingRequests).toHaveLength(3);
 
@@ -95,6 +105,7 @@ describe("seedAll", () => {
 			lenders: 0,
 			properties: 0,
 			mortgages: 0,
+			deals: 0,
 			obligations: 0,
 			onboardingRequests: 0,
 		});
@@ -106,6 +117,7 @@ describe("seedAll", () => {
 				lenders,
 				properties,
 				mortgages,
+				deals,
 				obligations,
 				onboardingRequests,
 			] = await Promise.all([
@@ -114,6 +126,7 @@ describe("seedAll", () => {
 				ctx.db.query("lenders").collect(),
 				ctx.db.query("properties").collect(),
 				ctx.db.query("mortgages").collect(),
+				ctx.db.query("deals").collect(),
 				ctx.db.query("obligations").collect(),
 				ctx.db.query("onboardingRequests").collect(),
 			]);
@@ -124,6 +137,7 @@ describe("seedAll", () => {
 				lenders: lenders.length,
 				properties: properties.length,
 				mortgages: mortgages.length,
+				deals: deals.length,
 				obligations: obligations.length,
 				onboardingRequests: onboardingRequests.length,
 			};
@@ -135,9 +149,55 @@ describe("seedAll", () => {
 			lenders: 3,
 			properties: 5,
 			mortgages: 5,
+			deals: 3,
 			obligations: 15,
 			onboardingRequests: 3,
 		});
+
+		const dealStatuses = new Set(
+			countsAfterFirstRun.deals.map((deal) => deal.status)
+		);
+		expect(dealStatuses).toEqual(
+			new Set(["initiated", "lawyerOnboarding.verified", "documentReview.signed"])
+		);
+
+		const mortgageIds = new Set(
+			countsAfterFirstRun.mortgages.map((mortgage) => mortgage._id)
+		);
+		for (const deal of countsAfterFirstRun.deals) {
+			expect(mortgageIds.has(deal.mortgageId)).toBe(true);
+		}
+
+		const lenderAuthIds = new Set(
+			await t.run(async (ctx) => {
+				const lenders = await ctx.db.query("lenders").collect();
+				const users = await Promise.all(
+					lenders.map((lender) => ctx.db.get(lender.userId))
+				);
+				return users.flatMap((user) => (user?.authId ? [user.authId] : []));
+			})
+		);
+		for (const deal of countsAfterFirstRun.deals) {
+			expect(lenderAuthIds.has(deal.buyerId)).toBe(true);
+			expect(lenderAuthIds.has(deal.sellerId)).toBe(true);
+			if (deal.status === "initiated") {
+				expect(deal.machineContext?.reservationId).toBeUndefined();
+			} else {
+				expect(deal.machineContext?.reservationId).toBeDefined();
+			}
+			const hydrated = dealMachine.resolveState({
+				value: deserializeStatus(deal.status) as Parameters<
+					typeof dealMachine.resolveState
+				>[0]["value"],
+				context: (deal.machineContext ?? {}) as Parameters<
+					typeof dealMachine.resolveState
+				>[0]["context"],
+			});
+			const reserialized = serializeStatus(
+				hydrated.value as string | Record<string, unknown>
+			);
+			expect(reserialized).toBe(deal.status);
+		}
 
 		const obligationStates = new Set(
 			countsAfterFirstRun.obligations.map((obligation) => obligation.status)
@@ -160,6 +220,14 @@ describe("seedAll", () => {
 				entityId: mortgage._id,
 			});
 			expect(latestState).toBe(mortgage.status);
+		}
+
+		for (const deal of countsAfterFirstRun.deals) {
+			const latestState = await latestTransitionStateForEntity(t, {
+				entityType: "deal",
+				entityId: deal._id,
+			});
+			expect(latestState).toBe(deal.status);
 		}
 
 		for (const obligation of countsAfterFirstRun.obligations) {
