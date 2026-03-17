@@ -53,6 +53,7 @@ import type * as documentEngine_templates from "../documentEngine/templates.js";
 import type * as documentEngine_validators from "../documentEngine/validators.js";
 import type * as engine_auditJournal from "../engine/auditJournal.js";
 import type * as engine_commands from "../engine/commands.js";
+import type * as engine_effects_dealClosingPlaceholder from "../engine/effects/dealClosingPlaceholder.js";
 import type * as engine_effects_obligation from "../engine/effects/obligation.js";
 import type * as engine_effects_onboarding from "../engine/effects/onboarding.js";
 import type * as engine_effects_registry from "../engine/effects/registry.js";
@@ -150,6 +151,7 @@ declare const fullApi: ApiFromModules<{
   "documentEngine/validators": typeof documentEngine_validators;
   "engine/auditJournal": typeof engine_auditJournal;
   "engine/commands": typeof engine_commands;
+  "engine/effects/dealClosingPlaceholder": typeof engine_effects_dealClosingPlaceholder;
   "engine/effects/obligation": typeof engine_effects_obligation;
   "engine/effects/onboarding": typeof engine_effects_onboarding;
   "engine/effects/registry": typeof engine_effects_registry;
