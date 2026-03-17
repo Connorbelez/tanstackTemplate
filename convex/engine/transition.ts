@@ -1,6 +1,6 @@
 import type { GenericId } from "convex/values";
 import { ConvexError } from "convex/values";
-import type { AnyStateMachine } from "xstate";
+import type { AnyStateMachine, StateValue } from "xstate";
 import { getNextSnapshot } from "xstate";
 import type { TableNames } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
@@ -8,7 +8,7 @@ import { auditLog } from "../auditLog";
 import { appendAuditJournalEntry } from "./auditJournal";
 import { effectRegistry } from "./effects/registry";
 import { getMachineVersion, machineRegistry } from "./machines/registry";
-import { deserializeStatus, serializeStatus } from "./serialization";
+import { deserializeState, serializeState } from "./serialization";
 import type {
 	CommandSource,
 	EntityType,
@@ -29,6 +29,11 @@ function isGovernedEntityType(
 interface ScheduledEffectDescriptor {
 	actionType: string;
 	params?: Record<string, unknown>;
+}
+
+interface MachineConfigStateNode {
+	on?: Record<string, unknown>;
+	states?: Record<string, MachineConfigStateNode>;
 }
 
 function normalizeActionDescriptors(
@@ -65,29 +70,68 @@ function normalizeActionDescriptors(
 	return descriptors;
 }
 
-function extractScheduledEffects(
-	machine: AnyStateMachine,
-	previousStateValue: string | Record<string, unknown>,
-	eventType: string
-): ScheduledEffectDescriptor[] {
-	// For config inspection we use the string form of the state (top-level key)
-	const stateKeys =
-		typeof previousStateValue === "string"
-			? [previousStateValue]
-			: Object.keys(previousStateValue);
-	if (stateKeys.length !== 1) {
+function getActiveStatePath(stateValue: StateValue): string[] {
+	if (typeof stateValue === "string") {
+		return [stateValue];
+	}
+
+	const entries = Object.entries(stateValue);
+	if (entries.length !== 1) {
 		throw new Error(
-			`extractScheduledEffects only supports a single active top-level state node; got: ${stateKeys.join(", ")}`
+			`extractScheduledEffects only supports a single active state path; got: ${Object.keys(stateValue).join(", ")}`
 		);
 	}
-	const stateKey = stateKeys[0];
 
-	const stateNode =
-		machine.config.states?.[stateKey as keyof typeof machine.config.states];
+	const [region, subState] = entries[0] as [string, StateValue];
+	if (typeof subState === "string") {
+		return [region, subState];
+	}
+
+	return [region, ...getActiveStatePath(subState)];
+}
+
+function getActiveStateNodes(
+	machine: AnyStateMachine,
+	activeStatePath: string[]
+): MachineConfigStateNode[] {
+	const nodes: MachineConfigStateNode[] = [];
+	let states = machine.config.states as
+		| Record<string, MachineConfigStateNode>
+		| undefined;
+
+	for (const segment of activeStatePath) {
+		if (!states) {
+			break;
+		}
+
+		const stateNode = states[segment];
+		if (!stateNode) {
+			break;
+		}
+
+		nodes.push(stateNode);
+		states = stateNode.states;
+	}
+
+	return nodes;
+}
+
+function extractScheduledEffects(
+	machine: AnyStateMachine,
+	previousStateValue: StateValue,
+	eventType: string
+): ScheduledEffectDescriptor[] {
+	const activeStateNodes = getActiveStateNodes(
+		machine,
+		getActiveStatePath(previousStateValue)
+	);
 	const eventConfig =
-		stateNode && "on" in stateNode
-			? (stateNode.on as Record<string, unknown>)?.[eventType]
-			: undefined;
+		[...activeStateNodes]
+			.reverse()
+			.find((stateNode) => stateNode.on?.[eventType] !== undefined)?.on?.[
+			eventType
+		] ??
+		(machine.config.on as Record<string, unknown> | undefined)?.[eventType];
 	let candidates: unknown[] = [];
 	if (eventConfig) {
 		candidates = Array.isArray(eventConfig) ? eventConfig : [eventConfig];
@@ -224,8 +268,8 @@ export async function executeTransition(
 		status: string;
 		machineContext?: Record<string, unknown>;
 	};
-	const previousStateValue = deserializeStatus(governedEntity.status);
-	const previousStateSerialized = serializeStatus(previousStateValue);
+	const previousStateValue = deserializeState(governedEntity.status);
+	const previousStateSerialized = serializeState(previousStateValue);
 	const hydratedContext = (governedEntity.machineContext ?? {}) as Parameters<
 		typeof machine.resolveState
 	>[0]["context"];
@@ -241,8 +285,8 @@ export async function executeTransition(
 		typeof getNextSnapshot<typeof machine>
 	>[2];
 	const nextSnapshot = getNextSnapshot(machine, currentSnapshot, event);
-	const newStateValue = nextSnapshot.value as string | Record<string, unknown>;
-	const newStateSerialized = serializeStatus(newStateValue);
+	const newStateValue = nextSnapshot.value as StateValue;
+	const newStateSerialized = serializeState(newStateValue);
 
 	const resourceType = tableName;
 	let journalEntryId = `${entityType}:${entityId}:${eventType}:${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;

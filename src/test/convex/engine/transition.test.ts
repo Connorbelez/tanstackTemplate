@@ -19,7 +19,6 @@ import {
 import {
 	getAuditJournalForEntity,
 	getEntity,
-	seedMortgage,
 } from "./helpers";
 
 interface AuditHistoryEvent {
@@ -125,6 +124,33 @@ async function getMortgage(t: GovernedTestConvex, mortgageId: Id<"mortgages">) {
 	return t.run(async (ctx) => ctx.db.get(mortgageId));
 }
 
+async function seedDeal(
+	t: GovernedTestConvex,
+	options?: {
+		machineContext?: Record<string, unknown>;
+		status?: string;
+	}
+): Promise<Id<"deals">> {
+	const mortgageId = await seedMortgage(t);
+
+	return t.run(async (ctx) => {
+		const createdAt = Date.now();
+
+		return ctx.db.insert("deals", {
+			status: options?.status ?? "initiated",
+			machineContext: options?.machineContext ?? { dealId: "deal_test_1" },
+			lastTransitionAt: createdAt,
+			mortgageId,
+			buyerId: "buyer_test_1",
+			sellerId: "seller_test_1",
+			fractionalShare: 0.5,
+			closingDate: createdAt + 86_400_000,
+			createdAt,
+			createdBy: "user_fairlend_admin",
+		});
+	});
+}
+
 async function seedPendingOnboardingRequest(
 	t: GovernedTestConvex
 ): Promise<Id<"onboardingRequests">> {
@@ -150,6 +176,7 @@ async function seedPendingOnboardingRequest(
 
 describe("transition engine", () => {
 	const originalMachine = machineRegistry.onboardingRequest;
+	const originalCreateDealAccess = effectRegistry.createDealAccess;
 	const originalTestEffect = effectRegistry.testEffect;
 
 	beforeEach(() => {
@@ -159,6 +186,11 @@ describe("transition engine", () => {
 	afterEach(() => {
 		(machineRegistry as Record<string, unknown>).onboardingRequest =
 			originalMachine;
+		if (originalCreateDealAccess) {
+			effectRegistry.createDealAccess = originalCreateDealAccess;
+		} else {
+			delete effectRegistry.createDealAccess;
+		}
 		if (originalTestEffect) {
 			effectRegistry.testEffect = originalTestEffect;
 		} else {
@@ -854,6 +886,43 @@ describe("transition engine", () => {
 		expect((await getRequest(t, requestId))?.status).toBe("approved");
 	});
 
+	it("schedules nested compound-state effects for deal sub-state transitions", async () => {
+		const t = createGovernedTestConvex();
+		await seedDefaultGovernedActors(t);
+		effectRegistry.createDealAccess =
+			internal.engine.effects.onboarding.assignRole;
+
+		const dealId = await seedDeal(t, {
+			status: "lawyerOnboarding.pending",
+			machineContext: { dealId: "deal_test_nested_effect" },
+		});
+
+		const result = await t.mutation(
+			internal.engine.transitionMutation.transitionMutation,
+			{
+				entityType: "deal",
+				entityId: dealId,
+				eventType: "LAWYER_VERIFIED",
+				payload: { verificationId: "v-1" },
+				source: {
+					actorId: "user_fairlend_admin",
+					actorType: "admin",
+					channel: "admin_dashboard",
+				},
+			}
+		);
+
+		expect(result).toMatchObject({
+			success: true,
+			previousState: "lawyerOnboarding.pending",
+			newState: "lawyerOnboarding.verified",
+			effectsScheduled: ["createDealAccess"],
+		});
+
+		const deal = await getEntity(t, dealId);
+		expect(deal?.status).toBe("lawyerOnboarding.verified");
+	});
+
 	it("keeps a consistent final state under competing transition requests", async () => {
 		const t = createGovernedTestConvex();
 		await seedDefaultGovernedActors(t);
@@ -1281,8 +1350,8 @@ describe("transition engine", () => {
 
 		const error = await t
 			.mutation(internal.engine.transitionMutation.transitionMutation, {
-				entityType: "deal" as EntityType,
-				entityId: "fake_deal_id",
+				entityType: "borrower" as EntityType,
+				entityId: "fake_borrower_id",
 				eventType: "APPROVE",
 				payload: {},
 				source: {
