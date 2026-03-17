@@ -83,6 +83,20 @@ export const issueSharesArgsValidator = {
 	metadata: v.optional(v.any()),
 };
 
+export const allocationValidator = v.object({
+	lenderId: v.string(),
+	amount: v.number(),
+});
+
+export const mintAndIssueArgsValidator = {
+	mortgageId: v.string(),
+	allocations: v.array(allocationValidator),
+	effectiveDate: v.string(),
+	idempotencyKey: v.string(),
+	source: eventSourceValidator,
+	metadata: v.optional(v.any()),
+};
+
 export const transferSharesArgsValidator = {
 	mortgageId: v.string(),
 	sellerLenderId: v.string(),
