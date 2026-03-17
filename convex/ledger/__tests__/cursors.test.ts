@@ -236,7 +236,7 @@ describe("Ledger Consumer Cursors", () => {
 
 		const secondBatch = await auth.query(api.ledger.cursors.getNewEntries, {
 			consumerId: "accrual_engine",
-			batchSize: 10,
+			batchSize: 4,
 		});
 		expect(secondBatch.entries.map((entry) => entry.sequenceNumber)).toEqual([
 			4n,
@@ -284,6 +284,21 @@ describe("Ledger Consumer Cursors", () => {
 			expect.unreachable("Expected advanceCursor to reject bad sequence");
 		} catch (error) {
 			expect(getConvexErrorCode(error)).toBe("INVALID_SEQUENCE");
+		}
+
+		await auth.mutation(api.ledger.cursors.advanceCursor, {
+			consumerId: "accrual_engine",
+			lastProcessedSequence: 7n,
+		});
+
+		try {
+			await auth.mutation(api.ledger.cursors.advanceCursor, {
+				consumerId: "accrual_engine",
+				lastProcessedSequence: 3n,
+			});
+			expect.unreachable("Expected advanceCursor to reject rewinds");
+		} catch (error) {
+			expect(getConvexErrorCode(error)).toBe("CURSOR_REWIND_NOT_ALLOWED");
 		}
 
 		try {

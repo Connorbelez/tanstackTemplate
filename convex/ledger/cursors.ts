@@ -1,6 +1,6 @@
 import { ConvexError, v } from "convex/values";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
-import { ledgerMutation, ledgerQuery } from "../fluent";
+import { adminMutation, ledgerMutation, ledgerQuery } from "../fluent";
 
 const DEFAULT_BATCH_SIZE = 100;
 
@@ -55,7 +55,7 @@ export const getCursor = ledgerQuery
 	})
 	.public();
 
-export const registerCursor = ledgerMutation
+export const registerCursor = adminMutation
 	.input({ consumerId: v.string() })
 	.handler(async (ctx, args) => {
 		const existing = await getCursorByConsumerId(ctx, args.consumerId);
@@ -87,18 +87,21 @@ export const getNewEntries = ledgerQuery
 		}
 
 		const batchSize = resolveBatchSize(args.batchSize);
+		// Over-fetch by one so `hasMore` is accurate when the remaining entries
+		// count equals `batchSize`.
 		const entries = await ctx.db
 			.query("ledger_journal_entries")
 			.withIndex("by_sequence", (q) =>
 				q.gt("sequenceNumber", cursor.lastProcessedSequence)
 			)
 			.order("asc")
-			.take(batchSize);
+			.take(batchSize + 1);
 
+		const hasMore = entries.length > batchSize;
 		return {
-			entries,
+			entries: entries.slice(0, batchSize),
 			cursorPosition: cursor.lastProcessedSequence,
-			hasMore: entries.length === batchSize,
+			hasMore,
 		};
 	})
 	.public();
@@ -114,6 +117,17 @@ export const advanceCursor = ledgerMutation
 			throw new ConvexError({
 				code: "CURSOR_NOT_FOUND",
 				message: `Consumer cursor '${args.consumerId}' not registered.`,
+				consumerId: args.consumerId,
+			});
+		}
+
+		if (args.lastProcessedSequence < existing.lastProcessedSequence) {
+			throw new ConvexError({
+				code: "CURSOR_REWIND_NOT_ALLOWED",
+				message:
+					"advanceCursor cannot move backwards. Use resetCursor for explicit rewinds.",
+				currentSequence: existing.lastProcessedSequence,
+				attemptedSequence: args.lastProcessedSequence,
 				consumerId: args.consumerId,
 			});
 		}
