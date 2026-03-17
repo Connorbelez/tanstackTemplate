@@ -1,6 +1,6 @@
 import type { GenericId } from "convex/values";
 import { ConvexError } from "convex/values";
-import type { AnyStateMachine } from "xstate";
+import type { AnyStateMachine, StateValue } from "xstate";
 import { getNextSnapshot } from "xstate";
 import type { TableNames } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
@@ -8,7 +8,7 @@ import { auditLog } from "../auditLog";
 import { appendAuditJournalEntry } from "./auditJournal";
 import { effectRegistry } from "./effects/registry";
 import { getMachineVersion, machineRegistry } from "./machines/registry";
-import { deserializeStatus, serializeStatus } from "./serialization";
+import { deserializeState, serializeState } from "./serialization";
 import type {
 	CommandSource,
 	EntityType,
@@ -67,7 +67,7 @@ function normalizeActionDescriptors(
 
 function extractScheduledEffects(
 	machine: AnyStateMachine,
-	previousStateValue: string | Record<string, unknown>,
+	previousStateValue: StateValue,
 	eventType: string
 ): ScheduledEffectDescriptor[] {
 	// For config inspection we use the string form of the state (top-level key)
@@ -224,8 +224,8 @@ export async function executeTransition(
 		status: string;
 		machineContext?: Record<string, unknown>;
 	};
-	const previousStateValue = deserializeStatus(governedEntity.status);
-	const previousStateSerialized = serializeStatus(previousStateValue);
+	const previousStateValue = deserializeState(governedEntity.status);
+	const previousStateSerialized = serializeState(previousStateValue);
 	const hydratedContext = (governedEntity.machineContext ?? {}) as Parameters<
 		typeof machine.resolveState
 	>[0]["context"];
@@ -241,8 +241,8 @@ export async function executeTransition(
 		typeof getNextSnapshot<typeof machine>
 	>[2];
 	const nextSnapshot = getNextSnapshot(machine, currentSnapshot, event);
-	const newStateValue = nextSnapshot.value as string | Record<string, unknown>;
-	const newStateSerialized = serializeStatus(newStateValue);
+	const newStateValue = nextSnapshot.value as StateValue;
+	const newStateSerialized = serializeState(newStateValue);
 
 	const resourceType = tableName;
 	let journalEntryId = `${entityType}:${entityId}:${eventType}:${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
