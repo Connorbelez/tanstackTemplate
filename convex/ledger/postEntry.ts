@@ -129,6 +129,103 @@ async function resolveAccounts(
 	return { debitAccount, creditAccount };
 }
 
+// ── Mortgage match helpers ──────────────────────────────────────────
+// Extracted from typeCheck to stay below cognitive complexity threshold.
+
+/** Throws MORTGAGE_MISMATCH if accountMortgageId !== expectedMortgageId. */
+function assertAccountMortgage(
+	accountMortgageId: string | undefined,
+	expectedMortgageId: string,
+	side: "debit" | "credit"
+): void {
+	if (accountMortgageId !== expectedMortgageId) {
+		throw new ConvexError({
+			code: "MORTGAGE_MISMATCH",
+			message: `args.mortgageId (${expectedMortgageId}) does not match ${side} account mortgageId (${accountMortgageId})`,
+			argsMortgageId: expectedMortgageId,
+			accountMortgageId,
+			side,
+		});
+	}
+}
+
+/** Verify args.mortgageId matches the relevant account mortgageIds by entry type. */
+function checkArgsMortgageMatch(
+	args: PostEntryInput,
+	debitAccount: Doc<"ledger_accounts">,
+	creditAccount: Doc<"ledger_accounts">
+): void {
+	if (SAME_MORTGAGE_ENTRY_TYPES.has(args.entryType)) {
+		// Share-level types: both accounts must match args.mortgageId
+		assertAccountMortgage(debitAccount.mortgageId, args.mortgageId, "debit");
+		assertAccountMortgage(creditAccount.mortgageId, args.mortgageId, "credit");
+		return;
+	}
+
+	if (args.entryType === "MORTGAGE_MINTED") {
+		// Debit account (TREASURY) must match; credit (WORLD) has no mortgageId
+		assertAccountMortgage(debitAccount.mortgageId, args.mortgageId, "debit");
+		return;
+	}
+
+	if (args.entryType === "MORTGAGE_BURNED") {
+		// Credit account (TREASURY) must match; debit (WORLD) has no mortgageId
+		assertAccountMortgage(creditAccount.mortgageId, args.mortgageId, "credit");
+		return;
+	}
+
+	if (args.entryType === "CORRECTION") {
+		// If an account has mortgageId, it must match args.mortgageId
+		if (debitAccount.mortgageId) {
+			assertAccountMortgage(debitAccount.mortgageId, args.mortgageId, "debit");
+		}
+		if (creditAccount.mortgageId) {
+			assertAccountMortgage(
+				creditAccount.mortgageId,
+				args.mortgageId,
+				"credit"
+			);
+		}
+	}
+}
+
+/** Verify accounts match each other's mortgageId where required. */
+function checkAccountMortgageMatch(
+	args: PostEntryInput,
+	debitAccount: Doc<"ledger_accounts">,
+	creditAccount: Doc<"ledger_accounts">
+): void {
+	// Same-mortgage enforcement for share-level entry types
+	if (
+		SAME_MORTGAGE_ENTRY_TYPES.has(args.entryType) &&
+		debitAccount.mortgageId !== creditAccount.mortgageId
+	) {
+		throw new ConvexError({
+			code: "MORTGAGE_MISMATCH",
+			message: `${args.entryType} requires both accounts on the same mortgage`,
+			entryType: args.entryType,
+			debitMortgageId: debitAccount.mortgageId,
+			creditMortgageId: creditAccount.mortgageId,
+		});
+	}
+
+	// CORRECTION: if both accounts have mortgageId, they must match each other
+	if (
+		args.entryType === "CORRECTION" &&
+		debitAccount.mortgageId &&
+		creditAccount.mortgageId &&
+		debitAccount.mortgageId !== creditAccount.mortgageId
+	) {
+		throw new ConvexError({
+			code: "MORTGAGE_MISMATCH",
+			message: "CORRECTION cannot move units between different mortgages",
+			entryType: "CORRECTION",
+			debitMortgageId: debitAccount.mortgageId,
+			creditMortgageId: creditAccount.mortgageId,
+		});
+	}
+}
+
 // ── Step 4: TYPE_CHECK ──────────────────────────────────────────────
 // T-005
 
@@ -161,42 +258,37 @@ function typeCheck(
 		});
 	}
 
-	// Same-mortgage enforcement for share-level entry types
-	if (
-		SAME_MORTGAGE_ENTRY_TYPES.has(args.entryType) &&
-		debitAccount.mortgageId !== creditAccount.mortgageId
-	) {
-		throw new ConvexError({
-			code: "MORTGAGE_MISMATCH",
-			message: `${args.entryType} requires both accounts on the same mortgage`,
-			entryType: args.entryType,
-			debitMortgageId: debitAccount.mortgageId,
-			creditMortgageId: creditAccount.mortgageId,
-		});
-	}
+	// Mortgage matching: accounts must match each other and args.mortgageId
+	checkAccountMortgageMatch(args, debitAccount, creditAccount);
+	checkArgsMortgageMatch(args, debitAccount, creditAccount);
 
-	// CORRECTION: if both accounts have mortgageId, they must match
-	if (
-		args.entryType === "CORRECTION" &&
-		debitAccount.mortgageId &&
-		creditAccount.mortgageId &&
-		debitAccount.mortgageId !== creditAccount.mortgageId
-	) {
-		throw new ConvexError({
-			code: "MORTGAGE_MISMATCH",
-			message: "CORRECTION cannot move units between different mortgages",
-			entryType: "CORRECTION",
-			debitMortgageId: debitAccount.mortgageId,
-			creditMortgageId: creditAccount.mortgageId,
-		});
-	}
-
-	// CORRECTION requires causedBy
-	if (args.entryType === "CORRECTION" && !args.causedBy) {
-		throw new ConvexError({
-			code: "CORRECTION_REQUIRES_CAUSED_BY",
-			message: "CORRECTION requires causedBy reference to existing entry",
-		});
+	// CORRECTION structural preconditions — must fire before balanceCheck (Step 5).
+	// Ordered: admin first, then causedBy, then reason.
+	if (args.entryType === "CORRECTION") {
+		if (args.source.type !== "user") {
+			throw new ConvexError({
+				code: "CORRECTION_REQUIRES_ADMIN",
+				message: "CORRECTION requires source.type = 'user'",
+			});
+		}
+		if (!args.source.actor) {
+			throw new ConvexError({
+				code: "CORRECTION_REQUIRES_ADMIN",
+				message: "CORRECTION requires source.actor (admin identity)",
+			});
+		}
+		if (!args.causedBy) {
+			throw new ConvexError({
+				code: "CORRECTION_REQUIRES_CAUSED_BY",
+				message: "CORRECTION requires causedBy reference to existing entry",
+			});
+		}
+		if (!args.reason) {
+			throw new ConvexError({
+				code: "CORRECTION_REQUIRES_REASON",
+				message: "CORRECTION requires a reason",
+			});
+		}
 	}
 }
 
@@ -295,8 +387,8 @@ function constraintSharesIssued(ctx: ConstraintContext): void {
 }
 
 function constraintSharesTransferred(ctx: ConstraintContext): void {
-	// Min position on credit (seller) after
-	const creditAfter = getPostedBalance(ctx.creditAccount) - ctx.amountBigInt;
+	// Min position on credit (seller) after — using available balance to account for pending reservations
+	const creditAfter = getAvailableBalance(ctx.creditAccount) - ctx.amountBigInt;
 	checkMinPosition(creditAfter, "Seller post-transfer");
 
 	// Min position on debit (buyer) after
@@ -311,8 +403,17 @@ function constraintSharesRedeemed(ctx: ConstraintContext): void {
 }
 
 function constraintSharesReserved(ctx: ConstraintContext): void {
-	// Min position on credit (seller) after — using available balance
+	// Check insufficient balance explicitly before min position check
 	const sellerAvailable = getAvailableBalance(ctx.creditAccount);
+	if (sellerAvailable < ctx.amountBigInt) {
+		throw new ConvexError({
+			code: "INSUFFICIENT_BALANCE",
+			message: `Seller available balance ${sellerAvailable} < reservation amount ${ctx.amountBigInt}`,
+			availableBalance: Number(sellerAvailable),
+			requestedAmount: ctx.args.amount,
+			creditAccountId: ctx.creditAccount._id,
+		});
+	}
 	const sellerAfter = sellerAvailable - ctx.amountBigInt;
 	checkMinPosition(sellerAfter, "Seller post-reservation");
 
@@ -331,24 +432,10 @@ function constraintSharesVoided(_ctx: ConstraintContext): void {
 }
 
 function constraintCorrection(ctx: ConstraintContext): void {
-	if (ctx.args.source.type !== "user") {
-		throw new ConvexError({
-			code: "CORRECTION_REQUIRES_ADMIN",
-			message: "CORRECTION requires source.type = 'user'",
-		});
-	}
-	if (!ctx.args.causedBy) {
-		throw new ConvexError({
-			code: "CORRECTION_REQUIRES_CAUSED_BY",
-			message: "CORRECTION requires causedBy reference to existing entry",
-		});
-	}
-	if (!ctx.args.reason) {
-		throw new ConvexError({
-			code: "CORRECTION_REQUIRES_REASON",
-			message: "CORRECTION requires a reason",
-		});
-	}
+	// Admin, causedBy, and reason checks are in typeCheck (Step 4)
+	// to ensure they fire before balanceCheck (Step 5).
+	// Only min-position constraints remain here.
+
 	// Min position on affected POSITIONs
 	if (ctx.debitAccount.type === "POSITION") {
 		const debitAfter = getPostedBalance(ctx.debitAccount) + ctx.amountBigInt;

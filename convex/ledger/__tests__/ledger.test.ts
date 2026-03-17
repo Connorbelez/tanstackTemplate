@@ -892,7 +892,7 @@ describe("CORRECTION", () => {
 				causedBy: issueResult.journalEntry._id,
 				reason: "bad correction",
 			})
-		).rejects.toThrow(/INSUFFICIENT_BALANCE/);
+		).rejects.toThrow(/available balance.*< amount/);
 	});
 
 	it("T-064c: CORRECTION rejects cross-mortgage unit movement", async () => {
@@ -1504,7 +1504,7 @@ describe("Common Rejections", () => {
 				idempotencyKey: "wrong-types-1",
 				source: SYS_SOURCE,
 			})
-		).rejects.toThrow(/TYPE_MISMATCH/);
+		).rejects.toThrow(/requires debit account type in/);
 	});
 
 	it("T-075b: MORTGAGE_MINTED rejects wrong account types", async () => {
@@ -1529,7 +1529,7 @@ describe("Common Rejections", () => {
 				idempotencyKey: "wrong-types-2",
 				source: SYS_SOURCE,
 			})
-		).rejects.toThrow(/TYPE_MISMATCH/);
+		).rejects.toThrow(/requires debit account type in/);
 	});
 
 	it("T-075c: SHARES_REDEEMED rejects wrong account types", async () => {
@@ -1554,6 +1554,6 @@ describe("Common Rejections", () => {
 				idempotencyKey: "wrong-types-3",
 				source: SYS_SOURCE,
 			})
-		).rejects.toThrow(/TYPE_MISMATCH/);
+		).rejects.toThrow(/requires debit account type in/);
 	});
 });
