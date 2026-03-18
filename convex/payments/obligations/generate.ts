@@ -35,7 +35,7 @@ export const generateObligations = internalMutation({
 
 		if (!borrowerLink) {
 			throw new ConvexError(
-				`No borrower found for mortgage: ${args.mortgageId as string}`,
+				`No borrower found for mortgage: ${args.mortgageId as string}`
 			);
 		}
 

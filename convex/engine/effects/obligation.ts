@@ -136,7 +136,7 @@ export const emitObligationOverdue = internalMutation({
 		// Trigger rules engine for late fee evaluation (SPEC 1.5 §8.2)
 		await ctx.scheduler.runAfter(
 			0,
-			internal.payments.collectionPlan.stubs.evaluateRules,
+			internal.payments.collectionPlan.engine.evaluateRules,
 			{
 				trigger: "event" as const,
 				mortgageId: obligation.mortgageId,
