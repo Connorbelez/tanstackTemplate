@@ -89,7 +89,7 @@ async function forwardObligationEventToMortgage(
 		effectLabel: "emitObligationOverdue" | "emitObligationSettled";
 		eventType: "OBLIGATION_OVERDUE" | "PAYMENT_CONFIRMED";
 	}
-) {
+): Promise<ObligationRecord> {
 	const obligation = await loadObligationOrThrow(ctx, args, config.effectLabel);
 	const result = await executeTransition(ctx, {
 		entityType: "mortgage",
@@ -103,12 +103,14 @@ async function forwardObligationEventToMortgage(
 		console.warn(
 			`[${config.effectLabel}] Skipping ${config.eventType} for mortgage=${obligation.mortgageId} from obligation=${args.entityId}: ${getTransitionFailureReason(result)} (state=${result.previousState})`
 		);
-		return;
+		return obligation;
 	}
 
 	console.info(
 		`[${config.effectLabel}] obligation=${args.entityId} -> mortgage=${obligation.mortgageId}: ${result.previousState} -> ${result.newState}`
 	);
+
+	return obligation;
 }
 
 export const obligationEffectTestHelpers = {
@@ -123,7 +125,7 @@ export const obligationEffectTestHelpers = {
 export const emitObligationOverdue = internalMutation({
 	args: obligationEffectPayloadValidator,
 	handler: async (ctx, args) => {
-		await forwardObligationEventToMortgage(ctx, args, {
+		const obligation = await forwardObligationEventToMortgage(ctx, args, {
 			effectLabel: "emitObligationOverdue",
 			eventType: "OBLIGATION_OVERDUE",
 			buildPayload: ({ entityId }) => ({
@@ -132,22 +134,19 @@ export const emitObligationOverdue = internalMutation({
 		});
 
 		// Trigger rules engine for late fee evaluation (SPEC 1.5 §8.2)
-		const obligation = await ctx.db.get(args.entityId);
-		if (obligation) {
-			await ctx.scheduler.runAfter(
-				0,
-				internal.payments.collectionPlan.stubs.evaluateRules,
-				{
-					trigger: "event" as const,
+		await ctx.scheduler.runAfter(
+			0,
+			internal.payments.collectionPlan.stubs.evaluateRules,
+			{
+				trigger: "event" as const,
+				mortgageId: obligation.mortgageId,
+				eventType: "OBLIGATION_OVERDUE",
+				eventPayload: {
+					obligationId: args.entityId,
 					mortgageId: obligation.mortgageId,
-					eventType: "OBLIGATION_OVERDUE",
-					eventPayload: {
-						obligationId: args.entityId,
-						mortgageId: obligation.mortgageId,
-					},
-				}
-			);
-		}
+				},
+			}
+		);
 	},
 });
 
@@ -158,24 +157,21 @@ export const emitObligationOverdue = internalMutation({
 export const emitObligationSettled = internalMutation({
 	args: obligationEffectPayloadValidator,
 	handler: async (ctx, args) => {
-		await forwardObligationEventToMortgage(ctx, args, {
+		const obligation = await forwardObligationEventToMortgage(ctx, args, {
 			effectLabel: "emitObligationSettled",
 			eventType: "PAYMENT_CONFIRMED",
 			buildPayload: buildPaymentConfirmedPayload,
 		});
 
 		// Schedule dispersal entry creation (SPEC 1.5 §8.3)
-		const obligation = await ctx.db.get(args.entityId);
-		if (obligation) {
-			await ctx.scheduler.runAfter(
-				0,
-				internal.payments.dispersal.stubs.createDispersalEntry,
-				{
-					mortgageId: obligation.mortgageId,
-					obligationId: args.entityId,
-					amount: obligation.amount,
-				}
-			);
-		}
+		await ctx.scheduler.runAfter(
+			0,
+			internal.payments.dispersal.stubs.createDispersalEntry,
+			{
+				mortgageId: obligation.mortgageId,
+				obligationId: args.entityId,
+				amount: obligation.amount,
+			}
+		);
 	},
 });

@@ -34,6 +34,8 @@ export const createLateFeeObligation = internalMutation({
 
 		// IDEMPOTENCY CHECK: look for an existing late fee for this obligation.
 		// Use the by_mortgage index to narrow results, then filter in-memory.
+		// TODO: Add a dedicated index on (mortgageId, sourceObligationId, type) or
+		// sourceObligationId alone to avoid unbounded scan as mortgage history grows.
 		const existingLateFee = await ctx.db
 			.query("obligations")
 			.withIndex("by_mortgage", (q) =>
@@ -56,7 +58,7 @@ export const createLateFeeObligation = internalMutation({
 
 		const now = Date.now();
 
-		await ctx.db.insert("obligations", {
+		const lateFeeId = await ctx.db.insert("obligations", {
 			status: "upcoming",
 			type: "late_fee",
 			amount: LATE_FEE_AMOUNT_CENTS,
@@ -70,6 +72,11 @@ export const createLateFeeObligation = internalMutation({
 			sourceObligationId: args.entityId,
 			createdAt: now,
 			lastTransitionAt: now,
+		});
+
+		// Patch machineContext with the actual obligation ID to maintain consistency
+		await ctx.db.patch(lateFeeId, {
+			machineContext: { obligationId: lateFeeId, paymentsApplied: 0 },
 		});
 
 		console.info(
