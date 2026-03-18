@@ -3,7 +3,7 @@ import { internalQuery } from "../_generated/server";
 
 /**
  * Returns the most recent settled obligation before a given date for a mortgage.
- * Used by prorateAccrualBetweenOwners to derive the last payment date.
+ * Uses by_mortgage_and_due index range to avoid full-table scan.
  */
 export const getSettledBeforeDate = internalQuery({
 	args: {
@@ -11,26 +11,20 @@ export const getSettledBeforeDate = internalQuery({
 		beforeDate: v.string(),
 	},
 	handler: async (ctx, { mortgageId, beforeDate }) => {
-		const obligations = await ctx.db
+		return await ctx.db
 			.query("obligations")
-			.withIndex("by_mortgage_and_due", (q) => q.eq("mortgageId", mortgageId))
-			.filter((q) =>
-				q.and(
-					q.lte(q.field("dueDate"), beforeDate),
-					q.eq(q.field("status"), "settled")
-				)
+			.withIndex("by_mortgage_and_due", (q) =>
+				q.eq("mortgageId", mortgageId).lte("dueDate", beforeDate)
 			)
-			.collect();
-
-		// Sort descending by dueDate to get the most recent
-		obligations.sort((a, b) => (b.dueDate > a.dueDate ? 1 : -1));
-		return obligations.length > 0 ? obligations[0] : null;
+			.order("desc")
+			.filter((q) => q.eq(q.field("status"), "settled"))
+			.first();
 	},
 });
 
 /**
  * Returns the first obligation after a given date for a mortgage.
- * Used by prorateAccrualBetweenOwners to derive the next payment date.
+ * Uses by_mortgage_and_due index range to avoid full-table scan.
  */
 export const getFirstAfterDate = internalQuery({
 	args: {
@@ -38,14 +32,12 @@ export const getFirstAfterDate = internalQuery({
 		afterDate: v.string(),
 	},
 	handler: async (ctx, { mortgageId, afterDate }) => {
-		const obligations = await ctx.db
+		return await ctx.db
 			.query("obligations")
-			.withIndex("by_mortgage_and_due", (q) => q.eq("mortgageId", mortgageId))
-			.filter((q) => q.gt(q.field("dueDate"), afterDate))
-			.collect();
-
-		// Sort ascending by dueDate to get the earliest
-		obligations.sort((a, b) => (a.dueDate > b.dueDate ? 1 : -1));
-		return obligations.length > 0 ? obligations[0] : null;
+			.withIndex("by_mortgage_and_due", (q) =>
+				q.eq("mortgageId", mortgageId).gt("dueDate", afterDate)
+			)
+			.order("asc")
+			.first();
 	},
 });

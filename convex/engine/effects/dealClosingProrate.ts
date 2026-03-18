@@ -192,6 +192,7 @@ export const prorateAccrualBetweenOwners = internalAction({
 					error instanceof Error ? error.message : String(error)
 				}`
 			);
+			throw error;
 		}
 	},
 });
