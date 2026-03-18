@@ -76,8 +76,8 @@ describe("ScheduleRule", () => {
 
 		// getUpcomingInWindow -> returns the obligation
 		runQuery.mockResolvedValueOnce([obligation]);
-		// getEntryForObligation -> no existing entry
-		runQuery.mockResolvedValueOnce(null);
+		// getPlannedEntriesForObligations -> no existing entries (empty record)
+		runQuery.mockResolvedValueOnce({});
 
 		await scheduleRuleHandler.evaluate(ctx, { rule });
 
@@ -100,9 +100,9 @@ describe("ScheduleRule", () => {
 
 		// getUpcomingInWindow -> returns the obligation
 		runQuery.mockResolvedValueOnce([obligation]);
-		// getEntryForObligation -> existing entry found
+		// getPlannedEntriesForObligations -> obligation already covered
 		runQuery.mockResolvedValueOnce({
-			_id: "existing_entry" as Id<"collectionPlanEntries">,
+			[obligation._id]: "existing_entry" as Id<"collectionPlanEntries">,
 		});
 
 		await scheduleRuleHandler.evaluate(ctx, { rule });
@@ -124,7 +124,8 @@ describe("ScheduleRule", () => {
 		const obligation = mockObligation();
 
 		runQuery.mockResolvedValueOnce([obligation]);
-		runQuery.mockResolvedValueOnce(null);
+		// getPlannedEntriesForObligations -> no existing entries
+		runQuery.mockResolvedValueOnce({});
 
 		await scheduleRuleHandler.evaluate(ctx, { rule });
 
@@ -141,7 +142,8 @@ describe("ScheduleRule", () => {
 		const obligation = mockObligation({ dueDate });
 
 		runQuery.mockResolvedValueOnce([obligation]);
-		runQuery.mockResolvedValueOnce(null);
+		// getPlannedEntriesForObligations -> no existing entries
+		runQuery.mockResolvedValueOnce({});
 
 		await scheduleRuleHandler.evaluate(ctx, {
 			rule: mockRule({ parameters: { delayDays } }),
@@ -259,6 +261,26 @@ describe("RetryRule", () => {
 				before + expectedDelay + 100
 			);
 		}
+	});
+
+	it("is idempotent: evaluating same COLLECTION_FAILED payload twice creates only one retry entry", async () => {
+		const evalCtx = retryEvalCtx();
+
+		// First evaluation: no existing retry entry found -> creates one
+		runQuery.mockResolvedValueOnce(null);
+		await retryRuleHandler.evaluate(ctx, evalCtx);
+		expect(runMutation).toHaveBeenCalledOnce();
+
+		// Second evaluation: existing retry entry found -> skips creation
+		runMutation.mockClear();
+		runQuery.mockResolvedValueOnce({
+			_id: "existing_retry_entry" as Id<"collectionPlanEntries">,
+			rescheduledFromId: "entry_1",
+			source: "retry_rule",
+			status: "planned",
+		});
+		await retryRuleHandler.evaluate(ctx, evalCtx);
+		expect(runMutation).not.toHaveBeenCalled();
 	});
 
 	it("ignores non-COLLECTION_FAILED events", async () => {

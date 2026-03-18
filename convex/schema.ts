@@ -536,7 +536,8 @@ export default defineSchema({
 		.index("by_status", ["status"])
 		.index("by_mortgage", ["mortgageId", "status"])
 		.index("by_mortgage_and_date", ["mortgageId", "dueDate"])
-		.index("by_due_date", ["dueDate", "status"])
+		.index("by_due_date", ["status", "dueDate"])
+		.index("by_type_and_source", ["type", "sourceObligationId"])
 		.index("by_borrower", ["borrowerId"]),
 
 	// ══════════════════════════════════════════════════════════
@@ -566,7 +567,8 @@ export default defineSchema({
 		createdAt: v.number(),
 	})
 		.index("by_scheduled_date", ["scheduledDate", "status"])
-		.index("by_status", ["status"]),
+		.index("by_status", ["status"])
+		.index("by_rescheduled_from", ["rescheduledFromId", "source"]),
 
 	collectionRules: defineTable({
 		name: v.string(),

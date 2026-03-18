@@ -88,7 +88,7 @@ However, the rule handlers themselves are pure TypeScript objects (RuleHandler i
 11. Exponential backoff: verify delay pattern (3, 6, 12 days)
 12. Ignores non-COLLECTION_FAILED events
 
-**LateFeeeRule Tests:**
+**LateFeeRule Tests:**
 13. Creates late_fee obligation on OBLIGATION_OVERDUE
 14. Idempotency: existing late fee for same source obligation → no duplicate
 15. Correct parameters: amount=5000, dueDate=+30d, gracePeriod=+45d

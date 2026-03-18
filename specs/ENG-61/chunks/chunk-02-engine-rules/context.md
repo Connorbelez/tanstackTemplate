@@ -8,7 +8,7 @@ The rules engine is the intelligence layer between obligations and collection at
 1. **Action-based engine**: `evaluateRules` is an `internalAction` because it orchestrates multiple DB reads and writes. Each rule handler calls `ctx.runQuery` and `ctx.runMutation`.
 2. **Handler registry pattern (Strategy Pattern)**: A `Record<string, RuleHandler>` maps rule names to handlers. Adding a new rule = new handler file + registry entry.
 3. **Idempotency over transactions**: Each rule handler is individually idempotent since Convex actions can't be transactional across mutations.
-4. **Priority ordering**: Rules queried with `by_trigger` index which includes priority. Higher-priority rules execute first.
+4. **Priority ordering**: Rules queried with `by_trigger` index which includes priority in ascending order. Lower numeric priority values execute first (e.g., priority 10 runs before priority 20).
 
 ## Schema Definitions
 
@@ -231,7 +231,7 @@ Expected eventPayload shape for COLLECTION_FAILED:
 }
 ```
 
-## T-008: LateFeeeRule (convex/payments/collectionPlan/rules/lateFeeRule.ts)
+## T-008: LateFeeRule (convex/payments/collectionPlan/rules/lateFeeRule.ts)
 
 ### Behavior
 1. Guard: if `eventType !== "OBLIGATION_OVERDUE"` return
@@ -254,7 +254,7 @@ Expected eventPayload shape for COLLECTION_FAILED:
    - `createdAt: Date.now()`
 
 ### Creating obligations from an action
-LateFeeeRule creates obligations, NOT plan entries. Must use `ctx.runMutation` with an internal mutation.
+LateFeeRule creates obligations, NOT plan entries. Must use `ctx.runMutation` with an internal mutation.
 Need a `createObligation` internal mutation. Add this to `convex/payments/collectionPlan/mutations.ts` or create a separate obligations mutation file.
 
 **Recommended**: Add `createObligation` as an internal mutation in `convex/obligations/mutations.ts` (create file if it doesn't exist). This mutation should accept all obligation fields and insert into the obligations table.
