@@ -16,6 +16,7 @@ deals: defineTable({
   sellerId: v.string(),                  // WorkOS user ID
   fractionalShare: v.number(),           // 1-10000
   closingDate: v.optional(v.number()),   // Set on DEAL_LOCKED
+  reservationId: v.optional(v.id("ledger_reservations")),  // Accepted divergence: top-level, not in machineContext
   lawyerId: v.optional(v.string()),
   lawyerType: v.optional(v.union(v.literal("platform_lawyer"), v.literal("guest_lawyer"))),
   createdAt: v.number(),

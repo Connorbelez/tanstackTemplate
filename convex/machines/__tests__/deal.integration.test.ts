@@ -829,10 +829,17 @@ describe("Deal Integration — Concurrency (UC-DC-05)", () => {
 // These tests call the prorateAccrualBetweenOwners action via t.action()
 // with full Convex runtime support.
 
-// Function reference for prorateAccrualBetweenOwners (not yet in codegen)
+// Function reference for prorateAccrualBetweenOwners (not yet in codegen).
+// TODO: Replace with `internal.engine.effects.dealClosingProrate.prorateAccrualBetweenOwners`
+// once `bunx convex codegen` is re-run with a live deployment.
 const prorateActionRef = makeFunctionReference<"action">(
 	"engine/effects/dealClosingProrate:prorateAccrualBetweenOwners"
 );
+
+/** Parse a date-only string as UTC midnight to avoid timezone-dependent flakiness. */
+function parseUTCDate(dateStr: string): number {
+	return new Date(`${dateStr}T00:00:00Z`).getTime();
+}
 
 /** Seed helper for prorate tests: creates deal + mortgage + borrower + obligations. */
 async function seedProrateScenario(
@@ -902,7 +909,7 @@ async function seedProrateScenario(
 			gracePeriodEndDate: opts.lastPaymentDate,
 			settledAmount: 290_800,
 			settledDate: opts.lastPaymentDate,
-			settledAt: new Date(opts.lastPaymentDate).getTime(),
+			settledAt: parseUTCDate(opts.lastPaymentDate),
 			createdAt: Date.now(),
 		});
 
@@ -920,7 +927,7 @@ async function seedProrateScenario(
 			createdAt: Date.now(),
 		});
 
-		const closingTimestamp = new Date(opts.closingDate).getTime();
+		const closingTimestamp = parseUTCDate(opts.closingDate);
 		const dealId = await ctx.db.insert("deals", {
 			status: "confirmed",
 			mortgageId,
