@@ -14,4 +14,12 @@ crons.daily(
 	internal.engine.reconciliationAction.dailyReconciliation
 );
 
+// Daily obligation lifecycle: BECAME_DUE + GRACE_PERIOD_EXPIRED transitions.
+// Runs at 6:00 UTC (1am ET) to advance obligations through their lifecycle.
+crons.daily(
+	"daily obligation transitions",
+	{ hourUTC: 6, minuteUTC: 0 },
+	internal.payments.obligations.crons.processObligationTransitions
+);
+
 export default crons;
