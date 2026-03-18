@@ -12,7 +12,7 @@ import {
 } from "#/components/ui/select";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
-import { GovernedTransitionsJournalView } from "./_components/GovernedTransitionsJournalView";
+import { GovernedTransitionsJournalView } from "./_components/-GovernedTransitionsJournalView";
 
 export const Route = createFileRoute("/demo/governed-transitions/journal")({
 	ssr: false,
