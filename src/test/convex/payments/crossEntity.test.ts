@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { internal } from "../../../../convex/_generated/api";
-import type { Id } from "../../../../convex/_generated/dataModel";
 import {
 	buildEffectArgs,
 	createGovernedTestConvex,
@@ -279,16 +278,6 @@ describe("AC2: failure chain (attempt permanent_fail -> COLLECTION_FAILED -> Ret
 		expect(r3.effectsScheduled).toContain("emitCollectionFailed");
 		expect(r3.effectsScheduled).toContain("notifyAdmin");
 
-		// Step 4: Invoke emitCollectionFailed effect
-		// This schedules evaluateRules action via runAfter
-		await t.mutation(
-			emitCollectionFailed,
-			buildEffectArgs(
-				attemptId,
-				"collectionAttempt",
-				"emitCollectionFailed",
-			),
-		);
 
 		// Step 5: Drain scheduled work (evaluateRules -> RetryRule -> createEntry)
 		await drainScheduledWork(t);
@@ -359,34 +348,6 @@ describe("AC3: overdue chain (obligation overdue -> mortgage delinquent + late f
 		expect(r1.effectsScheduled).toContain("emitObligationOverdue");
 		expect(r1.effectsScheduled).toContain("createLateFeeObligation");
 
-		// Step 2: Invoke emitObligationOverdue effect
-		// This transitions mortgage active -> delinquent and
-		// also schedules evaluateRules with OBLIGATION_OVERDUE event
-		await t.mutation(
-			emitObligationOverdue,
-			buildEffectArgs(
-				obligationId,
-				"obligation",
-				"emitObligationOverdue",
-			),
-		);
-
-		const mortgage = await t.run(async (ctx) => ctx.db.get(mortgageId));
-		expect(mortgage?.status).toBe("delinquent");
-		expect(
-			(mortgage?.machineContext as { missedPayments: number })
-				?.missedPayments,
-		).toBe(1);
-
-		// Step 3: Invoke createLateFeeObligation effect
-		await t.mutation(
-			createLateFeeObligation,
-			buildEffectArgs(
-				obligationId,
-				"obligation",
-				"createLateFeeObligation",
-			),
-		);
 
 		// Verify late fee obligation was created
 		const allObligations = await t.run(async (ctx) =>

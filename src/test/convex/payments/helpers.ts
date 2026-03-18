@@ -201,7 +201,7 @@ export function fireTransition(
  */
 export function buildEffectArgs(
 	entityId: string,
-	entityType: EntityType,
+	entityType: EntityType = "obligation",
 	effectName: string,
 	payload?: Record<string, unknown>,
 ) {

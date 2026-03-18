@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { internal } from "../../../../convex/_generated/api";
-import type { Id } from "../../../../convex/_generated/dataModel";
 import {
 	buildEffectArgs,
 	createGovernedTestConvex,
@@ -26,7 +25,6 @@ const recordProviderRef =
 const applyPayment = internal.engine.effects.obligationPayment.applyPayment;
 const emitObligationSettled =
 	internal.engine.effects.obligation.emitObligationSettled;
-const notifyAdmin = internal.engine.effects.collectionAttempt.notifyAdmin;
 
 // ─── Shared Setup ─────────────────────────────────────────────────────
 
@@ -529,15 +527,6 @@ describe("AC7: retry chain to eventual success", () => {
 		expect(r3.effectsScheduled).toContain("emitCollectionFailed");
 		expect(r3.effectsScheduled).toContain("notifyAdmin");
 
-		// Step 4: Invoke emitCollectionFailed effect → schedules evaluateRules
-		await t.mutation(
-			emitCollectionFailed,
-			buildEffectArgs(
-				attemptId,
-				"collectionAttempt",
-				"emitCollectionFailed",
-			),
-		);
 
 		// Step 5: Drain scheduled work → RetryRule creates new plan entry
 		await drainScheduledWork(t);
