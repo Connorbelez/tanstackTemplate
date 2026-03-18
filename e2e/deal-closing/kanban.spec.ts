@@ -310,9 +310,14 @@ test.describe.serial(
 				getColumn(page, "Failed").getByText("Share: 2000%"),
 			).toBeVisible({ timeout: DATA_LOAD_TIMEOUT });
 
-			// The column count badge should show at least "1"
-			const failedColumn = getColumn(page, "Failed");
-			await expect(failedColumn.getByText("1")).toBeVisible();
+			// The column count is a muted-foreground span next to the h3 header.
+			// Scope to the header row to avoid matching deal card content.
+			const failedHeader = getColumn(page, "Failed").locator(
+				".flex.items-center.gap-2",
+			);
+			await expect(
+				failedHeader.locator(".text-muted-foreground"),
+			).toHaveText(/[1-9]/);
 		});
 	},
 );
