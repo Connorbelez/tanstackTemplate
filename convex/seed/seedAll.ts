@@ -55,6 +55,13 @@ interface SeedOnboardingRequestResult {
 	reused: { onboardingRequests: number };
 }
 
+interface SeedPaymentDataResult {
+	obligationIds: Id<"obligations">[];
+	planEntryIds: Id<"collectionPlanEntries">[];
+	generated: { obligations: number; planEntries: number };
+	reused: { obligations: number; planEntries: number };
+}
+
 const bootstrapLedgerRef = makeFunctionReference<
 	"mutation",
 	Record<string, never>,
@@ -106,6 +113,12 @@ const seedOnboardingRequestRef = makeFunctionReference<
 	SeedOnboardingRequestResult
 >("seed/seedOnboardingRequest:seedOnboardingRequest");
 
+const seedPaymentDataRef = makeFunctionReference<
+	"mutation",
+	{ mortgageId: Id<"mortgages"> },
+	SeedPaymentDataResult
+>("seed/seedPaymentData:seedPaymentDataInternal");
+
 export const seedAll = adminAction
 	.input({})
 	.handler(async (ctx) => {
@@ -130,8 +143,41 @@ export const seedAll = adminAction
 		});
 		const onboardingRequests = await ctx.runMutation(
 			seedOnboardingRequestRef,
-			{}
+			{},
 		);
+
+		// Seed payment data (obligations + plan entries) for each mortgage
+		const paymentDataResults: SeedPaymentDataResult[] = [];
+		for (const mortgageId of mortgages.mortgageIds) {
+			const result = await ctx.runMutation(seedPaymentDataRef, {
+				mortgageId,
+			});
+			paymentDataResults.push(result);
+		}
+
+		const paymentData = {
+			results: paymentDataResults,
+			generated: {
+				obligations: paymentDataResults.reduce(
+					(sum, r) => sum + r.generated.obligations,
+					0,
+				),
+				planEntries: paymentDataResults.reduce(
+					(sum, r) => sum + r.generated.planEntries,
+					0,
+				),
+			},
+			reused: {
+				obligations: paymentDataResults.reduce(
+					(sum, r) => sum + r.reused.obligations,
+					0,
+				),
+				planEntries: paymentDataResults.reduce(
+					(sum, r) => sum + r.reused.planEntries,
+					0,
+				),
+			},
+		};
 
 		return {
 			ledgerBootstrap,
@@ -142,6 +188,7 @@ export const seedAll = adminAction
 			deals,
 			obligations,
 			onboardingRequests,
+			paymentData,
 			summary: {
 				ledgerBootstrap: {
 					worldAccountId: ledgerBootstrap.worldAccountId,
@@ -156,6 +203,8 @@ export const seedAll = adminAction
 					deals: deals.created.deals,
 					obligations: obligations.created.obligations,
 					onboardingRequests: onboardingRequests.created.onboardingRequests,
+					paymentDataObligations: paymentData.generated.obligations,
+					paymentDataPlanEntries: paymentData.generated.planEntries,
 				},
 				reused: {
 					brokers: brokers.reused.brokers,
@@ -166,6 +215,8 @@ export const seedAll = adminAction
 					deals: deals.reused.deals,
 					obligations: obligations.reused.obligations,
 					onboardingRequests: onboardingRequests.reused.onboardingRequests,
+					paymentDataObligations: paymentData.reused.obligations,
+					paymentDataPlanEntries: paymentData.reused.planEntries,
 				},
 			},
 		};
