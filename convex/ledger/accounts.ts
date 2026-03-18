@@ -23,7 +23,7 @@ export function getAvailableBalance(
 	>
 ): bigint {
 	const posted = account.cumulativeDebits - account.cumulativeCredits;
-	const pending = account.pendingCredits;
+	const pending = account.pendingCredits ?? 0n;
 	return posted - pending;
 }
 

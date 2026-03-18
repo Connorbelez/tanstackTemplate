@@ -12,7 +12,7 @@ import {
 	getConvexErrorCode,
 	initCounter,
 	mintAndIssue,
-} from "./testUtils";
+} from "./testUtils.test";
 
 const modules = import.meta.glob("/convex/**/*.ts");
 

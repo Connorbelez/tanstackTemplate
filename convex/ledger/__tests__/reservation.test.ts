@@ -13,7 +13,7 @@ import {
 	getReservation,
 	initCounter,
 	mintAndIssue,
-} from "./testUtils";
+} from "./testUtils.test";
 
 describe("reserveShares", () => {
 	it("creates a pending reservation, locks pending fields, and backfills reservationId on the journal entry", async () => {

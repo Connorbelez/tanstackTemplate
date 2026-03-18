@@ -11,7 +11,10 @@ import { AUDIT_ONLY_ENTRY_TYPES, TOTAL_SUPPLY } from "./constants";
  * Throws a descriptive error if the amount is not a safe integer,
  * preventing opaque BigInt conversion failures on bad data.
  */
-function safeBigIntAmount(amount: number, entryId: string): bigint {
+function safeBigIntAmount(amount: number | bigint, entryId: string): bigint {
+	if (typeof amount === "bigint") {
+		return amount;
+	}
 	if (!Number.isSafeInteger(amount)) {
 		throw new Error(
 			`Journal entry ${entryId} has non-integer amount (${amount}). ` +

@@ -21,7 +21,7 @@ import {
 	executeReserveShares,
 	getConvexErrorCode,
 	initCounter,
-} from "./testUtils";
+} from "./testUtils.test";
 
 /**
  * Mint a mortgage and issue shares to multiple lenders.
