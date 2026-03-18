@@ -20,7 +20,13 @@ const DAYS_PER_YEAR = 365;
 export function daysBetween(fromDate: string, toDate: string): number {
 	const from = Date.parse(`${fromDate}T00:00:00Z`);
 	const to = Date.parse(`${toDate}T00:00:00Z`);
-	return Math.floor((to - from) / MS_PER_DAY) + 1;
+	const days = Math.floor((to - from) / MS_PER_DAY) + 1;
+	if (days < 1) {
+		throw new Error(
+			`daysBetween: fromDate ${fromDate} is after toDate ${toDate}`
+		);
+	}
+	return days;
 }
 
 /**

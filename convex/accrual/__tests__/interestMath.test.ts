@@ -61,6 +61,12 @@ describe("daysBetween", () => {
 		// Jan 31 to Feb 1 = 2 days
 		expect(daysBetween("2026-01-31", "2026-02-01")).toBe(2);
 	});
+
+	it("throws when fromDate is after toDate", () => {
+		expect(() => daysBetween("2026-03-15", "2026-01-01")).toThrow(
+			"daysBetween: fromDate 2026-03-15 is after toDate 2026-01-01"
+		);
+	});
 });
 
 // ---------------------------------------------------------------------------

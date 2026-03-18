@@ -27,7 +27,8 @@ export interface AccrualResult {
 	periods: Array<{
 		fraction: number;
 		fromDate: string;
-		toDate: string | null;
+		/** Always resolved — query range is always closed */
+		toDate: string;
 	}>;
 	toDate: string;
 }
