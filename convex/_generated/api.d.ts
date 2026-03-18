@@ -59,6 +59,7 @@ import type * as documentEngine_templates from "../documentEngine/templates.js";
 import type * as documentEngine_validators from "../documentEngine/validators.js";
 import type * as engine_auditJournal from "../engine/auditJournal.js";
 import type * as engine_commands from "../engine/commands.js";
+import type * as engine_effects_collectionAttempt from "../engine/effects/collectionAttempt.js";
 import type * as engine_effects_dealAccess from "../engine/effects/dealAccess.js";
 import type * as engine_effects_dealClosing from "../engine/effects/dealClosing.js";
 import type * as engine_effects_dealClosingEffects from "../engine/effects/dealClosingEffects.js";
@@ -180,6 +181,7 @@ declare const fullApi: ApiFromModules<{
   "documentEngine/validators": typeof documentEngine_validators;
   "engine/auditJournal": typeof engine_auditJournal;
   "engine/commands": typeof engine_commands;
+  "engine/effects/collectionAttempt": typeof engine_effects_collectionAttempt;
   "engine/effects/dealAccess": typeof engine_effects_dealAccess;
   "engine/effects/dealClosing": typeof engine_effects_dealClosing;
   "engine/effects/dealClosingEffects": typeof engine_effects_dealClosingEffects;
