@@ -47,7 +47,7 @@ export const recordWaiver = internalMutation({
 		});
 
 		console.info(
-			`[recordWaiver] Waiver recorded for obligation=${args.entityId}, mortgage=${obligation.mortgageId}, reason="${reason}"`
+			`[recordWaiver] Waiver recorded for obligation=${args.entityId}, mortgage=${obligation.mortgageId}`
 		);
 	},
 });

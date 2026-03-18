@@ -48,8 +48,8 @@ export const applyPayment = internalMutation({
 		};
 
 		// If the obligation has already been transitioned to "settled",
-		// stamp the settledAt timestamp (domain field only).
-		if (obligation.status === "settled") {
+		// stamp the settledAt timestamp only if not already set by the transition engine.
+		if (obligation.status === "settled" && obligation.settledAt === undefined) {
 			patch.settledAt = Date.now();
 		}
 
