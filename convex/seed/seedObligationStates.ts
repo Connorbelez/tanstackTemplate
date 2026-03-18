@@ -36,7 +36,7 @@ async function tryTransition(
 }
 
 /**
- * Transition obligation to settled: DUE_DATE_REACHED -> PAYMENT_APPLIED -> patch settlement fields.
+ * Transition obligation to settled: BECAME_DUE -> PAYMENT_APPLIED -> patch settlement fields.
  * Returns true only if both transitions succeed and the patch is applied.
  */
 async function transitionToSettled(
@@ -44,12 +44,7 @@ async function transitionToSettled(
 	obl: Doc<"obligations">,
 	source: CommandSource
 ): Promise<boolean> {
-	const duePassed = await tryTransition(
-		ctx,
-		obl._id,
-		"DUE_DATE_REACHED",
-		source
-	);
+	const duePassed = await tryTransition(ctx, obl._id, "BECAME_DUE", source);
 	if (!duePassed) {
 		return false;
 	}
@@ -59,7 +54,12 @@ async function transitionToSettled(
 		obl._id,
 		"PAYMENT_APPLIED",
 		source,
-		{ amount: obl.amount, paidAt: Date.now() }
+		{
+			amount: obl.amount,
+			attemptId: `seed_attempt_${obl._id}`,
+			currentAmountSettled: 0,
+			totalAmount: obl.amount,
+		}
 	);
 	if (!paymentPassed) {
 		return false;
@@ -73,30 +73,25 @@ async function transitionToSettled(
 }
 
 /**
- * Transition obligation to due: DUE_DATE_REACHED.
+ * Transition obligation to due: BECAME_DUE.
  */
 async function transitionToDue(
 	ctx: MutationCtx,
 	obl: Doc<"obligations">,
 	source: CommandSource
 ): Promise<boolean> {
-	return tryTransition(ctx, obl._id, "DUE_DATE_REACHED", source);
+	return tryTransition(ctx, obl._id, "BECAME_DUE", source);
 }
 
 /**
- * Transition obligation to overdue: DUE_DATE_REACHED -> GRACE_PERIOD_EXPIRED.
+ * Transition obligation to overdue: BECAME_DUE -> GRACE_PERIOD_EXPIRED.
  */
 async function transitionToOverdue(
 	ctx: MutationCtx,
 	obl: Doc<"obligations">,
 	source: CommandSource
 ): Promise<boolean> {
-	const duePassed = await tryTransition(
-		ctx,
-		obl._id,
-		"DUE_DATE_REACHED",
-		source
-	);
+	const duePassed = await tryTransition(ctx, obl._id, "BECAME_DUE", source);
 	if (!duePassed) {
 		return false;
 	}

@@ -28,7 +28,7 @@ const OBLIGATION_STATE_MATRIX: readonly (readonly ObligationState[])[] = [
 ];
 
 const OBLIGATION_EVENT_MAP: Readonly<Record<string, string>> = {
-	"upcoming->due": "DUE_DATE_REACHED",
+	"upcoming->due": "BECAME_DUE",
 	"due->overdue": "GRACE_PERIOD_EXPIRED",
 	"due->settled": "PAYMENT_APPLIED",
 	"overdue->settled": "PAYMENT_APPLIED",
@@ -219,7 +219,9 @@ export const seedObligation = adminMutation
 						? {
 								"due->settled": {
 									amount,
-									paidAt: dateFields.settledAt,
+									attemptId: `seed_attempt_${mortgageIndex}_${paymentIndex}`,
+									currentAmountSettled: 0,
+									totalAmount: amount,
 								},
 							}
 						: undefined;
