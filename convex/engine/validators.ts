@@ -21,6 +21,7 @@ export const entityTypeValidator = v.union(
 	v.literal("onboardingRequest"),
 	v.literal("mortgage"),
 	v.literal("obligation"),
+	v.literal("collectionAttempt"),
 	v.literal("deal"),
 	v.literal("provisionalApplication"),
 	v.literal("applicationPackage"),

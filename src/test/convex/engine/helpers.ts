@@ -129,11 +129,11 @@ export async function seedObligation(
 			mortgageId,
 			borrowerId,
 			paymentNumber: 1,
+			type: "regular_interest",
 			amount: 3_000_00,
-			principalPortion: 1_500_00,
-			interestPortion: 1_500_00,
-			dueDate: "2026-02-15",
-			gracePeriodEndDate: "2026-02-25",
+			amountSettled: 0,
+			dueDate: new Date("2026-02-15T12:00:00.000Z").getTime(),
+			gracePeriodEnd: new Date("2026-02-25T12:00:00.000Z").getTime(),
 			createdAt: Date.now(),
 		})
 	);

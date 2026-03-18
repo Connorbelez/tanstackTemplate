@@ -505,9 +505,8 @@ export default defineSchema({
 	}).index("by_property", ["propertyId"]),
 
 	obligations: defineTable({
-		// ─── Governed Transitions fields ───
+		// ─── GT fields ───
 		status: v.string(),
-		// machineContext: unused — no guards, no accumulated state
 		machineContext: v.optional(v.any()),
 		lastTransitionAt: v.optional(v.number()),
 
@@ -518,24 +517,89 @@ export default defineSchema({
 		// ─── Payment identification ───
 		paymentNumber: v.number(),
 
-		// ─── Payment details (all amounts in cents) ───
+		// ─── Domain fields (all amounts in cents) ───
+		type: v.union(
+			v.literal("regular_interest"),
+			v.literal("arrears_cure"),
+			v.literal("late_fee"),
+			v.literal("principal_repayment")
+		),
 		amount: v.number(),
-		principalPortion: v.number(),
-		interestPortion: v.number(),
-		dueDate: v.string(),
-		gracePeriodEndDate: v.string(),
-
-		// ─── Settlement ───
-		settledAmount: v.optional(v.number()),
-		settledDate: v.optional(v.string()),
+		amountSettled: v.number(), // cumulative cents settled
+		dueDate: v.number(), // unix timestamp
+		gracePeriodEnd: v.number(), // unix timestamp
+		sourceObligationId: v.optional(v.id("obligations")), // for late_fee type
 		settledAt: v.optional(v.number()),
 
 		createdAt: v.number(),
 	})
-		.index("by_mortgage", ["mortgageId"])
-		.index("by_mortgage_and_due", ["mortgageId", "dueDate"])
-		.index("by_borrower", ["borrowerId"])
+		.index("by_status", ["status"])
+		.index("by_mortgage", ["mortgageId", "status"])
+		.index("by_mortgage_and_date", ["mortgageId", "dueDate"])
+		.index("by_due_date", ["dueDate", "status"])
+		.index("by_borrower", ["borrowerId"]),
+
+	// ══════════════════════════════════════════════════════════
+	// PAYMENT RAILS (SPEC 1.5)
+	// ══════════════════════════════════════════════════════════
+
+	collectionPlanEntries: defineTable({
+		obligationIds: v.array(v.id("obligations")),
+		amount: v.number(), // cents
+		method: v.string(), // "manual", "mock_pad", "rotessa_pad"
+		scheduledDate: v.number(), // unix timestamp
+		status: v.union(
+			v.literal("planned"),
+			v.literal("executing"),
+			v.literal("completed"),
+			v.literal("cancelled"),
+			v.literal("rescheduled")
+		),
+		source: v.union(
+			v.literal("default_schedule"),
+			v.literal("retry_rule"),
+			v.literal("late_fee_rule"),
+			v.literal("admin")
+		),
+		ruleId: v.optional(v.id("collectionRules")),
+		rescheduledFromId: v.optional(v.id("collectionPlanEntries")),
+		createdAt: v.number(),
+	})
+		.index("by_scheduled_date", ["scheduledDate", "status"])
 		.index("by_status", ["status"]),
+
+	collectionRules: defineTable({
+		name: v.string(),
+		trigger: v.union(v.literal("schedule"), v.literal("event")),
+		condition: v.optional(v.any()),
+		action: v.string(),
+		parameters: v.optional(v.any()), // rule-specific config
+		priority: v.number(),
+		enabled: v.boolean(),
+		createdAt: v.number(),
+		updatedAt: v.number(),
+	}).index("by_trigger", ["trigger", "enabled", "priority"]),
+
+	collectionAttempts: defineTable({
+		// ─── GT fields ───
+		status: v.string(),
+		machineContext: v.optional(v.any()),
+		lastTransitionAt: v.optional(v.number()),
+		// ─── Domain fields ───
+		planEntryId: v.id("collectionPlanEntries"),
+		method: v.string(),
+		amount: v.number(), // cents
+		providerRef: v.optional(v.string()),
+		providerStatus: v.optional(v.string()),
+		providerData: v.optional(v.any()),
+		initiatedAt: v.number(),
+		settledAt: v.optional(v.number()),
+		failedAt: v.optional(v.number()),
+		failureReason: v.optional(v.string()),
+	})
+		.index("by_plan_entry", ["planEntryId"])
+		.index("by_status", ["status"])
+		.index("by_provider_ref", ["providerRef"]),
 
 	// ══════════════════════════════════════════════════════════
 	// PROVISIONAL FLOW

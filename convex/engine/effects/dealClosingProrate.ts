@@ -81,11 +81,11 @@ export const prorateAccrualBetweenOwners = internalAction({
 			internal.obligations.queries.getSettledBeforeDate,
 			{
 				mortgageId: deal.mortgageId,
-				beforeDate: closingDateStr,
+				beforeDate: deal.closingDate,
 			}
 		);
 		const lastPaymentDate = lastSettled
-			? lastSettled.dueDate
+			? new Date(lastSettled.dueDate).toISOString().split("T")[0]
 			: mortgage.termStartDate;
 
 		// Derive next payment date from future obligations (on or after closing date).
@@ -94,7 +94,7 @@ export const prorateAccrualBetweenOwners = internalAction({
 			internal.obligations.queries.getFirstOnOrAfterDate,
 			{
 				mortgageId: deal.mortgageId,
-				onOrAfterDate: closingDateStr,
+				onOrAfterDate: deal.closingDate,
 			}
 		);
 
@@ -104,7 +104,9 @@ export const prorateAccrualBetweenOwners = internalAction({
 			);
 			return;
 		}
-		const nextPaymentDate = nextObligation.dueDate;
+		const nextPaymentDate = new Date(nextObligation.dueDate)
+			.toISOString()
+			.split("T")[0];
 
 		// Calculate daily rate
 		// TODO(Phase 2): use computed currentBalance once amortization engine is live

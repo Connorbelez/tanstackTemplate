@@ -4,6 +4,7 @@ export type EntityType =
 	| "onboardingRequest"
 	| "mortgage"
 	| "obligation"
+	| "collectionAttempt"
 	| "deal"
 	| "provisionalApplication"
 	| "applicationPackage"
@@ -22,6 +23,7 @@ export type GovernedEntityType =
 	| "onboardingRequest"
 	| "mortgage"
 	| "obligation"
+	| "collectionAttempt"
 	| "deal";
 
 // ── Command Source ──────────────────────────────────────────────────
@@ -163,6 +165,7 @@ export const ENTITY_TABLE_MAP = {
 	onboardingRequest: "onboardingRequests",
 	mortgage: "mortgages",
 	obligation: "obligations",
+	collectionAttempt: "collectionAttempts",
 	deal: "deals",
 	provisionalApplication: "provisionalApplications",
 	applicationPackage: "applicationPackages",

@@ -104,47 +104,52 @@ function buildStatePath(state: ObligationState): readonly string[] {
 	}
 }
 
+/** Convert ISO date string to unix timestamp (ms) at noon UTC */
+function dateStringToTimestamp(dateStr: string): number {
+	return new Date(`${dateStr}T12:00:00.000Z`).getTime();
+}
+
 function obligationDates(
 	baseDate: string,
 	state: ObligationState
-): Pick<
-	Doc<"obligations">,
-	| "dueDate"
-	| "gracePeriodEndDate"
-	| "settledAt"
-	| "settledAmount"
-	| "settledDate"
-> {
+): Pick<Doc<"obligations">, "dueDate" | "gracePeriodEnd" | "settledAt"> {
 	switch (state) {
 		case "upcoming": {
 			const dueDate = addDaysToDateString(baseDate, 30);
 			return {
-				dueDate,
-				gracePeriodEndDate: addDaysToDateString(dueDate, 10),
+				dueDate: dateStringToTimestamp(dueDate),
+				gracePeriodEnd: dateStringToTimestamp(
+					addDaysToDateString(dueDate, 10)
+				),
 			};
 		}
 		case "due": {
 			const dueDate = addDaysToDateString(baseDate, -5);
 			return {
-				dueDate,
-				gracePeriodEndDate: addDaysToDateString(dueDate, 10),
+				dueDate: dateStringToTimestamp(dueDate),
+				gracePeriodEnd: dateStringToTimestamp(
+					addDaysToDateString(dueDate, 10)
+				),
 			};
 		}
 		case "overdue": {
 			const dueDate = addDaysToDateString(baseDate, -40);
 			return {
-				dueDate,
-				gracePeriodEndDate: addDaysToDateString(dueDate, 15),
+				dueDate: dateStringToTimestamp(dueDate),
+				gracePeriodEnd: dateStringToTimestamp(
+					addDaysToDateString(dueDate, 15)
+				),
 			};
 		}
 		case "settled": {
 			const dueDate = addDaysToDateString(baseDate, -20);
 			const settledDate = addDaysToDateString(dueDate, 12);
 			return {
-				dueDate,
-				gracePeriodEndDate: addDaysToDateString(dueDate, 15),
-				settledDate,
-				settledAt: new Date(`${settledDate}T12:00:00.000Z`).getTime(),
+				dueDate: dateStringToTimestamp(dueDate),
+				gracePeriodEnd: dateStringToTimestamp(
+					addDaysToDateString(dueDate, 15)
+				),
+				settledAt: dateStringToTimestamp(settledDate),
 			};
 		}
 		default:
@@ -216,8 +221,6 @@ export const seedObligation = adminMutation
 				const transitionCount = Math.max(0, statePath.length - 1);
 				const finalTransitionAt = createdAt + transitionCount * 60_000;
 				const amount = mortgage.paymentAmount;
-				const interestPortion = Math.round(amount * 0.34);
-				const principalPortion = amount - interestPortion;
 				const dateFields = obligationDates(mortgage.firstPaymentDate, state);
 				const payloadByTransition =
 					state === "settled"
@@ -237,13 +240,11 @@ export const seedObligation = adminMutation
 					mortgageId: pair.mortgageId,
 					borrowerId: pair.borrowerId,
 					paymentNumber,
+					type: "regular_interest",
 					amount,
-					principalPortion,
-					interestPortion,
+					amountSettled: state === "settled" ? amount : 0,
 					dueDate: dateFields.dueDate,
-					gracePeriodEndDate: dateFields.gracePeriodEndDate,
-					settledAmount: state === "settled" ? amount : undefined,
-					settledDate: dateFields.settledDate,
+					gracePeriodEnd: dateFields.gracePeriodEnd,
 					settledAt: dateFields.settledAt,
 					createdAt,
 				});

@@ -66,8 +66,7 @@ async function transitionToSettled(
 	}
 
 	await ctx.db.patch(obl._id, {
-		settledAmount: obl.amount,
-		settledDate: obl.dueDate,
+		amountSettled: obl.amount,
 		settledAt: Date.now(),
 	});
 	return true;
@@ -128,7 +127,9 @@ export async function seedObligationStatesImpl(
 	for (const mortgageId of args.mortgageIds) {
 		const obligations = await ctx.db
 			.query("obligations")
-			.withIndex("by_mortgage_and_due", (q) => q.eq("mortgageId", mortgageId))
+			.withIndex("by_mortgage_and_date", (q) =>
+				q.eq("mortgageId", mortgageId)
+			)
 			.collect();
 
 		obligations.sort((a, b) => a.paymentNumber - b.paymentNumber);
