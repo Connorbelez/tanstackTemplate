@@ -43,6 +43,7 @@ export function advanceMonth(date: Date): Date {
 export interface GenerateObligationsParams {
 	mortgageId: Id<"mortgages">;
 	borrowerId: Id<"borrowers">;
+	borrowerRole?: "primary" | "secondary"; // Optional role for deterministic ownership
 	interestRate: number;
 	principal: number;
 	paymentFrequency: string;
@@ -62,6 +63,7 @@ export async function generateObligationsImpl(
 	const {
 		mortgageId,
 		borrowerId,
+		borrowerRole,
 		interestRate,
 		principal,
 		paymentFrequency,
@@ -72,6 +74,20 @@ export async function generateObligationsImpl(
 	// Parse dates (ISO strings -> timestamps)
 	const firstPaymentTs = new Date(firstPaymentDate).getTime();
 	const maturityTs = new Date(maturityDate).getTime();
+
+	// Validate parsed timestamps
+	if (!Number.isFinite(firstPaymentTs) || !Number.isFinite(maturityTs)) {
+		throw new ConvexError(
+			`Invalid date format: firstPaymentDate (${firstPaymentDate}) or maturityDate (${maturityDate}) is not a valid ISO date string`,
+		);
+	}
+
+	// Reject inverted schedules before entering the loop
+	if (firstPaymentTs > maturityTs) {
+		throw new ConvexError(
+			`Invalid schedule: firstPaymentDate (${firstPaymentDate}) cannot be after maturityDate (${maturityDate})`,
+		);
+	}
 
 	// Calculate period amount (interest-only, in cents)
 	const periodsPerYear = PERIODS_PER_YEAR[paymentFrequency];

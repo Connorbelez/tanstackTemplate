@@ -88,6 +88,7 @@ mortgages: defineTable({
     lastTransitionAt: v.optional(v.number()),
     propertyId: v.id("properties"),
     principal: v.number(),
+    // Interest rate stored as decimal (e.g., 0.12 = 12%)
     interestRate: v.number(),
     rateType: v.union(v.literal("fixed"), v.literal("variable")),
     termMonths: v.number(),
@@ -230,6 +231,20 @@ export const generateObligations = internalMutation({
 2. Refactor `generate.ts` to: load mortgage, resolve borrower, idempotency check, then call `generateObligationsImpl()`
 3. `seedPaymentData.ts` will also call `generateObligationsImpl()` after its own loading/resolution
 
+#### GenerateObligationsParams Interface
+
+```typescript
+interface GenerateObligationsParams {
+    mortgageId: Id<"mortgages">;
+    borrowerId: Id<"borrowers">;
+    interestRate: number; // decimal format (e.g., 0.12 = 12%)
+    principal: number;
+    paymentFrequency: "monthly" | "bi_weekly" | "accelerated_bi_weekly" | "weekly";
+    firstPaymentDate: string; // ISO date string
+    maturityDate: string; // ISO date string
+}
+```
+
 ### T-003/T-004: Collection Plan Query Design
 
 **`getEntryForObligation(obligationId)`**:
@@ -264,6 +279,18 @@ Follow the same pattern as existing seeds in `convex/seed/`:
 - Use `adminMutation` from `convex/fluent.ts` for the public version
 - Use `internalMutation` from `convex/_generated/server` for the internal version
 - Keep a shared `Impl` function for both
+
+#### SeedPaymentDataResult Type
+
+```typescript
+interface SeedPaymentDataResult {
+    mortgageId: Id<"mortgages">;
+    obligationsGenerated: number;
+    obligationsTotal: number;
+    planEntriesCreated: number;
+    skipped: boolean;
+}
+```
 
 ### T-006: seedAll.ts Wiring
 

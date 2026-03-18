@@ -3,7 +3,7 @@ import type { Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 import { internalMutation } from "../_generated/server";
 import { adminMutation } from "../fluent";
-import { generateObligationsImpl } from "../payments/obligations/generateImpl";
+import { generateObligationsImpl, MS_PER_DAY } from "../payments/obligations/generateImpl";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -11,7 +11,6 @@ import { generateObligationsImpl } from "../payments/obligations/generateImpl";
 
 /** How far ahead (in ms) to schedule plan entries from "now" */
 const SCHEDULING_WINDOW_DAYS = 5;
-const MS_PER_DAY = 86_400_000;
 
 // ---------------------------------------------------------------------------
 // Result type
@@ -21,7 +20,11 @@ interface SeedPaymentDataResult {
 	obligationIds: Id<"obligations">[];
 	planEntryIds: Id<"collectionPlanEntries">[];
 	generated: { obligations: number; planEntries: number };
-	reused: { obligations: number; planEntries: number };
+	reused: {
+		obligations: number;
+		planEntries: number;
+		planEntryIds: Id<"collectionPlanEntries">[];
+	};
 }
 
 // ---------------------------------------------------------------------------
@@ -93,31 +96,45 @@ async function seedPaymentDataImpl(
 
 	const dueSoonObligations = await ctx.db
 		.query("obligations")
-		.withIndex("by_mortgage_and_date", (q) => q.eq("mortgageId", mortgageId))
-		.filter((q) => q.lte(q.field("dueDate"), schedulingCutoff))
+		.withIndex("by_mortgage_and_date", (q) =>
+			q
+				.eq("mortgageId", mortgageId)
+				.gte("dueDate", now)
+				.lte("dueDate", schedulingCutoff),
+		)
 		.collect();
 
 	// 5. Create plan entries for obligations that don't already have one
 	const planEntryIds: Id<"collectionPlanEntries">[] = [];
+	const reusedPlanEntryIds: Id<"collectionPlanEntries">[] = [];
 	let generatedPlanEntries = 0;
 	let reusedPlanEntries = 0;
 
-	// Load all existing plan entries to check for duplicates
+	// Load existing non-cancelled plan entries to check for duplicates
 	// (obligationIds is an array field — no index available, must scan)
-	const existingPlanEntries = await ctx.db
-		.query("collectionPlanEntries")
-		.collect();
+	const nonCancelledStatuses = ["planned", "executing", "completed", "rescheduled"] as const;
+	const existingPlanEntries = (
+		await Promise.all(
+			nonCancelledStatuses.map((status) =>
+				ctx.db
+					.query("collectionPlanEntries")
+					.withIndex("by_status", (q) => q.eq("status", status))
+					.collect(),
+			),
+		)
+	).flat();
 
 	for (const obligation of dueSoonObligations) {
 		// Check if this obligation already has a non-cancelled plan entry
-		const hasEntry = existingPlanEntries.some(
+		const existingEntry = existingPlanEntries.find(
 			(entry) =>
 				entry.status !== "cancelled" &&
 				entry.obligationIds.includes(obligation._id),
 		);
 
-		if (hasEntry) {
+		if (existingEntry) {
 			reusedPlanEntries++;
+			reusedPlanEntryIds.push(existingEntry._id);
 			continue;
 		}
 
@@ -145,6 +162,7 @@ async function seedPaymentDataImpl(
 		reused: {
 			obligations: reusedObligations,
 			planEntries: reusedPlanEntries,
+			planEntryIds: reusedPlanEntryIds,
 		},
 	};
 }
