@@ -90,6 +90,12 @@ async function getEntityStatus(
 			const entity = await ctx.db.get(entityId as Id<"obligations">);
 			return entity?.status ?? null;
 		}
+		case "collectionAttempt": {
+			const entity = await ctx.db.get(
+				entityId as Id<"collectionAttempts">
+			);
+			return entity?.status ?? null;
+		}
 		// Non-governed entity types: tables exist in schema but have no
 		// machine definitions. Skip to avoid false discrepancies.
 		case "deal":

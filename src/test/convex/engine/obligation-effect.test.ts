@@ -20,11 +20,11 @@ function createObligation(
 		mortgageId: "mortgage_1" as Id<"mortgages">,
 		borrowerId: "borrower_1" as Id<"borrowers">,
 		paymentNumber: 1,
+		type: "regular_interest" as const,
 		amount: 1_500,
-		principalPortion: 1_000,
-		interestPortion: 500,
-		dueDate: "2026-03-01",
-		gracePeriodEndDate: "2026-03-10",
+		amountSettled: 1_500,
+		dueDate: Date.UTC(2026, 2, 1, 12, 0, 0),
+		gracePeriodEnd: Date.UTC(2026, 2, 10, 12, 0, 0),
 		createdAt: Date.UTC(2026, 2, 16, 12, 0, 0),
 		...overrides,
 	};
@@ -61,7 +61,7 @@ describe("obligation effect helpers", () => {
 			},
 		});
 		const obligation = createObligation({
-			settledAmount: 999,
+			amountSettled: 999,
 			settledAt: 123,
 		});
 

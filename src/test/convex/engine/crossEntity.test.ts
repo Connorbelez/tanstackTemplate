@@ -87,11 +87,11 @@ describe("cross-entity coordination: obligation → mortgage", () => {
 				mortgageId,
 				borrowerId,
 				paymentNumber: 1,
+				type: "regular_interest",
 				amount: 333_333,
-				principalPortion: 0,
-				interestPortion: 333_333,
-				dueDate: "2026-02-15",
-				gracePeriodEndDate: "2026-03-02",
+				amountSettled: 0,
+				dueDate: new Date("2026-02-15T12:00:00.000Z").getTime(),
+				gracePeriodEnd: new Date("2026-03-02T12:00:00.000Z").getTime(),
 				createdAt: Date.now(),
 			})
 		);

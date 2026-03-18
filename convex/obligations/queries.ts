@@ -3,17 +3,17 @@ import { internalQuery } from "../_generated/server";
 
 /**
  * Returns the most recent settled obligation before a given date for a mortgage.
- * Uses by_mortgage_and_due index range to avoid full-table scan.
+ * Uses by_mortgage_and_date index range to avoid full-table scan.
  */
 export const getSettledBeforeDate = internalQuery({
 	args: {
 		mortgageId: v.id("mortgages"),
-		beforeDate: v.string(),
+		beforeDate: v.number(), // unix timestamp
 	},
 	handler: async (ctx, { mortgageId, beforeDate }) => {
 		return await ctx.db
 			.query("obligations")
-			.withIndex("by_mortgage_and_due", (q) =>
+			.withIndex("by_mortgage_and_date", (q) =>
 				q.eq("mortgageId", mortgageId).lte("dueDate", beforeDate)
 			)
 			.order("desc")
@@ -24,17 +24,17 @@ export const getSettledBeforeDate = internalQuery({
 
 /**
  * Returns the first obligation after a given date for a mortgage.
- * Uses by_mortgage_and_due index range to avoid full-table scan.
+ * Uses by_mortgage_and_date index range to avoid full-table scan.
  */
 export const getFirstAfterDate = internalQuery({
 	args: {
 		mortgageId: v.id("mortgages"),
-		afterDate: v.string(),
+		afterDate: v.number(), // unix timestamp
 	},
 	handler: async (ctx, { mortgageId, afterDate }) => {
 		return await ctx.db
 			.query("obligations")
-			.withIndex("by_mortgage_and_due", (q) =>
+			.withIndex("by_mortgage_and_date", (q) =>
 				q.eq("mortgageId", mortgageId).gt("dueDate", afterDate)
 			)
 			.order("asc")
@@ -48,17 +48,17 @@ export const getFirstAfterDate = internalQuery({
  * to non-settled status so settled obligations on the boundary are skipped.
  * Used by prorate calculations where closing on a payment date should
  * yield 0 buyer days rather than failing to find a next payment boundary.
- * Uses by_mortgage_and_due index range to avoid full-table scan.
+ * Uses by_mortgage_and_date index range to avoid full-table scan.
  */
 export const getFirstOnOrAfterDate = internalQuery({
 	args: {
 		mortgageId: v.id("mortgages"),
-		onOrAfterDate: v.string(),
+		onOrAfterDate: v.number(), // unix timestamp
 	},
 	handler: async (ctx, { mortgageId, onOrAfterDate }) => {
 		return await ctx.db
 			.query("obligations")
-			.withIndex("by_mortgage_and_due", (q) =>
+			.withIndex("by_mortgage_and_date", (q) =>
 				q.eq("mortgageId", mortgageId).gte("dueDate", onOrAfterDate)
 			)
 			.order("asc")
