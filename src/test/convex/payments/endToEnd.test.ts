@@ -550,7 +550,7 @@ describe("AC7: retry chain to eventual success", () => {
 		const MS_PER_DAY = 86_400_000;
 		const expectedDelay = 3 * 2 ** 1 * MS_PER_DAY; // retryCount was incremented to 1 by DRAW_FAILED
 		const scheduledDateDiff = retryPlanEntry!.scheduledDate - Date.now();
-		expect(scheduledDateDiff).toBeGreaterThan(0);
+		expect(scheduledDateDiff).toBeGreaterThanOrEqual(expectedDelay - 1000);
 		expect(scheduledDateDiff).toBeLessThanOrEqual(expectedDelay + 1000);
 
 		// Step 6: Seed NEW collection attempt for the retry plan entry

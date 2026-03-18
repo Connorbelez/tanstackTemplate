@@ -145,7 +145,7 @@ Test: `attempt failed → COLLECTION_FAILED → RetryRule creates new plan entry
    - `source: "retry_rule"`
    - `rescheduledFromId: originalPlanEntryId`
    - `status: "planned"`
-   - `scheduledDate` ≈ `Date.now() + 3 * MS_PER_DAY` (backoff for retryCount=0, baseDays=3)
+   - `scheduledDate` ≈ `Date.now() + 6 * MS_PER_DAY` (backoff for retryCount=1 after DRAW_FAILED, baseDays=3)
 
 **Note on draining**: The `emitCollectionFailed` effect uses `ctx.scheduler.runAfter(0, evaluateRules, ...)`. The `evaluateRules` is an `internalAction` that calls `ctx.runMutation(createEntry, ...)`. We need `finishAllScheduledFunctions` to execute the chain.
 

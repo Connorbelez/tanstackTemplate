@@ -305,7 +305,7 @@ describe("AC2: failure chain (attempt permanent_fail -> COLLECTION_FAILED -> Ret
 		const scheduledDateDiff =
 			retryEntry!.scheduledDate - Date.now();
 		// Allow some tolerance for timing
-		expect(scheduledDateDiff).toBeGreaterThan(0);
+		expect(scheduledDateDiff).toBeGreaterThanOrEqual(expectedDelay - 1000);
 		expect(scheduledDateDiff).toBeLessThanOrEqual(expectedDelay + 1000);
 	});
 });

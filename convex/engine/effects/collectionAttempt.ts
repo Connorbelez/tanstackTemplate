@@ -58,6 +58,8 @@ export const emitPaymentReceived = internalMutation({
 			"emitPaymentReceived"
 		);
 
+		let remainingAmount = attempt.amount;
+
 		for (const obligationId of planEntry.obligationIds) {
 			const obligation = await ctx.db.get(obligationId);
 			if (!obligation) {
@@ -67,12 +69,21 @@ export const emitPaymentReceived = internalMutation({
 				continue;
 			}
 
+			const outstandingAmount = Math.max(
+				0,
+				obligation.amount - (obligation.amountSettled ?? 0)
+			);
+			const appliedAmount = Math.min(remainingAmount, outstandingAmount);
+			if (appliedAmount <= 0) {
+				continue;
+			}
+
 			const result = await executeTransition(ctx, {
 				entityType: "obligation",
 				entityId: obligationId,
 				eventType: "PAYMENT_APPLIED",
 				payload: {
-					amount: attempt.amount,
+					amount: appliedAmount,
 					attemptId: args.entityId,
 					currentAmountSettled: obligation.amountSettled,
 					totalAmount: obligation.amount,
@@ -90,6 +101,11 @@ export const emitPaymentReceived = internalMutation({
 			console.info(
 				`[emitPaymentReceived] attempt=${args.entityId} -> obligation=${obligationId}: ${result.previousState} -> ${result.newState}`
 			);
+
+			remainingAmount -= appliedAmount;
+			if (remainingAmount <= 0) {
+				break;
+			}
 		}
 	},
 });

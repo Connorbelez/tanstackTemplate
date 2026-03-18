@@ -147,7 +147,24 @@ Test: `attempt fails → RetryRule → new attempt → succeeds → obligation s
 **Backoff verification:**
 ```typescript
 const MS_PER_DAY = 86_400_000;
-// retryCount=0 (from machineContext), backoffBaseDays=3
+// retryCount=1 after DRAW_FAILED increments the counter
+// delay = 3 * 2^1 * MS_PER_DAY = 6 days
+expect(retryPlanEntry.scheduledDate).toBeGreaterThanOrEqual(Date.now() + 6 * MS_PER_DAY - 1000);
+expect(retryPlanEntry.scheduledDate).toBeLessThanOrEqual(Date.now() + 6 * MS_PER_DAY + 1000);
+```
+
+## T-018: Final Quality Gate
+```typescript
+const MS_PER_DAY = 86_400_000;
+// retryCount=1 after DRAW_FAILED increments the counter
+// delay = 3 * 2^1 * MS_PER_DAY = 6 days
+expect(retryPlanEntry.scheduledDate).toBeGreaterThanOrEqual(Date.now() + 6 * MS_PER_DAY - 1000);
+expect(retryPlanEntry.scheduledDate).toBeLessThanOrEqual(Date.now() + 6 * MS_PER_DAY + 1000);
+```
+// retryCount=1 after DRAW_FAILED increments the counter
+// delay = 3 * 2^1 * MS_PER_DAY = 6 days
+expect(retryPlanEntry.scheduledDate).toBeGreaterThanOrEqual(Date.now() + 6 * MS_PER_DAY - 1000);
+```
 // delay = 3 * 2^0 * MS_PER_DAY = 3 days
 expect(retryPlanEntry.scheduledDate).toBeGreaterThanOrEqual(Date.now() + 3 * MS_PER_DAY - 1000);
 expect(retryPlanEntry.scheduledDate).toBeLessThanOrEqual(Date.now() + 3 * MS_PER_DAY + 1000);

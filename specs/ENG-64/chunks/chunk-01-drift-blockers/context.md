@@ -44,7 +44,7 @@ Fires when attempt transitions to `permanent_fail` (MAX_RETRIES_EXCEEDED event).
 1. Load attempt and plan entry
 2. Schedule `internal.payments.collectionPlan.engine.evaluateRules` (it's an `internalAction`)
 3. Use `ctx.scheduler.runAfter(0, ...)` since evaluateRules is an action and cannot be called directly from a mutation
-4. Pass: `trigger: "event"`, `eventType: "COLLECTION_FAILED"`, and payload with `planEntryId`, `obligationIds`, `amount`, `method`, `retryCount`
+4. Pass: `trigger: "event"`, `eventType: "COLLECTION_FAILED"`, and `eventPayload` with `planEntryId`, `obligationIds`, `amount`, `method`, `retryCount`
 
 **The RetryRule handler** (at `convex/payments/collectionPlan/rules/retryRule.ts`) expects this payload shape:
 ```typescript
