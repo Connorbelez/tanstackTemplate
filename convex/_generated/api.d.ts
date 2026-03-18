@@ -60,6 +60,9 @@ import type * as engine_effects_dealClosing from "../engine/effects/dealClosing.
 import type * as engine_effects_dealClosingEffects from "../engine/effects/dealClosingEffects.js";
 import type * as engine_effects_dealClosingPlaceholder from "../engine/effects/dealClosingPlaceholder.js";
 import type * as engine_effects_obligation from "../engine/effects/obligation.js";
+import type * as engine_effects_obligationLateFee from "../engine/effects/obligationLateFee.js";
+import type * as engine_effects_obligationPayment from "../engine/effects/obligationPayment.js";
+import type * as engine_effects_obligationWaiver from "../engine/effects/obligationWaiver.js";
 import type * as engine_effects_onboarding from "../engine/effects/onboarding.js";
 import type * as engine_effects_registry from "../engine/effects/registry.js";
 import type * as engine_effects_workosProvisioning from "../engine/effects/workosProvisioning.js";
@@ -72,6 +75,8 @@ import type * as engine_transition from "../engine/transition.js";
 import type * as engine_transitionMutation from "../engine/transitionMutation.js";
 import type * as engine_types from "../engine/types.js";
 import type * as engine_validators from "../engine/validators.js";
+import type * as payments_collectionPlan_stubs from "../payments/collectionPlan/stubs.js";
+import type * as payments_dispersal_stubs from "../payments/dispersal/stubs.js";
 import type * as fluent from "../fluent.js";
 import type * as http from "../http.js";
 import type * as ledger_accountOwnership from "../ledger/accountOwnership.js";
@@ -166,6 +171,9 @@ declare const fullApi: ApiFromModules<{
   "engine/effects/dealClosingEffects": typeof engine_effects_dealClosingEffects;
   "engine/effects/dealClosingPlaceholder": typeof engine_effects_dealClosingPlaceholder;
   "engine/effects/obligation": typeof engine_effects_obligation;
+  "engine/effects/obligationLateFee": typeof engine_effects_obligationLateFee;
+  "engine/effects/obligationPayment": typeof engine_effects_obligationPayment;
+  "engine/effects/obligationWaiver": typeof engine_effects_obligationWaiver;
   "engine/effects/onboarding": typeof engine_effects_onboarding;
   "engine/effects/registry": typeof engine_effects_registry;
   "engine/effects/workosProvisioning": typeof engine_effects_workosProvisioning;
@@ -178,6 +186,8 @@ declare const fullApi: ApiFromModules<{
   "engine/transitionMutation": typeof engine_transitionMutation;
   "engine/types": typeof engine_types;
   "engine/validators": typeof engine_validators;
+  "payments/collectionPlan/stubs": typeof payments_collectionPlan_stubs;
+  "payments/dispersal/stubs": typeof payments_dispersal_stubs;
   fluent: typeof fluent;
   http: typeof http;
   "ledger/accountOwnership": typeof ledger_accountOwnership;
