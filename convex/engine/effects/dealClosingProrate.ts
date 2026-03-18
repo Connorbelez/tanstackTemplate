@@ -88,12 +88,13 @@ export const prorateAccrualBetweenOwners = internalAction({
 			? lastSettled.dueDate
 			: mortgage.termStartDate;
 
-		// Derive next payment date from future obligations
+		// Derive next payment date from future obligations (on or after closing date).
+		// Uses gte so closing exactly on a payment date yields 0 buyer days.
 		const nextObligation = await ctx.runQuery(
-			internal.obligations.queries.getFirstAfterDate,
+			internal.obligations.queries.getFirstOnOrAfterDate,
 			{
 				mortgageId: deal.mortgageId,
-				afterDate: closingDateStr,
+				onOrAfterDate: closingDateStr,
 			}
 		);
 

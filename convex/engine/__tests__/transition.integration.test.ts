@@ -217,16 +217,51 @@ describe("Transition Engine — audit journal compound state format", () => {
 		expect(newState).toBe("lawyerOnboarding.verified");
 	});
 
-	it("round-trip preserves dot-notation identity", () => {
+	it("round-trip preserves dot-notation identity for all 11 deal states", () => {
 		const states = [
+			// Flat states
+			"initiated",
+			"confirmed",
+			"failed",
+			// Compound states
 			"lawyerOnboarding.pending",
 			"lawyerOnboarding.verified",
+			"lawyerOnboarding.complete",
 			"documentReview.pending",
 			"documentReview.signed",
+			"documentReview.complete",
 			"fundsTransfer.pending",
+			"fundsTransfer.complete",
 		];
+		expect(states).toHaveLength(11);
 		for (const state of states) {
 			expect(serializeState(deserializeState(state))).toBe(state);
+		}
+	});
+
+	it("XState rehydration from deserialized state produces valid snapshot for all 11 deal states", () => {
+		const states = [
+			"initiated",
+			"confirmed",
+			"failed",
+			"lawyerOnboarding.pending",
+			"lawyerOnboarding.verified",
+			"lawyerOnboarding.complete",
+			"documentReview.pending",
+			"documentReview.signed",
+			"documentReview.complete",
+			"fundsTransfer.pending",
+			"fundsTransfer.complete",
+		];
+		expect(states).toHaveLength(11);
+		for (const state of states) {
+			const deserialized = deserializeState(state);
+			const snapshot = dealMachine.resolveState({
+				value: deserialized,
+				context: defaultContext,
+			});
+			// Snapshot should round-trip back to the same serialized state
+			expect(serializeState(snapshot.value)).toBe(state);
 		}
 	});
 });
