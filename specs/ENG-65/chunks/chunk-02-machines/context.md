@@ -68,7 +68,7 @@ obligationMachine = setup({
 - 4 events: BECAME_DUE, GRACE_PERIOD_EXPIRED, PAYMENT_APPLIED, OBLIGATION_WAIVED
 - Matrix: 6 × 4 = 24 test cases minimum
 - `isFullySettled` guard checks `currentAmountSettled + amount >= totalAmount`
-- OBLIGATION_WAIVED from `upcoming` is an accepted enhancement (not in original SPEC but valid)
+- OBLIGATION_WAIVED transitions (from all non-terminal states: `upcoming`, `due`, `overdue`, `partially_settled` in code) are accepted enhancements where they diverge from the original SPEC
 - Terminal states: settled, waived
 - `partially_settled` can still receive GRACE_PERIOD_EXPIRED → overdue
 
