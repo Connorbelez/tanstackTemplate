@@ -32,12 +32,12 @@ export const effectRegistry: Record<
 		internal.engine.effects.dealClosingEffects.confirmFundsReceipt,
 	// Deal Closing — reservations (ENG-49/50)
 	reserveShares: internal.engine.effects.dealClosing.reserveShares,
-	commitReservation: internal.engine.effects.dealClosingPlaceholder.placeholder,
+	commitReservation: internal.engine.effects.dealClosing.commitReservation,
 	voidReservation: internal.engine.effects.dealClosing.voidReservation,
 	prorateAccrualBetweenOwners:
-		internal.engine.effects.dealClosingPlaceholder.placeholder,
+		internal.engine.effects.dealClosingProrate.prorateAccrualBetweenOwners,
 	updatePaymentSchedule:
-		internal.engine.effects.dealClosingPlaceholder.placeholder,
+		internal.engine.effects.dealClosingPayments.updatePaymentSchedule,
 
 	// Deal Access (ENG-48 — real implementations)
 	createDealAccess: internal.engine.effects.dealAccess.createDealAccess,

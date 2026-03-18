@@ -206,3 +206,58 @@ export const voidReservation = internalAction({
 		}
 	},
 });
+
+/**
+ * Effect: commits a ledger reservation on deal confirmation.
+ * Fires on fundsTransfer.onDone → confirmed transition.
+ * Handles missing reservationId gracefully (logs error, exits).
+ * Idempotent via ledger's by_idempotency index.
+ */
+export const commitReservation = internalAction({
+	args: dealEffectPayloadValidator,
+	handler: async (ctx, args) => {
+		const dealId = args.entityId;
+
+		const deal = await ctx.runQuery(internal.deals.queries.getInternalDeal, {
+			dealId,
+		});
+
+		if (!deal) {
+			console.error(`[commitReservation] Deal not found: ${dealId}`);
+			return;
+		}
+
+		// reservationId is a top-level field on the deal (not in machineContext)
+		if (!deal.reservationId) {
+			console.error(
+				`[commitReservation] No reservationId for deal ${dealId} — cannot commit`
+			);
+			return;
+		}
+
+		const effectiveDate = deal.closingDate
+			? new Date(deal.closingDate).toISOString().split("T")[0]
+			: new Date().toISOString().split("T")[0];
+
+		try {
+			await ctx.runMutation(internal.ledger.mutations.commitReservation, {
+				reservationId: deal.reservationId,
+				effectiveDate,
+				idempotencyKey: `deal:${dealId}:commit`,
+				source: { type: "system", channel: "effect" },
+			});
+
+			console.info(
+				`[commitReservation] Committed reservation ${deal.reservationId} for deal ${dealId}`
+			);
+		} catch (error) {
+			// RESERVATION_NOT_PENDING means already committed (idempotent retry)
+			// RESERVATION_NOT_FOUND is unexpected but non-fatal
+			console.error(
+				`[commitReservation] Failed for deal ${dealId}: ${
+					error instanceof Error ? error.message : String(error)
+				}`
+			);
+		}
+	},
+});
