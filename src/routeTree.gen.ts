@@ -54,6 +54,7 @@ import { Route as DemoGovernedTransitionsRouteRouteImport } from './routes/demo/
 import { Route as DemoDocumentEngineRouteRouteImport } from './routes/demo/document-engine/route'
 import { Route as DemoAuditTraceabilityRouteRouteImport } from './routes/demo/audit-traceability/route'
 import { Route as AdminUnderwritingRouteRouteImport } from './routes/admin/underwriting/route'
+import { Route as AdminDealsRouteRouteImport } from './routes/admin/deals/route'
 import { Route as DemoRbacIndexRouteImport } from './routes/demo/rbac/index'
 import { Route as DemoRbacAuthIndexRouteImport } from './routes/demo/rbac-auth/index'
 import { Route as DemoGovernedTransitionsIndexRouteImport } from './routes/demo/governed-transitions/index'
@@ -316,6 +317,11 @@ const AdminUnderwritingRouteRoute = AdminUnderwritingRouteRouteImport.update({
   path: '/underwriting',
   getParentRoute: () => AdminRouteRoute,
 } as any)
+const AdminDealsRouteRoute = AdminDealsRouteRouteImport.update({
+  id: '/deals',
+  path: '/deals',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
 const DemoRbacIndexRoute = DemoRbacIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -498,6 +504,7 @@ export interface FileRoutesByFullPath {
   '/sign-out': typeof SignOutRoute
   '/sign-up': typeof SignUpRoute
   '/unauthorized': typeof UnauthorizedRoute
+  '/admin/deals': typeof AdminDealsRouteRoute
   '/admin/underwriting': typeof AdminUnderwritingRouteRoute
   '/demo/audit-traceability': typeof DemoAuditTraceabilityRouteRouteWithChildren
   '/demo/document-engine': typeof DemoDocumentEngineRouteRouteWithChildren
@@ -575,6 +582,7 @@ export interface FileRoutesByTo {
   '/sign-out': typeof SignOutRoute
   '/sign-up': typeof SignUpRoute
   '/unauthorized': typeof UnauthorizedRoute
+  '/admin/deals': typeof AdminDealsRouteRoute
   '/admin/underwriting': typeof AdminUnderwritingRouteRoute
   '/authenticated': typeof AuthenticatedAuthenticatedRoute
   '/demo/convex': typeof DemoConvexRoute
@@ -648,6 +656,7 @@ export interface FileRoutesById {
   '/sign-out': typeof SignOutRoute
   '/sign-up': typeof SignUpRoute
   '/unauthorized': typeof UnauthorizedRoute
+  '/admin/deals': typeof AdminDealsRouteRoute
   '/admin/underwriting': typeof AdminUnderwritingRouteRoute
   '/demo/audit-traceability': typeof DemoAuditTraceabilityRouteRouteWithChildren
   '/demo/document-engine': typeof DemoDocumentEngineRouteRouteWithChildren
@@ -727,6 +736,7 @@ export interface FileRouteTypes {
     | '/sign-out'
     | '/sign-up'
     | '/unauthorized'
+    | '/admin/deals'
     | '/admin/underwriting'
     | '/demo/audit-traceability'
     | '/demo/document-engine'
@@ -804,6 +814,7 @@ export interface FileRouteTypes {
     | '/sign-out'
     | '/sign-up'
     | '/unauthorized'
+    | '/admin/deals'
     | '/admin/underwriting'
     | '/authenticated'
     | '/demo/convex'
@@ -876,6 +887,7 @@ export interface FileRouteTypes {
     | '/sign-out'
     | '/sign-up'
     | '/unauthorized'
+    | '/admin/deals'
     | '/admin/underwriting'
     | '/demo/audit-traceability'
     | '/demo/document-engine'
@@ -1306,6 +1318,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminUnderwritingRouteRouteImport
       parentRoute: typeof AdminRouteRoute
     }
+    '/admin/deals': {
+      id: '/admin/deals'
+      path: '/deals'
+      fullPath: '/admin/deals'
+      preLoaderRoute: typeof AdminDealsRouteRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
     '/demo/rbac/': {
       id: '/demo/rbac/'
       path: '/'
@@ -1520,10 +1539,12 @@ declare module '@tanstack/react-router' {
 }
 
 interface AdminRouteRouteChildren {
+  AdminDealsRouteRoute: typeof AdminDealsRouteRoute
   AdminUnderwritingRouteRoute: typeof AdminUnderwritingRouteRoute
 }
 
 const AdminRouteRouteChildren: AdminRouteRouteChildren = {
+  AdminDealsRouteRoute: AdminDealsRouteRoute,
   AdminUnderwritingRouteRoute: AdminUnderwritingRouteRoute,
 }
 
