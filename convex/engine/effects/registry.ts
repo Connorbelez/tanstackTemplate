@@ -47,4 +47,13 @@ export const effectRegistry: Record<
 	createDealAccess: internal.engine.effects.dealAccess.createDealAccess,
 	revokeAllDealAccess: internal.engine.effects.dealAccess.revokeAllDealAccess,
 	revokeLawyerAccess: internal.engine.effects.dealAccess.revokeLawyerAccess,
+
+	// Collection Attempt effects (ENG-64)
+	emitPaymentReceived:
+		internal.engine.effects.collectionAttempt.emitPaymentReceived,
+	emitCollectionFailed:
+		internal.engine.effects.collectionAttempt.emitCollectionFailed,
+	recordProviderRef:
+		internal.engine.effects.collectionAttempt.recordProviderRef,
+	notifyAdmin: internal.engine.effects.collectionAttempt.notifyAdmin,
 };
