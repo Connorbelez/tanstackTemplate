@@ -19,7 +19,7 @@ import {
 } from "#/components/ui/table";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
-import { GovernedTransitionsMachineView } from "./_components/-GovernedTransitionsMachineView";
+import { GovernedTransitionsMachineView } from "./-components/GovernedTransitionsMachineView";
 
 export const Route = createFileRoute("/demo/governed-transitions/machine")({
 	ssr: false,
