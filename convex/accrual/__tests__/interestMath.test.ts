@@ -67,6 +67,15 @@ describe("daysBetween", () => {
 			"daysBetween: fromDate 2026-03-15 is after toDate 2026-01-01"
 		);
 	});
+
+	it("throws on invalid date strings", () => {
+		expect(() => daysBetween("not-a-date", "2026-01-01")).toThrow(
+			"daysBetween: invalid date string"
+		);
+		expect(() => daysBetween("2026-01-01", "garbage")).toThrow(
+			"daysBetween: invalid date string"
+		);
+	});
 });
 
 // ---------------------------------------------------------------------------
@@ -334,5 +343,20 @@ describe("calculateAccrualForPeriods", () => {
 		);
 		const expected = (0.1 * 1 * 100_000 * 31) / 365;
 		expect(result).toBeCloseTo(expected, 10);
+	});
+
+	it("throws when query fromDate is after toDate", () => {
+		const periods = [makePeriod()];
+		expect(() =>
+			calculateAccrualForPeriods(
+				periods,
+				0.1,
+				100_000,
+				"2026-12-31",
+				"2026-01-01"
+			)
+		).toThrow(
+			"calculateAccrualForPeriods: fromDate 2026-12-31 is after toDate 2026-01-01"
+		);
 	});
 });

@@ -34,7 +34,7 @@ export type AccrualResult = {
   periods: Array<{
     fraction: number;
     fromDate: string;
-    toDate: string | null;
+    toDate: string;           // always resolved — query range is always closed
   }>;
 };
 

@@ -2,7 +2,7 @@
 
 | Chunk | Tasks | Status | Description |
 |-------|-------|--------|-------------|
-| chunk-01-types-and-math | T-001 → T-005 | pending | All types, date helpers, interest math, and unit tests |
+| chunk-01-types-and-math | T-001 → T-005 | complete | All types, date helpers, interest math, and unit tests |
 
 ## Execution Order
 1. **chunk-01-types-and-math** — Single chunk; scope is small enough (2 source files + 1 test file)
