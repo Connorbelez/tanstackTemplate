@@ -6,6 +6,8 @@
  *
  * Uses convex-test with the real transition mutation (not direct handler calls).
  */
+
+import { makeFunctionReference } from "convex/server";
 import auditLogTest from "convex-audit-log/test";
 import { convexTest } from "convex-test";
 import { describe, expect, it } from "vitest";
@@ -816,5 +818,251 @@ describe("Deal Integration — Concurrency (UC-DC-05)", () => {
 
 		expect(transitioned).toHaveLength(1);
 		expect(rejected).toHaveLength(1);
+	});
+});
+
+// =====================================================================
+// T-011: Prorate Boundary Condition Integration Tests
+// =====================================================================
+// Rewritten from skipped unit tests in effects.test.ts that required
+// internal query execution from action context (convex-test limitation).
+// These tests call the prorateAccrualBetweenOwners action via t.action()
+// with full Convex runtime support.
+
+// Function reference for prorateAccrualBetweenOwners (not yet in codegen).
+// TODO: Replace with `internal.engine.effects.dealClosingProrate.prorateAccrualBetweenOwners`
+// once `bunx convex codegen` is re-run with a live deployment.
+const prorateActionRef = makeFunctionReference<"action">(
+	"engine/effects/dealClosingProrate:prorateAccrualBetweenOwners"
+);
+
+/** Parse a date-only string as UTC midnight to avoid timezone-dependent flakiness. */
+function parseUTCDate(dateStr: string): number {
+	return new Date(`${dateStr}T00:00:00Z`).getTime();
+}
+
+/** Seed helper for prorate tests: creates deal + mortgage + borrower + obligations. */
+async function seedProrateScenario(
+	t: TestHarness,
+	opts: {
+		closingDate: string; // ISO date e.g. "2026-02-15"
+		lastPaymentDate: string; // settled obligation due date
+		nextPaymentDate: string; // future obligation due date
+		fractionalShare?: number;
+	}
+) {
+	return t.run(async (ctx) => {
+		const userId = await ctx.db.insert("users", {
+			authId: "prorate-seed-user",
+			email: "prorate@test.com",
+			firstName: "Prorate",
+			lastName: "User",
+		});
+		const propertyId = await ctx.db.insert("properties", {
+			streetAddress: "456 Prorate Ave",
+			city: "Toronto",
+			province: "ON",
+			postalCode: "M5V 2B2",
+			propertyType: "residential",
+			createdAt: Date.now(),
+		});
+		const brokerId = await ctx.db.insert("brokers", {
+			status: "active",
+			userId,
+			createdAt: Date.now(),
+		});
+		const mortgageId = await ctx.db.insert("mortgages", {
+			status: "funded",
+			propertyId,
+			principal: 500_000,
+			interestRate: 0.05,
+			rateType: "fixed",
+			termMonths: 60,
+			amortizationMonths: 300,
+			paymentAmount: 2908,
+			paymentFrequency: "monthly",
+			loanType: "conventional",
+			lienPosition: 1,
+			interestAdjustmentDate: "2026-01-01",
+			termStartDate: "2026-01-01",
+			maturityDate: "2031-01-01",
+			firstPaymentDate: "2026-02-01",
+			brokerOfRecordId: brokerId,
+			createdAt: Date.now(),
+		});
+		const borrowerId = await ctx.db.insert("borrowers", {
+			userId,
+			status: "active",
+			createdAt: Date.now(),
+		});
+
+		// Seed settled obligation (last payment before closing)
+		await ctx.db.insert("obligations", {
+			status: "settled",
+			mortgageId,
+			borrowerId,
+			paymentNumber: 1,
+			amount: 290_800,
+			principalPortion: 120_800,
+			interestPortion: 170_000,
+			dueDate: opts.lastPaymentDate,
+			gracePeriodEndDate: opts.lastPaymentDate,
+			settledAmount: 290_800,
+			settledDate: opts.lastPaymentDate,
+			settledAt: parseUTCDate(opts.lastPaymentDate),
+			createdAt: Date.now(),
+		});
+
+		// Seed future obligation (next payment after closing)
+		await ctx.db.insert("obligations", {
+			status: "pending",
+			mortgageId,
+			borrowerId,
+			paymentNumber: 2,
+			amount: 290_800,
+			principalPortion: 121_300,
+			interestPortion: 169_500,
+			dueDate: opts.nextPaymentDate,
+			gracePeriodEndDate: opts.nextPaymentDate,
+			createdAt: Date.now(),
+		});
+
+		const closingTimestamp = parseUTCDate(opts.closingDate);
+		const dealId = await ctx.db.insert("deals", {
+			status: "confirmed",
+			mortgageId,
+			buyerId: "buyer-prorate-1",
+			sellerId: "seller-prorate-1",
+			fractionalShare: opts.fractionalShare ?? 3000,
+			closingDate: closingTimestamp,
+			lawyerId: "test-lawyer",
+			lawyerType: "platform_lawyer",
+			createdAt: Date.now(),
+			createdBy: "test-admin",
+		});
+
+		return { dealId, mortgageId, borrowerId };
+	});
+}
+
+const PRORATE_EFFECT_ARGS_BASE = {
+	entityType: "deal" as const,
+	eventType: "FUNDS_RECEIVED",
+	journalEntryId: "test-journal-prorate",
+	effectName: "prorateAccrualBetweenOwners",
+	source: ADMIN_SOURCE,
+};
+
+describe("Deal Integration — Prorate Boundary Conditions (T-011)", () => {
+	it("happy path: writes seller and buyer prorate entries with correct amounts", async () => {
+		const t = createTestHarness();
+		// Closing Feb 15, last payment Feb 1, next payment Mar 1
+		// Seller days: 14 (Feb 1 → Feb 15), Buyer days: 14 (Feb 15 → Mar 1)
+		const { dealId, mortgageId } = await seedProrateScenario(t, {
+			closingDate: "2026-02-15",
+			lastPaymentDate: "2026-02-01",
+			nextPaymentDate: "2026-03-01",
+			fractionalShare: 3000,
+		});
+
+		await t.action(prorateActionRef, {
+			...PRORATE_EFFECT_ARGS_BASE,
+			entityId: dealId,
+		});
+
+		const entries = await t.run(async (ctx) => {
+			const all = await ctx.db.query("prorateEntries").collect();
+			return all.filter((e) => e.dealId === dealId);
+		});
+
+		expect(entries).toHaveLength(2);
+
+		const sellerEntry = entries.find((e) => e.ownerRole === "seller");
+		const buyerEntry = entries.find((e) => e.ownerRole === "buyer");
+
+		expect(sellerEntry).toBeDefined();
+		expect(buyerEntry).toBeDefined();
+
+		// dailyRate = (0.05 × 0.30 × 500000) / 365 = 7500 / 365 ≈ 20.5479...
+		const expectedDailyRate = (0.05 * 0.3 * 500_000) / 365;
+
+		expect(sellerEntry?.days).toBe(14);
+		expect(sellerEntry?.dailyRate).toBeCloseTo(expectedDailyRate, 2);
+		expect(sellerEntry?.amount).toBeCloseTo(
+			Math.round(expectedDailyRate * 14 * 100) / 100,
+			2
+		);
+		expect(sellerEntry?.periodStart).toBe("2026-02-01");
+		expect(sellerEntry?.periodEnd).toBe("2026-02-15");
+		expect(sellerEntry?.ownerId).toBe("seller-prorate-1");
+		expect(sellerEntry?.mortgageId).toBe(mortgageId);
+
+		expect(buyerEntry?.days).toBe(14);
+		expect(buyerEntry?.dailyRate).toBeCloseTo(expectedDailyRate, 2);
+		expect(buyerEntry?.amount).toBeCloseTo(
+			Math.round(expectedDailyRate * 14 * 100) / 100,
+			2
+		);
+		expect(buyerEntry?.periodStart).toBe("2026-02-15");
+		expect(buyerEntry?.periodEnd).toBe("2026-03-01");
+		expect(buyerEntry?.ownerId).toBe("buyer-prorate-1");
+	});
+
+	it("zero seller days: closing on last payment date — only buyer entry", async () => {
+		const t = createTestHarness();
+		// Closing ON the last payment date (Feb 1) → seller days = 0
+		// Buyer days: 28 (Feb 1 → Mar 1)
+		const { dealId } = await seedProrateScenario(t, {
+			closingDate: "2026-02-01",
+			lastPaymentDate: "2026-02-01",
+			nextPaymentDate: "2026-03-01",
+			fractionalShare: 3000,
+		});
+
+		await t.action(prorateActionRef, {
+			...PRORATE_EFFECT_ARGS_BASE,
+			entityId: dealId,
+		});
+
+		const entries = await t.run(async (ctx) => {
+			const all = await ctx.db.query("prorateEntries").collect();
+			return all.filter((e) => e.dealId === dealId);
+		});
+
+		// Zero seller days → no seller entry
+		expect(entries).toHaveLength(1);
+		expect(entries[0].ownerRole).toBe("buyer");
+		expect(entries[0].days).toBe(28);
+		expect(entries[0].periodStart).toBe("2026-02-01");
+		expect(entries[0].periodEnd).toBe("2026-03-01");
+	});
+
+	it("zero buyer days: closing on next payment date — only seller entry", async () => {
+		const t = createTestHarness();
+		// Closing ON the next payment date (Mar 1) → buyer days = 0
+		// Seller days: 28 (Feb 1 → Mar 1)
+		const { dealId } = await seedProrateScenario(t, {
+			closingDate: "2026-03-01",
+			lastPaymentDate: "2026-02-01",
+			nextPaymentDate: "2026-03-01",
+			fractionalShare: 3000,
+		});
+
+		await t.action(prorateActionRef, {
+			...PRORATE_EFFECT_ARGS_BASE,
+			entityId: dealId,
+		});
+
+		const entries = await t.run(async (ctx) => {
+			const all = await ctx.db.query("prorateEntries").collect();
+			return all.filter((e) => e.dealId === dealId);
+		});
+
+		// Zero buyer days → no buyer entry
+		expect(entries).toHaveLength(1);
+		expect(entries[0].ownerRole).toBe("seller");
+		expect(entries[0].days).toBe(28);
+		expect(entries[0].periodStart).toBe("2026-02-01");
+		expect(entries[0].periodEnd).toBe("2026-03-01");
 	});
 });

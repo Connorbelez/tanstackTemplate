@@ -33,7 +33,7 @@ export default defineConfig({
 		{
 			name: "chromium",
 			testDir: "./e2e",
-			testIgnore: ["auth/**", "rbac/**", "auth.setup.ts"],
+			testIgnore: ["auth/**", "rbac/**", "deal-closing/**", "auth.setup.ts"],
 			use: { ...devices["Desktop Chrome"] },
 		},
 		{
@@ -63,6 +63,15 @@ export default defineConfig({
 			use: {
 				...devices["Desktop Chrome"],
 				storageState: ".auth/member.json",
+			},
+		},
+		{
+			name: "deal-closing",
+			testDir: "./e2e/deal-closing",
+			dependencies: ["setup"],
+			use: {
+				...devices["Desktop Chrome"],
+				storageState: ".auth/admin.json",
 			},
 		},
 	],
