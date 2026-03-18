@@ -762,6 +762,40 @@ export default defineSchema({
 		.index("by_user", ["userId"]),
 
 	// ══════════════════════════════════════════════════════════
+	// PRORATE ENGINE (Deal Closing — ENG-50)
+	// ══════════════════════════════════════════════════════════
+
+	prorateEntries: defineTable({
+		mortgageId: v.id("mortgages"),
+		dealId: v.id("deals"),
+		ownerId: v.string(),
+		ownerRole: v.union(v.literal("seller"), v.literal("buyer")),
+		amount: v.number(),
+		days: v.number(),
+		dailyRate: v.number(),
+		periodStart: v.string(),
+		periodEnd: v.string(),
+		closingDate: v.string(),
+		entryType: v.literal("prorate_credit"),
+		createdAt: v.number(),
+	})
+		.index("by_deal", ["dealId"])
+		.index("by_mortgage", ["mortgageId"])
+		.index("by_owner", ["ownerId"]),
+
+	dealReroutes: defineTable({
+		dealId: v.id("deals"),
+		mortgageId: v.id("mortgages"),
+		fromOwnerId: v.string(),
+		toOwnerId: v.string(),
+		fractionalShare: v.number(),
+		effectiveAfterDate: v.string(),
+		createdAt: v.number(),
+	})
+		.index("by_deal", ["dealId"])
+		.index("by_mortgage", ["mortgageId"]),
+
+	// ══════════════════════════════════════════════════════════
 	// DISPERSAL ENGINE
 	// ══════════════════════════════════════════════════════════
 
