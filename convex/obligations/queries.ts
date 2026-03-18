@@ -66,3 +66,62 @@ export const getFirstOnOrAfterDate = internalQuery({
 			.first();
 	},
 });
+
+/**
+ * Returns all obligations with status "upcoming" that are due on or before a given date.
+ * Optionally scoped to a single mortgage.
+ */
+export const getUpcomingInWindow = internalQuery({
+	args: {
+		mortgageId: v.optional(v.id("mortgages")),
+		dueBefore: v.number(), // unix timestamp
+	},
+	handler: async (ctx, { mortgageId, dueBefore }) => {
+		if (mortgageId) {
+			return await ctx.db
+				.query("obligations")
+				.withIndex("by_mortgage_and_date", (q) =>
+					q.eq("mortgageId", mortgageId).lte("dueDate", dueBefore)
+				)
+				.filter((q) => q.eq(q.field("status"), "upcoming"))
+				.collect();
+		}
+		return await ctx.db
+			.query("obligations")
+			.withIndex("by_due_date", (q) => q.lte("dueDate", dueBefore))
+			.filter((q) => q.eq(q.field("status"), "upcoming"))
+			.collect();
+	},
+});
+
+/**
+ * Returns a single obligation by its ID.
+ * Used by rules engine (e.g. LateFeeRule) to load source obligation data.
+ */
+export const getById = internalQuery({
+	args: { id: v.id("obligations") },
+	handler: async (ctx, { id }) => {
+		return await ctx.db.get(id);
+	},
+});
+
+/**
+ * Returns the first late_fee obligation linked to a given source obligation.
+ * Uses full-table filter since there is no dedicated index on (type, sourceObligationId).
+ */
+export const getLateFeeForObligation = internalQuery({
+	args: {
+		sourceObligationId: v.id("obligations"),
+	},
+	handler: async (ctx, { sourceObligationId }) => {
+		return await ctx.db
+			.query("obligations")
+			.filter((q) =>
+				q.and(
+					q.eq(q.field("type"), "late_fee"),
+					q.eq(q.field("sourceObligationId"), sourceObligationId)
+				)
+			)
+			.first();
+	},
+});
