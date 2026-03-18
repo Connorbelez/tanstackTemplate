@@ -46,6 +46,7 @@ export const obligationMachine = setup({
 	},
 }).createMachine({
 	id: "obligation",
+	version: OBLIGATION_MACHINE_VERSION,
 	initial: "upcoming",
 	context: { obligationId: "", paymentsApplied: 0 },
 	states: {

@@ -106,20 +106,30 @@ describe("Sequence Counter", () => {
 		expect(counter!.value).toBe(1n);
 	});
 
-	it("getNextSequenceNumber throws ConvexError if counter not initialized", async () => {
+	it("getNextSequenceNumber lazy-initializes counter if not present", async () => {
 		const t = createTestHarness();
 		const auth = asLedgerUser(t);
 
 		// Calling mintMortgage triggers postEntryInternal → getNextSequenceNumber
-		// without initializing the counter first
-		await expect(
-			auth.mutation(api.ledger.mutations.mintMortgage, {
-				mortgageId: "m1",
-				effectiveDate: "2026-01-01",
-				idempotencyKey: "mint-m1",
-				source: SYS_SOURCE,
-			}),
-		).rejects.toThrow("Ledger sequence counter not initialized");
+		// without initializing the counter first — should auto-initialize
+		const result = await auth.mutation(api.ledger.mutations.mintMortgage, {
+			mortgageId: "m1",
+			effectiveDate: "2026-01-01",
+			idempotencyKey: "mint-m1",
+			source: SYS_SOURCE,
+		});
+
+		expect(result.journalEntry.sequenceNumber).toBe(1n);
+
+		// Verify the counter was created
+		const counter = await t.run(async (ctx) => {
+			return ctx.db
+				.query("ledger_sequence_counters")
+				.withIndex("by_name", (q) => q.eq("name", "ledger_sequence"))
+				.unique();
+		});
+		expect(counter).not.toBeNull();
+		expect(counter!.value).toBe(1n);
 	});
 
 	it("getNextSequenceNumber returns monotonically increasing values", async () => {

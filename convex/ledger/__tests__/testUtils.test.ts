@@ -3,8 +3,20 @@
  *
  * Centralizes auth identities, harness helpers, typed mutation wrappers,
  * and the ConvexError code extractor so they stay in sync across files.
+ *
+ * NOTE: This file uses .test.ts to exclude it from Convex codegen
+ * (import.meta.glob is unsupported in Convex runtime). The test block
+ * below prevents vitest from reporting "no test suite found".
  */
+import { describe, it } from "vitest";
 import { ConvexError } from "convex/values";
+
+describe("testUtils", () => {
+	it("exports shared test helpers", () => {
+		// Sentinel test — this file is a utility module, not a test suite.
+		// The .test.ts extension is required to exclude it from Convex codegen.
+	});
+});
 import { convexTest } from "convex-test";
 import { api, internal } from "../../_generated/api";
 import type { Doc, Id } from "../../_generated/dataModel";

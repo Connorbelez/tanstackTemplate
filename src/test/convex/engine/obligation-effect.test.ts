@@ -118,23 +118,24 @@ describe("obligation effect helpers", () => {
 			reason: 'Event "OBLIGATION_OVERDUE" not valid in state "defaulted"',
 		});
 
-		await expect(
-			obligationEffectTestHelpers.forwardObligationEventToMortgage(
-				ctx as never,
-				{
-					...args,
-					effectName: "emitObligationOverdue",
-					eventType: "GRACE_PERIOD_EXPIRED",
-				},
-				{
-					effectLabel: "emitObligationOverdue",
-					eventType: "OBLIGATION_OVERDUE",
-					buildPayload: ({ entityId }) => ({
-						obligationId: entityId,
-					}),
-				}
-			)
-		).resolves.toBeUndefined();
+		const result = await obligationEffectTestHelpers.forwardObligationEventToMortgage(
+			ctx as never,
+			{
+				...args,
+				effectName: "emitObligationOverdue",
+				eventType: "GRACE_PERIOD_EXPIRED",
+			},
+			{
+				effectLabel: "emitObligationOverdue",
+				eventType: "OBLIGATION_OVERDUE",
+				buildPayload: ({ entityId }) => ({
+					obligationId: entityId,
+				}),
+			}
+		);
+
+		// Returns the obligation even on no-op rejection
+		expect(result).toEqual(obligation);
 
 		expect(mockedExecuteTransition).toHaveBeenCalledWith(ctx, {
 			entityType: "mortgage",
