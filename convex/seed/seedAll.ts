@@ -59,11 +59,7 @@ interface SeedPaymentDataResult {
 	generated: { obligations: number; planEntries: number };
 	obligationIds: Id<"obligations">[];
 	planEntryIds: Id<"collectionPlanEntries">[];
-	reused: {
-		obligations: number;
-		planEntries: number;
-		planEntryIds: Id<"collectionPlanEntries">[];
-	};
+	reused: { obligations: number; planEntries: number };
 }
 
 const bootstrapLedgerRef = makeFunctionReference<
