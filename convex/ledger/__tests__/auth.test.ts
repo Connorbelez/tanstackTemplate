@@ -13,7 +13,7 @@ import {
 	createTestHarness,
 	initCounter,
 	mintAndIssue,
-} from "./testUtils";
+} from "./testUtils.test";
 
 // ── Auth Gates: Admin Mutations ──────────────────────────────────
 

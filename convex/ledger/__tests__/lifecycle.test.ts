@@ -10,7 +10,7 @@ import {
 	getAccount,
 	getConvexErrorCode,
 	initCounter,
-} from "./testUtils";
+} from "./testUtils.test";
 
 // ── Test 1: Complete Lifecycle ──────────────────────────────────
 

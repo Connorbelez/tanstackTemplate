@@ -1,3 +1,4 @@
+import { useMemo, useState } from "react";
 import { Badge } from "#/components/ui/badge";
 import { Button } from "#/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "#/components/ui/card";
@@ -66,8 +67,25 @@ export function LedgerActions({
 	onIssue,
 	onRedeem,
 }: LedgerActionsProps) {
+	const [isCreatingBuyer, setIsCreatingBuyer] = useState(false);
+
 	const getPositions = (mortgageId: string) =>
 		mortgages.find((m) => m.mortgageId === mortgageId)?.positions ?? [];
+
+	const allLenders = useMemo(() => {
+		const seen = new Map<string, string>();
+		for (const m of mortgages) {
+			for (const p of m.positions) {
+				if (!seen.has(p.lenderId)) {
+					seen.set(p.lenderId, p.displayName);
+				}
+			}
+		}
+		return [...seen.entries()].map(([lenderId, displayName]) => ({
+			lenderId,
+			displayName,
+		}));
+	}, [mortgages]);
 
 	const isTransferValid =
 		transferForm.mortgage &&
@@ -107,7 +125,7 @@ export function LedgerActions({
 								<Label>Mortgage</Label>
 								<Select
 									onValueChange={(v) =>
-										onTransferChange({ mortgage: v, seller: "" })
+										onTransferChange({ mortgage: v, seller: "", buyer: "" })
 									}
 									value={transferForm.mortgage}
 								>
@@ -126,7 +144,9 @@ export function LedgerActions({
 							<div>
 								<Label>Seller</Label>
 								<Select
-									onValueChange={(v) => onTransferChange({ seller: v })}
+									onValueChange={(v) =>
+										onTransferChange({ seller: v, buyer: "" })
+									}
 									value={transferForm.seller}
 								>
 									<SelectTrigger>
@@ -142,12 +162,60 @@ export function LedgerActions({
 								</Select>
 							</div>
 							<div>
-								<Label>Buyer Lender ID</Label>
-								<Input
-									onChange={(e) => onTransferChange({ buyer: e.target.value })}
-									placeholder="demo-lender-..."
-									value={transferForm.buyer}
-								/>
+								<Label>Buyer</Label>
+								{isCreatingBuyer ? (
+									<div className="flex gap-2">
+										<Input
+											autoFocus
+											onChange={(e) =>
+												onTransferChange({ buyer: e.target.value })
+											}
+											placeholder="demo-inv-new"
+											value={transferForm.buyer}
+										/>
+										<Button
+											aria-label="Clear buyer"
+											className="shrink-0"
+											onClick={() => {
+												setIsCreatingBuyer(false);
+												onTransferChange({ buyer: "" });
+											}}
+											size="icon"
+											type="button"
+											variant="ghost"
+										>
+											&times;
+										</Button>
+									</div>
+								) : (
+									<Select
+										onValueChange={(v) => {
+											if (v === "__new__") {
+												setIsCreatingBuyer(true);
+												onTransferChange({ buyer: "" });
+											} else {
+												onTransferChange({ buyer: v });
+											}
+										}}
+										value={transferForm.buyer}
+									>
+										<SelectTrigger>
+											<SelectValue placeholder="Select buyer" />
+										</SelectTrigger>
+										<SelectContent>
+											{allLenders
+												.filter((l) => l.lenderId !== transferForm.seller)
+												.map((l) => (
+													<SelectItem key={l.lenderId} value={l.lenderId}>
+														{l.displayName}
+													</SelectItem>
+												))}
+											<SelectItem value="__new__">
+												+ Create new lender
+											</SelectItem>
+										</SelectContent>
+									</Select>
+								)}
 							</div>
 							<div>
 								<Label>Amount (units)</Label>

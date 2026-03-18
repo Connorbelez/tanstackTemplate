@@ -66,7 +66,7 @@ function LedgerDemo() {
 	const [transferForm, setTransferForm] = useState<TransferFormState>({
 		mortgage: "",
 		seller: "",
-		buyer: "demo-inv-",
+		buyer: "",
 		amount: "",
 	});
 	const [issueForm, setIssueForm] = useState<IssueFormState>({

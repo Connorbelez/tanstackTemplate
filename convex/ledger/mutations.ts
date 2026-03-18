@@ -572,10 +572,10 @@ export const reserveShares = internalMutation({
 
 		const amountDelta = BigInt(args.amount);
 		await ctx.db.patch(sellerPosition._id, {
-			pendingCredits: sellerPosition.pendingCredits + amountDelta,
+			pendingCredits: (sellerPosition.pendingCredits ?? 0n) + amountDelta,
 		});
 		await ctx.db.patch(buyerPosition._id, {
-			pendingDebits: buyerPosition.pendingDebits + amountDelta,
+			pendingDebits: (buyerPosition.pendingDebits ?? 0n) + amountDelta,
 		});
 
 		const reservationId = await ctx.db.insert("ledger_reservations", {
@@ -653,10 +653,10 @@ export const commitReservation = internalMutation({
 		// fails, this patch rolls back too.
 		const amountDelta = BigInt(reservation.amount);
 		await ctx.db.patch(reservation.sellerAccountId, {
-			pendingCredits: sellerAccount.pendingCredits - amountDelta,
+			pendingCredits: (sellerAccount.pendingCredits ?? 0n) - amountDelta,
 		});
 		await ctx.db.patch(reservation.buyerAccountId, {
-			pendingDebits: buyerAccount.pendingDebits - amountDelta,
+			pendingDebits: (buyerAccount.pendingDebits ?? 0n) - amountDelta,
 		});
 
 		// Post SHARES_COMMITTED: buyer receives ← seller gives
@@ -735,10 +735,10 @@ export const voidReservation = internalMutation({
 		// Release pending fields before posting audit entry
 		const amountDelta = BigInt(reservation.amount);
 		await ctx.db.patch(reservation.sellerAccountId, {
-			pendingCredits: sellerAccount.pendingCredits - amountDelta,
+			pendingCredits: (sellerAccount.pendingCredits ?? 0n) - amountDelta,
 		});
 		await ctx.db.patch(reservation.buyerAccountId, {
-			pendingDebits: buyerAccount.pendingDebits - amountDelta,
+			pendingDebits: (buyerAccount.pendingDebits ?? 0n) - amountDelta,
 		});
 
 		// Post SHARES_VOIDED: reverse direction (seller receives ← buyer gives)

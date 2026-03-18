@@ -54,15 +54,26 @@ export async function getNextSequenceNumber(ctx: MutationCtx): Promise<bigint> {
 		.withIndex("by_name", (q) => q.eq("name", COUNTER_NAME))
 		.first();
 
+	// Lazy initialization: create counter if it doesn't exist
 	if (!counter) {
+		await initializeSequenceCounterInternal(ctx);
+	}
+
+	// Re-fetch after potential initialization
+	const counterAfterInit = await ctx.db
+		.query("ledger_sequence_counters")
+		.withIndex("by_name", (q) => q.eq("name", COUNTER_NAME))
+		.first();
+
+	// Now we must have the counter — throw if still missing (unexpected)
+	if (!counterAfterInit) {
 		throw new ConvexError({
-			code: "SEQUENCE_COUNTER_NOT_INITIALIZED",
-			message:
-				"Ledger sequence counter not initialized. Run initializeSequenceCounter first.",
+			code: "SEQUENCE_COUNTER_INIT_FAILED",
+			message: "Failed to initialize ledger sequence counter",
 		});
 	}
 
-	const nextValue = counter.value + 1n;
-	await ctx.db.patch(counter._id, { value: nextValue });
+	const nextValue = counterAfterInit.value + 1n;
+	await ctx.db.patch(counterAfterInit._id, { value: nextValue });
 	return nextValue;
 }

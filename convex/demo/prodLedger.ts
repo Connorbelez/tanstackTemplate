@@ -134,8 +134,8 @@ export const getLedgerOverview = authedQuery
 				lenderId: getAccountLenderId(a) ?? "",
 				balance: Number(getPostedBalance(a)),
 				availableBalance: Number(getAvailableBalance(a)),
-				pendingCredits: Number(a.pendingCredits),
-				pendingDebits: Number(a.pendingDebits),
+				pendingCredits: Number(a.pendingCredits ?? 0n),
+				pendingDebits: Number(a.pendingDebits ?? 0n),
 			}));
 
 			// Count entries for this mortgage
@@ -621,10 +621,10 @@ async function reserveSharesInternal(
 
 	const amountDelta = BigInt(args.amount);
 	await ctx.db.patch(sellerPosition._id, {
-		pendingCredits: sellerPosition.pendingCredits + amountDelta,
+		pendingCredits: (sellerPosition.pendingCredits ?? 0n) + amountDelta,
 	});
 	await ctx.db.patch(buyerPosition._id, {
-		pendingDebits: buyerPosition.pendingDebits + amountDelta,
+		pendingDebits: (buyerPosition.pendingDebits ?? 0n) + amountDelta,
 	});
 
 	const reservationId = await ctx.db.insert("ledger_reservations", {
@@ -690,10 +690,10 @@ async function commitReservationInternal(
 	// Clear pending fields BEFORE postEntry
 	const amountDelta = BigInt(reservation.amount);
 	await ctx.db.patch(reservation.sellerAccountId, {
-		pendingCredits: sellerAccount.pendingCredits - amountDelta,
+		pendingCredits: (sellerAccount.pendingCredits ?? 0n) - amountDelta,
 	});
 	await ctx.db.patch(reservation.buyerAccountId, {
-		pendingDebits: buyerAccount.pendingDebits - amountDelta,
+		pendingDebits: (buyerAccount.pendingDebits ?? 0n) - amountDelta,
 	});
 
 	// Post SHARES_COMMITTED via real postEntry pipeline
@@ -764,10 +764,10 @@ async function voidReservationInternal(
 	// Release pending fields before posting audit entry
 	const amountDelta = BigInt(reservation.amount);
 	await ctx.db.patch(reservation.sellerAccountId, {
-		pendingCredits: sellerAccount.pendingCredits - amountDelta,
+		pendingCredits: (sellerAccount.pendingCredits ?? 0n) - amountDelta,
 	});
 	await ctx.db.patch(reservation.buyerAccountId, {
-		pendingDebits: buyerAccount.pendingDebits - amountDelta,
+		pendingDebits: (buyerAccount.pendingDebits ?? 0n) - amountDelta,
 	});
 
 	// Post SHARES_VOIDED via real postEntry pipeline

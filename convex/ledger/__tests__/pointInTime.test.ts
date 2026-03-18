@@ -10,7 +10,7 @@ import {
 	executeVoidReservation,
 	getAccount,
 	initCounter,
-} from "./testUtils";
+} from "./testUtils.test";
 
 // ── Helpers ─────────────────────────────────────────────────────
 

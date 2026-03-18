@@ -945,8 +945,8 @@ export default defineSchema({
 		lenderId: v.optional(v.string()),
 		cumulativeDebits: v.int64(),
 		cumulativeCredits: v.int64(),
-		pendingDebits: v.int64(),
-		pendingCredits: v.int64(),
+		pendingDebits: v.optional(v.int64()),
+		pendingCredits: v.optional(v.int64()),
 		createdAt: v.number(),
 		metadata: v.optional(v.any()),
 	})
@@ -975,7 +975,7 @@ export default defineSchema({
 		debitAccountId: v.id("ledger_accounts"),
 		creditAccountId: v.id("ledger_accounts"),
 		/** Amount as a finite integer in the smallest currency unit (e.g. cents). Suitable for conversion to bigint. */
-		amount: v.number(),
+		amount: v.union(v.number(), v.int64()),
 		idempotencyKey: v.string(),
 		causedBy: v.optional(v.id("ledger_journal_entries")),
 		source: v.object({
