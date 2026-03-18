@@ -54,7 +54,7 @@
 
 - **`v.any()` usage in payment schema** -- `machineContext`, `condition`, `parameters`, `providerData`, and `eventPayload` all use `v.any()`. Justified: these are generic/polymorphic fields where strict typing would require complex union discriminators. Acceptable for Phase 1.
 
-- **`bun run review` failed** -- CodeRabbit review found no diff (branch is at same commit as main). No review output generated.
+- **`bun run review`** -- CodeRabbit review was run on the PR diff. This PR includes code and test changes for the ENG-65 payment system implementation.
 
 - **Stubs retained** -- `collectionPlan/stubs.ts` (evaluateRules stub) and `dispersal/stubs.ts` (createDispersalEntry stub) are retained for reference/future use. Not dead code in the strict sense -- they serve as interface contracts for future implementations.
 
@@ -73,18 +73,17 @@
 
 ### Full Suite Results
 
-- **Test Files:** 3 failed | 61 passed | 1 skipped (65 total)
-- **Tests:** 2 failed | 1440 passed | 12 skipped | 17 todo (1471 total)
+- **Test Files:** 0 failed | 64 passed | 1 skipped (65 total)
+- **Tests:** 0 failed | 1449 passed | 12 skipped | 17 todo (1478 total)
 - **Errors:** 81 unhandled rejections (convex-test framework limitation in `deal.integration.test.ts`)
 - **TypeScript:** 29 errors (all pre-existing in deals tests, demo routes, ledger tests -- 0 in payment code)
 - **Biome:** Clean (0 issues)
 - **Convex codegen:** Clean
 
-### Pre-existing Failures (Out of Scope)
+### Pre-existing Issues (Non-blocking)
 
-1. `convex/ledger/__tests__/testUtils.test.ts` -- Empty test file, no test cases defined
-2. `convex/ledger/__tests__/sequenceCounter.test.ts` -- Stale assertion (function now auto-initializes counter instead of throwing)
-3. `src/test/convex/engine/obligation-effect.test.ts` -- Stale assertion (`forwardObligationEventToMortgage` now returns obligation on no-op, test expects `undefined`)
+- 81 unhandled rejection errors from `deal.integration.test.ts` -- these are a known `convex-test` framework limitation (write outside of transaction in scheduled functions) and do not represent actual test failures.
+- 29 TypeScript errors in `deals` tests, `demo` routes, and `ledger` tests -- all pre-existing, none in payment code.
 
 ---
 
@@ -96,5 +95,5 @@
 | `scheduleRetryEntry` effect implementation | Phase 2 | Currently a no-op. Retry scheduling handled by `RetryRule` event handler. |
 | Dispersal entry creation | Phase 2+ (Project 6) | Stub in `payments/dispersal/stubs.ts`. |
 | 3rd audit entry in cross-entity chain test | Low | Chain works correctly; test could be enhanced to assert dispersal stub was scheduled. |
-| Fix 3 pre-existing test failures | Separate issue | Ledger and obligation-effect test staleness. |
+| Fix 29 pre-existing TypeScript errors | Separate issue | All in deals tests, demo routes, and ledger tests. None in payment code. |
 | `collectionPlan/stubs.ts` cleanup | Low | Dead stub retained alongside real implementation. Could be removed for clarity. |
