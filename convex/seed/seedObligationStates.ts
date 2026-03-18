@@ -127,9 +127,7 @@ export async function seedObligationStatesImpl(
 	for (const mortgageId of args.mortgageIds) {
 		const obligations = await ctx.db
 			.query("obligations")
-			.withIndex("by_mortgage_and_date", (q) =>
-				q.eq("mortgageId", mortgageId)
-			)
+			.withIndex("by_mortgage_and_date", (q) => q.eq("mortgageId", mortgageId))
 			.collect();
 
 		obligations.sort((a, b) => a.paymentNumber - b.paymentNumber);
