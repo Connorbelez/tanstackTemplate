@@ -106,6 +106,7 @@ export const prorateAccrualBetweenOwners = internalAction({
 		const nextPaymentDate = nextObligation.dueDate;
 
 		// Calculate daily rate
+		// TODO(Phase 2): use computed currentBalance once amortization engine is live
 		const fractionalRate = deal.fractionalShare / 10_000;
 		const dailyRate =
 			(mortgage.interestRate * fractionalRate * mortgage.principal) / 365;
