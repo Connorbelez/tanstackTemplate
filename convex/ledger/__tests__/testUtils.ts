@@ -6,7 +6,6 @@
  */
 import { ConvexError } from "convex/values";
 import { convexTest } from "convex-test";
-import { expect } from "vitest";
 import { api, internal } from "../../_generated/api";
 import type { Doc, Id } from "../../_generated/dataModel";
 import type { MutationCtx } from "../../_generated/server";
@@ -276,7 +275,6 @@ export async function mintAndIssueMultiple(
  * structured `{ code }` payloads and string-embedded codes.
  */
 export function getConvexErrorCode(error: unknown): string {
-	expect(error).toBeInstanceOf(ConvexError);
 	if (!(error instanceof ConvexError)) {
 		throw new Error("Expected ConvexError");
 	}
