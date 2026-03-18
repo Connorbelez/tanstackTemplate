@@ -1,10 +1,23 @@
+import auditLogTest from "convex-audit-log/test";
 import { convexTest } from "convex-test";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import workflowSchema from "../../../node_modules/@convex-dev/workflow/dist/component/schema.js";
+import workpoolSchema from "../../../node_modules/@convex-dev/workpool/dist/component/schema.js";
 import { internal } from "../../_generated/api";
 import type { Id } from "../../_generated/dataModel";
+import auditTrailSchema from "../../components/auditTrail/schema";
 import schema from "../../schema";
 
 const modules = import.meta.glob("/convex/**/*.ts");
+const auditTrailModules = import.meta.glob(
+	"/convex/components/auditTrail/**/*.ts"
+);
+const workflowModules = import.meta.glob(
+	"/node_modules/@convex-dev/workflow/dist/component/**/*.js"
+);
+const workpoolModules = import.meta.glob(
+	"/node_modules/@convex-dev/workpool/dist/component/**/*.js"
+);
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -17,8 +30,15 @@ const GRACE_PERIOD_DAYS = 15;
 // Test harness
 // ---------------------------------------------------------------------------
 
-function createTestHarness() {
-	return convexTest(schema, modules);
+type TestHarness = ReturnType<typeof convexTest>;
+
+function createTestHarness(): TestHarness {
+	const t = convexTest(schema, modules);
+	auditLogTest.register(t, "auditLog");
+	t.registerComponent("auditTrail", auditTrailSchema, auditTrailModules);
+	t.registerComponent("workflow", workflowSchema, workflowModules);
+	t.registerComponent("workflow/workpool", workpoolSchema, workpoolModules);
+	return t;
 }
 
 /**
@@ -146,6 +166,7 @@ describe("processObligationTransitions", () => {
 	});
 
 	it("transitions due obligations to overdue when gracePeriodEnd <= now", async () => {
+		vi.useFakeTimers();
 		const t = createTestHarness();
 		const { mortgageId, borrowerId } = await seedMortgageWithBorrower(t);
 
@@ -165,11 +186,15 @@ describe("processObligationTransitions", () => {
 			{}
 		);
 
+		// Drain scheduled effects (emitObligationOverdue, createLateFeeObligation)
+		await t.finishAllScheduledFunctions(vi.runAllTimers);
+
 		const obligation = await t.run(async (ctx) => {
 			return ctx.db.get(obligationId);
 		});
 		expect(obligation).not.toBeNull();
 		expect(obligation?.status).toBe("overdue");
+		vi.useRealTimers();
 	});
 
 	it("does not transition obligations that are not yet due", async () => {
@@ -248,6 +273,7 @@ describe("processObligationTransitions", () => {
 	});
 
 	it("processes both phases in a single run", async () => {
+		vi.useFakeTimers();
 		const t = createTestHarness();
 		const { mortgageId, borrowerId } = await seedMortgageWithBorrower(t);
 
@@ -278,11 +304,15 @@ describe("processObligationTransitions", () => {
 			{}
 		);
 
+		// Drain scheduled effects from GRACE_PERIOD_EXPIRED
+		await t.finishAllScheduledFunctions(vi.runAllTimers);
+
 		const [upcomingObl, dueObl] = await t.run(async (ctx) => {
 			return Promise.all([ctx.db.get(upcomingId), ctx.db.get(dueId)]);
 		});
 
 		expect(upcomingObl?.status).toBe("due");
 		expect(dueObl?.status).toBe("overdue");
+		vi.useRealTimers();
 	});
 });
