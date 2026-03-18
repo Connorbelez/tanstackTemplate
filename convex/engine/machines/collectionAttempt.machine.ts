@@ -1,4 +1,4 @@
-import { setup } from "xstate";
+import { assign, setup } from "xstate";
 
 export const COLLECTION_ATTEMPT_MACHINE_VERSION = "1.0.0";
 
@@ -29,9 +29,9 @@ export const collectionAttemptMachine = setup({
 		emitPaymentReceived: () => {
 			/* resolved by GT effect registry */
 		},
-		incrementRetryCount: () => {
-			/* resolved by GT effect registry */
-		},
+		incrementRetryCount: assign({
+			retryCount: ({ context }) => context.retryCount + 1,
+		}),
 		scheduleRetryEntry: () => {
 			/* resolved by GT effect registry */
 		},

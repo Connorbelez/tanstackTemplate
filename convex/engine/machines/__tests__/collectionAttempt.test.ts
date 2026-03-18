@@ -219,14 +219,14 @@ describe("collectionAttempt machine", () => {
 			expect(actions.map((a) => a.type)).toContain("emitPaymentReceived");
 		});
 
-		it("pending -> failed on DRAW_FAILED fires incrementRetryCount", () => {
-			const [next, actions] = transition(
+		it("pending -> failed on DRAW_FAILED increments retryCount in context", () => {
+			const [next] = transition(
 				collectionAttemptMachine,
 				snapshotAt("pending"),
 				DRAW_FAILED
 			);
 			expect(next.value).toBe("failed");
-			expect(actions.map((a) => a.type)).toContain("incrementRetryCount");
+			expect(next.context.retryCount).toBe(1);
 		});
 
 		it("pending ignores RETRY_ELIGIBLE", () => {
@@ -565,13 +565,9 @@ describe("collectionAttempt machine", () => {
 			);
 			expect(step1.value).toBe("pending");
 
-			const [step2, actions2] = transition(
-				collectionAttemptMachine,
-				step1,
-				DRAW_FAILED
-			);
+			const [step2] = transition(collectionAttemptMachine, step1, DRAW_FAILED);
 			expect(step2.value).toBe("failed");
-			expect(actions2.map((a) => a.type)).toContain("incrementRetryCount");
+			expect(step2.context.retryCount).toBe(1);
 		});
 
 		it("retry path: failed -> retry_scheduled -> pending -> confirmed", () => {
