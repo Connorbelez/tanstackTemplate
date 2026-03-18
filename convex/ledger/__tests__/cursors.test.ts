@@ -1,7 +1,7 @@
 import { ConvexError } from "convex/values";
 import { convexTest } from "convex-test";
 import { describe, expect, it } from "vitest";
-import { api } from "../../_generated/api";
+import { api, internal } from "../../_generated/api";
 import { FAIRLEND_STAFF_ORG_ID } from "../../constants";
 import schema from "../../schema";
 
@@ -62,7 +62,7 @@ async function createSevenEntries(t: ReturnType<typeof createTestHarness>) {
 		idempotencyKey: "mint-m1",
 		source: SYS_SOURCE,
 	});
-	await auth.mutation(api.ledger.mutations.issueShares, {
+	await auth.mutation(internal.ledger.mutations.issueShares, {
 		mortgageId: "m1",
 		lenderId: "lender-a",
 		amount: 5_000,
@@ -70,7 +70,7 @@ async function createSevenEntries(t: ReturnType<typeof createTestHarness>) {
 		idempotencyKey: "issue-a",
 		source: SYS_SOURCE,
 	});
-	await auth.mutation(api.ledger.mutations.issueShares, {
+	await auth.mutation(internal.ledger.mutations.issueShares, {
 		mortgageId: "m1",
 		lenderId: "lender-b",
 		amount: 5_000,

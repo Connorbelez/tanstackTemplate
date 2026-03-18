@@ -254,7 +254,7 @@ describe("transferShares", () => {
 		const { positionAccountId: sellerPos } = await issueAll(t, "m1", "seller", 10_000);
 
 		const { buyerAccountId } = await asAdmin(t).mutation(
-			internal.ledger.mutations.transferShares,
+			internal.ledger.mutations.transferSharesInternal,
 			{
 				mortgageId: "m1",
 				sellerLenderId: "seller",
@@ -280,7 +280,7 @@ describe("transferShares", () => {
 		await issueAll(t, "m1", "seller", 10_000);
 
 		const { buyerAccountId } = await asAdmin(t).mutation(
-			internal.ledger.mutations.transferShares,
+			internal.ledger.mutations.transferSharesInternal,
 			{
 				mortgageId: "m1",
 				sellerLenderId: "seller",
@@ -303,7 +303,7 @@ describe("transferShares", () => {
 		await mintMortgage(t, "m1");
 
 		await expect(
-			asAdmin(t).mutation(internal.ledger.mutations.transferShares, {
+			asAdmin(t).mutation(internal.ledger.mutations.transferSharesInternal, {
 				mortgageId: "m1",
 				sellerLenderId: "nonexistent",
 				buyerLenderId: "buyer",
@@ -322,7 +322,7 @@ describe("transferShares", () => {
 		await issueAll(t, "m1", "seller", 5000);
 
 		await expect(
-			asAdmin(t).mutation(internal.ledger.mutations.transferShares, {
+			asAdmin(t).mutation(internal.ledger.mutations.transferSharesInternal, {
 				mortgageId: "m1",
 				sellerLenderId: "seller",
 				buyerLenderId: "buyer",
@@ -346,7 +346,7 @@ describe("transferShares", () => {
 		);
 
 		// Transfer all 5000 to buyer — seller goes to 0
-		await asAdmin(t).mutation(internal.ledger.mutations.transferShares, {
+		await asAdmin(t).mutation(internal.ledger.mutations.transferSharesInternal, {
 			mortgageId: "m1",
 			sellerLenderId: "seller",
 			buyerLenderId: "buyer",
@@ -368,7 +368,7 @@ describe("transferShares", () => {
 
 		// Transfer 4500, leaving seller with 500 (< 1000 min, != 0)
 		await expect(
-			asAdmin(t).mutation(internal.ledger.mutations.transferShares, {
+			asAdmin(t).mutation(internal.ledger.mutations.transferSharesInternal, {
 				mortgageId: "m1",
 				sellerLenderId: "seller",
 				buyerLenderId: "buyer",
@@ -388,7 +388,7 @@ describe("transferShares", () => {
 
 		// Transfer 500 to a new buyer — buyer would have 500 (< 1000 min)
 		await expect(
-			asAdmin(t).mutation(internal.ledger.mutations.transferShares, {
+			asAdmin(t).mutation(internal.ledger.mutations.transferSharesInternal, {
 				mortgageId: "m1",
 				sellerLenderId: "seller",
 				buyerLenderId: "buyer",
@@ -407,7 +407,7 @@ describe("transferShares", () => {
 		await issueAll(t, "m1", "seller", 10_000);
 
 		const first = await asAdmin(t).mutation(
-			internal.ledger.mutations.transferShares,
+			internal.ledger.mutations.transferSharesInternal,
 			{
 				mortgageId: "m1",
 				sellerLenderId: "seller",
@@ -420,7 +420,7 @@ describe("transferShares", () => {
 		);
 
 		const second = await asAdmin(t).mutation(
-			internal.ledger.mutations.transferShares,
+			internal.ledger.mutations.transferSharesInternal,
 			{
 				mortgageId: "m1",
 				sellerLenderId: "seller",
@@ -445,7 +445,7 @@ describe("redeemShares", () => {
 		const { treasuryAccountId } = await mintMortgage(t, "m1");
 		const { positionAccountId } = await issueAll(t, "m1", "lender-a", 10_000);
 
-		await asAdmin(t).mutation(internal.ledger.mutations.redeemShares, {
+		await asAdmin(t).mutation(internal.ledger.mutations.redeemSharesInternal, {
 			mortgageId: "m1",
 			lenderId: "lender-a",
 			amount: 3000,
@@ -466,7 +466,7 @@ describe("redeemShares", () => {
 		await bootstrap(t);
 
 		await expect(
-			asAdmin(t).mutation(internal.ledger.mutations.redeemShares, {
+			asAdmin(t).mutation(internal.ledger.mutations.redeemSharesInternal, {
 				mortgageId: "unminted",
 				lenderId: "lender-a",
 				amount: 1000,
@@ -483,7 +483,7 @@ describe("redeemShares", () => {
 		await mintMortgage(t, "m1");
 
 		await expect(
-			asAdmin(t).mutation(internal.ledger.mutations.redeemShares, {
+			asAdmin(t).mutation(internal.ledger.mutations.redeemSharesInternal, {
 				mortgageId: "m1",
 				lenderId: "nonexistent",
 				amount: 1000,
@@ -501,7 +501,7 @@ describe("redeemShares", () => {
 		await issueAll(t, "m1", "lender-a", 5000);
 
 		await expect(
-			asAdmin(t).mutation(internal.ledger.mutations.redeemShares, {
+			asAdmin(t).mutation(internal.ledger.mutations.redeemSharesInternal, {
 				mortgageId: "m1",
 				lenderId: "lender-a",
 				amount: 6000,
@@ -518,7 +518,7 @@ describe("redeemShares", () => {
 		await mintMortgage(t, "m1");
 		const { positionAccountId } = await issueAll(t, "m1", "lender-a", 5000);
 
-		await asAdmin(t).mutation(internal.ledger.mutations.redeemShares, {
+		await asAdmin(t).mutation(internal.ledger.mutations.redeemSharesInternal, {
 			mortgageId: "m1",
 			lenderId: "lender-a",
 			amount: 5000,
@@ -539,7 +539,7 @@ describe("redeemShares", () => {
 
 		// Redeem 4200, leaving 800 (< 1000 min, != 0)
 		await expect(
-			asAdmin(t).mutation(internal.ledger.mutations.redeemShares, {
+			asAdmin(t).mutation(internal.ledger.mutations.redeemSharesInternal, {
 				mortgageId: "m1",
 				lenderId: "lender-a",
 				amount: 4200,
@@ -557,7 +557,7 @@ describe("redeemShares", () => {
 		await issueAll(t, "m1", "lender-a", 10_000);
 
 		const first = await asAdmin(t).mutation(
-			internal.ledger.mutations.redeemShares,
+			internal.ledger.mutations.redeemSharesInternal,
 			{
 				mortgageId: "m1",
 				lenderId: "lender-a",
@@ -569,7 +569,7 @@ describe("redeemShares", () => {
 		);
 
 		const second = await asAdmin(t).mutation(
-			internal.ledger.mutations.redeemShares,
+			internal.ledger.mutations.redeemSharesInternal,
 			{
 				mortgageId: "m1",
 				lenderId: "lender-a",

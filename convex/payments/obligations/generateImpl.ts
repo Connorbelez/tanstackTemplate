@@ -42,6 +42,7 @@ export function advanceMonth(date: Date): Date {
 
 export interface GenerateObligationsParams {
 	borrowerId: Id<"borrowers">;
+	borrowerRole?: "primary" | "secondary"; // Optional role for deterministic ownership
 	firstPaymentDate: string; // ISO date string
 	interestRate: number;
 	maturityDate: string; // ISO date string
@@ -62,6 +63,7 @@ export async function generateObligationsImpl(
 	const {
 		mortgageId,
 		borrowerId,
+		borrowerRole: _borrowerRole,
 		interestRate,
 		principal,
 		paymentFrequency,

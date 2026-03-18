@@ -214,7 +214,7 @@ describe("getPositions", () => {
 			"issue-redeem"
 		);
 		// Redeem all shares back to treasury
-		await auth.mutation(internal.ledger.mutations.redeemShares, {
+		await auth.mutation(internal.ledger.mutations.redeemSharesInternal, {
 			mortgageId: "m-pos-redeemed",
 			lenderId: "lender-redeem",
 			amount: 5_000,
@@ -302,7 +302,7 @@ describe("getLenderPositions", () => {
 			5_000,
 			"issue-lp-zero"
 		);
-		await auth.mutation(internal.ledger.mutations.redeemShares, {
+		await auth.mutation(internal.ledger.mutations.redeemSharesInternal, {
 			mortgageId: "m-lp-zero",
 			lenderId: "lender-zeroed",
 			amount: 5_000,
@@ -400,7 +400,7 @@ describe("validateSupplyInvariant", () => {
 			5_000,
 			"issue-seller"
 		);
-		await auth.mutation(internal.ledger.mutations.transferShares, {
+		await auth.mutation(internal.ledger.mutations.transferSharesInternal, {
 			mortgageId: "m-inv-xfer",
 			sellerLenderId: "seller-inv",
 			buyerLenderId: "buyer-inv",

@@ -224,7 +224,7 @@ export async function mintAndIssue(
 		source: SYS_SOURCE,
 	});
 
-	return auth.mutation(api.ledger.mutations.issueShares, {
+	return auth.mutation(internal.ledger.mutations.issueShares, {
 		mortgageId,
 		lenderId,
 		amount,

@@ -505,17 +505,17 @@ export const mintMortgageWithAllocations = ledgerMutation
 
 export const issueShares = internalMutation({
 	args: issueSharesArgsValidator,
-	handler: issueSharesHandler,
+	handler: async (ctx, args) => issueSharesHandler(ctx, args),
 });
 
 export const transferSharesInternal = internalMutation({
 	args: transferSharesArgsValidator,
-	handler: transferSharesHandler,
+	handler: async (ctx, args) => transferSharesHandler(ctx, args),
 });
 
 export const redeemSharesInternal = internalMutation({
 	args: redeemSharesArgsValidator,
-	handler: redeemSharesHandler,
+	handler: async (ctx, args) => redeemSharesHandler(ctx, args),
 });
 
 export const reserveShares = internalMutation({

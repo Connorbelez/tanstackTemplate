@@ -164,7 +164,7 @@ describe("PostEntry Pipeline — Happy Path (6 original entry types)", () => {
 
 		await mintAndIssue(t, "m1", "seller");
 		const { buyerAccountId, journalEntry } = await auth.mutation(
-			internal.ledger.mutations.transferShares,
+			internal.ledger.mutations.transferSharesInternal,
 			{
 				mortgageId: "m1",
 				sellerLenderId: "seller",
@@ -205,7 +205,7 @@ describe("PostEntry Pipeline — Happy Path (6 original entry types)", () => {
 		);
 
 		const redeemEntry = await auth.mutation(
-			internal.ledger.mutations.redeemShares,
+			internal.ledger.mutations.redeemSharesInternal,
 			{
 				mortgageId: "m1",
 				lenderId: "lender-a",
@@ -240,7 +240,7 @@ describe("PostEntry Pipeline — Happy Path (6 original entry types)", () => {
 		const { mintResult } = await mintAndIssue(t, "m1", "lender-a");
 
 		// Redeem all first
-		await auth.mutation(internal.ledger.mutations.redeemShares, {
+		await auth.mutation(internal.ledger.mutations.redeemSharesInternal, {
 			mortgageId: "m1",
 			lenderId: "lender-a",
 			amount: 10_000,
@@ -677,7 +677,7 @@ describe("PostEntry Pipeline — Rejection Tests (ConvexError codes)", () => {
 
 		// Transfer 9,500 leaves seller with 500 < MIN_FRACTION (1,000)
 		try {
-			await auth.mutation(internal.ledger.mutations.transferShares, {
+			await auth.mutation(internal.ledger.mutations.transferSharesInternal, {
 				mortgageId: "m1",
 				sellerLenderId: "seller",
 				buyerLenderId: "buyer",
@@ -900,7 +900,7 @@ describe("PostEntry Pipeline — Special Cases", () => {
 
 		// Transfer all 10,000 units — full exit is allowed
 		const { buyerAccountId } = await auth.mutation(
-			internal.ledger.mutations.transferShares,
+			internal.ledger.mutations.transferSharesInternal,
 			{
 				mortgageId: "m1",
 				sellerLenderId: "seller",
