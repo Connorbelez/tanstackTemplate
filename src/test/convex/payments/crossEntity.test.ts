@@ -348,6 +348,8 @@ describe("AC3: overdue chain (obligation overdue -> mortgage delinquent + late f
 		expect(r1.effectsScheduled).toContain("emitObligationOverdue");
 		expect(r1.effectsScheduled).toContain("createLateFeeObligation");
 
+		// createLateFeeObligation is scheduled via runAfter(0, ...) — drain before querying
+		await drainScheduledWork(t);
 
 		// Verify late fee obligation was created
 		const allObligations = await t.run(async (ctx) =>

@@ -56,10 +56,14 @@ interface SeedOnboardingRequestResult {
 }
 
 interface SeedPaymentDataResult {
+	generated: { obligations: number; planEntries: number };
 	obligationIds: Id<"obligations">[];
 	planEntryIds: Id<"collectionPlanEntries">[];
-	generated: { obligations: number; planEntries: number };
-	reused: { obligations: number; planEntries: number };
+	reused: {
+		obligations: number;
+		planEntries: number;
+		planEntryIds: Id<"collectionPlanEntries">[];
+	};
 }
 
 const bootstrapLedgerRef = makeFunctionReference<
@@ -143,7 +147,7 @@ export const seedAll = adminAction
 		});
 		const onboardingRequests = await ctx.runMutation(
 			seedOnboardingRequestRef,
-			{},
+			{}
 		);
 
 		// Seed payment data (obligations + plan entries) for each mortgage
@@ -160,21 +164,21 @@ export const seedAll = adminAction
 			generated: {
 				obligations: paymentDataResults.reduce(
 					(sum, r) => sum + r.generated.obligations,
-					0,
+					0
 				),
 				planEntries: paymentDataResults.reduce(
 					(sum, r) => sum + r.generated.planEntries,
-					0,
+					0
 				),
 			},
 			reused: {
 				obligations: paymentDataResults.reduce(
 					(sum, r) => sum + r.reused.obligations,
-					0,
+					0
 				),
 				planEntries: paymentDataResults.reduce(
 					(sum, r) => sum + r.reused.planEntries,
-					0,
+					0
 				),
 			},
 		};

@@ -3,7 +3,10 @@ import type { Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 import { internalMutation } from "../_generated/server";
 import { adminMutation } from "../fluent";
-import { generateObligationsImpl, MS_PER_DAY } from "../payments/obligations/generateImpl";
+import {
+	generateObligationsImpl,
+	MS_PER_DAY,
+} from "../payments/obligations/generateImpl";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -17,9 +20,9 @@ const SCHEDULING_WINDOW_DAYS = 5;
 // ---------------------------------------------------------------------------
 
 interface SeedPaymentDataResult {
+	generated: { obligations: number; planEntries: number };
 	obligationIds: Id<"obligations">[];
 	planEntryIds: Id<"collectionPlanEntries">[];
-	generated: { obligations: number; planEntries: number };
 	reused: {
 		obligations: number;
 		planEntries: number;
@@ -33,7 +36,7 @@ interface SeedPaymentDataResult {
 
 async function seedPaymentDataImpl(
 	ctx: MutationCtx,
-	args: { mortgageId: Id<"mortgages"> },
+	args: { mortgageId: Id<"mortgages"> }
 ): Promise<SeedPaymentDataResult> {
 	const { mortgageId } = args;
 
@@ -51,7 +54,7 @@ async function seedPaymentDataImpl(
 
 	if (!borrowerLink) {
 		throw new ConvexError(
-			`No borrower found for mortgage: ${mortgageId as string}`,
+			`No borrower found for mortgage: ${mortgageId as string}`
 		);
 	}
 
@@ -100,7 +103,7 @@ async function seedPaymentDataImpl(
 			q
 				.eq("mortgageId", mortgageId)
 				.gte("dueDate", now)
-				.lte("dueDate", schedulingCutoff),
+				.lte("dueDate", schedulingCutoff)
 		)
 		.collect();
 
@@ -112,15 +115,20 @@ async function seedPaymentDataImpl(
 
 	// Load existing non-cancelled plan entries to check for duplicates
 	// (obligationIds is an array field — no index available, must scan)
-	const nonCancelledStatuses = ["planned", "executing", "completed", "rescheduled"] as const;
+	const nonCancelledStatuses = [
+		"planned",
+		"executing",
+		"completed",
+		"rescheduled",
+	] as const;
 	const existingPlanEntries = (
 		await Promise.all(
 			nonCancelledStatuses.map((status) =>
 				ctx.db
 					.query("collectionPlanEntries")
 					.withIndex("by_status", (q) => q.eq("status", status))
-					.collect(),
-			),
+					.collect()
+			)
 		)
 	).flat();
 
@@ -129,7 +137,7 @@ async function seedPaymentDataImpl(
 		const existingEntry = existingPlanEntries.find(
 			(entry) =>
 				entry.status !== "cancelled" &&
-				entry.obligationIds.includes(obligation._id),
+				entry.obligationIds.includes(obligation._id)
 		);
 
 		if (existingEntry) {
@@ -187,6 +195,6 @@ export const seedPaymentData = adminMutation
 	.handler(async (ctx, args) =>
 		seedPaymentDataImpl(ctx as unknown as MutationCtx, {
 			mortgageId: args.mortgageId,
-		}),
+		})
 	)
 	.public();

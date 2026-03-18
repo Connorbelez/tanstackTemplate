@@ -41,14 +41,13 @@ export function advanceMonth(date: Date): Date {
 // ---------------------------------------------------------------------------
 
 export interface GenerateObligationsParams {
-	mortgageId: Id<"mortgages">;
 	borrowerId: Id<"borrowers">;
-	borrowerRole?: "primary" | "secondary"; // Optional role for deterministic ownership
-	interestRate: number;
-	principal: number;
-	paymentFrequency: string;
 	firstPaymentDate: string; // ISO date string
+	interestRate: number;
 	maturityDate: string; // ISO date string
+	mortgageId: Id<"mortgages">;
+	paymentFrequency: string;
+	principal: number;
 }
 
 /**
@@ -58,12 +57,11 @@ export interface GenerateObligationsParams {
  */
 export async function generateObligationsImpl(
 	ctx: MutationCtx,
-	params: GenerateObligationsParams,
+	params: GenerateObligationsParams
 ): Promise<{ generated: number; obligations: Id<"obligations">[] }> {
 	const {
 		mortgageId,
 		borrowerId,
-		borrowerRole,
 		interestRate,
 		principal,
 		paymentFrequency,
@@ -76,16 +74,16 @@ export async function generateObligationsImpl(
 	const maturityTs = new Date(maturityDate).getTime();
 
 	// Validate parsed timestamps
-	if (!Number.isFinite(firstPaymentTs) || !Number.isFinite(maturityTs)) {
+	if (!(Number.isFinite(firstPaymentTs) && Number.isFinite(maturityTs))) {
 		throw new ConvexError(
-			`Invalid date format: firstPaymentDate (${firstPaymentDate}) or maturityDate (${maturityDate}) is not a valid ISO date string`,
+			`Invalid date format: firstPaymentDate (${firstPaymentDate}) or maturityDate (${maturityDate}) is not a valid ISO date string`
 		);
 	}
 
 	// Reject inverted schedules before entering the loop
 	if (firstPaymentTs > maturityTs) {
 		throw new ConvexError(
-			`Invalid schedule: firstPaymentDate (${firstPaymentDate}) cannot be after maturityDate (${maturityDate})`,
+			`Invalid schedule: firstPaymentDate (${firstPaymentDate}) cannot be after maturityDate (${maturityDate})`
 		);
 	}
 
@@ -94,9 +92,7 @@ export async function generateObligationsImpl(
 	if (!periodsPerYear) {
 		throw new ConvexError(`Unknown payment frequency: ${paymentFrequency}`);
 	}
-	const periodAmount = Math.round(
-		(interestRate * principal) / periodsPerYear,
-	);
+	const periodAmount = Math.round((interestRate * principal) / periodsPerYear);
 
 	// Generate obligations from firstPaymentDate to maturityDate (inclusive)
 	const obligations: Id<"obligations">[] = [];

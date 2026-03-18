@@ -124,9 +124,10 @@ export function LedgerActions({
 							<div>
 								<Label>Mortgage</Label>
 								<Select
-									onValueChange={(v) =>
-										onTransferChange({ mortgage: v, seller: "", buyer: "" })
-									}
+									onValueChange={(v) => {
+										setIsCreatingBuyer(false);
+										onTransferChange({ mortgage: v, seller: "", buyer: "" });
+									}}
 									value={transferForm.mortgage}
 								>
 									<SelectTrigger>
@@ -144,9 +145,10 @@ export function LedgerActions({
 							<div>
 								<Label>Seller</Label>
 								<Select
-									onValueChange={(v) =>
-										onTransferChange({ seller: v, buyer: "" })
-									}
+									onValueChange={(v) => {
+										setIsCreatingBuyer(false);
+										onTransferChange({ seller: v, buyer: "" });
+									}}
 									value={transferForm.seller}
 								>
 									<SelectTrigger>
