@@ -118,27 +118,21 @@ function obligationDates(
 			const dueDate = addDaysToDateString(baseDate, 30);
 			return {
 				dueDate: dateStringToTimestamp(dueDate),
-				gracePeriodEnd: dateStringToTimestamp(
-					addDaysToDateString(dueDate, 10)
-				),
+				gracePeriodEnd: dateStringToTimestamp(addDaysToDateString(dueDate, 10)),
 			};
 		}
 		case "due": {
 			const dueDate = addDaysToDateString(baseDate, -5);
 			return {
 				dueDate: dateStringToTimestamp(dueDate),
-				gracePeriodEnd: dateStringToTimestamp(
-					addDaysToDateString(dueDate, 10)
-				),
+				gracePeriodEnd: dateStringToTimestamp(addDaysToDateString(dueDate, 10)),
 			};
 		}
 		case "overdue": {
 			const dueDate = addDaysToDateString(baseDate, -40);
 			return {
 				dueDate: dateStringToTimestamp(dueDate),
-				gracePeriodEnd: dateStringToTimestamp(
-					addDaysToDateString(dueDate, 15)
-				),
+				gracePeriodEnd: dateStringToTimestamp(addDaysToDateString(dueDate, 15)),
 			};
 		}
 		case "settled": {
@@ -146,9 +140,7 @@ function obligationDates(
 			const settledDate = addDaysToDateString(dueDate, 12);
 			return {
 				dueDate: dateStringToTimestamp(dueDate),
-				gracePeriodEnd: dateStringToTimestamp(
-					addDaysToDateString(dueDate, 15)
-				),
+				gracePeriodEnd: dateStringToTimestamp(addDaysToDateString(dueDate, 15)),
 				settledAt: dateStringToTimestamp(settledDate),
 			};
 		}
