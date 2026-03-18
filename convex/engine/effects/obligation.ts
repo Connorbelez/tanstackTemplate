@@ -1,4 +1,5 @@
 import { v } from "convex/values";
+import { internal } from "../../_generated/api";
 import type { Doc, Id } from "../../_generated/dataModel";
 import type { MutationCtx } from "../../_generated/server";
 import { internalMutation } from "../../_generated/server";
@@ -129,6 +130,24 @@ export const emitObligationOverdue = internalMutation({
 				obligationId: entityId,
 			}),
 		});
+
+		// Trigger rules engine for late fee evaluation (SPEC 1.5 §8.2)
+		const obligation = await ctx.db.get(args.entityId);
+		if (obligation) {
+			await ctx.scheduler.runAfter(
+				0,
+				internal.payments.collectionPlan.stubs.evaluateRules,
+				{
+					trigger: "event" as const,
+					mortgageId: obligation.mortgageId,
+					eventType: "OBLIGATION_OVERDUE",
+					eventPayload: {
+						obligationId: args.entityId,
+						mortgageId: obligation.mortgageId,
+					},
+				}
+			);
+		}
 	},
 });
 
@@ -144,5 +163,19 @@ export const emitObligationSettled = internalMutation({
 			eventType: "PAYMENT_CONFIRMED",
 			buildPayload: buildPaymentConfirmedPayload,
 		});
+
+		// Schedule dispersal entry creation (SPEC 1.5 §8.3)
+		const obligation = await ctx.db.get(args.entityId);
+		if (obligation) {
+			await ctx.scheduler.runAfter(
+				0,
+				internal.payments.dispersal.stubs.createDispersalEntry,
+				{
+					mortgageId: obligation.mortgageId,
+					obligationId: args.entityId,
+					amount: obligation.amount,
+				}
+			);
+		}
 	},
 });
