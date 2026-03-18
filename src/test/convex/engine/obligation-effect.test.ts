@@ -74,7 +74,7 @@ describe("obligation effect helpers", () => {
 		});
 	});
 
-	it("throws when no canonical paidAt value is available", () => {
+	it("falls back to Date.now() when no paidAt or settledAt is available", () => {
 		const args = createArgs({
 			payload: {
 				amount: 2_345,
@@ -84,9 +84,15 @@ describe("obligation effect helpers", () => {
 			settledAt: undefined,
 		});
 
-		expect(() =>
-			obligationEffectTestHelpers.buildPaymentConfirmedPayload(args, obligation)
-		).toThrow("Missing canonical paidAt");
+		const before = Date.now();
+		const result =
+			obligationEffectTestHelpers.buildPaymentConfirmedPayload(args, obligation);
+		const after = Date.now();
+
+		expect(result.obligationId).toBe(args.entityId);
+		expect(result.amount).toBe(2_345);
+		expect(result.paidAt).toBeGreaterThanOrEqual(before);
+		expect(result.paidAt).toBeLessThanOrEqual(after);
 	});
 
 	it("passes the original source into executeTransition and logs no-op rejections", async () => {

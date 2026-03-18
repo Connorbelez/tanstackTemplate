@@ -20,6 +20,10 @@ export const effectRegistry: Record<
 		internal.engine.effects.obligation.emitObligationOverdue,
 	emitObligationSettled:
 		internal.engine.effects.obligation.emitObligationSettled,
+	createLateFeeObligation:
+		internal.engine.effects.obligationPlaceholders.createLateFeeObligation,
+	applyPayment: internal.engine.effects.obligationPlaceholders.applyPayment,
+	recordWaiver: internal.engine.effects.obligationPlaceholders.recordWaiver,
 	// Deal Closing — effects (ENG-53)
 	notifyAllParties: internal.engine.effects.dealClosingEffects.notifyAllParties,
 	notifyCancellation:

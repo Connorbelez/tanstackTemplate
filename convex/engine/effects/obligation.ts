@@ -50,19 +50,24 @@ function buildPaymentConfirmedPayload(
 	obligation: ObligationRecord
 ) {
 	const amountFromEvent = args.payload?.amount;
-	const paidAtFromEvent = args.payload?.paidAt;
 
 	const amount = isFiniteNumber(amountFromEvent)
 		? amountFromEvent
 		: (obligation.amountSettled ?? obligation.amount);
-	const paidAt = isFiniteNumber(paidAtFromEvent)
-		? paidAtFromEvent
-		: obligation.settledAt;
 
-	if (!isFiniteNumber(paidAt)) {
-		throw new Error(
-			`[emitObligationSettled] Missing canonical paidAt for obligation ${args.entityId}`
-		);
+	// SPEC 1.5: PAYMENT_APPLIED no longer carries paidAt — it carries attemptId instead.
+	// Resolve paidAt with fallback chain:
+	//   1. Legacy paidAt from event payload (backward compat with old journal entries)
+	//   2. obligation.settledAt (patched by transition persist step)
+	//   3. Date.now() (effect runs immediately after transition, so current time is reasonable)
+	const paidAtFromEvent = args.payload?.paidAt;
+	let paidAt: number;
+	if (isFiniteNumber(paidAtFromEvent)) {
+		paidAt = paidAtFromEvent;
+	} else if (isFiniteNumber(obligation.settledAt)) {
+		paidAt = obligation.settledAt;
+	} else {
+		paidAt = Date.now();
 	}
 
 	return {

@@ -29,7 +29,9 @@ describe("Transition Engine — backward compatibility (flat-state machines)", (
 			"upcoming",
 			"due",
 			"overdue",
+			"partially_settled",
 			"settled",
+			"waived",
 		];
 
 		it.each(
@@ -106,13 +108,15 @@ describe("Transition Engine — backward compatibility (flat-state machines)", (
 	});
 
 	describe("obligation transitions through serialize/deserialize round-trip", () => {
-		it("upcoming → DUE_DATE_REACHED → due via round-trip", () => {
+		const obligationContext = { obligationId: "test_ob", paymentsApplied: 0 };
+
+		it("upcoming → BECAME_DUE → due via round-trip", () => {
 			const restored = obligationMachine.resolveState({
 				value: deserializeState("upcoming"),
-				context: {},
+				context: obligationContext,
 			});
 			const next = getNextSnapshot(obligationMachine, restored, {
-				type: "DUE_DATE_REACHED",
+				type: "BECAME_DUE",
 			});
 			expect(serializeState(next.value)).toBe("due");
 		});
@@ -120,7 +124,7 @@ describe("Transition Engine — backward compatibility (flat-state machines)", (
 		it("due → GRACE_PERIOD_EXPIRED → overdue via round-trip", () => {
 			const restored = obligationMachine.resolveState({
 				value: deserializeState("due"),
-				context: {},
+				context: obligationContext,
 			});
 			const next = getNextSnapshot(obligationMachine, restored, {
 				type: "GRACE_PERIOD_EXPIRED",
@@ -128,15 +132,17 @@ describe("Transition Engine — backward compatibility (flat-state machines)", (
 			expect(serializeState(next.value)).toBe("overdue");
 		});
 
-		it("due → PAYMENT_APPLIED → settled via round-trip", () => {
+		it("due → PAYMENT_APPLIED (full) → settled via round-trip", () => {
 			const restored = obligationMachine.resolveState({
 				value: deserializeState("due"),
-				context: {},
+				context: obligationContext,
 			});
 			const next = getNextSnapshot(obligationMachine, restored, {
 				type: "PAYMENT_APPLIED",
-				amount: 500,
-				paidAt: Date.now(),
+				amount: 150_000,
+				attemptId: "attempt_1",
+				currentAmountSettled: 350_000,
+				totalAmount: 500_000,
 			});
 			expect(serializeState(next.value)).toBe("settled");
 		});
