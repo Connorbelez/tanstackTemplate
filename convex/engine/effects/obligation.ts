@@ -54,7 +54,7 @@ function buildPaymentConfirmedPayload(
 
 	const amount = isFiniteNumber(amountFromEvent)
 		? amountFromEvent
-		: (obligation.amountSettled || obligation.amount);
+		: (obligation.amountSettled ?? obligation.amount);
 	const paidAt = isFiniteNumber(paidAtFromEvent)
 		? paidAtFromEvent
 		: obligation.settledAt;

@@ -902,28 +902,26 @@ async function seedProrateScenario(
 			mortgageId,
 			borrowerId,
 			paymentNumber: 1,
+			type: "regular_interest",
 			amount: 290_800,
-			principalPortion: 120_800,
-			interestPortion: 170_000,
-			dueDate: opts.lastPaymentDate,
-			gracePeriodEndDate: opts.lastPaymentDate,
-			settledAmount: 290_800,
-			settledDate: opts.lastPaymentDate,
+			amountSettled: 290_800,
+			dueDate: parseUTCDate(opts.lastPaymentDate),
+			gracePeriodEnd: parseUTCDate(opts.lastPaymentDate),
 			settledAt: parseUTCDate(opts.lastPaymentDate),
 			createdAt: Date.now(),
 		});
 
 		// Seed future obligation (next payment after closing)
 		await ctx.db.insert("obligations", {
-			status: "pending",
+			status: "upcoming",
 			mortgageId,
 			borrowerId,
 			paymentNumber: 2,
+			type: "regular_interest",
 			amount: 290_800,
-			principalPortion: 121_300,
-			interestPortion: 169_500,
-			dueDate: opts.nextPaymentDate,
-			gracePeriodEndDate: opts.nextPaymentDate,
+			amountSettled: 0,
+			dueDate: parseUTCDate(opts.nextPaymentDate),
+			gracePeriodEnd: parseUTCDate(opts.nextPaymentDate),
 			createdAt: Date.now(),
 		});
 

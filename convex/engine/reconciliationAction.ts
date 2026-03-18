@@ -110,6 +110,10 @@ async function lookupStatus(
 		const e = await ctx.db.get(entityId as Id<"obligations">);
 		return e?.status ?? null;
 	}
+	if (entityType === "collectionAttempt") {
+		const e = await ctx.db.get(entityId as Id<"collectionAttempts">);
+		return e?.status ?? null;
+	}
 	return undefined;
 }
 
