@@ -17,7 +17,7 @@ import type {
 export class ManualPaymentMethod implements PaymentMethod {
 	async initiate(params: InitiateParams): Promise<InitiateResult> {
 		return {
-			providerRef: `manual_${params.planEntryId}_${Date.now()}`,
+			providerRef: `manual_${params.planEntryId}_${crypto.randomUUID()}`,
 			status: "confirmed",
 		};
 	}

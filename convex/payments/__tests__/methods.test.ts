@@ -1,5 +1,5 @@
 import { ConvexError } from "convex/values";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { InitiateParams } from "../methods/interface";
 import { ManualPaymentMethod } from "../methods/manual";
 import {
@@ -16,8 +16,10 @@ import {
 // Shared fixtures
 // ---------------------------------------------------------------------------
 
-const MANUAL_REF_PATTERN = /^manual_entry_789_\d+$/;
-const MOCK_PAD_REF_PATTERN = /^mock_pad_entry_789_\d+$/;
+const MANUAL_REF_PATTERN =
+	/^manual_entry_789_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const MOCK_PAD_REF_PATTERN =
+	/^mock_pad_entry_789_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const UNKNOWN_METHOD_PATTERN = /Unknown payment method: "stripe_ach"/;
 
 const sampleParams: InitiateParams = {
@@ -87,6 +89,10 @@ describe("MockPADMethod", () => {
 		});
 	});
 
+	afterEach(() => {
+		vi.restoreAllMocks();
+	});
+
 	it("initiate returns pending status", async () => {
 		const method = new MockPADMethod(scheduler);
 		const result = await method.initiate(sampleParams);
@@ -106,8 +112,6 @@ describe("MockPADMethod", () => {
 				planEntryId: sampleParams.planEntryId,
 			})
 		);
-
-		vi.restoreAllMocks();
 	});
 
 	it("providerRef contains planEntryId", async () => {
@@ -158,8 +162,6 @@ describe("MockPADMethod", () => {
 				shouldFail: false,
 			})
 		);
-
-		vi.restoreAllMocks();
 	});
 
 	it("respects custom failureRate of 1 (always fail)", async () => {
@@ -174,8 +176,6 @@ describe("MockPADMethod", () => {
 				shouldFail: true,
 			})
 		);
-
-		vi.restoreAllMocks();
 	});
 
 	it("confirm returns settledAt timestamp", async () => {
@@ -193,6 +193,47 @@ describe("MockPADMethod", () => {
 		const result = await method.cancel("mock_pad_entry_789_1000");
 		expect(result).toEqual({ cancelled: true });
 	});
+
+	it("getStatus returns pending with structured providerData", async () => {
+		const method = new MockPADMethod(scheduler);
+		const ref = "mock_pad_entry_789_abc123";
+		const result = await method.getStatus(ref);
+		expect(result.status).toBe("pending");
+		expect(result.providerData).toEqual({
+			providerRef: ref,
+			method: "mock_pad",
+		});
+	});
+
+	it("throws ConvexError when failureRate > 1", () => {
+		expect(() => new MockPADMethod(scheduler, { failureRate: 1.5 })).toThrow(
+			ConvexError
+		);
+	});
+
+	it("throws ConvexError when failureRate < 0", () => {
+		expect(() => new MockPADMethod(scheduler, { failureRate: -0.1 })).toThrow(
+			ConvexError
+		);
+	});
+
+	it("throws ConvexError when failureRate is NaN", () => {
+		expect(
+			() => new MockPADMethod(scheduler, { failureRate: Number.NaN })
+		).toThrow(ConvexError);
+	});
+
+	it("throws ConvexError when delayMs is negative", () => {
+		expect(() => new MockPADMethod(scheduler, { delayMs: -100 })).toThrow(
+			ConvexError
+		);
+	});
+
+	it("throws ConvexError when delayMs is NaN", () => {
+		expect(() => new MockPADMethod(scheduler, { delayMs: Number.NaN })).toThrow(
+			ConvexError
+		);
+	});
 });
 
 // ---------------------------------------------------------------------------
@@ -200,6 +241,10 @@ describe("MockPADMethod", () => {
 // ---------------------------------------------------------------------------
 
 describe("Method Registry", () => {
+	afterEach(() => {
+		vi.restoreAllMocks();
+	});
+
 	it('getPaymentMethod("manual") returns ManualPaymentMethod', () => {
 		const method = getPaymentMethod("manual");
 		expect(method).toBeInstanceOf(ManualPaymentMethod);
@@ -235,7 +280,5 @@ describe("Method Registry", () => {
 		vi.spyOn(Math, "random").mockReturnValue(0.5);
 		await method.initiate(sampleParams);
 		expect(injectedScheduler).toHaveBeenCalledOnce();
-
-		vi.restoreAllMocks();
 	});
 });

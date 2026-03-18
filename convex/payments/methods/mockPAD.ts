@@ -8,6 +8,7 @@
  * `ctx.scheduler.runAfter`.
  */
 
+import { ConvexError } from "convex/values";
 import type {
 	CancelResult,
 	ConfirmResult,
@@ -58,12 +59,29 @@ export class MockPADMethod implements PaymentMethod {
 		scheduleSettlement: ScheduleSettlementFn,
 		config: Partial<MockPADConfig> = {}
 	) {
+		const merged = { ...DEFAULT_MOCK_PAD_CONFIG, ...config };
+
+		if (
+			!Number.isFinite(merged.failureRate) ||
+			merged.failureRate < 0 ||
+			merged.failureRate > 1
+		) {
+			throw new ConvexError(
+				`MockPADMethod: failureRate must be a finite number in [0, 1], got ${String(merged.failureRate)}`
+			);
+		}
+		if (!Number.isFinite(merged.delayMs) || merged.delayMs < 0) {
+			throw new ConvexError(
+				`MockPADMethod: delayMs must be a non-negative finite number, got ${String(merged.delayMs)}`
+			);
+		}
+
 		this.scheduleSettlement = scheduleSettlement;
-		this.config = { ...DEFAULT_MOCK_PAD_CONFIG, ...config };
+		this.config = merged;
 	}
 
 	async initiate(params: InitiateParams): Promise<InitiateResult> {
-		const providerRef = `mock_pad_${params.planEntryId}_${Date.now()}`;
+		const providerRef = `mock_pad_${params.planEntryId}_${crypto.randomUUID()}`;
 		const shouldFail = Math.random() < this.config.failureRate;
 
 		await this.scheduleSettlement(this.config.delayMs, {
