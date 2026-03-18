@@ -210,7 +210,7 @@ describe("generateObligations", () => {
 
 		expect(result.generated).toBe(expectedDates.length);
 		expect(result.obligations).toHaveLength(expectedDates.length);
-		expect(result.skipped).toBeUndefined();
+		expect("skipped" in result).toBe(false);
 
 		// Verify in DB
 		const obligations = await t.run(async (ctx) => {
@@ -422,7 +422,7 @@ describe("generateObligations", () => {
 			{ mortgageId }
 		);
 		expect(first.generated).toBeGreaterThan(0);
-		expect(first.skipped).toBeUndefined();
+		expect("skipped" in first).toBe(false);
 
 		const second = await t.mutation(
 			internal.payments.obligations.generate.generateObligations,
@@ -430,7 +430,7 @@ describe("generateObligations", () => {
 		);
 		expect(second.generated).toBe(0);
 		expect(second.obligations).toHaveLength(0);
-		expect(second.skipped).toBe(true);
+		expect("skipped" in second && second.skipped).toBe(true);
 	});
 
 	it("throws when mortgage does not exist", async () => {
