@@ -1,4 +1,4 @@
-# ENG-61: Rules Engine + ScheduleRule + RetryRule + LateFeeeRule + Seed Rules
+# ENG-61: Rules Engine + ScheduleRule + RetryRule + LateFeeRule + Seed Rules
 
 ## Master Task List
 
@@ -12,7 +12,7 @@
 - [x] T-005: Create `convex/payments/collectionPlan/engine.ts` — RuleHandler interface, registry, evaluateRules internalAction
 - [x] T-006: Create `convex/payments/collectionPlan/rules/scheduleRule.ts` — ScheduleRule handler
 - [x] T-007: Create `convex/payments/collectionPlan/rules/retryRule.ts` — RetryRule handler
-- [x] T-008: Create `convex/payments/collectionPlan/rules/lateFeeRule.ts` — LateFeeeRule handler
+- [x] T-008: Create `convex/payments/collectionPlan/rules/lateFeeRule.ts` — LateFeeRule handler
 - [x] Bonus: Added `getById` internal query to `convex/obligations/queries.ts`
 
 ### Chunk 3: Seed + Tests + Validation ✅

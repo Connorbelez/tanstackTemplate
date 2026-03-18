@@ -121,7 +121,7 @@ export const setupPaymentScheduler = (ctx: ActionCtx) => {
 **File:** `convex/crons.ts`
 
 ```typescript
-crons hourly(
+crons.hourly(
   "execute scheduled collection entries",
   { minuteUTC: 0 },
   internal.payments.collectionPlan.actions.executeScheduledEntries
@@ -135,7 +135,7 @@ crons hourly(
 ### From ENG-61 (Rules Engine)
 ```typescript
 // Trigger rules on settlement
-await ctx.runMutation(
+await ctx.runAction(
   internal.payments.collectionPlan.engine.evaluateRules,
   {
     trigger: "event",

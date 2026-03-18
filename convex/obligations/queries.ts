@@ -88,8 +88,9 @@ export const getUpcomingInWindow = internalQuery({
 		}
 		return await ctx.db
 			.query("obligations")
-			.withIndex("by_due_date", (q) => q.lte("dueDate", dueBefore))
-			.filter((q) => q.eq(q.field("status"), "upcoming"))
+			.withIndex("by_due_date", (q) =>
+				q.eq("status", "upcoming").lte("dueDate", dueBefore)
+			)
 			.collect();
 	},
 });
@@ -107,7 +108,7 @@ export const getById = internalQuery({
 
 /**
  * Returns the first late_fee obligation linked to a given source obligation.
- * Uses full-table filter since there is no dedicated index on (type, sourceObligationId).
+ * Uses by_type_and_source index for O(log n) lookup instead of full-table scan.
  */
 export const getLateFeeForObligation = internalQuery({
 	args: {
@@ -116,11 +117,8 @@ export const getLateFeeForObligation = internalQuery({
 	handler: async (ctx, { sourceObligationId }) => {
 		return await ctx.db
 			.query("obligations")
-			.filter((q) =>
-				q.and(
-					q.eq(q.field("type"), "late_fee"),
-					q.eq(q.field("sourceObligationId"), sourceObligationId)
-				)
+			.withIndex("by_type_and_source", (q) =>
+				q.eq("type", "late_fee").eq("sourceObligationId", sourceObligationId)
 			)
 			.first();
 	},

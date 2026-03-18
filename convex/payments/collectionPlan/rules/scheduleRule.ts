@@ -23,14 +23,19 @@ export const scheduleRuleHandler: RuleHandler = {
 			{ mortgageId: evalCtx.mortgageId, dueBefore }
 		);
 
-		for (const obligation of obligations) {
-			// Idempotency: skip if a plan entry already covers this obligation
-			const existing = await ctx.runQuery(
-				internal.payments.collectionPlan.queries.getEntryForObligation,
-				{ obligationId: obligation._id }
-			);
+		if (obligations.length === 0) {
+			return;
+		}
 
-			if (existing) {
+		// Batch idempotency check: load planned entries once for all obligations
+		const coveredObligations = await ctx.runQuery(
+			internal.payments.collectionPlan.queries.getPlannedEntriesForObligations,
+			{ obligationIds: obligations.map((o) => o._id) }
+		);
+
+		for (const obligation of obligations) {
+			// Skip if a plan entry already covers this obligation
+			if (obligation._id in coveredObligations) {
 				continue;
 			}
 

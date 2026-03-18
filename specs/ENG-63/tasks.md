@@ -126,17 +126,17 @@ export const updateAttemptStatus = internalMutation({
 
 Cross-entity effect that fires PAYMENT_APPLIED to each obligation:
 ```typescript
-const effectPayloadValidator = v.object({
+import { effectPayloadValidator } from "../validators";
+
+// Narrow entityId to collectionAttempts for these effects
+const collectionEffectPayloadValidator = {
+  ...effectPayloadValidator,
   entityId: v.id("collectionAttempts"),
   entityType: v.literal("collectionAttempt"),
-  eventType: v.string(),
-  journalEntryId: v.string(),
-  payload: v.optional(v.any()),
-  source: v.any(), // CommandSource
-});
+};
 
 export const emitPaymentReceived = internalMutation({
-  args: effectPayloadValidator,
+  args: collectionEffectPayloadValidator,
   handler: async (ctx, args) => {
     // 1. Load collection attempt
     const attempt = await ctx.db.get(args.entityId);
@@ -175,17 +175,35 @@ export const emitPaymentReceived = internalMutation({
 Effect that triggers rules engine with COLLECTION_FAILED:
 ```typescript
 export const emitCollectionFailed = internalAction({
-  args: effectPayloadValidator,
+  args: collectionEffectPayloadValidator,
   handler: async (ctx, args) => {
-    // Trigger rules engine with COLLECTION_FAILED event
-    await ctx.runMutation(
+    // 1. Load the attempt and plan entry to build the full payload
+    //    that retryRule expects (planEntryId, obligationIds, amount, method, retryCount)
+    const attempt = await ctx.runQuery(
+      internal.payments.collectionPlan.queries.getAttempt,
+      { attemptId: args.entityId }
+    );
+    if (!attempt) throw new Error(`Attempt not found: ${args.entityId}`);
+
+    const planEntry = await ctx.runQuery(
+      internal.payments.collectionPlan.queries.getPlanEntry,
+      { planEntryId: attempt.planEntryId }
+    );
+    if (!planEntry) throw new Error(`Plan entry not found: ${attempt.planEntryId}`);
+
+    // 2. Trigger rules engine with full COLLECTION_FAILED eventPayload
+    //    retryRule expects: planEntryId, obligationIds, amount, method, retryCount
+    await ctx.runAction(
       internal.payments.collectionPlan.engine.evaluateRules,
       {
         trigger: "event",
         eventType: "COLLECTION_FAILED",
         eventPayload: {
-          attemptId: args.entityId,
-          failureReason: args.payload?.failureReason ?? "UNKNOWN",
+          planEntryId: planEntry._id,
+          obligationIds: planEntry.obligationIds,
+          amount: planEntry.amount,
+          method: planEntry.method,
+          retryCount: planEntry.retryCount ?? 0,
         },
       }
     );
@@ -206,12 +224,12 @@ emitCollectionFailed: internal.engine.effects.collection.emitCollectionFailed,
 
 ### Phase 3: Execution Pipeline
 
-#### T-008: Implement executeCollectionEntry action
-**File:** `convex/payments/collectionPlan/actions.ts` (new file)
+#### T-008: Implement executeCollectionEntry mutation
+**File:** `convex/payments/collectionPlan/mutations.ts`
 
-Main execution action:
+Main execution mutation (uses `internalMutation` since it needs direct DB access via `ctx.db.*`):
 ```typescript
-export const executeCollectionEntry = internalAction({
+export const executeCollectionEntry = internalMutation({
   args: {
     planEntryId: v.id("collectionPlanEntries"),
   },
@@ -288,7 +306,7 @@ export const executeCollectionEntry = internalAction({
         entityId: attemptId,
         eventType: "DRAW_INITIATED",
         payload: { providerRef: result.providerRef },
-        source: { type: "system", channel: "payment_collection },
+        source: { type: "system", channel: "payment_collection" },
       });
     }
   },
@@ -367,7 +385,7 @@ export const executeScheduledEntries = internalAction({
     for (const entry of entries) {
       try {
         await ctx.runMutation(
-          internal.payments.collectionPlan.actions.executeCollectionEntry,
+          internal.payments.collectionPlan.mutations.executeCollectionEntry,
           { planEntryId: entry._id }
         );
       } catch (error) {
@@ -438,8 +456,8 @@ import { executeTransition } from "../transition";
 | File | Action |
 |------|--------|
 | `convex/payments/collectionPlan/queries.ts` | Add `getExecutableEntries` |
-| `convex/payments/collectionPlan/mutations.ts` | Add `createAttempt`, `updatePlanEntryStatus`, `updateAttemptStatus`, `handleSettlement` |
-| `convex/payments/collectionPlan/actions.ts` | Create with `executeCollectionEntry`, `executeScheduledEntries` |
+| `convex/payments/collectionPlan/mutations.ts` | Add `createAttempt`, `updatePlanEntryStatus`, `updateAttemptStatus`, `handleSettlement`, `executeCollectionEntry` |
+| `convex/payments/collectionPlan/actions.ts` | Create with `executeScheduledEntries` |
 | `convex/engine/effects/collection.ts` | Create with `emitPaymentReceived`, `emitCollectionFailed` |
 | `convex/engine/effects/registry.ts` | Add effect entries |
 | `convex/crons.ts` | Add hourly cron |
