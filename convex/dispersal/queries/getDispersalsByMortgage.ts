@@ -1,4 +1,5 @@
 import { v } from "convex/values";
+import type { Doc } from "../../_generated/dataModel";
 import { ledgerQuery } from "../../fluent";
 
 export const getDispersalsByMortgage = ledgerQuery
@@ -8,33 +9,53 @@ export const getDispersalsByMortgage = ledgerQuery
 		toDate: v.optional(v.string()),
 	})
 	.handler(async (ctx, args) => {
-		const entries = await ctx.db
-			.query("dispersalEntries")
-			.withIndex("by_mortgage", (q) => q.eq("mortgageId", args.mortgageId))
-			.collect();
-		const filteredEntries = entries.filter((entry) => {
-			if (args.fromDate && entry.dispersalDate < args.fromDate) {
-				return false;
-			}
-			if (args.toDate && entry.dispersalDate > args.toDate) {
-				return false;
-			}
-			return true;
-		});
-		filteredEntries.sort((left, right) =>
-			right.dispersalDate.localeCompare(left.dispersalDate)
-		);
+		const { fromDate, mortgageId, toDate } = args;
+		let entries: Doc<"dispersalEntries">[];
+		if (fromDate && toDate) {
+			entries = await ctx.db
+				.query("dispersalEntries")
+				.withIndex("by_mortgage", (q) =>
+					q
+						.eq("mortgageId", mortgageId)
+						.gte("dispersalDate", fromDate)
+						.lte("dispersalDate", toDate)
+				)
+				.order("desc")
+				.collect();
+		} else if (fromDate) {
+			entries = await ctx.db
+				.query("dispersalEntries")
+				.withIndex("by_mortgage", (q) =>
+					q.eq("mortgageId", mortgageId).gte("dispersalDate", fromDate)
+				)
+				.order("desc")
+				.collect();
+		} else if (toDate) {
+			entries = await ctx.db
+				.query("dispersalEntries")
+				.withIndex("by_mortgage", (q) =>
+					q.eq("mortgageId", mortgageId).lte("dispersalDate", toDate)
+				)
+				.order("desc")
+				.collect();
+		} else {
+			entries = await ctx.db
+				.query("dispersalEntries")
+				.withIndex("by_mortgage", (q) => q.eq("mortgageId", mortgageId))
+				.order("desc")
+				.collect();
+		}
 
 		const byLender: Record<string, number> = {};
-		for (const entry of filteredEntries) {
+		for (const entry of entries) {
 			byLender[entry.lenderId] = (byLender[entry.lenderId] ?? 0) + entry.amount;
 		}
 
 		return {
-			mortgageId: args.mortgageId,
-			total: filteredEntries.reduce((total, entry) => total + entry.amount, 0),
+			mortgageId,
+			total: entries.reduce((total, entry) => total + entry.amount, 0),
 			byLender,
-			entries: filteredEntries.map((entry) => ({
+			entries: entries.map((entry) => ({
 				id: entry._id,
 				lenderId: entry.lenderId,
 				lenderAccountId: entry.lenderAccountId,

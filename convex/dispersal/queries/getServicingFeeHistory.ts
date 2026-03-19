@@ -8,28 +8,49 @@ export const getServicingFeeHistory = ledgerQuery
 		toDate: v.optional(v.string()),
 	})
 	.handler(async (ctx, args) => {
-		const entries = await ctx.db
-			.query("servicingFeeEntries")
-			.withIndex("by_mortgage", (q) => q.eq("mortgageId", args.mortgageId))
-			.collect();
-		const filteredEntries = entries.filter((entry) => {
-			if (args.fromDate && entry.date < args.fromDate) {
-				return false;
+		const { fromDate, mortgageId, toDate } = args;
+		const entries = await (async () => {
+			if (fromDate && toDate) {
+				return ctx.db
+					.query("servicingFeeEntries")
+					.withIndex("by_mortgage", (q) =>
+						q
+							.eq("mortgageId", mortgageId)
+							.gte("date", fromDate)
+							.lte("date", toDate)
+					)
+					.order("desc")
+					.collect();
 			}
-			if (args.toDate && entry.date > args.toDate) {
-				return false;
+			if (fromDate) {
+				return ctx.db
+					.query("servicingFeeEntries")
+					.withIndex("by_mortgage", (q) =>
+						q.eq("mortgageId", mortgageId).gte("date", fromDate)
+					)
+					.order("desc")
+					.collect();
 			}
-			return true;
-		});
-		filteredEntries.sort((left, right) => right.date.localeCompare(left.date));
+			if (toDate) {
+				return ctx.db
+					.query("servicingFeeEntries")
+					.withIndex("by_mortgage", (q) =>
+						q.eq("mortgageId", mortgageId).lte("date", toDate)
+					)
+					.order("desc")
+					.collect();
+			}
+			return ctx.db
+				.query("servicingFeeEntries")
+				.withIndex("by_mortgage", (q) => q.eq("mortgageId", mortgageId))
+				.order("desc")
+				.collect();
+		})();
 
 		return {
-			mortgageId: args.mortgageId,
-			totalFees: filteredEntries.reduce(
-				(total, entry) => total + entry.amount,
-				0
-			),
-			entries: filteredEntries,
+			mortgageId,
+			totalFees: entries.reduce((total, entry) => total + entry.amount, 0),
+			entries,
 		};
 	})
 	.public();
