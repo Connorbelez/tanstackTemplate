@@ -217,7 +217,9 @@ export const getDisbursementHistory = dispersalQuery
 		})();
 
 		entries.sort(compareDispersalEntriesByDate);
+		const overallTotal = sumAmounts(entries);
 		const limitedEntries = entries.slice(0, effectiveLimit);
+		const pageTotal = sumAmounts(limitedEntries);
 
 		let runningTotal = 0;
 		const history = limitedEntries.map((entry) => {
@@ -227,9 +229,10 @@ export const getDisbursementHistory = dispersalQuery
 
 		return {
 			lenderId: args.lenderId,
-			entryCount: history.length,
+			entryCount: entries.length,
 			entries: history,
-			total: roundCurrency(runningTotal),
+			total: overallTotal,
+			pageTotal,
 		};
 	})
 	.public();
@@ -282,14 +285,17 @@ export const getDispersalsByMortgage = dispersalQuery
 		})();
 
 		entries.sort(compareDispersalEntriesByDate);
+		const overallTotal = sumAmounts(entries);
 		const limitedEntries = entries.slice(0, effectiveLimit);
+		const pageTotal = sumAmounts(limitedEntries);
 
 		return {
 			mortgageId: args.mortgageId,
-			entryCount: limitedEntries.length,
+			entryCount: entries.length,
 			entries: limitedEntries,
-			total: sumAmounts(limitedEntries),
-			byLender: summarizeByLender(limitedEntries),
+			total: overallTotal,
+			pageTotal,
+			byLender: summarizeByLender(entries),
 		};
 	})
 	.public();
@@ -368,13 +374,16 @@ export const getServicingFeeHistory = dispersalQuery
 		})();
 
 		entries.sort(compareFeeEntriesByDate);
+		const overallTotalFees = sumAmounts(entries);
 		const limitedEntries = entries.slice(0, effectiveLimit);
+		const pageTotalFees = sumAmounts(limitedEntries);
 
 		return {
 			mortgageId: args.mortgageId,
-			entryCount: limitedEntries.length,
+			entryCount: entries.length,
 			entries: limitedEntries,
-			totalFees: sumAmounts(limitedEntries),
+			totalFees: overallTotalFees,
+			pageTotalFees,
 		};
 	})
 	.public();

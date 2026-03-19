@@ -5,6 +5,7 @@ doc-crawler.skill
 .gitnexus/
 .codex/
 dist
+convex/_generated/
 dist-ssr
 *.local
 .vscode/

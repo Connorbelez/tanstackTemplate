@@ -1,4 +1,3 @@
-import { anyApi } from "convex/server";
 import { convexTest } from "convex-test";
 import { describe, expect, it } from "vitest";
 import {
@@ -6,11 +5,11 @@ import {
 	type MockIdentity,
 } from "../../../src/test/auth/helpers";
 import { FAIRLEND_ADMIN, LENDER } from "../../../src/test/auth/identities";
+import { api } from "../../_generated/api";
 import type { MutationCtx } from "../../_generated/server";
 import schema from "../../schema";
 
 const modules = import.meta.glob("/convex/**/*.ts");
-const api = anyApi;
 
 const OTHER_LENDER = createMockViewer({
 	roles: ["lender"],
@@ -410,7 +409,7 @@ describe("dispersal reconciliation queries", () => {
 		]);
 	});
 
-	it("getDisbursementHistory respects limit pagination semantics", async () => {
+	it("getDisbursementHistory returns overall totals when limit pagination is applied", async () => {
 		const t = createHarness();
 		const { lenderId } = await seedScenario(t);
 
@@ -421,8 +420,9 @@ describe("dispersal reconciliation queries", () => {
 				limit: 2,
 			});
 
-		expect(result.entryCount).toBe(2);
-		expect(result.total).toBe(300);
+		expect(result.entryCount).toBe(3);
+		expect(result.total).toBe(450);
+		expect(result.pageTotal).toBe(300);
 		expect(result.entries.map((entry) => entry.amount)).toEqual([100, 200]);
 	});
 
@@ -446,6 +446,27 @@ describe("dispersal reconciliation queries", () => {
 
 		expect(result.entryCount).toBe(5);
 		expect(result.total).toBe(800);
+		expect(result.byLender).toEqual([
+			{ lenderId, entryCount: 3, totalAmount: 450 },
+			{ lenderId: otherLenderId, entryCount: 2, totalAmount: 350 },
+		]);
+	});
+
+	it("getDispersalsByMortgage keeps overall aggregates when limit is applied", async () => {
+		const t = createHarness();
+		const { mortgageId, lenderId, otherLenderId } = await seedScenario(t);
+
+		const result = await t
+			.withIdentity(FAIRLEND_ADMIN)
+			.query(api.dispersal.queries.getDispersalsByMortgage, {
+				mortgageId,
+				limit: 2,
+			});
+
+		expect(result.entryCount).toBe(5);
+		expect(result.total).toBe(800);
+		expect(result.pageTotal).toBe(150);
+		expect(result.entries.map((entry) => entry.amount)).toEqual([100, 50]);
 		expect(result.byLender).toEqual([
 			{ lenderId, entryCount: 3, totalAmount: 450 },
 			{ lenderId: otherLenderId, entryCount: 2, totalAmount: 350 },
@@ -498,5 +519,22 @@ describe("dispersal reconciliation queries", () => {
 		expect(emptyRange.entryCount).toBe(0);
 		expect(emptyRange.totalFees).toBe(0);
 		expect(emptyRange.entries).toEqual([]);
+	});
+
+	it("getServicingFeeHistory keeps overall totals when limit is applied", async () => {
+		const t = createHarness();
+		const { mortgageId } = await seedScenario(t);
+
+		const result = await t
+			.withIdentity(FAIRLEND_ADMIN)
+			.query(api.dispersal.queries.getServicingFeeHistory, {
+				mortgageId,
+				limit: 2,
+			});
+
+		expect(result.entryCount).toBe(3);
+		expect(result.totalFees).toBe(90);
+		expect(result.pageTotalFees).toBe(50);
+		expect(result.entries.map((entry) => entry.amount)).toEqual([20, 30]);
 	});
 });
