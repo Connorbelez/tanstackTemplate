@@ -130,23 +130,21 @@ export function calculateAccrualForPeriods(
 	return total;
 }
 
-type WorkingPositionShare = PositionShare & {
-	flooredCents: number;
-	originalIndex: number;
-	remainder: number;
-};
-
 /**
- * Splits a distributable amount across positions using the largest-remainder
- * method so the rounded output sums exactly to the original amount.
+ * Calculates per-lender shares for a distributable amount using the
+ * largest-remainder method.
+ *
+ * Inputs and outputs are in dollars. `units` are ledger ownership units out of
+ * 10_000. The returned `amount` values are in dollars and sum exactly to the
+ * distributable amount.
  */
 export function calculateProRataShares(
 	positions: ProRataPosition[],
 	distributableAmount: number
 ): PositionShare[] {
-	if (distributableAmount < 0) {
+	if (!Number.isSafeInteger(distributableAmount) || distributableAmount < 0) {
 		throw new Error(
-			`calculateProRataShares: distributableAmount must be non-negative (received ${distributableAmount})`
+			`calculateProRataShares: distributableAmount must be a non-negative integer cent value, got ${distributableAmount}`
 		);
 	}
 
@@ -158,64 +156,54 @@ export function calculateProRataShares(
 		(sum, position) => sum + position.units,
 		0
 	);
-	if (totalUnits <= 0) {
-		throw new Error(
-			`calculateProRataShares: totalUnits must be positive (received ${totalUnits})`
-		);
+
+	if (!Number.isSafeInteger(totalUnits) || totalUnits <= 0) {
+		return [];
 	}
 
-	const workingShares: WorkingPositionShare[] = positions.map(
-		(position, originalIndex) => {
-			const rawAmount = (position.units / totalUnits) * distributableAmount;
-			const rawCents = rawAmount * CENTS_PER_DOLLAR;
-			const flooredCents = Math.floor(rawCents);
-
-			return {
-				...position,
-				amount: flooredCents / CENTS_PER_DOLLAR,
-				flooredCents,
-				originalIndex,
-				rawAmount,
-				remainder: rawCents - flooredCents,
-			};
-		}
-	);
-
-	const distributableCents = Math.round(distributableAmount * CENTS_PER_DOLLAR);
-	const flooredCents = workingShares.reduce(
-		(sum, share) => sum + share.flooredCents,
-		0
-	);
-	let remainingCents = distributableCents - flooredCents;
-
-	const rankedShares = [...workingShares].sort((a, b) => {
-		if (Math.abs(b.remainder - a.remainder) > Number.EPSILON) {
-			return b.remainder - a.remainder;
-		}
-		if (b.units !== a.units) {
-			return b.units - a.units;
-		}
-		return a.originalIndex - b.originalIndex;
+	const withRemainders = positions.map((position, index) => {
+		const rawAmount = (distributableAmount * position.units) / totalUnits;
+		const amount = Math.floor(rawAmount + 1e-9);
+		return {
+			...position,
+			index,
+			rawAmount,
+			amount,
+			remainder: rawAmount - amount,
+		};
 	});
 
-	for (
-		let index = 0;
-		index < rankedShares.length && remainingCents > 0;
-		index += 1
-	) {
-		rankedShares[index].flooredCents += 1;
+	let remainingCents =
+		distributableAmount -
+		withRemainders.reduce((sum, position) => sum + position.amount, 0);
+
+	withRemainders.sort((left, right) => {
+		const remainderDiff = right.remainder - left.remainder;
+		if (Math.abs(remainderDiff) > 1e-12) {
+			return remainderDiff;
+		}
+		const unitDiff = right.units - left.units;
+		if (unitDiff !== 0) {
+			return unitDiff;
+		}
+		return left.index - right.index;
+	});
+
+	for (const share of withRemainders) {
+		if (remainingCents <= 0) {
+			break;
+		}
+		share.amount += 1;
 		remainingCents -= 1;
 	}
 
-	return workingShares.map(
-		({
-			flooredCents: allocatedCents,
-			originalIndex: _,
-			remainder: __,
-			...share
-		}) => ({
-			...share,
-			amount: allocatedCents / CENTS_PER_DOLLAR,
-		})
-	);
+	return withRemainders
+		.sort((left, right) => left.index - right.index)
+		.map(({ index: _index, remainder: _remainder, ...share }) => ({
+			amount: share.amount,
+			lenderAccountId: share.accountId,
+			lenderId: share.lenderId,
+			rawAmount: share.rawAmount,
+			units: share.units,
+		}));
 }
