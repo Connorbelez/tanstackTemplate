@@ -14,6 +14,10 @@ import {
 	channelValidator,
 	entityTypeValidator,
 } from "./engine/validators";
+import {
+	calculationDetailsValidator,
+	dispersalStatusValidator,
+} from "./dispersal/validators";
 
 export default defineSchema({
 	// ══════════════════════════════════════════════════════════
@@ -873,18 +877,9 @@ export default defineSchema({
 		dispersalDate: v.string(),
 		obligationId: v.id("obligations"),
 		servicingFeeDeducted: v.number(),
-		status: v.literal("pending"),
+		status: dispersalStatusValidator,
 		idempotencyKey: v.string(),
-		calculationDetails: v.object({
-			settledAmount: v.number(),
-			servicingFee: v.number(),
-			distributableAmount: v.number(),
-			ownershipUnits: v.number(),
-			totalUnits: v.number(),
-			ownershipFraction: v.number(),
-			rawAmount: v.number(),
-			roundedAmount: v.number(),
-		}),
+		calculationDetails: calculationDetailsValidator,
 		createdAt: v.number(),
 	})
 		.index("by_lender", ["lenderId", "dispersalDate"])
