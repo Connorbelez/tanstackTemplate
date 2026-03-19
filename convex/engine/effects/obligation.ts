@@ -33,6 +33,10 @@ function isFiniteNumber(value: unknown): value is number {
 	return typeof value === "number" && Number.isFinite(value);
 }
 
+function toIsoDateString(timestamp: number): string {
+	return new Date(timestamp).toISOString().slice(0, 10);
+}
+
 async function loadObligationOrThrow(
 	ctx: MutationCtx,
 	args: ObligationEffectArgs,
@@ -163,14 +167,28 @@ export const emitObligationSettled = internalMutation({
 			buildPayload: buildPaymentConfirmedPayload,
 		});
 
-		// Schedule dispersal entry creation (SPEC 1.5 §8.3)
+		const settledAt = isFiniteNumber(obligation.settledAt)
+			? obligation.settledAt
+			: Date.now();
+		const settledDate = toIsoDateString(settledAt);
+		let settledAmount = obligation.amount;
+		if (isFiniteNumber(args.payload?.amount)) {
+			settledAmount = args.payload.amount;
+		} else if (obligation.amountSettled > 0) {
+			settledAmount = obligation.amountSettled;
+		}
+
+		// Schedule dispersal entry creation (WS6 / ENG-68)
 		await ctx.scheduler.runAfter(
 			0,
-			internal.payments.dispersal.stubs.createDispersalEntry,
+			internal.dispersal.createDispersalEntries.createDispersalEntries,
 			{
 				mortgageId: obligation.mortgageId,
 				obligationId: args.entityId,
-				amount: obligation.amount,
+				settledAmount,
+				settledDate,
+				idempotencyKey: `dispersal:${args.entityId}`,
+				source: args.source,
 			}
 		);
 	},

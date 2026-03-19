@@ -9,6 +9,18 @@ export type LedgerLenderId = string;
 export type LedgerMortgageId = string;
 
 /**
+ * One lender's share of a distributable amount, after largest-remainder
+ * rounding. Amounts are in cents.
+ */
+export interface PositionShare {
+	amount: number;
+	lenderAccountId: Id<"ledger_accounts">;
+	lenderId: Id<"lenders">;
+	rawAmount: number;
+	units: number;
+}
+
+/**
  * Represents a lender's ownership stake in a mortgage for a date range.
  * Used by the accrual engine to calculate per-lender interest.
  */
@@ -59,13 +71,4 @@ export interface ProRataPosition {
 	accountId: Id<"ledger_accounts">;
 	lenderId: Id<"lenders">;
 	units: number;
-}
-
-/**
- * A pro-rata allocation result that preserves both the raw and rounded amount
- * for auditability.
- */
-export interface PositionShare extends ProRataPosition {
-	amount: number;
-	rawAmount: number;
 }
