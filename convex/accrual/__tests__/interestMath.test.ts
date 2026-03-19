@@ -76,6 +76,11 @@ describe("daysBetween", () => {
 			"daysBetween: invalid date string"
 		);
 	});
+
+	it("returns 7 for month boundary crossing Jan 28 to Feb 3", () => {
+		// Jan 28–31 = 4 days + Feb 1–3 = 3 days = 7 days total
+		expect(daysBetween("2026-01-28", "2026-02-03")).toBe(7);
+	});
 });
 
 // ---------------------------------------------------------------------------
@@ -181,6 +186,18 @@ describe("calculatePeriodAccrual", () => {
 		// 10% of $100K / 365 = $27.397260...
 		const result = calculatePeriodAccrual(0.1, 1, 100_000, 1);
 		expect(result).toBeCloseTo((100_000 * 0.1) / 365, 10);
+	});
+
+	it("computes approximately $821.92 for 10% rate, 100% ownership, $100K, 30 days", () => {
+		// (0.10 * 1.0 * 100_000 * 30) / 365 = 821.9178...
+		const result = calculatePeriodAccrual(0.1, 1, 100_000, 30);
+		expect(result).toBeCloseTo(821.92, 2);
+	});
+
+	it("computes approximately $16.44 for 12% rate, 25% ownership, $200K, 1 day", () => {
+		// (0.12 * 0.25 * 200_000 * 1) / 365 = 16.4383...
+		const result = calculatePeriodAccrual(0.12, 0.25, 200_000, 1);
+		expect(result).toBeCloseTo(16.44, 2);
 	});
 });
 
@@ -358,5 +375,35 @@ describe("calculateAccrualForPeriods", () => {
 		).toThrow(
 			"calculateAccrualForPeriods: fromDate 2026-12-31 is after toDate 2026-01-01"
 		);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Precision — no premature rounding
+// ---------------------------------------------------------------------------
+
+describe("precision", () => {
+	it("preserves full float in intermediate values (calculatePeriodAccrual)", () => {
+		// If intermediate values were prematurely rounded to cents,
+		// the result would differ from the exact floating-point computation.
+		// This uses values that produce a repeating decimal to expose precision loss.
+		// (0.07 * 0.333333 * 100_000 * 30) / 365 ≈ 191.78... (repeating)
+		const result = calculatePeriodAccrual(0.07, 1 / 3, 100_000, 30);
+		const expected = (0.07 * (1 / 3) * 100_000 * 30) / 365;
+		// toBeCloseTo with high precision confirms no premature rounding
+		expect(result).toBeCloseTo(expected, 10);
+	});
+
+	it("preserves full float across multiple period summations", () => {
+		// Summing many small periods should not lose precision vs single large period
+		const single = calculatePeriodAccrual(0.1, 1, 100_000, 365);
+		let summed = 0;
+		for (let i = 0; i < 365; i++) {
+			summed += calculatePeriodAccrual(0.1, 1, 100_000, 1);
+		}
+		// Single period: exactly $10,000. Summed periods: very close (within 1e-5),
+		// accounting for floating-point accumulation across iterations
+		expect(single).toBe(10_000);
+		expect(summed).toBeCloseTo(10_000, 5);
 	});
 });
