@@ -1,4 +1,4 @@
-import type { OwnershipPeriod } from "./types";
+import type { OwnershipPeriod, PositionShare, ProRataPosition } from "./types";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -6,6 +6,7 @@ import type { OwnershipPeriod } from "./types";
 
 const MS_PER_DAY = 86_400_000;
 const DAYS_PER_YEAR = 365;
+const CENTS_PER_DOLLAR = 100;
 
 // ---------------------------------------------------------------------------
 // Date helpers — all inputs/outputs are YYYY-MM-DD strings, UTC-safe
@@ -127,4 +128,94 @@ export function calculateAccrualForPeriods(
 	}
 
 	return total;
+}
+
+type WorkingPositionShare = PositionShare & {
+	flooredCents: number;
+	originalIndex: number;
+	remainder: number;
+};
+
+/**
+ * Splits a distributable amount across positions using the largest-remainder
+ * method so the rounded output sums exactly to the original amount.
+ */
+export function calculateProRataShares(
+	positions: ProRataPosition[],
+	distributableAmount: number
+): PositionShare[] {
+	if (distributableAmount < 0) {
+		throw new Error(
+			`calculateProRataShares: distributableAmount must be non-negative (received ${distributableAmount})`
+		);
+	}
+
+	if (positions.length === 0) {
+		return [];
+	}
+
+	const totalUnits = positions.reduce(
+		(sum, position) => sum + position.units,
+		0
+	);
+	if (totalUnits <= 0) {
+		throw new Error(
+			`calculateProRataShares: totalUnits must be positive (received ${totalUnits})`
+		);
+	}
+
+	const workingShares: WorkingPositionShare[] = positions.map(
+		(position, originalIndex) => {
+			const rawAmount = (position.units / totalUnits) * distributableAmount;
+			const rawCents = rawAmount * CENTS_PER_DOLLAR;
+			const flooredCents = Math.floor(rawCents);
+
+			return {
+				...position,
+				amount: flooredCents / CENTS_PER_DOLLAR,
+				flooredCents,
+				originalIndex,
+				rawAmount,
+				remainder: rawCents - flooredCents,
+			};
+		}
+	);
+
+	const distributableCents = Math.round(distributableAmount * CENTS_PER_DOLLAR);
+	const flooredCents = workingShares.reduce(
+		(sum, share) => sum + share.flooredCents,
+		0
+	);
+	let remainingCents = distributableCents - flooredCents;
+
+	const rankedShares = [...workingShares].sort((a, b) => {
+		if (Math.abs(b.remainder - a.remainder) > Number.EPSILON) {
+			return b.remainder - a.remainder;
+		}
+		if (b.units !== a.units) {
+			return b.units - a.units;
+		}
+		return a.originalIndex - b.originalIndex;
+	});
+
+	for (
+		let index = 0;
+		index < rankedShares.length && remainingCents > 0;
+		index += 1
+	) {
+		rankedShares[index].flooredCents += 1;
+		remainingCents -= 1;
+	}
+
+	return workingShares.map(
+		({
+			flooredCents: allocatedCents,
+			originalIndex: _,
+			remainder: __,
+			...share
+		}) => ({
+			...share,
+			amount: allocatedCents / CENTS_PER_DOLLAR,
+		})
+	);
 }

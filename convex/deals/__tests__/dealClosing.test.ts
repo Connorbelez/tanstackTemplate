@@ -14,7 +14,6 @@ import { ConvexError } from "convex/values";
 import { convexTest } from "convex-test";
 import { assert, beforeEach, describe, expect, it } from "vitest";
 import type { Id } from "../../_generated/dataModel";
-import type { ActionCtx } from "../../_generated/server";
 import {
 	reserveShares,
 	voidReservation,
@@ -35,7 +34,7 @@ const EFFECT_SOURCE = {
 
 interface ReserveSharesAction {
 	_handler: (
-		ctx: ActionCtx,
+		ctx: unknown,
 		args: {
 			entityId: Id<"deals">;
 			entityType: "deal";
@@ -50,7 +49,7 @@ interface ReserveSharesAction {
 
 interface VoidReservationAction {
 	_handler: (
-		ctx: ActionCtx,
+		ctx: unknown,
 		args: {
 			entityId: Id<"deals">;
 			entityType: "deal";

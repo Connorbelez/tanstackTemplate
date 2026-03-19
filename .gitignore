@@ -2,6 +2,8 @@ node_modules
 .DS_Store
 review.md
 doc-crawler.skill
+.gitnexus/
+.codex/
 dist
 dist-ssr
 *.local

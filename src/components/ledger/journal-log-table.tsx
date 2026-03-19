@@ -13,7 +13,7 @@ import { EntryTypeBadge } from "./entry-type-badge";
 
 export interface JournalEntry {
 	_id: string;
-	amount: number;
+	amount: number | bigint;
 	entryType: string;
 	fromLabel: string;
 	sequenceNumber: number;
@@ -60,7 +60,7 @@ export function JournalLogTable({ entries }: JournalLogTableProps) {
 										<EntryTypeBadge entryType={entry.entryType} />
 									</TableCell>
 									<TableCell className="font-mono text-sm">
-										{entry.amount.toLocaleString()}
+										{Number(entry.amount).toLocaleString()}
 									</TableCell>
 									<TableCell className="text-sm">
 										<span className="inline-flex items-center gap-1">

@@ -13,7 +13,6 @@
 import { convexTest } from "convex-test";
 import { assert, beforeEach, describe, expect, it } from "vitest";
 import type { Id } from "../../_generated/dataModel";
-import type { ActionCtx } from "../../_generated/server";
 import { commitReservation } from "../../engine/effects/dealClosing";
 import { updatePaymentSchedule } from "../../engine/effects/dealClosingPayments";
 import { prorateAccrualBetweenOwners } from "../../engine/effects/dealClosingProrate";
@@ -33,7 +32,7 @@ const EFFECT_SOURCE = {
 
 interface EffectAction {
 	_handler: (
-		ctx: ActionCtx,
+		ctx: unknown,
 		args: {
 			entityId: Id<"deals">;
 			entityType: "deal";
