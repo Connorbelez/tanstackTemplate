@@ -1,3 +1,5 @@
+import type { Id } from "../_generated/dataModel";
+
 /**
  * Ledger identifiers are stored as plain string keys in the ownership ledger.
  * Keep these aliases explicit so accrual code does not leak Convex row IDs
