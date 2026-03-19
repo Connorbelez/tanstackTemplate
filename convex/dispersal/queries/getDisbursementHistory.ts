@@ -2,6 +2,8 @@ import { ConvexError, v } from "convex/values";
 import { ledgerQuery } from "../../fluent";
 import { findLenderByAuthId } from "../lenderIdentity";
 
+const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+
 export const getDisbursementHistory = ledgerQuery
 	.input({
 		lenderId: v.id("lenders"),
@@ -19,6 +21,19 @@ export const getDisbursementHistory = ledgerQuery
 				throw new ConvexError(
 					"Forbidden: lenders may only view their own disbursement history"
 				);
+			}
+		}
+
+		// Validate date format and logical order
+		if (fromDate && toDate) {
+			if (!DATE_REGEX.test(fromDate)) {
+				throw new ConvexError("fromDate must be in YYYY-MM-DD format");
+			}
+			if (!DATE_REGEX.test(toDate)) {
+				throw new ConvexError("toDate must be in YYYY-MM-DD format");
+			}
+			if (fromDate > toDate) {
+				throw new ConvexError("fromDate must not be after toDate");
 			}
 		}
 

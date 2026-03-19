@@ -20,10 +20,20 @@ export async function findLenderByAuthId(
 		return null;
 	}
 
-	return db
+	const lenders = await db
 		.query("lenders")
 		.withIndex("by_user", (q) => q.eq("userId", user._id))
-		.unique();
+		.collect();
+
+	if (lenders.length === 0) {
+		return null;
+	}
+	if (lenders.length > 1) {
+		throw new Error(
+			`findLenderByAuthId: found ${lenders.length} lenders for user ${user._id} — data corruption detected`
+		);
+	}
+	return lenders[0];
 }
 
 export async function requireLenderIdForAuthId(

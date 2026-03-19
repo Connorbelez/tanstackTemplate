@@ -100,7 +100,18 @@ async function applyDealReroutes(
 		.withIndex("by_mortgage", (q) => q.eq("mortgageId", mortgageId))
 		.collect();
 
-	for (const reroute of reroutes) {
+	// Sort reroutes by effectiveAfterDate to ensure deterministic processing order
+	const sortedReroutes = reroutes.slice().sort((a, b) => {
+		const dateCompare = a.effectiveAfterDate.localeCompare(
+			b.effectiveAfterDate
+		);
+		if (dateCompare !== 0) {
+			return dateCompare;
+		}
+		return a._creationTime - b._creationTime;
+	});
+
+	for (const reroute of sortedReroutes) {
 		if (reroute.effectiveAfterDate > settledDate) {
 			continue;
 		}
@@ -119,6 +130,12 @@ async function applyDealReroutes(
 		if (!Number.isSafeInteger(reroute.fractionalShare)) {
 			throw new ConvexError(
 				`createDispersalEntries: deal reroute ${reroute._id} has a non-integer fractionalShare`
+			);
+		}
+
+		if (reroute.fractionalShare <= 0) {
+			throw new ConvexError(
+				`createDispersalEntries: reroute ${reroute._id} has invalid fractionalShare ${reroute.fractionalShare} (must be > 0)`
 			);
 		}
 
