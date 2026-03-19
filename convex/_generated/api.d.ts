@@ -8,6 +8,8 @@
  * @module
  */
 
+import type * as accrual_interestMath from "../accrual/interestMath.js";
+import type * as accrual_types from "../accrual/types.js";
 import type * as audit_queries from "../audit/queries.js";
 import type * as auditLog from "../auditLog.js";
 import type * as auditTrailClient from "../auditTrailClient.js";
@@ -145,6 +147,8 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  "accrual/interestMath": typeof accrual_interestMath;
+  "accrual/types": typeof accrual_types;
   "audit/queries": typeof audit_queries;
   auditLog: typeof auditLog;
   auditTrailClient: typeof auditTrailClient;
