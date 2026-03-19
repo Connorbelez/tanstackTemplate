@@ -204,10 +204,14 @@ describe("dealAccess mutations", () => {
 			const records = await t.run(async (ctx) =>
 				ctx.db
 					.query("dealAccess")
-					.withIndex("by_user_and_deal", (q) =>
-						q.eq("userId", LAWYER_IDENTITY.subject).eq("dealId", dealId)
-					)
 					.collect()
+					.then((all) =>
+						all.filter(
+							(record) =>
+								record.userId === LAWYER_IDENTITY.subject &&
+								record.dealId === dealId
+						)
+					)
 			);
 			const activeRecords = records.filter((r) => r.status === "active");
 			expect(activeRecords).toHaveLength(1);
@@ -280,8 +284,8 @@ describe("dealAccess effects", () => {
 			const records = await t.run(async (ctx) =>
 				ctx.db
 					.query("dealAccess")
-					.withIndex("by_deal", (q) => q.eq("dealId", dealId))
 					.collect()
+					.then((all) => all.filter((record) => record.dealId === dealId))
 			);
 			expect(records).toHaveLength(1);
 			expect(records[0].userId).toBe(LAWYER_IDENTITY.subject);
@@ -311,9 +315,12 @@ describe("dealAccess effects", () => {
 			const records = await t.run(async (ctx) =>
 				ctx.db
 					.query("dealAccess")
-					.withIndex("by_deal", (q) => q.eq("dealId", dealId))
-					.filter((q) => q.eq(q.field("status"), "active"))
 					.collect()
+					.then((all) =>
+						all.filter(
+							(record) => record.dealId === dealId && record.status === "active"
+						)
+					)
 			);
 			expect(records).toHaveLength(1);
 		});
@@ -335,8 +342,8 @@ describe("dealAccess effects", () => {
 			const records = await t.run(async (ctx) =>
 				ctx.db
 					.query("dealAccess")
-					.withIndex("by_deal", (q) => q.eq("dealId", seed.dealId))
 					.collect()
+					.then((all) => all.filter((record) => record.dealId === seed.dealId))
 			);
 			expect(records).toHaveLength(0);
 		});
@@ -359,8 +366,8 @@ describe("dealAccess effects", () => {
 			const records = await t.run(async (ctx) =>
 				ctx.db
 					.query("dealAccess")
-					.withIndex("by_deal", (q) => q.eq("dealId", dealId))
 					.collect()
+					.then((all) => all.filter((record) => record.dealId === dealId))
 			);
 			expect(records).toHaveLength(2);
 			for (const record of records) {
@@ -391,8 +398,8 @@ describe("dealAccess effects", () => {
 			const records = await t.run(async (ctx) =>
 				ctx.db
 					.query("dealAccess")
-					.withIndex("by_deal", (q) => q.eq("dealId", dealId))
 					.collect()
+					.then((all) => all.filter((record) => record.dealId === dealId))
 			);
 
 			const lawyerRecords = records.filter(

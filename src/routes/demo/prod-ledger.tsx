@@ -31,6 +31,7 @@ import {
 } from "#/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "#/components/ui/tabs";
 import { api } from "../../../convex/_generated/api";
+import type { Id } from "../../../convex/_generated/dataModel";
 
 export const Route = createFileRoute("/demo/prod-ledger")({
 	ssr: false,
@@ -64,26 +65,26 @@ interface LedgerOverview {
 }
 
 interface JournalEntry {
-	_id: string;
-	amount: number;
+	_id: Id<"ledger_journal_entries">;
+	amount: number | bigint;
 	creditLabel: string;
 	debitLabel: string;
 	effectiveDate: string;
 	entryType: string;
-	mortgageId: string;
-	reservationId?: string | null;
+	mortgageId: Id<"mortgages">;
+	reservationId?: Id<"ledger_reservations"> | null;
 	sequenceNumber: number;
 	source: { type: string; actor?: string; channel?: string };
 	timestamp: number;
 }
 
 interface Reservation {
-	_id: string;
+	_id: Id<"ledger_reservations">;
 	amount: number;
 	buyerLenderId: string;
 	createdAt: number;
-	dealId?: string;
-	mortgageId: string;
+	dealId?: Id<"deals">;
+	mortgageId: Id<"mortgages">;
 	resolvedAt?: number;
 	sellerLenderId: string;
 	status: string;
@@ -167,7 +168,8 @@ function ProdLedgerDemo() {
 	const [loading, setLoading] = useState(false);
 
 	// Void reason inline state
-	const [voidTarget, setVoidTarget] = useState<string | null>(null);
+	const [voidTarget, setVoidTarget] =
+		useState<Id<"ledger_reservations"> | null>(null);
 	const [voidReason, setVoidReason] = useState("");
 
 	const clearMessages = useCallback(() => {
@@ -561,7 +563,7 @@ function JournalRegisterTab({ entries }: { entries: JournalEntry[] }) {
 								{entry.creditLabel}
 							</TableCell>
 							<TableCell className="text-right font-mono text-xs">
-								{entry.amount.toLocaleString()}
+								{Number(entry.amount).toLocaleString()}
 							</TableCell>
 						</TableRow>
 					))}
@@ -590,18 +592,20 @@ function ReservationsTab({
 	voidReason,
 	setVoidReason,
 }: {
-	commitReservation: (args: { reservationId: string }) => Promise<unknown>;
+	commitReservation: (args: {
+		reservationId: Id<"ledger_reservations">;
+	}) => Promise<unknown>;
 	loading: boolean;
 	reservations: Reservation[];
 	runAction: (label: string, fn: () => Promise<unknown>) => Promise<void>;
 	setVoidReason: (v: string) => void;
-	setVoidTarget: (v: string | null) => void;
+	setVoidTarget: (v: Id<"ledger_reservations"> | null) => void;
 	voidReason: string;
 	voidReservation: (args: {
-		reservationId: string;
+		reservationId: Id<"ledger_reservations">;
 		reason: string;
 	}) => Promise<unknown>;
-	voidTarget: string | null;
+	voidTarget: Id<"ledger_reservations"> | null;
 }) {
 	if (reservations.length === 0) {
 		return (
@@ -638,7 +642,7 @@ function ReservationsTab({
 								{r.sellerLenderId} → {r.buyerLenderId}
 							</TableCell>
 							<TableCell className="text-right font-mono text-xs">
-								{r.amount.toLocaleString()}
+								{Number(r.amount).toLocaleString()}
 							</TableCell>
 							<TableCell>
 								<span

@@ -1,6 +1,7 @@
 import { useQuery } from "convex/react";
 import { cn } from "#/lib/utils";
 import { api } from "../../../convex/_generated/api";
+import type { Id } from "../../../convex/_generated/dataModel";
 import { ScrollArea, ScrollBar } from "../ui/scroll-area";
 import { DealCard } from "./deal-card";
 
@@ -14,7 +15,7 @@ type DealPhase =
 	| "failed";
 
 interface DealWithPhase {
-	_id: string;
+	_id: Id<"deals">;
 	buyerId: string;
 	closingDate?: number;
 	createdAt: number;
@@ -22,7 +23,7 @@ interface DealWithPhase {
 	fractionalShare: number;
 	lawyerId?: string;
 	lawyerType?: "platform_lawyer" | "guest_lawyer";
-	mortgageId: string;
+	mortgageId: Id<"mortgages">;
 	sellerId: string;
 	status: string;
 }

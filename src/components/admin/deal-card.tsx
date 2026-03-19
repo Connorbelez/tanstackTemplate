@@ -4,6 +4,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { useDealActions } from "@/hooks/useDealActions";
 import { api } from "../../../convex/_generated/api";
+import type { Id } from "../../../convex/_generated/dataModel";
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -31,7 +32,7 @@ type DealPhase =
 	| "failed";
 
 interface DealWithPhase {
-	_id: string;
+	_id: Id<"deals">;
 	buyerId: string;
 	closingDate?: number;
 	createdAt: number;
@@ -39,7 +40,7 @@ interface DealWithPhase {
 	fractionalShare: number;
 	lawyerId?: string;
 	lawyerType?: "platform_lawyer" | "guest_lawyer";
-	mortgageId: string;
+	mortgageId: Id<"mortgages">;
 	sellerId: string;
 	status: string;
 }
@@ -168,9 +169,8 @@ export function DealCard({ deal }: DealCardProps) {
 	// Handle deal cancellation
 	const handleCancel = async (reason: string) => {
 		try {
-			const dealId = deal._id as string;
 			const result = await transitionDeal({
-				entityId: dealId,
+				entityId: deal._id,
 				eventType: "DEAL_CANCELLED",
 				payload: { reason },
 			});
@@ -191,9 +191,8 @@ export function DealCard({ deal }: DealCardProps) {
 
 	const handleAction = async (event: string) => {
 		try {
-			const dealId = deal._id as string;
 			const result = await transitionDeal({
-				entityId: dealId,
+				entityId: deal._id,
 				eventType: event,
 			});
 

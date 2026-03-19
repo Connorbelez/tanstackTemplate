@@ -3,13 +3,14 @@ import type { Id } from "../../_generated/dataModel";
 import {
 	calculateAccrualForPeriods,
 	calculatePeriodAccrual,
+	calculateProRataShares,
 	dayAfter,
 	dayBefore,
 	daysBetween,
 	maxDate,
 	minDate,
 } from "../interestMath";
-import type { OwnershipPeriod } from "../types";
+import type { OwnershipPeriod, ProRataPosition } from "../types";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -22,6 +23,17 @@ function makePeriod(overrides: Partial<OwnershipPeriod> = {}): OwnershipPeriod {
 		fraction: 1,
 		fromDate: "2026-01-01",
 		toDate: "2026-12-31",
+		...overrides,
+	};
+}
+
+function makePosition(
+	overrides: Partial<ProRataPosition> = {}
+): ProRataPosition {
+	return {
+		accountId: "ledger_account_1" as Id<"ledger_accounts">,
+		lenderId: "lender_1" as Id<"lenders">,
+		units: 10_000,
 		...overrides,
 	};
 }
@@ -405,5 +417,132 @@ describe("precision", () => {
 		// accounting for floating-point accumulation across iterations
 		expect(single).toBe(10_000);
 		expect(summed).toBeCloseTo(10_000, 5);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// calculateProRataShares
+// ---------------------------------------------------------------------------
+
+describe("calculateProRataShares", () => {
+	it("distributes $10.00 across 3333/3333/3334 units as 3.33/3.33/3.34", () => {
+		const shares = calculateProRataShares(
+			[
+				makePosition({
+					accountId: "ledger_account_1" as Id<"ledger_accounts">,
+					lenderId: "lender_1" as Id<"lenders">,
+					units: 3333,
+				}),
+				makePosition({
+					accountId: "ledger_account_2" as Id<"ledger_accounts">,
+					lenderId: "lender_2" as Id<"lenders">,
+					units: 3333,
+				}),
+				makePosition({
+					accountId: "ledger_account_3" as Id<"ledger_accounts">,
+					lenderId: "lender_3" as Id<"lenders">,
+					units: 3334,
+				}),
+			],
+			10
+		);
+
+		expect(shares.map((share) => share.amount)).toEqual([3.33, 3.33, 3.34]);
+		expect(
+			Math.round(shares.reduce((sum, share) => sum + share.amount, 0) * 100)
+		).toBe(1000);
+	});
+
+	it("distributes an odd cent deterministically across equal positions", () => {
+		const shares = calculateProRataShares(
+			[
+				makePosition({
+					accountId: "ledger_account_1" as Id<"ledger_accounts">,
+					lenderId: "lender_1" as Id<"lenders">,
+					units: 5000,
+				}),
+				makePosition({
+					accountId: "ledger_account_2" as Id<"ledger_accounts">,
+					lenderId: "lender_2" as Id<"lenders">,
+					units: 5000,
+				}),
+			],
+			100.01
+		);
+
+		expect(shares.map((share) => share.amount)).toEqual([50.01, 50]);
+		expect(
+			Math.round(shares.reduce((sum, share) => sum + share.amount, 0) * 100)
+		).toBe(10_001);
+	});
+
+	it("breaks equal-remainder ties by largest position", () => {
+		const shares = calculateProRataShares(
+			[
+				makePosition({
+					accountId: "ledger_account_1" as Id<"ledger_accounts">,
+					lenderId: "lender_1" as Id<"lenders">,
+					units: 2000,
+				}),
+				makePosition({
+					accountId: "ledger_account_2" as Id<"ledger_accounts">,
+					lenderId: "lender_2" as Id<"lenders">,
+					units: 1000,
+				}),
+			],
+			0.02
+		);
+
+		expect(shares.map((share) => share.amount)).toEqual([0.01, 0.01]);
+		expect(shares[0]?.rawAmount).toBeCloseTo(0.013_333_333_3, 10);
+		expect(shares[1]?.rawAmount).toBeCloseTo(0.006_666_666_7, 10);
+	});
+
+	it("preserves input order while allocating cents by rank", () => {
+		const shares = calculateProRataShares(
+			[
+				makePosition({
+					accountId: "ledger_account_9" as Id<"ledger_accounts">,
+					lenderId: "lender_9" as Id<"lenders">,
+					units: 1,
+				}),
+				makePosition({
+					accountId: "ledger_account_8" as Id<"ledger_accounts">,
+					lenderId: "lender_8" as Id<"lenders">,
+					units: 3,
+				}),
+			],
+			0.01
+		);
+
+		expect(shares.map((share) => share.accountId)).toEqual([
+			"ledger_account_9",
+			"ledger_account_8",
+		]);
+		expect(shares.map((share) => share.amount)).toEqual([0, 0.01]);
+	});
+
+	it("returns an empty array for no positions", () => {
+		expect(calculateProRataShares([], 0)).toEqual([]);
+	});
+
+	it("throws when distributableAmount is negative", () => {
+		expect(() => calculateProRataShares([makePosition()], -0.01)).toThrow(
+			"calculateProRataShares: distributableAmount must be non-negative"
+		);
+	});
+
+	it("throws when total units is not positive", () => {
+		expect(() =>
+			calculateProRataShares(
+				[
+					makePosition({
+						accountId: "ledger_account_1" as Id<"ledger_accounts">,
+						units: 0,
+					}),
+				],
+				1
+			)
+		).toThrow("calculateProRataShares: totalUnits must be positive");
 	});
 });

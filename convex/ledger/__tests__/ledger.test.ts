@@ -1619,7 +1619,7 @@ describe("Point-in-Time & History", () => {
 		// Mint+issue 10,000 to seller, issue 0 to buyer (creates position account)
 		await mintAndIssue(t, "m1", "seller", 5_000);
 		const { positionAccountId: buyerAccountId } = await auth.mutation(
-			api.ledger.mutations.issueShares,
+			internal.ledger.mutations.issueShares,
 			{
 				mortgageId: "m1",
 				lenderId: "buyer",

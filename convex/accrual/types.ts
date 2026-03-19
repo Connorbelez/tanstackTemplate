@@ -48,3 +48,22 @@ export interface DateRange {
 	/** YYYY-MM-DD */
 	toDate: string;
 }
+
+/**
+ * Current ownership units for a lender position participating in pro-rata
+ * allocation.
+ */
+export interface ProRataPosition {
+	accountId: Id<"ledger_accounts">;
+	lenderId: Id<"lenders">;
+	units: number;
+}
+
+/**
+ * A pro-rata allocation result that preserves both the raw and rounded amount
+ * for auditability.
+ */
+export interface PositionShare extends ProRataPosition {
+	amount: number;
+	rawAmount: number;
+}
