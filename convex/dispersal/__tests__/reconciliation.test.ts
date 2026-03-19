@@ -537,4 +537,28 @@ describe("dispersal reconciliation queries", () => {
 		expect(result.pageTotalFees).toBe(50);
 		expect(result.entries.map((entry) => entry.amount)).toEqual([20, 30]);
 	});
+
+	it("prevents lenders from reading another lender's disbursement history", async () => {
+		const t = createHarness();
+		const { lenderId, otherLenderId } = await seedScenario(t);
+
+		// A lender can query their own disbursement history
+		const ownHistory = await t
+			.withIdentity(LENDER)
+			.query(api.dispersal.queries.getDisbursementHistory, {
+				lenderId,
+				fromDate: "2026-02-01",
+				toDate: "2026-04-30",
+			});
+		expect(ownHistory.total).toBe(450);
+
+		// A lender cannot query another lender's disbursement history
+		await expect(
+			t
+				.withIdentity(LENDER)
+				.query(api.dispersal.queries.getDisbursementHistory, {
+					lenderId: otherLenderId,
+				})
+		).rejects.toThrow("No access to this dispersal data");
+	});
 });

@@ -6,6 +6,7 @@ import { calculateProRataShares } from "../accrual/interestMath";
 import { sourceValidator } from "../engine/validators";
 import { getAccountLenderId } from "../ledger/accountOwnership";
 import { getPostedBalance } from "../ledger/accounts";
+import { requireLenderIdForAuthId } from "./lenderIdentity";
 import { calculateServicingFee } from "./servicingFee";
 
 interface ActivePosition {
@@ -31,27 +32,11 @@ async function resolveLenderIdFromAuthId(
 	ctx: MutationCtx,
 	lenderAuthId: string
 ): Promise<Id<"lenders">> {
-	const user = await ctx.db
-		.query("users")
-		.withIndex("authId", (q) => q.eq("authId", lenderAuthId))
-		.unique();
-	if (!user) {
-		throw new ConvexError(
-			`createDispersalEntries: user not found for lender auth id ${lenderAuthId}`
-		);
-	}
-
-	const lender = await ctx.db
-		.query("lenders")
-		.withIndex("by_user", (q) => q.eq("userId", user._id))
-		.unique();
-	if (!lender) {
-		throw new ConvexError(
-			`createDispersalEntries: lender not found for auth id ${lenderAuthId}`
-		);
-	}
-
-	return lender._id;
+	return requireLenderIdForAuthId(
+		ctx.db,
+		lenderAuthId,
+		"createDispersalEntries"
+	);
 }
 
 function validateIntegerCents(value: number, label: string) {

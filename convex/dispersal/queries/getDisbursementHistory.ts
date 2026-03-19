@@ -1,5 +1,6 @@
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { ledgerQuery } from "../../fluent";
+import { findLenderByAuthId } from "../lenderIdentity";
 
 export const getDisbursementHistory = ledgerQuery
 	.input({
@@ -9,6 +10,18 @@ export const getDisbursementHistory = ledgerQuery
 	})
 	.handler(async (ctx, args) => {
 		const { fromDate, toDate, lenderId } = args;
+		if (
+			!ctx.viewer.isFairLendAdmin &&
+			ctx.viewer.permissions.has("lender:access")
+		) {
+			const viewerLender = await findLenderByAuthId(ctx.db, ctx.viewer.authId);
+			if (!viewerLender || viewerLender._id !== lenderId) {
+				throw new ConvexError(
+					"Forbidden: lenders may only view their own disbursement history"
+				);
+			}
+		}
+
 		const entries = await (async () => {
 			if (fromDate && toDate) {
 				return ctx.db
