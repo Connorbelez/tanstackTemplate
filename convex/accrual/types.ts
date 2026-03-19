@@ -1,4 +1,10 @@
-import type { Id } from "../_generated/dataModel";
+/**
+ * Ledger identifiers are stored as plain string keys in the ownership ledger.
+ * Keep these aliases explicit so accrual code does not leak Convex row IDs
+ * into the public helper surface.
+ */
+export type LedgerLenderId = string;
+export type LedgerMortgageId = string;
 
 /**
  * Represents a lender's ownership stake in a mortgage for a date range.
@@ -9,8 +15,8 @@ export interface OwnershipPeriod {
 	fraction: number;
 	/** Inclusive start date, YYYY-MM-DD */
 	fromDate: string;
-	lenderId: Id<"lenders">;
-	mortgageId: Id<"mortgages">;
+	lenderId: LedgerLenderId;
+	mortgageId: LedgerMortgageId;
 	/** Inclusive end date, YYYY-MM-DD. null = still active */
 	toDate: string | null;
 }
@@ -22,8 +28,8 @@ export interface OwnershipPeriod {
 export interface AccrualResult {
 	accruedInterest: number;
 	fromDate: string;
-	lenderId: Id<"lenders">;
-	mortgageId: Id<"mortgages">;
+	lenderId: LedgerLenderId;
+	mortgageId: LedgerMortgageId;
 	periods: Array<{
 		fraction: number;
 		fromDate: string;
