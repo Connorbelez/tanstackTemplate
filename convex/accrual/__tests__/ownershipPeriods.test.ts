@@ -1,6 +1,7 @@
 import { convexTest } from "convex-test";
 import { describe, expect, it } from "vitest";
 import { api, internal } from "../../_generated/api";
+import type { Id } from "../../_generated/dataModel";
 import { FAIRLEND_STAFF_ORG_ID } from "../../constants";
 import schema from "../../schema";
 import { getOwnershipPeriods } from "../ownershipPeriods";
@@ -8,15 +9,15 @@ import { getOwnershipPeriods } from "../ownershipPeriods";
 const modules = import.meta.glob("/convex/**/*.ts");
 
 const LEDGER_TEST_IDENTITY = {
-	subject: "test-ledger-user",
+	subject: "test-accrual-user",
 	issuer: "https://api.workos.com",
 	org_id: FAIRLEND_STAFF_ORG_ID,
 	organization_name: "FairLend Staff",
 	role: "admin",
 	roles: JSON.stringify(["admin"]),
 	permissions: JSON.stringify(["ledger:view", "ledger:correct"]),
-	user_email: "ledger-test@fairlend.ca",
-	user_first_name: "Ledger",
+	user_email: "accrual-test@fairlend.ca",
+	user_first_name: "Accrual",
 	user_last_name: "Tester",
 };
 
@@ -30,50 +31,137 @@ function asLedgerUser(t: ReturnType<typeof createTestHarness>) {
 	return t.withIdentity(LEDGER_TEST_IDENTITY);
 }
 
-async function initCounter(t: ReturnType<typeof createTestHarness>) {
-	await asLedgerUser(t).mutation(
-		api.ledger.sequenceCounter.initializeSequenceCounter,
-		{}
-	);
+async function initLedger(t: ReturnType<typeof createTestHarness>) {
+	const auth = asLedgerUser(t);
+	await auth.mutation(api.ledger.sequenceCounter.initializeSequenceCounter, {});
+	return auth;
 }
 
-async function mintAndIssue(
-	t: ReturnType<typeof createTestHarness>,
+async function mintMortgage(
+	auth: ReturnType<typeof asLedgerUser>,
 	mortgageId: string,
-	lenderId: string,
-	amount = 10_000
+	idempotencyKey: string
 ) {
-	const auth = asLedgerUser(t);
-	await auth.mutation(api.ledger.mutations.mintMortgage, {
+	return auth.mutation(api.ledger.mutations.mintMortgage, {
 		mortgageId,
 		effectiveDate: "2026-01-01",
-		idempotencyKey: `mint-${mortgageId}`,
+		idempotencyKey,
 		source: SYS_SOURCE,
 	});
+}
+
+async function issueShares(
+	auth: ReturnType<typeof asLedgerUser>,
+	mortgageId: string,
+	lenderId: string,
+	amount: number,
+	effectiveDate: string,
+	idempotencyKey: string
+) {
 	return auth.mutation(internal.ledger.mutations.issueShares, {
 		mortgageId,
 		lenderId,
 		amount,
-		effectiveDate: "2026-01-01",
-		idempotencyKey: `issue-${mortgageId}-${lenderId}`,
+		effectiveDate,
+		idempotencyKey,
 		source: SYS_SOURCE,
 	});
 }
 
-describe("getOwnershipPeriods", () => {
-	it("returns a single open period for an untouched position", async () => {
-		const t = createTestHarness();
-		await initCounter(t);
-		await mintAndIssue(t, "m-single", "lender-a");
+async function transferShares(
+	auth: ReturnType<typeof asLedgerUser>,
+	args: {
+		amount: number;
+		buyerLenderId: string;
+		effectiveDate: string;
+		idempotencyKey: string;
+		mortgageId: string;
+		sellerLenderId: string;
+	}
+) {
+	return auth.mutation(internal.ledger.mutations.transferSharesInternal, {
+		...args,
+		source: SYS_SOURCE,
+	});
+}
 
-		const periods = await t.run(async (ctx) =>
-			getOwnershipPeriods(ctx, "m-single", "lender-a")
+async function redeemShares(
+	auth: ReturnType<typeof asLedgerUser>,
+	args: {
+		amount: number;
+		effectiveDate: string;
+		idempotencyKey: string;
+		mortgageId: string;
+		lenderId: string;
+	}
+) {
+	return auth.mutation(internal.ledger.mutations.redeemSharesInternal, {
+		...args,
+		source: SYS_SOURCE,
+	});
+}
+
+async function reserveShares(
+	auth: ReturnType<typeof asLedgerUser>,
+	args: {
+		amount: number;
+		buyerLenderId: string;
+		effectiveDate: string;
+		idempotencyKey: string;
+		mortgageId: string;
+		sellerLenderId: string;
+	}
+) {
+	return auth.mutation(internal.ledger.mutations.reserveShares, {
+		...args,
+		source: SYS_SOURCE,
+	});
+}
+
+async function commitReservation(
+	auth: ReturnType<typeof asLedgerUser>,
+	args: {
+		effectiveDate: string;
+		idempotencyKey: string;
+		reservationId: Id<"ledger_reservations">;
+	}
+) {
+	return auth.mutation(internal.ledger.mutations.commitReservation, {
+		...args,
+		source: SYS_SOURCE,
+	});
+}
+
+async function getPeriods(
+	t: ReturnType<typeof createTestHarness>,
+	mortgageId: string,
+	lenderId: string
+) {
+	return t.run(async (ctx) =>
+		getOwnershipPeriods({ db: ctx.db }, mortgageId, lenderId)
+	);
+}
+
+describe("getOwnershipPeriods", () => {
+	it("returns one open period for a single owner", async () => {
+		const t = createTestHarness();
+		const auth = await initLedger(t);
+
+		await mintMortgage(auth, "m-period-single", "mint-single");
+		await issueShares(
+			auth,
+			"m-period-single",
+			"lender-a",
+			10_000,
+			"2026-01-01",
+			"issue-single"
 		);
 
+		const periods = await getPeriods(t, "m-period-single", "lender-a");
 		expect(periods).toEqual([
 			{
 				lenderId: "lender-a",
-				mortgageId: "m-single",
+				mortgageId: "m-period-single",
 				fraction: 1,
 				fromDate: "2026-01-01",
 				toDate: null,
@@ -81,49 +169,59 @@ describe("getOwnershipPeriods", () => {
 		]);
 	});
 
-	it("splits periods on transfer and gives the closing date to the seller", async () => {
+	it("keeps the closing date with the seller and starts the buyer the day after on SHARES_COMMITTED", async () => {
 		const t = createTestHarness();
-		await initCounter(t);
-		const auth = asLedgerUser(t);
+		const auth = await initLedger(t);
 
-		await mintAndIssue(t, "m-transfer", "seller");
-		await auth.mutation(api.ledger.mutations.transferShares, {
-			mortgageId: "m-transfer",
+		await mintMortgage(auth, "m-period-commit", "mint-commit");
+		await issueShares(
+			auth,
+			"m-period-commit",
+			"seller",
+			10_000,
+			"2026-01-01",
+			"issue-commit-seller"
+		);
+
+		const reservation = await reserveShares(auth, {
+			mortgageId: "m-period-commit",
 			sellerLenderId: "seller",
 			buyerLenderId: "buyer",
 			amount: 5000,
 			effectiveDate: "2026-01-15",
-			idempotencyKey: "transfer-m-transfer",
-			source: SYS_SOURCE,
+			idempotencyKey: "reserve-commit",
 		});
 
-		const sellerPeriods = await t.run(async (ctx) =>
-			getOwnershipPeriods(ctx, "m-transfer", "seller")
-		);
-		const buyerPeriods = await t.run(async (ctx) =>
-			getOwnershipPeriods(ctx, "m-transfer", "buyer")
-		);
+		await commitReservation(auth, {
+			reservationId: reservation.reservationId,
+			effectiveDate: "2026-01-15",
+			idempotencyKey: "commit-commit",
+		});
+
+		const sellerPeriods = await getPeriods(t, "m-period-commit", "seller");
+		const buyerPeriods = await getPeriods(t, "m-period-commit", "buyer");
 
 		expect(sellerPeriods).toEqual([
 			{
 				lenderId: "seller",
-				mortgageId: "m-transfer",
+				mortgageId: "m-period-commit",
 				fraction: 1,
 				fromDate: "2026-01-01",
 				toDate: "2026-01-15",
 			},
 			{
 				lenderId: "seller",
-				mortgageId: "m-transfer",
+				mortgageId: "m-period-commit",
 				fraction: 0.5,
 				fromDate: "2026-01-16",
 				toDate: null,
 			},
 		]);
+
 		expect(buyerPeriods).toEqual([
 			{
 				lenderId: "buyer",
-				mortgageId: "m-transfer",
+				mortgageId: "m-period-commit",
 				fraction: 0.5,
 				fromDate: "2026-01-16",
 				toDate: null,
@@ -131,106 +229,152 @@ describe("getOwnershipPeriods", () => {
 		]);
 	});
 
-	it("reconstructs multiple periods deterministically from real ledger rows", async () => {
+	it("returns a correct period chain for multiple sequential transfers", async () => {
 		const t = createTestHarness();
-		await initCounter(t);
-		const auth = asLedgerUser(t);
+		const auth = await initLedger(t);
 
-		await mintAndIssue(t, "m-multi", "seller");
-		await auth.mutation(api.ledger.mutations.transferShares, {
-			mortgageId: "m-multi",
-			sellerLenderId: "seller",
-			buyerLenderId: "buyer-1",
-			amount: 2000,
-			effectiveDate: "2026-02-01",
-			idempotencyKey: "transfer-1",
-			source: SYS_SOURCE,
-		});
-		await auth.mutation(api.ledger.mutations.transferShares, {
-			mortgageId: "m-multi",
-			sellerLenderId: "seller",
-			buyerLenderId: "buyer-2",
-			amount: 2000,
-			effectiveDate: "2026-03-01",
-			idempotencyKey: "transfer-2",
-			source: SYS_SOURCE,
-		});
-
-		const first = await t.run(async (ctx) =>
-			getOwnershipPeriods(ctx, "m-multi", "seller")
+		await mintMortgage(auth, "m-period-chain", "mint-chain");
+		await issueShares(
+			auth,
+			"m-period-chain",
+			"lender-a",
+			10_000,
+			"2026-01-01",
+			"issue-chain"
 		);
-		const second = await t.run(async (ctx) =>
-			getOwnershipPeriods(ctx, "m-multi", "seller")
-		);
+		await transferShares(auth, {
+			mortgageId: "m-period-chain",
+			sellerLenderId: "lender-a",
+			buyerLenderId: "lender-b",
+			amount: 3000,
+			effectiveDate: "2026-01-10",
+			idempotencyKey: "transfer-chain-1",
+		});
+		await transferShares(auth, {
+			mortgageId: "m-period-chain",
+			sellerLenderId: "lender-a",
+			buyerLenderId: "lender-c",
+			amount: 3000,
+			effectiveDate: "2026-01-20",
+			idempotencyKey: "transfer-chain-2",
+		});
 
-		expect(first).toEqual(second);
-		expect(first).toEqual([
+		await expect(getPeriods(t, "m-period-chain", "lender-a")).resolves.toEqual([
 			{
-				lenderId: "seller",
-				mortgageId: "m-multi",
+				lenderId: "lender-a",
+				mortgageId: "m-period-chain",
 				fraction: 1,
 				fromDate: "2026-01-01",
-				toDate: "2026-02-01",
+				toDate: "2026-01-10",
 			},
 			{
-				lenderId: "seller",
-				mortgageId: "m-multi",
-				fraction: 0.8,
-				fromDate: "2026-02-02",
-				toDate: "2026-03-01",
+				lenderId: "lender-a",
+				mortgageId: "m-period-chain",
+				fraction: 0.7,
+				fromDate: "2026-01-11",
+				toDate: "2026-01-20",
 			},
 			{
-				lenderId: "seller",
-				mortgageId: "m-multi",
-				fraction: 0.6,
-				fromDate: "2026-03-02",
+				lenderId: "lender-a",
+				mortgageId: "m-period-chain",
+				fraction: 0.4,
+				fromDate: "2026-01-21",
+				toDate: null,
+			},
+		]);
+
+		await expect(getPeriods(t, "m-period-chain", "lender-b")).resolves.toEqual([
+			{
+				lenderId: "lender-b",
+				mortgageId: "m-period-chain",
+				fraction: 0.3,
+				fromDate: "2026-01-11",
+				toDate: null,
+			},
+		]);
+
+		await expect(getPeriods(t, "m-period-chain", "lender-c")).resolves.toEqual([
+			{
+				lenderId: "lender-c",
+				mortgageId: "m-period-chain",
+				fraction: 0.3,
+				fromDate: "2026-01-21",
 				toDate: null,
 			},
 		]);
 	});
 
-	it("ignores audit-only reserve and void entries", async () => {
+	it("closes the final period on full exit", async () => {
 		const t = createTestHarness();
-		await initCounter(t);
-		const auth = asLedgerUser(t);
+		const auth = await initLedger(t);
 
-		await mintAndIssue(t, "m-audit", "seller");
-		await auth.mutation(internal.ledger.mutations.reserveShares, {
-			mortgageId: "m-audit",
+		await mintMortgage(auth, "m-period-exit", "mint-exit");
+		await issueShares(
+			auth,
+			"m-period-exit",
+			"lender-a",
+			10_000,
+			"2026-01-01",
+			"issue-exit"
+		);
+		await redeemShares(auth, {
+			mortgageId: "m-period-exit",
+			lenderId: "lender-a",
+			amount: 10_000,
+			effectiveDate: "2026-01-15",
+			idempotencyKey: "redeem-exit",
+		});
+
+		const periods = await getPeriods(t, "m-period-exit", "lender-a");
+		expect(periods).toEqual([
+			{
+				lenderId: "lender-a",
+				mortgageId: "m-period-exit",
+				fraction: 1,
+				fromDate: "2026-01-01",
+				toDate: "2026-01-15",
+			},
+		]);
+	});
+
+	it("ignores SHARES_RESERVED and SHARES_VOIDED entries", async () => {
+		const t = createTestHarness();
+		const auth = await initLedger(t);
+
+		await mintMortgage(auth, "m-period-audit", "mint-audit");
+		await issueShares(
+			auth,
+			"m-period-audit",
+			"seller",
+			10_000,
+			"2026-01-01",
+			"issue-audit"
+		);
+
+		const reservation = await reserveShares(auth, {
+			mortgageId: "m-period-audit",
 			sellerLenderId: "seller",
 			buyerLenderId: "buyer",
-			amount: 2000,
-			effectiveDate: "2026-01-15",
+			amount: 3000,
+			effectiveDate: "2026-01-10",
 			idempotencyKey: "reserve-audit",
-			source: SYS_SOURCE,
 		});
-		const reservation = await t.run(async (ctx) => {
-			const reservations = await ctx.db.query("ledger_reservations").collect();
-			return reservations.find((row) => row.mortgageId === "m-audit");
-		});
-		expect(reservation).toBeDefined();
-		if (!reservation) {
-			return;
-		}
+
 		await auth.mutation(internal.ledger.mutations.voidReservation, {
-			reservationId: reservation._id,
-			reason: "test void",
-			effectiveDate: "2026-01-16",
+			reservationId: reservation.reservationId,
+			reason: "cancelled",
+			effectiveDate: "2026-01-11",
 			idempotencyKey: "void-audit",
 			source: SYS_SOURCE,
 		});
 
-		const sellerPeriods = await t.run(async (ctx) =>
-			getOwnershipPeriods(ctx, "m-audit", "seller")
-		);
-		const buyerPeriods = await t.run(async (ctx) =>
-			getOwnershipPeriods(ctx, "m-audit", "buyer")
-		);
+		const sellerPeriods = await getPeriods(t, "m-period-audit", "seller");
+		const buyerPeriods = await getPeriods(t, "m-period-audit", "buyer");
 
 		expect(sellerPeriods).toEqual([
 			{
 				lenderId: "seller",
-				mortgageId: "m-audit",
+				mortgageId: "m-period-audit",
 				fraction: 1,
 				fromDate: "2026-01-01",
 				toDate: null,
