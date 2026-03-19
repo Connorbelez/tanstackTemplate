@@ -1,6 +1,10 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 import {
+	calculationDetailsValidator,
+	dispersalStatusValidator,
+} from "./dispersal/validators";
+import {
 	draftStateValidator,
 	entityFieldValidator,
 	entitySourceValidator,
@@ -14,10 +18,6 @@ import {
 	channelValidator,
 	entityTypeValidator,
 } from "./engine/validators";
-import {
-	calculationDetailsValidator,
-	dispersalStatusValidator,
-} from "./dispersal/validators";
 
 export default defineSchema({
 	// ══════════════════════════════════════════════════════════
