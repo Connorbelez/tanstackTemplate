@@ -1,4 +1,4 @@
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { canAccessMortgage } from "../auth/resourceChecks";
 import { ledgerQuery } from "../fluent";
 import { buildDailyAccrualBreakdown } from "./queryHelpers";
@@ -11,7 +11,7 @@ export const calculateDailyAccrual = ledgerQuery
 	.handler(async (ctx, args) => {
 		const allowed = await canAccessMortgage(ctx, ctx.viewer, args.mortgageId);
 		if (!allowed) {
-			throw new Error(
+			throw new ConvexError(
 				`Forbidden: no mortgage access for ${String(args.mortgageId)}`
 			);
 		}

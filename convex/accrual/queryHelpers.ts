@@ -125,9 +125,10 @@ export async function buildLenderAccrualResult(
 	mortgageId: Id<"mortgages">,
 	lenderId: string,
 	fromDate: string,
-	toDate: string
+	toDate: string,
+	mortgageData?: { interestRate: number; principal: number }
 ): Promise<AccrualResult> {
-	const mortgage = await getMortgageOrThrow(ctx, mortgageId);
+	const mortgage = mortgageData ?? (await getMortgageOrThrow(ctx, mortgageId));
 	const mortgageLedgerId = toLedgerMortgageId(mortgageId);
 	const periods = await getOwnershipPeriods(ctx, mortgageLedgerId, lenderId);
 	return {
@@ -165,7 +166,8 @@ export async function buildMortgageAccrualBreakdown(
 				mortgageId,
 				account.lenderId,
 				fromDate,
-				toDate
+				toDate,
+				{ interestRate: mortgage.interestRate, principal: mortgage.principal }
 			)
 		)
 	);
@@ -212,17 +214,15 @@ export async function buildPortfolioAccrualBreakdown(
 	fromDate: string,
 	toDate: string
 ): Promise<PortfolioAccrualBreakdown> {
+	// NOTE: We intentionally do not fall back to a full-table scan for legacy
+	// accounts without `lenderId` because that does not scale with ledger size.
+	// Any remaining legacy accounts should have `lenderId` backfilled so they
+	// are discoverable via the `by_lender` index above.
 	const indexedAccounts = await ctx.db
 		.query("ledger_accounts")
 		.withIndex("by_lender", (q) => q.eq("lenderId", lenderId))
 		.collect();
-	const legacyAccounts = (
-		await ctx.db.query("ledger_accounts").collect()
-	).filter(
-		(account) =>
-			account.type === "POSITION" && getAccountLenderId(account) === lenderId
-	);
-	const accounts = [...indexedAccounts, ...legacyAccounts].filter(
+	const accounts = indexedAccounts.filter(
 		(account) => account.type === "POSITION" && getPostedBalance(account) > 0n
 	);
 	const uniqueMortgageIds = Array.from(

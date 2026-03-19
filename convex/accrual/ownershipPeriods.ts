@@ -1,7 +1,8 @@
 import type { Doc } from "../_generated/dataModel";
 import type { QueryCtx } from "../_generated/server";
 import { getAccountLenderId } from "../ledger/accountOwnership";
-import { AUDIT_ONLY_ENTRY_TYPES } from "../ledger/constants";
+import { AUDIT_ONLY_ENTRY_TYPES, TOTAL_SUPPLY } from "../ledger/constants";
+import { getPositionAccount } from "../ledger/accounts";
 import { dayAfter, dayBefore } from "./interestMath";
 import type { OwnershipPeriod } from "./types";
 
@@ -36,23 +37,6 @@ function compareBySequence(
 		return 1;
 	}
 	return 0;
-}
-
-async function getPositionAccount(
-	ctx: { db: QueryCtx["db"] },
-	mortgageId: string,
-	lenderId: string
-) {
-	const mortgageAccounts = await ctx.db
-		.query("ledger_accounts")
-		.withIndex("by_mortgage", (q) => q.eq("mortgageId", mortgageId))
-		.collect();
-
-	return mortgageAccounts.find((account) => {
-		return (
-			account.type === "POSITION" && getAccountLenderId(account) === lenderId
-		);
-	});
 }
 
 async function getPositionHistory(
@@ -182,21 +166,35 @@ export async function getOwnershipPeriods(
 			? dayBefore(nextStartDate)
 			: getPeriodEndDate(entry, isCreditSide);
 
-		openPeriod = closeOpenPeriod(
-			periods,
-			openPeriod,
-			currentBalance,
-			currentEndDate
-		);
+		// If this change affects the same future start date as the currently open
+		// period, merge it into that period instead of closing and reopening.
+		if (openPeriod && openPeriod.fromDate === nextStartDate) {
+			if (nextBalance > 0n) {
+				openPeriod = {
+					...openPeriod,
+					fraction: Number(nextBalance) / Number(TOTAL_SUPPLY),
+				};
+			} else {
+				// Net effect is that there should be no ownership starting at this date.
+				openPeriod = null;
+			}
+		} else {
+			openPeriod = closeOpenPeriod(
+				periods,
+				openPeriod,
+				currentBalance,
+				currentEndDate
+			);
 
-		if (nextBalance > 0n) {
-			openPeriod = {
-				lenderId,
-				mortgageId,
-				fraction: Number(nextBalance) / 10_000,
-				fromDate: nextStartDate,
-				toDate: null,
-			};
+			if (nextBalance > 0n) {
+				openPeriod = {
+					lenderId,
+					mortgageId,
+					fraction: Number(nextBalance) / Number(TOTAL_SUPPLY),
+					fromDate: nextStartDate,
+					toDate: null,
+				};
+			}
 		}
 
 		currentBalance = nextBalance;
