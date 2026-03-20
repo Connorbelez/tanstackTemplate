@@ -1366,4 +1366,14 @@ export default defineSchema({
 	})
 		.index("by_entity", ["entityId"])
 		.index("by_journal", ["journalEntryId"]),
+
+	// ══════════════════════════════════════════════════════════
+	// SIMULATION DEMO
+	// ══════════════════════════════════════════════════════════
+
+	simulation_clock: defineTable({
+		clockId: v.string(), // singleton key, e.g. "simulation"
+		currentDate: v.string(), // YYYY-MM-DD
+		startedAt: v.number(), // unix timestamp
+	}).index("by_clockId", ["clockId"]),
 });

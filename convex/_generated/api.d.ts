@@ -8,7 +8,13 @@
  * @module
  */
 
+import type * as accrual_calculateAccruedByMortgage from "../accrual/calculateAccruedByMortgage.js";
+import type * as accrual_calculateAccruedInterest from "../accrual/calculateAccruedInterest.js";
+import type * as accrual_calculateDailyAccrual from "../accrual/calculateDailyAccrual.js";
+import type * as accrual_calculateInvestorPortfolio from "../accrual/calculateInvestorPortfolio.js";
 import type * as accrual_interestMath from "../accrual/interestMath.js";
+import type * as accrual_ownershipPeriods from "../accrual/ownershipPeriods.js";
+import type * as accrual_queryHelpers from "../accrual/queryHelpers.js";
 import type * as accrual_types from "../accrual/types.js";
 import type * as audit_queries from "../audit/queries.js";
 import type * as auditLog from "../auditLog.js";
@@ -24,11 +30,6 @@ import type * as dealReroutes_queries from "../dealReroutes/queries.js";
 import type * as deals_accessCheck from "../deals/accessCheck.js";
 import type * as deals_mutations from "../deals/mutations.js";
 import type * as deals_queries from "../deals/queries.js";
-import type * as dispersal_queries_getDisbursementHistory from "../dispersal/queries/getDisbursementHistory.js";
-import type * as dispersal_queries_getDispersalsByMortgage from "../dispersal/queries/getDispersalsByMortgage.js";
-import type * as dispersal_queries_getDispersalsByObligation from "../dispersal/queries/getDispersalsByObligation.js";
-import type * as dispersal_queries_getServicingFeeHistory from "../dispersal/queries/getServicingFeeHistory.js";
-import type * as dispersal_queries_getUndisbursedBalance from "../dispersal/queries/getUndisbursedBalance.js";
 import type * as demo_actionCache from "../demo/actionCache.js";
 import type * as demo_aggregate from "../demo/aggregate.js";
 import type * as demo_apiCredentials from "../demo/apiCredentials.js";
@@ -49,11 +50,15 @@ import type * as demo_presence from "../demo/presence.js";
 import type * as demo_prodLedger from "../demo/prodLedger.js";
 import type * as demo_rateLimiter from "../demo/rateLimiter.js";
 import type * as demo_rbacAuth from "../demo/rbacAuth.js";
+import type * as demo_simulation from "../demo/simulation.js";
 import type * as demo_timeline from "../demo/timeline.js";
 import type * as demo_tracer from "../demo/tracer.js";
 import type * as demo_triggers from "../demo/triggers.js";
 import type * as demo_workflow from "../demo/workflow.js";
 import type * as demo_workosAuth from "../demo/workosAuth.js";
+import type * as dispersal_createDispersalEntries from "../dispersal/createDispersalEntries.js";
+import type * as dispersal_lenderIdentity from "../dispersal/lenderIdentity.js";
+import type * as dispersal_queries from "../dispersal/queries.js";
 import type * as dispersal_servicingFee from "../dispersal/servicingFee.js";
 import type * as dispersal_types from "../dispersal/types.js";
 import type * as dispersal_validators from "../dispersal/validators.js";
@@ -134,7 +139,6 @@ import type * as payments_obligations_generateImpl from "../payments/obligations
 import type * as payments_obligations_queries from "../payments/obligations/queries.js";
 import type * as prorateEntries_mutations from "../prorateEntries/mutations.js";
 import type * as prorateEntries_queries from "../prorateEntries/queries.js";
-import type * as dispersal_createDispersalEntries from "../dispersal/createDispersalEntries.js";
 import type * as seed_seedAll from "../seed/seedAll.js";
 import type * as seed_seedBorrower from "../seed/seedBorrower.js";
 import type * as seed_seedBroker from "../seed/seedBroker.js";
@@ -156,7 +160,13 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  "accrual/calculateAccruedByMortgage": typeof accrual_calculateAccruedByMortgage;
+  "accrual/calculateAccruedInterest": typeof accrual_calculateAccruedInterest;
+  "accrual/calculateDailyAccrual": typeof accrual_calculateDailyAccrual;
+  "accrual/calculateInvestorPortfolio": typeof accrual_calculateInvestorPortfolio;
   "accrual/interestMath": typeof accrual_interestMath;
+  "accrual/ownershipPeriods": typeof accrual_ownershipPeriods;
+  "accrual/queryHelpers": typeof accrual_queryHelpers;
   "accrual/types": typeof accrual_types;
   "audit/queries": typeof audit_queries;
   auditLog: typeof auditLog;
@@ -172,11 +182,6 @@ declare const fullApi: ApiFromModules<{
   "deals/accessCheck": typeof deals_accessCheck;
   "deals/mutations": typeof deals_mutations;
   "deals/queries": typeof deals_queries;
-  "dispersal/queries/getDisbursementHistory": typeof dispersal_queries_getDisbursementHistory;
-  "dispersal/queries/getDispersalsByMortgage": typeof dispersal_queries_getDispersalsByMortgage;
-  "dispersal/queries/getDispersalsByObligation": typeof dispersal_queries_getDispersalsByObligation;
-  "dispersal/queries/getServicingFeeHistory": typeof dispersal_queries_getServicingFeeHistory;
-  "dispersal/queries/getUndisbursedBalance": typeof dispersal_queries_getUndisbursedBalance;
   "demo/actionCache": typeof demo_actionCache;
   "demo/aggregate": typeof demo_aggregate;
   "demo/apiCredentials": typeof demo_apiCredentials;
@@ -197,11 +202,15 @@ declare const fullApi: ApiFromModules<{
   "demo/prodLedger": typeof demo_prodLedger;
   "demo/rateLimiter": typeof demo_rateLimiter;
   "demo/rbacAuth": typeof demo_rbacAuth;
+  "demo/simulation": typeof demo_simulation;
   "demo/timeline": typeof demo_timeline;
   "demo/tracer": typeof demo_tracer;
   "demo/triggers": typeof demo_triggers;
   "demo/workflow": typeof demo_workflow;
   "demo/workosAuth": typeof demo_workosAuth;
+  "dispersal/createDispersalEntries": typeof dispersal_createDispersalEntries;
+  "dispersal/lenderIdentity": typeof dispersal_lenderIdentity;
+  "dispersal/queries": typeof dispersal_queries;
   "dispersal/servicingFee": typeof dispersal_servicingFee;
   "dispersal/types": typeof dispersal_types;
   "dispersal/validators": typeof dispersal_validators;
@@ -280,7 +289,6 @@ declare const fullApi: ApiFromModules<{
   "payments/obligations/generate": typeof payments_obligations_generate;
   "payments/obligations/generateImpl": typeof payments_obligations_generateImpl;
   "payments/obligations/queries": typeof payments_obligations_queries;
-  "dispersal/createDispersalEntries": typeof dispersal_createDispersalEntries;
   "prorateEntries/mutations": typeof prorateEntries_mutations;
   "prorateEntries/queries": typeof prorateEntries_queries;
   "seed/seedAll": typeof seed_seedAll;
