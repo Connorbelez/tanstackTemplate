@@ -38,6 +38,7 @@ import type * as demo_auditTraceability from "../demo/auditTraceability.js";
 import type * as demo_cascadingDelete from "../demo/cascadingDelete.js";
 import type * as demo_crons from "../demo/crons.js";
 import type * as demo_debouncer from "../demo/debouncer.js";
+import type * as demo_demoLedgerSeed from "../demo/demoLedgerSeed.js";
 import type * as demo_fileManagement from "../demo/fileManagement.js";
 import type * as demo_fluentConvex from "../demo/fluentConvex.js";
 import type * as demo_geospatial from "../demo/geospatial.js";
@@ -190,6 +191,7 @@ declare const fullApi: ApiFromModules<{
   "demo/cascadingDelete": typeof demo_cascadingDelete;
   "demo/crons": typeof demo_crons;
   "demo/debouncer": typeof demo_debouncer;
+  "demo/demoLedgerSeed": typeof demo_demoLedgerSeed;
   "demo/fileManagement": typeof demo_fileManagement;
   "demo/fluentConvex": typeof demo_fluentConvex;
   "demo/geospatial": typeof demo_geospatial;

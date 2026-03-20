@@ -33,7 +33,8 @@ export type CommandChannel =
 	| "onboarding_portal"
 	| "admin_dashboard"
 	| "api_webhook"
-	| "scheduler";
+	| "scheduler"
+	| "simulation";
 
 export type ActorType = "borrower" | "broker" | "member" | "admin" | "system";
 

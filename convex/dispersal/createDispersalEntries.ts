@@ -49,12 +49,12 @@ function validateIntegerCents(value: number, label: string) {
 
 async function loadActivePositions(
 	ctx: MutationCtx,
-	mortgageId: Id<"mortgages">
+	ledgerMortgageId: string
 ): Promise<ActivePosition[]> {
 	const accounts = await ctx.db
 		.query("ledger_accounts")
 		.withIndex("by_type_and_mortgage", (q) =>
-			q.eq("type", "POSITION").eq("mortgageId", mortgageId)
+			q.eq("type", "POSITION").eq("mortgageId", ledgerMortgageId)
 		)
 		.collect();
 
@@ -216,7 +216,8 @@ export const createDispersalEntries = internalMutation({
 			);
 		}
 
-		const activePositions = await loadActivePositions(ctx, args.mortgageId);
+		const ledgerMortgageId = mortgage.simulationId ?? String(args.mortgageId);
+		const activePositions = await loadActivePositions(ctx, ledgerMortgageId);
 		if (activePositions.length === 0) {
 			throw new ConvexError(
 				`createDispersalEntries: no active positions for mortgage ${args.mortgageId}`

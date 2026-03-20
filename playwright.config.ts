@@ -33,8 +33,24 @@ export default defineConfig({
 		{
 			name: "chromium",
 			testDir: "./e2e",
-			testIgnore: ["auth/**", "rbac/**", "deal-closing/**", "auth.setup.ts"],
+			testIgnore: [
+				"auth/**",
+				"rbac/**",
+				"deal-closing/**",
+				"auth.setup.ts",
+				"simulation.spec.ts",
+			],
 			use: { ...devices["Desktop Chrome"] },
+		},
+		{
+			name: "simulation",
+			testDir: "./e2e",
+			testMatch: "simulation.spec.ts",
+			dependencies: ["setup"],
+			use: {
+				...devices["Desktop Chrome"],
+				storageState: ".auth/admin.json",
+			},
 		},
 		{
 			name: "authenticated",

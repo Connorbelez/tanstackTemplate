@@ -1,67 +1,80 @@
 import { ConvexError, v } from "convex/values";
 import { internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
+import type { MutationCtx, QueryCtx } from "../_generated/server";
 import { calculateServicingFee } from "../dispersal/servicingFee";
+import type { CommandSource, TransitionResult } from "../engine/types";
 import { adminMutation, authedQuery } from "../fluent";
 import { getAccountLenderId } from "../ledger/accountOwnership";
-import {
-	getAvailableBalance,
-	getOrCreatePositionAccount,
-	getPostedBalance,
-	initializeWorldAccount,
-} from "../ledger/accounts";
+import { getAvailableBalance, getPostedBalance } from "../ledger/accounts";
 import { TOTAL_SUPPLY } from "../ledger/constants";
-import { postEntry } from "../ledger/postEntry";
-import { initializeSequenceCounterInternal } from "../ledger/sequenceCounter";
-import type { EventSource } from "../ledger/types";
-
-// ── Constants ──────────────────────────────────────────────────────────────
+import {
+	DEMO_LEDGER_MORTGAGES,
+	ensureDemoLedgerSeeded,
+	getDemoMortgageLabel,
+} from "./demoLedgerSeed";
 
 const SIM_CLOCK_ID = "simulation" as const;
-const SIM_SOURCE: EventSource = {
-	type: "system",
-	channel: "scheduler",
-};
-const SIM_DEMO_SOURCE: {
-	channel: "scheduler";
-	actorId: string;
-	actorType?: "admin" | "member" | "borrower" | "broker" | "system";
-	ip?: string;
-	sessionId?: string;
-} = {
-	channel: "scheduler",
-	actorId: "simulation",
-};
-
-const SIM_MORTGAGES = [
+const SIM_BORROWER_AUTH_ID = "simulation-borrower@fairlend.demo";
+const SIM_BROKER_AUTH_ID = "simulation-broker@fairlend.demo";
+const SIM_LENDER_FIXTURES = [
 	{
-		mortgageId: "sim-mtg-greenfield",
-		label: "123 Greenfield Rd — Residential",
-		allocations: [
-			{ lenderId: "lender-alice", amount: 5000 },
-			{ lenderId: "lender-bob", amount: 3000 },
-			{ lenderId: "lender-charlie", amount: 2000 },
-		],
+		authId: "lender-alice",
+		email: "lender-alice@fairlend.demo",
+		firstName: "Alice",
+		lastName: "Lender",
 	},
 	{
-		mortgageId: "sim-mtg-riverside",
-		label: "456 Riverside Dr — Commercial",
-		allocations: [
-			{ lenderId: "lender-alice", amount: 4000 },
-			{ lenderId: "lender-dave", amount: 6000 },
-		],
+		authId: "lender-bob",
+		email: "lender-bob@fairlend.demo",
+		firstName: "Bob",
+		lastName: "Lender",
 	},
 	{
-		mortgageId: "sim-mtg-oakwood",
-		label: "789 Oakwood Ave — Mixed Use",
-		allocations: [
-			{ lenderId: "lender-bob", amount: 5000 },
-			{ lenderId: "lender-eve", amount: 5000 },
-		],
+		authId: "lender-charlie",
+		email: "lender-charlie@fairlend.demo",
+		firstName: "Charlie",
+		lastName: "Lender",
+	},
+	{
+		authId: "lender-dave",
+		email: "lender-dave@fairlend.demo",
+		firstName: "Dave",
+		lastName: "Lender",
+	},
+	{
+		authId: "lender-eve",
+		email: "lender-eve@fairlend.demo",
+		firstName: "Eve",
+		lastName: "Lender",
 	},
 ] as const;
+const UNRESOLVED_OBLIGATION_STATUSES = new Set([
+	"upcoming",
+	"due",
+	"overdue",
+	"partially_settled",
+]);
+const SETTLEABLE_OBLIGATION_STATUSES = new Set([
+	"due",
+	"overdue",
+	"partially_settled",
+]);
+const DEMO_LEDGER_MORTGAGE_IDS: ReadonlySet<string> = new Set(
+	DEMO_LEDGER_MORTGAGES.map((mortgage) => mortgage.ledgerMortgageId)
+);
+const SIM_COMMAND_SOURCE: CommandSource = {
+	channel: "simulation",
+	actorId: "simulation",
+	actorType: "system",
+};
 
-// ── Helpers ───────────────────────────────────────────────────────────────
+interface SimulationMortgageRecord {
+	label: string;
+	ledgerMortgageId: string;
+	mortgageId: Id<"mortgages">;
+	propertyId: Id<"properties">;
+}
 
 function todayISO(): string {
 	return new Date().toISOString().split("T")[0];
@@ -87,25 +100,360 @@ function daysBetween(dateA: string, dateB: string): number {
 	return Math.round((b.getTime() - a.getTime()) / (1000 * 60 * 60 * 24));
 }
 
-// Monthly payment per mortgage based on $100K principal at ~7% annual interest
-// = $100,000 * 0.07 / 12 = ~$583/month in interest
-// For demo amounts (cents), we use proportional amounts
 function calculateMonthlyPayment(principal: number, annualRate = 0.07): number {
-	// Monthly payment in cents (principal + interest amortized over 24 months)
 	const monthlyRate = annualRate / 12;
 	const months = 24;
-	// PMT = P * [r(1+r)^n] / [(1+r)^n - 1]
 	const factor =
 		(monthlyRate * (1 + monthlyRate) ** months) /
 		((1 + monthlyRate) ** months - 1);
 	return Math.round(principal * factor);
 }
 
-// ── Queries ────────────────────────────────────────────────────────────────
+function isResolvedObligationStatus(status: string): boolean {
+	return status === "settled" || status === "waived";
+}
+
+async function getSimulationMortgageRecords(
+	ctx: QueryCtx
+): Promise<SimulationMortgageRecord[]> {
+	const records = await Promise.all(
+		DEMO_LEDGER_MORTGAGES.map(async (mortgage) => {
+			const record = await ctx.db
+				.query("mortgages")
+				.withIndex("by_simulation", (q) =>
+					q.eq("simulationId", mortgage.ledgerMortgageId)
+				)
+				.first();
+			if (!record) {
+				return null;
+			}
+			return {
+				ledgerMortgageId: mortgage.ledgerMortgageId,
+				label: mortgage.label,
+				mortgageId: record._id,
+				propertyId: record.propertyId,
+			};
+		})
+	);
+
+	const simulationRecords: SimulationMortgageRecord[] = [];
+	for (const record of records) {
+		if (record) {
+			simulationRecords.push(record);
+		}
+	}
+	return simulationRecords;
+}
+
+async function getLegacySimulationMortgageRecords(
+	ctx: QueryCtx
+): Promise<
+	Array<{ mortgageId: Id<"mortgages">; propertyId: Id<"properties"> }>
+> {
+	const records = await ctx.db
+		.query("mortgages")
+		.withIndex("by_simulation", (q) => q.eq("simulationId", SIM_CLOCK_ID))
+		.collect();
+	return records.map((record) => ({
+		mortgageId: record._id,
+		propertyId: record.propertyId,
+	}));
+}
+
+async function getSimulationMortgageIdSet(
+	ctx: QueryCtx
+): Promise<Set<Id<"mortgages">>> {
+	const records = await getSimulationMortgageRecords(ctx);
+	return new Set(records.map((record) => record.mortgageId));
+}
+
+async function getSimulationMortgageLabelMap(
+	ctx: QueryCtx
+): Promise<Map<Id<"mortgages">, { label: string; ledgerMortgageId: string }>> {
+	const records = await getSimulationMortgageRecords(ctx);
+	return new Map(
+		records.map((record) => [
+			record.mortgageId,
+			{
+				label: record.label,
+				ledgerMortgageId: record.ledgerMortgageId,
+			},
+		])
+	);
+}
+
+async function getOrCreateSimulationBorrower(ctx: MutationCtx) {
+	let user = await ctx.db
+		.query("users")
+		.withIndex("authId", (q) => q.eq("authId", SIM_BORROWER_AUTH_ID))
+		.first();
+
+	if (!user) {
+		const userId = await ctx.db.insert("users", {
+			authId: SIM_BORROWER_AUTH_ID,
+			email: SIM_BORROWER_AUTH_ID,
+			firstName: "Simulation",
+			lastName: "Borrower",
+		});
+		user = await ctx.db.get(userId);
+	}
+	if (!user) {
+		throw new Error("Failed to create simulation borrower user");
+	}
+
+	const borrower = await ctx.db
+		.query("borrowers")
+		.withIndex("by_user", (q) => q.eq("userId", user._id))
+		.first();
+
+	if (borrower) {
+		return borrower._id;
+	}
+
+	return await ctx.db.insert("borrowers", {
+		userId: user._id,
+		status: "active",
+		lastTransitionAt: Date.now(),
+		createdAt: Date.now(),
+	});
+}
+
+async function getOrCreateSimulationBroker(ctx: MutationCtx) {
+	let user = await ctx.db
+		.query("users")
+		.withIndex("authId", (q) => q.eq("authId", SIM_BROKER_AUTH_ID))
+		.first();
+
+	if (!user) {
+		const userId = await ctx.db.insert("users", {
+			authId: SIM_BROKER_AUTH_ID,
+			email: SIM_BROKER_AUTH_ID,
+			firstName: "Simulation",
+			lastName: "Broker",
+		});
+		user = await ctx.db.get(userId);
+	}
+	if (!user) {
+		throw new Error("Failed to create simulation broker user");
+	}
+
+	const broker = await ctx.db
+		.query("brokers")
+		.withIndex("by_user", (q) => q.eq("userId", user._id))
+		.first();
+
+	if (broker) {
+		return broker._id;
+	}
+
+	return await ctx.db.insert("brokers", {
+		userId: user._id,
+		status: "active",
+		lastTransitionAt: Date.now(),
+		createdAt: Date.now(),
+	});
+}
+
+async function ensureSimulationLenders(
+	ctx: MutationCtx,
+	brokerId: Id<"brokers">
+) {
+	for (const fixture of SIM_LENDER_FIXTURES) {
+		let user = await ctx.db
+			.query("users")
+			.withIndex("authId", (q) => q.eq("authId", fixture.authId))
+			.first();
+
+		if (!user) {
+			const userId = await ctx.db.insert("users", {
+				authId: fixture.authId,
+				email: fixture.email,
+				firstName: fixture.firstName,
+				lastName: fixture.lastName,
+			});
+			user = await ctx.db.get(userId);
+		}
+		if (!user) {
+			throw new Error(
+				`Failed to create simulation lender user ${fixture.authId}`
+			);
+		}
+
+		const lender = await ctx.db
+			.query("lenders")
+			.withIndex("by_user", (q) => q.eq("userId", user._id))
+			.first();
+		if (lender) {
+			continue;
+		}
+
+		await ctx.db.insert("lenders", {
+			userId: user._id,
+			brokerId,
+			accreditationStatus: "accredited",
+			onboardingEntryPath: "simulation",
+			status: "active",
+			activatedAt: Date.now(),
+			createdAt: Date.now(),
+		});
+	}
+}
+
+async function deleteSimulationProfileByAuthId(
+	ctx: MutationCtx,
+	authId: string,
+	table: "borrowers" | "brokers"
+): Promise<{ deletedProfiles: number; deletedUsers: number }> {
+	const user = await ctx.db
+		.query("users")
+		.withIndex("authId", (q) => q.eq("authId", authId))
+		.first();
+	if (!user) {
+		return { deletedProfiles: 0, deletedUsers: 0 };
+	}
+
+	const profiles = await ctx.db
+		.query(table)
+		.withIndex("by_user", (q) => q.eq("userId", user._id))
+		.collect();
+
+	for (const profile of profiles) {
+		await ctx.db.delete(profile._id);
+	}
+	await ctx.db.delete(user._id);
+
+	return {
+		deletedProfiles: profiles.length,
+		deletedUsers: 1,
+	};
+}
+
+async function deleteSimulationLenderByAuthId(
+	ctx: MutationCtx,
+	authId: string
+): Promise<{ deletedProfiles: number; deletedUsers: number }> {
+	const user = await ctx.db
+		.query("users")
+		.withIndex("authId", (q) => q.eq("authId", authId))
+		.first();
+	if (!user) {
+		return { deletedProfiles: 0, deletedUsers: 0 };
+	}
+
+	const lenders = await ctx.db
+		.query("lenders")
+		.withIndex("by_user", (q) => q.eq("userId", user._id))
+		.collect();
+
+	for (const lender of lenders) {
+		await ctx.db.delete(lender._id);
+	}
+	await ctx.db.delete(user._id);
+
+	return {
+		deletedProfiles: lenders.length,
+		deletedUsers: 1,
+	};
+}
+
+async function buildSimulationCleanupTargets(ctx: QueryCtx) {
+	const currentRecords = await getSimulationMortgageRecords(ctx);
+	const legacyRecords = await getLegacySimulationMortgageRecords(ctx);
+
+	return {
+		allMortgageIds: new Set<Id<"mortgages">>([
+			...currentRecords.map((record) => record.mortgageId),
+			...legacyRecords.map((record) => record.mortgageId),
+		]),
+		propertyIds: new Set<Id<"properties">>([
+			...currentRecords.map((record) => record.propertyId),
+			...legacyRecords.map((record) => record.propertyId),
+		]),
+	};
+}
+
+async function deleteSimulationMortgageArtifacts(
+	ctx: MutationCtx,
+	allMortgageIds: ReadonlySet<Id<"mortgages">>,
+	propertyIds: ReadonlySet<Id<"properties">>
+) {
+	let deletedObligations = 0;
+	for (const obligation of await ctx.db.query("obligations").collect()) {
+		if (allMortgageIds.has(obligation.mortgageId)) {
+			await ctx.db.delete(obligation._id);
+			deletedObligations++;
+		}
+	}
+
+	let deletedDispersals = 0;
+	for (const entry of await ctx.db.query("dispersalEntries").collect()) {
+		if (allMortgageIds.has(entry.mortgageId)) {
+			await ctx.db.delete(entry._id);
+			deletedDispersals++;
+		}
+	}
+
+	let deletedFees = 0;
+	for (const entry of await ctx.db.query("servicingFeeEntries").collect()) {
+		if (allMortgageIds.has(entry.mortgageId)) {
+			await ctx.db.delete(entry._id);
+			deletedFees++;
+		}
+	}
+
+	for (const link of await ctx.db.query("mortgageBorrowers").collect()) {
+		if (allMortgageIds.has(link.mortgageId)) {
+			await ctx.db.delete(link._id);
+		}
+	}
+
+	for (const mortgageId of allMortgageIds) {
+		await ctx.db.delete(mortgageId);
+	}
+	for (const propertyId of propertyIds) {
+		await ctx.db.delete(propertyId);
+	}
+
+	return { deletedObligations, deletedDispersals, deletedFees };
+}
+
+async function cleanupLegacySimulationLedgerArtifacts(ctx: MutationCtx) {
+	let deletedEntries = 0;
+	const legacyAccountIds: Id<"ledger_accounts">[] = [];
+
+	for (const account of await ctx.db.query("ledger_accounts").collect()) {
+		if (account.mortgageId?.startsWith("sim-mtg-")) {
+			legacyAccountIds.push(account._id);
+		}
+	}
+
+	for (const mortgageId of [
+		"sim-mtg-greenfield",
+		"sim-mtg-riverside",
+		"sim-mtg-oakwood",
+	]) {
+		const entries = await ctx.db
+			.query("ledger_journal_entries")
+			.withIndex("by_mortgage_and_time", (q) => q.eq("mortgageId", mortgageId))
+			.collect();
+		for (const entry of entries) {
+			await ctx.db.delete(entry._id);
+			deletedEntries++;
+		}
+	}
+
+	for (const accountId of legacyAccountIds) {
+		await ctx.db.delete(accountId);
+	}
+
+	return {
+		deletedEntries,
+		deletedAccounts: legacyAccountIds.length,
+	};
+}
 
 export const getSimulationState = authedQuery
 	.handler(async (ctx) => {
-		// Get simulation clock
 		const clock = await ctx.db
 			.query("simulation_clock")
 			.withIndex("by_clockId", (q) => q.eq("clockId", SIM_CLOCK_ID))
@@ -123,57 +471,52 @@ export const getSimulationState = authedQuery
 			};
 		}
 
-		// Count obligations
+		const simMtgIdSet = await getSimulationMortgageIdSet(ctx);
 		const allObligations = await ctx.db.query("obligations").collect();
-		const simObligations = allObligations.filter(
-			(o) =>
-				(o as { mortgageId?: string }).mortgageId?.startsWith("sim-mtg-") ??
-				false
+		const simObligations = allObligations.filter((obligation) =>
+			simMtgIdSet.has(obligation.mortgageId)
 		);
-		const pending = simObligations.filter((o) => o.status === "pending").length;
-		const settled = simObligations.filter((o) => o.status !== "pending").length;
+		const pending = simObligations.filter((obligation) =>
+			UNRESOLVED_OBLIGATION_STATUSES.has(obligation.status)
+		).length;
+		const settled = simObligations.filter((obligation) =>
+			isResolvedObligationStatus(obligation.status)
+		).length;
 
-		// Get mortgage state
 		const allAccounts = await ctx.db.query("ledger_accounts").collect();
-		const mortgages: Array<{
-			mortgageId: string;
-			label: string;
-			positions: Array<{
-				lenderId: string;
-				balance: number;
-				availableBalance: number;
-			}>;
-			invariant: { valid: boolean; total: number };
-		}> = [];
-
-		for (const simMig of SIM_MORTGAGES) {
+		const mortgages = DEMO_LEDGER_MORTGAGES.map((mortgage) => {
 			const treasury = allAccounts.find(
-				(a) => a.type === "TREASURY" && a.mortgageId === simMig.mortgageId
+				(account) =>
+					account.type === "TREASURY" &&
+					account.mortgageId === mortgage.ledgerMortgageId
 			);
 			const treasuryBalance = treasury ? Number(getPostedBalance(treasury)) : 0;
 
 			const positions = allAccounts
 				.filter(
-					(a) =>
-						a.type === "POSITION" &&
-						(a as { mortgageId?: string }).mortgageId === simMig.mortgageId
+					(account) =>
+						account.type === "POSITION" &&
+						account.mortgageId === mortgage.ledgerMortgageId
 				)
-				.map((a) => ({
-					lenderId: getAccountLenderId(a) ?? "",
-					balance: Number(getPostedBalance(a)),
-					availableBalance: Number(getAvailableBalance(a)),
+				.map((account) => ({
+					lenderId: getAccountLenderId(account) ?? "",
+					balance: Number(getPostedBalance(account)),
+					availableBalance: Number(getAvailableBalance(account)),
 				}));
 
-			const positionSum = positions.reduce((sum, p) => sum + p.balance, 0);
+			const positionSum = positions.reduce(
+				(sum, position) => sum + position.balance,
+				0
+			);
 			const total = treasuryBalance + positionSum;
 
-			mortgages.push({
-				mortgageId: simMig.mortgageId,
-				label: simMig.label,
+			return {
+				mortgageId: mortgage.ledgerMortgageId,
+				label: mortgage.label,
 				positions,
 				invariant: { valid: total === Number(TOTAL_SUPPLY), total },
-			});
-		}
+			};
+		});
 
 		return {
 			running: true,
@@ -194,43 +537,36 @@ export const getUpcomingDispersals = authedQuery
 			.withIndex("by_clockId", (q) => q.eq("clockId", SIM_CLOCK_ID))
 			.first();
 
+		const simMtgIdSet = await getSimulationMortgageIdSet(ctx);
+		const mortgageLabelMap = await getSimulationMortgageLabelMap(ctx);
 		const allObligations = await ctx.db.query("obligations").collect();
 		const simObligations = allObligations
-			.filter(
-				(o) =>
-					(o as { mortgageId?: string }).mortgageId?.startsWith("sim-mtg-") ??
-					false
+			.filter((obligation) => simMtgIdSet.has(obligation.mortgageId))
+			.filter((obligation) =>
+				UNRESOLVED_OBLIGATION_STATUSES.has(obligation.status)
 			)
-			.filter((o) => o.status === "pending")
-			.sort((a, b) => {
-				const aDue = (a as { dueDate?: number }).dueDate ?? 0;
-				const bDue = (b as { dueDate?: number }).dueDate ?? 0;
-				return aDue - bDue;
-			});
+			.sort((a, b) => a.dueDate - b.dueDate);
 
 		const currentDate = clock?.currentDate ?? todayISO();
 
 		return simObligations.map((obligation) => {
-			const mortgageId =
-				(obligation as { mortgageId?: string }).mortgageId ?? "";
-			const seedDef = SIM_MORTGAGES.find((m) => m.mortgageId === mortgageId);
-			const dueDateStr = new Date(
-				((obligation as { dueDate?: number }).dueDate ?? 0) * 1000
-			)
+			const mortgage = mortgageLabelMap.get(obligation.mortgageId);
+			const dueDate = new Date(obligation.dueDate * 1000)
 				.toISOString()
 				.split("T")[0];
 
 			return {
 				_id: obligation._id,
-				mortgageId,
-				mortgageLabel: seedDef?.label ?? mortgageId,
-				dueDate: dueDateStr,
-				type: obligation.type as string,
-				paymentNumber:
-					(obligation as { paymentNumber?: number }).paymentNumber ?? 0,
-				amount: calculateMonthlyPayment(Number(TOTAL_SUPPLY)),
+				mortgageId: mortgage?.ledgerMortgageId ?? "",
+				mortgageLabel:
+					mortgage?.label ??
+					getDemoMortgageLabel(mortgage?.ledgerMortgageId ?? ""),
+				dueDate,
+				type: obligation.type,
+				paymentNumber: obligation.paymentNumber,
+				amount: Math.max(0, obligation.amount - obligation.amountSettled),
 				status: obligation.status,
-				daysUntilDue: daysBetween(currentDate, dueDateStr),
+				daysUntilDue: daysBetween(currentDate, dueDate),
 			};
 		});
 	})
@@ -238,18 +574,17 @@ export const getUpcomingDispersals = authedQuery
 
 export const getDispersalHistory = authedQuery
 	.handler(async (ctx) => {
+		const simMtgIdSet = await getSimulationMortgageIdSet(ctx);
+		const mortgageLabelMap = await getSimulationMortgageLabelMap(ctx);
+
 		const entries = await ctx.db
 			.query("dispersalEntries")
 			.withIndex("by_mortgage")
 			.collect();
-
-		const simEntries = entries.filter(
-			(e) =>
-				(e as { mortgageId?: string }).mortgageId?.startsWith("sim-mtg-") ??
-				false
+		const simEntries = entries.filter((entry) =>
+			simMtgIdSet.has(entry.mortgageId)
 		);
 
-		// Sort by dispersalDate descending
 		simEntries.sort((a, b) => {
 			if (a.dispersalDate !== b.dispersalDate) {
 				return b.dispersalDate.localeCompare(a.dispersalDate);
@@ -259,22 +594,26 @@ export const getDispersalHistory = authedQuery
 
 		const totalByLender: Record<string, number> = {};
 		for (const entry of simEntries) {
-			const lenderId = (entry as { lenderId?: string }).lenderId ?? "";
-			totalByLender[lenderId] = (totalByLender[lenderId] ?? 0) + entry.amount;
+			totalByLender[entry.lenderId] =
+				(totalByLender[entry.lenderId] ?? 0) + entry.amount;
 		}
 
 		return {
-			entries: simEntries.map((e) => ({
-				_id: e._id,
-				mortgageId: (e as { mortgageId?: string }).mortgageId ?? "",
-				lenderId: (e as { lenderId?: string }).lenderId ?? "",
-				amount: e.amount,
-				dispersalDate: e.dispersalDate,
-				status: e.status,
+			entries: simEntries.map((entry) => ({
+				_id: entry._id,
+				mortgageId:
+					mortgageLabelMap.get(entry.mortgageId)?.ledgerMortgageId ?? "",
+				lenderId: entry.lenderId,
+				amount: entry.amount,
+				dispersalDate: entry.dispersalDate,
+				status: entry.status,
 			})),
 			totalByLender,
 			totalEntries: simEntries.length,
-			totalAmount: Object.values(totalByLender).reduce((s, v) => s + v, 0),
+			totalAmount: Object.values(totalByLender).reduce(
+				(sum, value) => sum + value,
+				0
+			),
 		};
 	})
 	.public();
@@ -283,25 +622,29 @@ export const getTrialBalance = authedQuery
 	.handler(async (ctx) => {
 		const allAccounts = await ctx.db.query("ledger_accounts").collect();
 		const simAccounts = allAccounts.filter(
-			(a) =>
-				(a as { mortgageId?: string }).mortgageId?.startsWith("sim-mtg-") ??
-				a.type === "WORLD"
+			(account) =>
+				account.type === "WORLD" ||
+				(account.mortgageId !== undefined &&
+					DEMO_LEDGER_MORTGAGE_IDS.has(account.mortgageId))
 		);
 
-		const accounts = simAccounts.map((a) => ({
-			accountId: a._id,
-			type: a.type,
-			mortgageId: (a as { mortgageId?: string }).mortgageId ?? "",
-			lenderId: getAccountLenderId(a) ?? "",
-			postedBalance: Number(getPostedBalance(a)),
-			availableBalance: Number(getAvailableBalance(a)),
-			pendingCredits: Number(a.pendingCredits ?? 0n),
-			pendingDebits: Number(a.pendingDebits ?? 0n),
+		const accounts = simAccounts.map((account) => ({
+			accountId: account._id,
+			type: account.type,
+			mortgageId: account.mortgageId ?? "",
+			lenderId: getAccountLenderId(account) ?? "",
+			postedBalance: Number(getPostedBalance(account)),
+			availableBalance: Number(getAvailableBalance(account)),
+			pendingCredits: Number(account.pendingCredits ?? 0n),
+			pendingDebits: Number(account.pendingDebits ?? 0n),
 		}));
 
-		const totalPosted = accounts.reduce((sum, a) => sum + a.postedBalance, 0);
+		const totalPosted = accounts.reduce(
+			(sum, account) => sum + account.postedBalance,
+			0
+		);
 		const totalPending = accounts.reduce(
-			(sum, a) => sum + a.pendingCredits + a.pendingDebits,
+			(sum, account) => sum + account.pendingCredits + account.pendingDebits,
 			0
 		);
 
@@ -309,11 +652,8 @@ export const getTrialBalance = authedQuery
 	})
 	.public();
 
-// ── Mutations ──────────────────────────────────────────────────────────────
-
 export const seedSimulation = adminMutation
 	.handler(async (ctx) => {
-		// Check if already seeded
 		const existingClock = await ctx.db
 			.query("simulation_clock")
 			.withIndex("by_clockId", (q) => q.eq("clockId", SIM_CLOCK_ID))
@@ -322,43 +662,26 @@ export const seedSimulation = adminMutation
 			return { seeded: false, message: "Simulation already initialized." };
 		}
 
-		// Bootstrap sequence counter + WORLD
-		await initializeSequenceCounterInternal(ctx);
-		const worldAccount = await initializeWorldAccount(ctx);
-
-		// Create a single simulation borrower for all simulation mortgages
-		// We need a real borrowerId for obligations
-		const borrowerUserId = await ctx.db.insert("users", {
-			authId: "sim-borrower-auth",
-			email: "simulation-borrower@fairlend.demo",
-			firstName: "Simulation",
-			lastName: "Borrower",
-		});
-		const borrowerId = await ctx.db.insert("borrowers", {
-			userId: borrowerUserId,
-			status: "active",
-			createdAt: Date.now(),
-		});
-
-		// Create a simulation broker for all mortgages
-		const brokerUserId = await ctx.db.insert("users", {
-			authId: "sim-broker-auth",
-			email: "simulation-broker@fairlend.demo",
-			firstName: "Simulation",
-			lastName: "Broker",
-		});
-		const brokerId = await ctx.db.insert("brokers", {
-			userId: brokerUserId,
-			status: "active",
-			createdAt: Date.now(),
-		});
-
-		// Track mortgage ID mappings (string prefix -> actual Convex ID)
+		await ensureDemoLedgerSeeded(ctx);
+		const borrowerId = await getOrCreateSimulationBorrower(ctx);
+		const brokerId = await getOrCreateSimulationBroker(ctx);
+		await ensureSimulationLenders(ctx, brokerId);
 		const mortgageIdMap: Record<string, Id<"mortgages">> = {};
+		const monthlyPayment = calculateMonthlyPayment(Number(TOTAL_SUPPLY));
 
-		// Seed each mortgage
-		for (const mortgage of SIM_MORTGAGES) {
-			// Create a property for this mortgage
+		for (const mortgage of DEMO_LEDGER_MORTGAGES) {
+			const existingMortgage = await ctx.db
+				.query("mortgages")
+				.withIndex("by_simulation", (q) =>
+					q.eq("simulationId", mortgage.ledgerMortgageId)
+				)
+				.first();
+
+			if (existingMortgage) {
+				mortgageIdMap[mortgage.ledgerMortgageId] = existingMortgage._id;
+				continue;
+			}
+
 			const propertyId = await ctx.db.insert("properties", {
 				streetAddress: mortgage.label,
 				city: "Simulation City",
@@ -366,20 +689,21 @@ export const seedSimulation = adminMutation
 				postalCode: "A1A1A1",
 				latitude: 0,
 				longitude: 0,
-				propertyType: "residential",
+				propertyType: mortgage.propertyType,
 				createdAt: Date.now(),
 			});
 
-			// Create the mortgage record (required for obligations)
-			const simMortgageId = await ctx.db.insert("mortgages", {
+			const mortgageId = await ctx.db.insert("mortgages", {
 				status: "active",
+				machineContext: { missedPayments: 0, lastPaymentAt: 0 },
+				lastTransitionAt: Date.now(),
 				propertyId,
 				principal: Number(TOTAL_SUPPLY),
 				interestRate: 0.07,
 				rateType: "fixed",
 				termMonths: 24,
 				amortizationMonths: 240,
-				paymentAmount: calculateMonthlyPayment(Number(TOTAL_SUPPLY)),
+				paymentAmount: monthlyPayment,
 				paymentFrequency: "monthly",
 				loanType: "conventional",
 				lienPosition: 1,
@@ -391,92 +715,46 @@ export const seedSimulation = adminMutation
 				brokerOfRecordId: brokerId,
 				fundedAt: Date.now(),
 				createdAt: Date.now(),
-			});
-			mortgageIdMap[mortgage.mortgageId] = simMortgageId;
-
-			// Create TREASURY (uses string mortgageId for ledger filtering)
-			const treasuryId = await ctx.db.insert("ledger_accounts", {
-				type: "TREASURY",
-				mortgageId: mortgage.mortgageId,
-				cumulativeDebits: 0n,
-				cumulativeCredits: 0n,
-				pendingDebits: 0n,
-				pendingCredits: 0n,
-				createdAt: Date.now(),
+				simulationId: mortgage.ledgerMortgageId,
 			});
 
-			// MINT: WORLD → TREASURY
-			await postEntry(ctx, {
-				entryType: "MORTGAGE_MINTED",
-				mortgageId: mortgage.mortgageId,
-				debitAccountId: treasuryId,
-				creditAccountId: worldAccount._id,
-				amount: Number(TOTAL_SUPPLY),
-				effectiveDate: "2024-01-01",
-				idempotencyKey: `sim-mint-${mortgage.mortgageId}`,
-				source: SIM_SOURCE,
-				metadata: { demo: true, source: "simulation" },
-			});
-
-			// ISSUE: TREASURY → POSITION per lender
-			for (const allocation of mortgage.allocations) {
-				const position = await getOrCreatePositionAccount(
-					ctx,
-					mortgage.mortgageId,
-					allocation.lenderId
-				);
-
-				await postEntry(ctx, {
-					entryType: "SHARES_ISSUED",
-					mortgageId: mortgage.mortgageId,
-					debitAccountId: position._id,
-					creditAccountId: treasuryId,
-					amount: allocation.amount,
-					effectiveDate: "2024-01-01",
-					idempotencyKey: `sim-issue-${mortgage.mortgageId}-${allocation.lenderId}`,
-					source: SIM_SOURCE,
-					metadata: { demo: true, source: "simulation" },
-				});
-			}
+			mortgageIdMap[mortgage.ledgerMortgageId] = mortgageId;
 		}
 
-		// Generate obligations: 24 monthly interest payments per mortgage
-		for (const mortgage of SIM_MORTGAGES) {
-			const monthlyPayment = calculateMonthlyPayment(Number(TOTAL_SUPPLY));
-			const startDate = new Date("2024-01-01T00:00:00Z");
-			const realMortgageId = mortgageIdMap[mortgage.mortgageId];
+		for (const mortgage of DEMO_LEDGER_MORTGAGES) {
+			const mortgageId = mortgageIdMap[mortgage.ledgerMortgageId];
+			const existingObligations = await ctx.db
+				.query("obligations")
+				.withIndex("by_mortgage", (q) => q.eq("mortgageId", mortgageId))
+				.collect();
 
+			if (existingObligations.length > 0) {
+				continue;
+			}
+
+			const startDate = new Date("2024-01-01T00:00:00Z");
 			for (let month = 1; month <= 24; month++) {
 				const dueDate = new Date(startDate);
 				dueDate.setUTCMonth(dueDate.getUTCMonth() + month);
 				dueDate.setUTCDate(1);
 
 				const isLastMonth = month === 24;
-				const obligationType = isLastMonth
-					? "principal_repayment"
-					: "regular_interest";
-				const amount = isLastMonth ? Number(TOTAL_SUPPLY) : monthlyPayment;
-
-				await ctx.db.insert("obligations", {
-					status: "pending",
-					machineContext: null,
-					paymentNumber: month,
-					type: obligationType,
-					mortgageId: realMortgageId,
+				await ctx.runMutation(internal.obligations.mutations.createObligation, {
+					mortgageId,
 					borrowerId,
-					amount,
+					paymentNumber: month,
+					type: isLastMonth ? "principal_repayment" : "regular_interest",
+					amount: isLastMonth ? Number(TOTAL_SUPPLY) : monthlyPayment,
 					amountSettled: 0,
 					dueDate: Math.floor(dueDate.getTime() / 1000),
 					gracePeriodEnd:
 						Math.floor(dueDate.getTime() / 1000) + 5 * 24 * 60 * 60,
 					sourceObligationId: undefined,
-					settledAt: undefined,
-					createdAt: Date.now(),
+					status: "upcoming",
 				});
 			}
 		}
 
-		// Initialize simulation clock
 		await ctx.db.insert("simulation_clock", {
 			clockId: SIM_CLOCK_ID,
 			currentDate: "2024-01-01",
@@ -485,7 +763,7 @@ export const seedSimulation = adminMutation
 
 		return {
 			seeded: true,
-			message: `Simulation initialized with ${SIM_MORTGAGES.length} mortgages and 72 obligations (24 months × 3).`,
+			message: `Simulation initialized with ${DEMO_LEDGER_MORTGAGES.length} mortgages and 72 obligations.`,
 		};
 	})
 	.public();
@@ -505,36 +783,96 @@ export const advanceTime = adminMutation
 		}
 
 		const newDate = addDays(clock.currentDate, args.days);
-
-		// Find obligations now due
-		const allObligations = await ctx.db.query("obligations").collect();
-		const simNewlyDue = allObligations.filter((o) => {
-			const mortgageId = (o as { mortgageId?: string }).mortgageId ?? "";
-			if (!mortgageId.startsWith("sim-mtg-")) {
-				return false;
-			}
-			if (o.status !== "pending") {
-				return false;
-			}
-			const dueDateNum = (o as { dueDate?: number }).dueDate;
-			if (dueDateNum === undefined) {
-				return false;
-			}
-			const dueDate = new Date(dueDateNum * 1000).toISOString().split("T")[0];
-			return dueDate <= newDate;
-		});
-
-		// Update clock
+		const asOfTimestamp = Math.floor(new Date(newDate).getTime() / 1000);
 		await ctx.db.patch(clock._id, { currentDate: newDate });
+
+		const simMtgIdSet = await getSimulationMortgageIdSet(ctx);
+		const mortgageLabelMap = await getSimulationMortgageLabelMap(ctx);
+		const allObligations = await ctx.db.query("obligations").collect();
+		const simObligations = allObligations.filter((obligation) =>
+			simMtgIdSet.has(obligation.mortgageId)
+		);
+
+		const newlyDue = simObligations.filter(
+			(obligation) =>
+				obligation.status === "upcoming" && obligation.dueDate <= asOfTimestamp
+		);
+		const pastGrace = simObligations.filter(
+			(obligation) =>
+				obligation.status === "due" &&
+				obligation.gracePeriodEnd <= asOfTimestamp
+		);
+
+		let becameDueCount = 0;
+		for (const obligation of newlyDue) {
+			try {
+				const result: TransitionResult = await ctx.runMutation(
+					internal.engine.commands.transitionObligation,
+					{
+						entityId: obligation._id,
+						eventType: "BECAME_DUE",
+						payload: {},
+						source: SIM_COMMAND_SOURCE,
+					}
+				);
+				if (result.success) {
+					becameDueCount++;
+				}
+			} catch (error) {
+				console.error(
+					`[advanceTime] BECAME_DUE failed for ${obligation._id}:`,
+					error
+				);
+			}
+		}
+
+		let becameOverdueCount = 0;
+		for (const obligation of pastGrace) {
+			try {
+				const result: TransitionResult = await ctx.runMutation(
+					internal.engine.commands.transitionObligation,
+					{
+						entityId: obligation._id,
+						eventType: "GRACE_PERIOD_EXPIRED",
+						payload: {},
+						source: SIM_COMMAND_SOURCE,
+					}
+				);
+				if (result.success) {
+					becameOverdueCount++;
+				}
+			} catch (error) {
+				console.error(
+					`[advanceTime] GRACE_PERIOD_EXPIRED failed for ${obligation._id}:`,
+					error
+				);
+			}
+		}
+
+		await ctx.scheduler.runAfter(
+			0,
+			internal.engine.reconciliationAction.dailyReconciliation,
+			{}
+		);
 
 		return {
 			newDate,
-			obligationsTriggered: simNewlyDue.length,
-			newlyDueObligations: simNewlyDue.map((o) => ({
-				_id: o._id,
-				mortgageId: (o as { mortgageId?: string }).mortgageId ?? "",
-				type: o.type as string,
-				paymentNumber: (o as { paymentNumber?: number }).paymentNumber ?? 0,
+			obligationsTriggered: becameDueCount + becameOverdueCount,
+			becameDue: becameDueCount,
+			becameOverdue: becameOverdueCount,
+			newlyDueObligations: newlyDue.map((obligation) => ({
+				_id: obligation._id,
+				mortgageId:
+					mortgageLabelMap.get(obligation.mortgageId)?.ledgerMortgageId ?? "",
+				type: obligation.type,
+				paymentNumber: obligation.paymentNumber,
+			})),
+			becameOverdueObligations: pastGrace.map((obligation) => ({
+				_id: obligation._id,
+				mortgageId:
+					mortgageLabelMap.get(obligation.mortgageId)?.ledgerMortgageId ?? "",
+				type: obligation.type,
+				paymentNumber: obligation.paymentNumber,
 			})),
 		};
 	})
@@ -559,134 +897,120 @@ export const triggerDispersal = adminMutation
 			throw new ConvexError(`Obligation not found: ${args.obligationId}`);
 		}
 
-		// mortgageId is now a typed Id<"mortgages"> (real records created by seedSimulation)
-		const mortgageId = obligation.mortgageId;
-		if (!mortgageId.startsWith("sim-mtg-")) {
+		const simMtgIdSet = await getSimulationMortgageIdSet(ctx);
+		if (!simMtgIdSet.has(obligation.mortgageId)) {
 			throw new ConvexError("Not a simulation obligation.");
 		}
 
-		if (obligation.status !== "pending") {
+		if (!SETTLEABLE_OBLIGATION_STATUSES.has(obligation.status)) {
 			throw new ConvexError(
-				`Obligation ${args.obligationId} is already settled.`
+				`Obligation ${args.obligationId} is ${obligation.status}. Only due, overdue, or partially settled obligations can be paid.`
+			);
+		}
+		if (!Number.isSafeInteger(args.settledAmount) || args.settledAmount <= 0) {
+			throw new ConvexError("settledAmount must be a positive integer amount.");
+		}
+
+		const remainingAmount = obligation.amount - obligation.amountSettled;
+		if (args.settledAmount > remainingAmount) {
+			throw new ConvexError(
+				`settledAmount ${args.settledAmount} exceeds remaining balance ${remainingAmount}.`
 			);
 		}
 
-		// Validate amount covers servicing fee
-		const principal = Number(TOTAL_SUPPLY);
-		const servicingFee = calculateServicingFee(0.01, principal);
+		const servicingFee = calculateServicingFee(0.01, Number(TOTAL_SUPPLY));
 		if (args.settledAmount < servicingFee) {
 			throw new ConvexError(
-				`settledAmount ${args.settledAmount} does not cover servicing fee ${servicingFee}`
+				`settledAmount ${args.settledAmount} does not cover servicing fee ${servicingFee}.`
 			);
 		}
 
-		// Call createDispersalEntries via ctx.runMutation (it's an internalMutation)
-		const idempotencyKey = genIdempotencyKey("sim-dispersal");
-		interface DispersalResult {
-			created: boolean;
-			entries: Array<{
-				id: Id<"dispersalEntries">;
-				lenderId: Id<"lenders">;
-				lenderAccountId: Id<"ledger_accounts">;
-				amount: number;
-				rawAmount: number;
-				units: number;
-			}>;
-			servicingFeeEntryId: Id<"servicingFeeEntries"> | null;
-		}
-		const result: DispersalResult = await ctx.runMutation(
-			internal.dispersal.createDispersalEntries.createDispersalEntries,
+		const result: TransitionResult = await ctx.runMutation(
+			internal.engine.commands.transitionObligation,
 			{
-				obligationId: args.obligationId,
-				mortgageId,
-				settledAmount: args.settledAmount,
-				settledDate: clock.currentDate,
-				idempotencyKey,
-				source: SIM_DEMO_SOURCE,
+				entityId: args.obligationId,
+				eventType: "PAYMENT_APPLIED",
+				payload: {
+					amount: args.settledAmount,
+					attemptId: genIdempotencyKey("sim-payment"),
+					currentAmountSettled: obligation.amountSettled,
+					totalAmount: obligation.amount,
+				},
+				source: SIM_COMMAND_SOURCE,
 			}
 		);
 
-		// Mark obligation as settled
-		await ctx.db.patch(args.obligationId, {
-			status: "settled",
-			amountSettled: args.settledAmount,
-			settledAt: Date.now(),
-		});
+		if (!result.success) {
+			throw new ConvexError(
+				result.reason ?? "Simulation payment could not be applied."
+			);
+		}
+
+		if (result.newState === "settled") {
+			const updatedObligation = await ctx.db.get(args.obligationId);
+			if (!updatedObligation) {
+				throw new ConvexError(
+					`Obligation disappeared after settlement: ${args.obligationId}`
+				);
+			}
+
+			const settledDate = updatedObligation.settledAt
+				? new Date(updatedObligation.settledAt).toISOString().slice(0, 10)
+				: clock.currentDate;
+
+			await ctx.runMutation(
+				internal.dispersal.createDispersalEntries.createDispersalEntries,
+				{
+					mortgageId: updatedObligation.mortgageId,
+					obligationId: updatedObligation._id,
+					settledAmount: updatedObligation.amountSettled,
+					settledDate,
+					idempotencyKey: `dispersal:${args.obligationId}`,
+					source: SIM_COMMAND_SOURCE,
+				}
+			);
+		}
 
 		return {
-			created: result.created,
-			dispersalEntryIds: result.entries.map(
-				(e: { id: Id<"dispersalEntries"> }) => e.id
-			),
-			servicingFeeEntryId: result.servicingFeeEntryId,
+			newState: result.newState,
+			effectsScheduled: result.effectsScheduled ?? [],
+			message:
+				result.newState === "settled"
+					? "Payment applied. Dispersal scheduled."
+					: "Partial payment applied. Obligation remains open.",
 		};
 	})
 	.public();
 
 export const cleanupSimulation = adminMutation
 	.handler(async (ctx) => {
-		// Helper to delete docs whose mortgageId starts with a prefix
-		const deleteByMortgagePrefix = async (
-			table: "obligations" | "dispersalEntries" | "servicingFeeEntries",
-			counter: { count: number }
-		): Promise<void> => {
-			const docs = await ctx.db.query(table).collect();
-			for (const doc of docs) {
-				const mortgageId = (doc as { mortgageId?: string }).mortgageId ?? "";
-				if (mortgageId.startsWith("sim-mtg-")) {
-					await ctx.db.delete(doc._id);
-					counter.count++;
-				}
-			}
-		};
+		const { allMortgageIds, propertyIds } =
+			await buildSimulationCleanupTargets(ctx);
+		const { deletedObligations, deletedDispersals, deletedFees } =
+			await deleteSimulationMortgageArtifacts(ctx, allMortgageIds, propertyIds);
+		const legacyCleanup = await cleanupLegacySimulationLedgerArtifacts(ctx);
 
-		// Collect sim account IDs for later deletion
-		const allAccounts = await ctx.db.query("ledger_accounts").collect();
-		const simAccountIds: Id<"ledger_accounts">[] = [];
-		for (const account of allAccounts) {
-			const mortgageId = (account as { mortgageId?: string }).mortgageId ?? "";
-			if (mortgageId.startsWith("sim-mtg-")) {
-				simAccountIds.push(account._id);
-			}
+		const borrowerCleanup = await deleteSimulationProfileByAuthId(
+			ctx,
+			SIM_BORROWER_AUTH_ID,
+			"borrowers"
+		);
+		const brokerCleanup = await deleteSimulationProfileByAuthId(
+			ctx,
+			SIM_BROKER_AUTH_ID,
+			"brokers"
+		);
+		let deletedLenders = 0;
+		let deletedLenderUsers = 0;
+		for (const fixture of SIM_LENDER_FIXTURES) {
+			const lenderCleanup = await deleteSimulationLenderByAuthId(
+				ctx,
+				fixture.authId
+			);
+			deletedLenders += lenderCleanup.deletedProfiles;
+			deletedLenderUsers += lenderCleanup.deletedUsers;
 		}
 
-		const oblCount = { count: 0 };
-		const dispCount = { count: 0 };
-		const feeCount = { count: 0 };
-
-		// Delete obligations and track counts
-		await deleteByMortgagePrefix("obligations", oblCount);
-		const deletedObligations = oblCount.count;
-
-		// Delete dispersal entries and track counts
-		await deleteByMortgagePrefix("dispersalEntries", dispCount);
-		const deletedDispersals = dispCount.count;
-
-		// Delete servicing fee entries and track counts
-		await deleteByMortgagePrefix("servicingFeeEntries", feeCount);
-		const deletedFees = feeCount.count;
-
-		// Delete journal entries for sim mortgages
-		let deletedEntries = 0;
-		for (const mortgageId of SIM_MORTGAGES.map((m) => m.mortgageId)) {
-			const entries = await ctx.db
-				.query("ledger_journal_entries")
-				.withIndex("by_mortgage_and_time", (q) =>
-					q.eq("mortgageId", mortgageId)
-				)
-				.collect();
-			for (const entry of entries) {
-				await ctx.db.delete(entry._id);
-				deletedEntries++;
-			}
-		}
-
-		// Delete accounts
-		for (const accountId of simAccountIds) {
-			await ctx.db.delete(accountId);
-		}
-
-		// Delete simulation clock
 		const clock = await ctx.db
 			.query("simulation_clock")
 			.withIndex("by_clockId", (q) => q.eq("clockId", SIM_CLOCK_ID))
@@ -699,8 +1023,17 @@ export const cleanupSimulation = adminMutation
 			deletedObligations,
 			deletedDispersals,
 			deletedFees,
-			deletedEntries,
-			deletedAccounts: simAccountIds.length,
+			deletedEntries: legacyCleanup.deletedEntries,
+			deletedAccounts: legacyCleanup.deletedAccounts,
+			deletedMortgages: allMortgageIds.size,
+			deletedProperties: propertyIds.size,
+			deletedBorrowers: borrowerCleanup.deletedProfiles,
+			deletedBrokers: brokerCleanup.deletedProfiles,
+			deletedLenders,
+			deletedUsers:
+				borrowerCleanup.deletedUsers +
+				brokerCleanup.deletedUsers +
+				deletedLenderUsers,
 		};
 	})
 	.public();

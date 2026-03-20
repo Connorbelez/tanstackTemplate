@@ -8,15 +8,18 @@ import { FAIRLEND_ADMIN, LENDER } from "../../../src/test/auth/identities";
 import { api } from "../../_generated/api";
 import type { Id } from "../../_generated/dataModel";
 import type { MutationCtx } from "../../_generated/server";
+import {
+	calculatePeriodAccrual,
+	daysBetween,
+} from "../../accrual/interestMath";
 import schema from "../../schema";
 import { createDispersalEntries } from "../createDispersalEntries";
-import { calculatePeriodAccrual, daysBetween } from "../../accrual/interestMath";
 
 const modules = import.meta.glob("/convex/**/*.ts");
 
 const DEFAULT_SOURCE = { type: "system" as const, channel: "test" } as const;
 
-type CreateDispersalEntriesHandler = {
+interface CreateDispersalEntriesHandler {
 	_handler: (
 		ctx: MutationCtx,
 		args: {
@@ -39,7 +42,7 @@ type CreateDispersalEntriesHandler = {
 		}>;
 		servicingFeeEntryId: Id<"servicingFeeEntries"> | null;
 	}>;
-};
+}
 
 const createDispersalEntriesMutation =
 	createDispersalEntries as unknown as CreateDispersalEntriesHandler;
@@ -696,7 +699,7 @@ describe("dispersal reconciliation queries", () => {
 			//   totalAccrual (131,507) ≈ totalDispersals + totalFees (131,507) within 1-day tolerance (2,192)
 			const settledFeb = 61_370;
 			const settledMar = 67_945;
-			const settledApr = 2_192;
+			const settledApr = 2192;
 
 			// Settlement dates: 2026-02-01, 2026-03-01, 2026-04-01
 			const obligationFeb = await ctx.db.insert("obligations", {
@@ -792,7 +795,12 @@ describe("dispersal reconciliation queries", () => {
 		);
 
 		// 1-day tolerance: one day's worth of interest on the full principal
-		const oneDayTolerance = calculatePeriodAccrual(annualRate, 1.0, principal, 1);
+		const oneDayTolerance = calculatePeriodAccrual(
+			annualRate,
+			1.0,
+			principal,
+			1
+		);
 
 		// ── Query actual totals via reconciliation queries ──────────────────
 		const history = await t
@@ -824,3 +832,4 @@ describe("dispersal reconciliation queries", () => {
 		expect(history.entryCount).toBe(3);
 		expect(fees.entryCount).toBe(3);
 	});
+});

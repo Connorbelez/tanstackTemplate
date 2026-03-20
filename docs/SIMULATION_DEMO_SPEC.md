@@ -172,3 +172,148 @@ Use existing `prodLedger.ts` mortgages (`prod-mtg-greenfield`, `prod-mtg-riversi
 
 ### Simulation Source
 All mutations use: `{ type: "user", actor: "simulation", channel: "simulation" }`
+
+
+---
+
+## Appendix A: Cron Dependencies & Gap Analysis
+
+### Critical Gap: Obligation State Machine
+
+The current specification does not account for the **Governed Transitions (GT) engine** that drives obligation lifecycle. In production, crons trigger state transitions that simulation must replicate.
+
+### Production Cron Architecture
+
+```
+crons.daily("daily obligation transitions", { hourUTC: 6, minuteUTC: 0 },
+  internal.payments.obligations.crons.processObligationTransitions
+);
+
+crons.daily("daily reconciliation", { hourUTC: 6, minuteUTC: 0 },
+  internal.engine.reconciliationAction.dailyReconciliation
+);
+```
+
+#### `processObligationTransitions` — Obligation Lifecycle Cron
+
+| Phase | Event | Transition | Effect |
+|-------|-------|------------|--------|
+| 1 | BECAME_DUE | upcoming → due | Fires via `transitionObligation` mutation |
+| 2 | GRACE_PERIOD_EXPIRED | due → overdue | Triggers `emitObligationOverdue` + rules evaluation |
+
+**File:** `convex/payments/obligations/crons.ts`
+
+### Scheduled Effects via `ctx.scheduler.runAfter(0, ...)`
+
+Effects queue immediately after mutation commit. In simulation mode, this behavior is preserved.
+
+| Trigger | Effect | Action |
+|--------|-------|--------|
+| GRACE_PERIOD_EXPIRED | `emitObligationOverdue` | Fires OBLIGATION_OVERDUE at parent mortgage |
+| PAYMENT_CONFIRMED | `emitObligationSettled` | Schedules `createDispersalEntries` |
+| OBLIGATION_OVERDUE | `evaluateRules` | Collection plan rules engine |
+
+### Required Changes to Implementation
+
+#### 1. `advanceTime` — Must Trigger Obligation Transitions
+
+**Current (Gap):** Advances clock but does NOT trigger state machine transitions.
+
+**Required:**
+```ts
+export const advanceTime = adminMutation({
+  handler: async (ctx, args) => {
+    // 1. Advance simulation clock
+    const newDate = addDays(clock.currentDate, args.days);
+    await ctx.db.patch(clock._id, { currentDate: newDate });
+
+    // 2. Phase 1: BECAME_DUE — pending → due
+    const newlyDue = allObligations.filter(o =>
+      o.status === 'pending' && o.dueDate <= asOfTimestamp
+    );
+    for (const obligation of newlyDue) {
+      await ctx.runMutation(
+        internal.engine.commands.transitionObligation,
+        { entityId: obligation._id, eventType: 'BECAME_DUE',
+          payload: {}, source: SIM_SOURCE }
+      );
+    }
+
+    // 3. Phase 2: GRACE_PERIOD_EXPIRED — due → overdue
+    const pastGrace = allObligations.filter(o =>
+      o.status === 'due' && o.gracePeriodEnd <= asOfTimestamp
+    );
+    for (const obligation of pastGrace) {
+      await ctx.runMutation(
+        internal.engine.commands.transitionObligation,
+        { entityId: obligation._id, eventType: 'GRACE_PERIOD_EXPIRED',
+          payload: {}, source: SIM_SOURCE }
+      );
+    }
+
+    // 4. Optional: Run reconciliation
+    await ctx.runAction(
+      internal.engine.reconciliationAction.dailyReconciliation,
+    );
+
+    return {
+      newDate,
+      obligationsTriggered: newlyDue.length + pastGrace.length,
+      becameDue: newlyDue.length,
+      becameOverdue: pastGrace.length,
+    };
+  }
+});
+```
+
+#### 2. `seedSimulation` — No Changes Required
+
+Already correctly seeds obligations with `status: 'pending'` and sets simulation clock.
+
+#### 3. `triggerDispersal` — Already Correct
+
+Already calls `createDispersalEntries` via `ctx.runMutation`. Scheduled effects fire automatically via `scheduler.runAfter(0, ...)`.
+
+### Dispersal Flow (How Funds Move)
+
+```
+Obligation becomes due (via advanceTime)
+        │
+        ▼
+BECAME_DUE transition fires
+        │
+        ▼ (scheduler.runAfter)
+emitObligationSettled mutation
+        │
+        ▼ (scheduler.runAfter)
+createDisbursalEntries — creates ledger entries
+        │
+        ▼
+Lenders receive funds in ledger accounts
+```
+
+### Simulation vs Production Behavior
+
+| Aspect | Production | Simulation |
+|--------|-----------|-----------|
+| Obligation transitions | Cron @ 06:00 UTC | `advanceTime` triggers inline |
+| Scheduled effects | `runAfter(0, ...)` immediate | Same — works identically |
+| Reconciliation | Cron @ 06:00 UTC | Run on each `advanceTime` call |
+| Dispersals | User-triggered | User-triggered via `triggerDispersal` |
+
+### Files to Modify
+
+1. **`convex/demo/simulation.ts`** — Update `advanceTime` to call obligation transitions
+2. **`convex/payments/obligations/queries.ts`** — May need simulation-aware filters (see below)
+
+### Simulation-Aware Obligation Queries
+
+The existing cron uses `getUpcomingDue` and `getDuePastGrace` which filter by `asOf: Date.now()`. For simulation, filter by simulation clock:
+
+```ts
+// Option A: Pass simulation date as parameter
+getUpcomingDue({ asOf: number, simulationOnly?: boolean })
+
+// Option B: Filter after fetch (current pattern)
+// Current implementation filters by checking mortgage.simulationId
+```

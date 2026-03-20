@@ -166,6 +166,128 @@ function daysLabel(clockDate: string | null, startedAt: number | null): string {
 	return `Day ${days}`;
 }
 
+function buildActionMessage(label: string, result: unknown): string {
+	if (result && typeof result === "object" && "message" in result) {
+		return (result as { message: string }).message;
+	}
+	if (result && typeof result === "object" && "seeded" in result) {
+		const seededResult = result as { message?: string; seeded: boolean };
+		return (
+			seededResult.message ??
+			(seededResult.seeded ? "Simulation started." : "Already initialized.")
+		);
+	}
+	return label;
+}
+
+function resolveJumpDays(
+	jumpDate: string,
+	currentClockDate: string | null | undefined
+): { error: string } | { days: number } | null {
+	if (!jumpDate) {
+		return null;
+	}
+	const parts = jumpDate.split("-");
+	if (parts.length !== 3) {
+		return { error: "Invalid date format. Use YYYY-MM-DD." };
+	}
+	const target = new Date(`${jumpDate}T00:00:00Z`);
+	if (Number.isNaN(target.getTime())) {
+		return { error: "Invalid date." };
+	}
+	const current = currentClockDate ?? "2024-01-01";
+	const diffMs = target.getTime() - new Date(`${current}T00:00:00Z`).getTime();
+	return { days: Math.round(diffMs / (1000 * 60 * 60 * 24)) };
+}
+
+function resolveSettlementAmount(
+	settledAmount: string
+): { error: string } | { amount: number } | null {
+	if (!settledAmount) {
+		return null;
+	}
+	const amount = Number.parseInt(settledAmount, 10);
+	if (Number.isNaN(amount) || amount <= 0) {
+		return { error: "Enter a valid positive amount in cents." };
+	}
+	return { amount };
+}
+
+function getSettledObligationsClass(
+	pendingObligations: number
+): string | undefined {
+	return pendingObligations === 0 ? "text-green-700" : undefined;
+}
+
+function getPendingDispersalsClass(pendingObligations: number): string {
+	return pendingObligations > 0 ? "text-yellow-700" : "text-green-700";
+}
+
+function obligationTypeColor(type: string): string {
+	if (type === "principal_repayment") {
+		return "bg-purple-100 text-purple-800";
+	}
+	if (type === "late_fee") {
+		return "bg-red-100 text-red-800";
+	}
+	return "bg-blue-100 text-blue-800";
+}
+
+function obligationTypeLabel(type: string): string {
+	if (type === "principal_repayment") {
+		return "Principal";
+	}
+	if (type === "regular_interest") {
+		return "Interest";
+	}
+	if (type === "late_fee") {
+		return "Late Fee";
+	}
+	if (type === "arrears_cure") {
+		return "Arrears Cure";
+	}
+	return type;
+}
+
+function obligationStatusColor(status: string): string {
+	if (status === "upcoming") {
+		return "bg-slate-100 text-slate-800";
+	}
+	if (status === "due") {
+		return "bg-yellow-100 text-yellow-800";
+	}
+	if (status === "overdue") {
+		return "bg-red-100 text-red-800";
+	}
+	if (status === "partially_settled") {
+		return "bg-blue-100 text-blue-800";
+	}
+	return "bg-green-100 text-green-800";
+}
+
+function canSettleObligation(status: string): boolean {
+	return (
+		status === "due" || status === "overdue" || status === "partially_settled"
+	);
+}
+
+interface RunningSimulationViewProps {
+	handleAdvance: (days: number) => void;
+	handleJumpToDate: () => void;
+	handleTriggerDispersal: () => void;
+	history: DispersalHistory | undefined;
+	jumpDate: string;
+	loading: boolean;
+	selectedObligation: UpcomingDispersal | null;
+	setJumpDate: (value: string) => void;
+	setSelectedObligation: (value: UpcomingDispersal | null) => void;
+	setSettledAmount: (value: string) => void;
+	settledAmount: string;
+	simState: SimulationState;
+	trialBalance: TrialBalance | undefined;
+	upcoming: UpcomingDispersal[] | undefined;
+}
+
 // ── Component ────────────────────────────────────────────────────────────
 
 function SimulationDemo() {
@@ -206,20 +328,7 @@ function SimulationDemo() {
 			setLoading(true);
 			try {
 				const result = await fn();
-				let msg: string;
-				if (result && typeof result === "object" && "message" in result) {
-					msg = (result as { message: string }).message;
-				} else if (result && typeof result === "object" && "seeded" in result) {
-					const seededResult = result as { message?: string; seeded: boolean };
-					msg =
-						seededResult.message ??
-						(seededResult.seeded
-							? "Simulation started."
-							: "Already initialized.");
-				} else {
-					msg = label;
-				}
-				setSuccessMsg(typeof msg === "string" ? msg : label);
+				setSuccessMsg(buildActionMessage(label, result));
 			} catch (e) {
 				setError(e instanceof Error ? e.message : String(e));
 			} finally {
@@ -244,47 +353,34 @@ function SimulationDemo() {
 	);
 
 	const handleJumpToDate = useCallback(() => {
-		if (!jumpDate) {
+		const result = resolveJumpDays(jumpDate, simState?.clockDate);
+		if (!result) {
 			return;
 		}
-		const parts = jumpDate.split("-");
-		if (parts.length !== 3) {
-			setError("Invalid date format. Use YYYY-MM-DD.");
+		if ("error" in result) {
+			setError(result.error);
 			return;
 		}
-		const target = new Date(`${jumpDate}T00:00:00Z`);
-		if (Number.isNaN(target.getTime())) {
-			setError("Invalid date.");
-			return;
-		}
-		const current = simState?.clockDate ?? "2024-01-01";
-		const diffMs =
-			target.getTime() - new Date(`${current}T00:00:00Z`).getTime();
-		const days = Math.round(diffMs / (1000 * 60 * 60 * 24));
 		setJumpDate("");
-		handleAdvance(days);
+		handleAdvance(result.days);
 	}, [jumpDate, simState?.clockDate, handleAdvance]);
 
 	const handleTriggerDispersal = useCallback(() => {
 		if (!(selectedObligation && settledAmount)) {
 			return;
 		}
-		const amount = Number.parseInt(settledAmount, 10);
-		if (Number.isNaN(amount) || amount <= 0) {
-			setError("Enter a valid positive amount in cents.");
+		const amountResult = resolveSettlementAmount(settledAmount);
+		if (!amountResult) {
 			return;
 		}
-		runAction("Dispersal triggered", () =>
+		if ("error" in amountResult) {
+			setError(amountResult.error);
+			return;
+		}
+		runAction("Payment applied", () =>
 			trigger({
 				obligationId: selectedObligation._id,
-				settledAmount: amount,
-			}).then((r) => {
-				const r2 = r as { created: boolean };
-				return {
-					message: r2.created
-						? "Dispersal entries created."
-						: "Already dispersed.",
-				};
+				settledAmount: amountResult.amount,
 			})
 		);
 		setSelectedObligation(null);
@@ -400,174 +496,243 @@ function SimulationDemo() {
 			)}
 
 			{simState !== undefined && isRunning && (
-				<>
-					{/* Stat Cards */}
-					<div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-						<StatCard
-							label="Simulation Date"
-							value={simState.clockDate ?? "—"}
-						/>
-						<StatCard
-							label="Obligations"
-							value={`${simState.settledObligations} / ${simState.totalObligations} settled`}
-							valueClassName={
-								simState.pendingObligations === 0 ? "text-green-700" : undefined
-							}
-						/>
-						<StatCard
-							label="Pending Dispersals"
-							value={String(simState.pendingObligations)}
-							valueClassName={
-								simState.pendingObligations > 0
-									? "text-yellow-700"
-									: "text-green-700"
-							}
-						/>
-						<StatCard
-							label="Total Dispersed"
-							value={
-								history
-									? centsToDollars(history.totalAmount)
-									: centsToDollars(0)
-							}
-						/>
-					</div>
-
-					{/* Time Controls */}
-					<Card>
-						<CardHeader className="pb-2">
-							<CardTitle className="text-base">Time Controls</CardTitle>
-							<CardDescription className="text-xs">
-								Advance the simulation clock. Obligations become auto-due when
-								their due date is reached.
-							</CardDescription>
-						</CardHeader>
-						<CardContent className="flex flex-wrap items-center gap-2">
-							<Button
-								disabled={loading}
-								onClick={() => handleAdvance(1)}
-								size="sm"
-								variant="outline"
-							>
-								+1 Day
-							</Button>
-							<Button
-								disabled={loading}
-								onClick={() => handleAdvance(7)}
-								size="sm"
-								variant="outline"
-							>
-								+7 Days
-							</Button>
-							<Button
-								disabled={loading}
-								onClick={() => handleAdvance(30)}
-								size="sm"
-								variant="outline"
-							>
-								+30 Days
-							</Button>
-							<Button
-								disabled={loading}
-								onClick={() => handleAdvance(90)}
-								size="sm"
-								variant="outline"
-							>
-								+90 Days
-							</Button>
-							<div className="ml-4 flex items-center gap-2">
-								<span className="text-muted-foreground text-sm">Jump to:</span>
-								<Input
-									className="w-36 font-mono text-sm"
-									onChange={(e) => setJumpDate(e.target.value)}
-									placeholder="YYYY-MM-DD"
-									value={jumpDate}
-								/>
-								<Button
-									disabled={loading || !jumpDate}
-									onClick={handleJumpToDate}
-									size="sm"
-									variant="secondary"
-								>
-									Go
-								</Button>
-							</div>
-						</CardContent>
-					</Card>
-
-					{/* Tabs */}
-					<Tabs defaultValue="overview">
-						<TabsList>
-							<TabsTrigger value="overview">Overview</TabsTrigger>
-							<TabsTrigger value="obligations">
-								Obligations
-								{simState.pendingObligations > 0 && (
-									<span className="ml-1 rounded bg-yellow-100 px-1.5 py-0.5 text-xs text-yellow-800">
-										{simState.pendingObligations}
-									</span>
-								)}
-							</TabsTrigger>
-							<TabsTrigger value="dispersals">
-								Dispersals
-								{history && history.totalEntries > 0 && (
-									<span className="ml-1 rounded bg-muted px-1.5 py-0.5 text-xs">
-										{history.totalEntries}
-									</span>
-								)}
-							</TabsTrigger>
-							<TabsTrigger value="trial-balance">Trial Balance</TabsTrigger>
-						</TabsList>
-
-						<TabsContent value="overview">
-							<OverviewTab mortgages={simState.mortgages} />
-						</TabsContent>
-
-						<TabsContent value="obligations">
-							<ObligationsTab
-								onCancel={() => {
-									setSelectedObligation(null);
-									setSettledAmount("");
-								}}
-								onConfirmTrigger={handleTriggerDispersal}
-								onTrigger={(ob) => {
-									setSelectedObligation(ob);
-									setSettledAmount(String(ob.amount));
-								}}
-								selectedObligation={selectedObligation}
-								setSettledAmount={setSettledAmount}
-								settledAmount={settledAmount}
-								upcoming={upcoming ?? []}
-							/>
-						</TabsContent>
-
-						<TabsContent value="dispersals">
-							<DispersalsTab
-								history={
-									history ?? {
-										entries: [],
-										totalByLender: {},
-										totalEntries: 0,
-										totalAmount: 0,
-									}
-								}
-							/>
-						</TabsContent>
-
-						<TabsContent value="trial-balance">
-							<TrialBalanceTab
-								trialBalance={
-									trialBalance ?? {
-										accounts: [],
-										totalPosted: 0,
-										totalPending: 0,
-									}
-								}
-							/>
-						</TabsContent>
-					</Tabs>
-				</>
+				<RunningSimulationView
+					handleAdvance={handleAdvance}
+					handleJumpToDate={handleJumpToDate}
+					handleTriggerDispersal={handleTriggerDispersal}
+					history={history}
+					jumpDate={jumpDate}
+					loading={loading}
+					selectedObligation={selectedObligation}
+					setJumpDate={setJumpDate}
+					setSelectedObligation={setSelectedObligation}
+					setSettledAmount={setSettledAmount}
+					settledAmount={settledAmount}
+					simState={simState}
+					trialBalance={trialBalance}
+					upcoming={upcoming}
+				/>
 			)}
 		</div>
+	);
+}
+
+function RunningSimulationView({
+	handleAdvance,
+	handleJumpToDate,
+	handleTriggerDispersal,
+	history,
+	jumpDate,
+	loading,
+	selectedObligation,
+	setJumpDate,
+	setSelectedObligation,
+	setSettledAmount,
+	settledAmount,
+	simState,
+	trialBalance,
+	upcoming,
+}: RunningSimulationViewProps) {
+	return (
+		<>
+			<div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+				<StatCard label="Simulation Date" value={simState.clockDate ?? "—"} />
+				<StatCard
+					label="Obligations"
+					value={`${simState.settledObligations} / ${simState.totalObligations} settled`}
+					valueClassName={getSettledObligationsClass(
+						simState.pendingObligations
+					)}
+				/>
+				<StatCard
+					label="Pending Dispersals"
+					value={String(simState.pendingObligations)}
+					valueClassName={getPendingDispersalsClass(
+						simState.pendingObligations
+					)}
+				/>
+				<StatCard
+					label="Total Dispersed"
+					value={
+						history ? centsToDollars(history.totalAmount) : centsToDollars(0)
+					}
+				/>
+			</div>
+
+			<Card>
+				<CardHeader className="pb-2">
+					<CardTitle className="text-base">Time Controls</CardTitle>
+					<CardDescription className="text-xs">
+						Advance the simulation clock. Upcoming obligations transition to
+						due, then overdue after their grace period.
+					</CardDescription>
+				</CardHeader>
+				<CardContent className="flex flex-wrap items-center gap-2">
+					<Button
+						disabled={loading}
+						onClick={() => handleAdvance(1)}
+						size="sm"
+						variant="outline"
+					>
+						+1 Day
+					</Button>
+					<Button
+						disabled={loading}
+						onClick={() => handleAdvance(7)}
+						size="sm"
+						variant="outline"
+					>
+						+7 Days
+					</Button>
+					<Button
+						disabled={loading}
+						onClick={() => handleAdvance(30)}
+						size="sm"
+						variant="outline"
+					>
+						+30 Days
+					</Button>
+					<Button
+						disabled={loading}
+						onClick={() => handleAdvance(90)}
+						size="sm"
+						variant="outline"
+					>
+						+90 Days
+					</Button>
+					<div className="ml-4 flex items-center gap-2">
+						<span className="text-muted-foreground text-sm">Jump to:</span>
+						<Input
+							className="w-36 font-mono text-sm"
+							onChange={(e) => setJumpDate(e.target.value)}
+							placeholder="YYYY-MM-DD"
+							value={jumpDate}
+						/>
+						<Button
+							disabled={loading || !jumpDate}
+							onClick={handleJumpToDate}
+							size="sm"
+							variant="secondary"
+						>
+							Go
+						</Button>
+					</div>
+				</CardContent>
+			</Card>
+
+			<div className="grid gap-4 xl:grid-cols-[260px_minmax(0,1fr)]">
+				<SimulationEventRail />
+				<Tabs defaultValue="overview">
+					<TabsList>
+						<TabsTrigger value="overview">Overview</TabsTrigger>
+						<TabsTrigger value="obligations">
+							Obligations
+							{simState.pendingObligations > 0 && (
+								<span className="ml-1 rounded bg-yellow-100 px-1.5 py-0.5 text-xs text-yellow-800">
+									{simState.pendingObligations}
+								</span>
+							)}
+						</TabsTrigger>
+						<TabsTrigger value="dispersals">
+							Dispersals
+							{history && history.totalEntries > 0 && (
+								<span className="ml-1 rounded bg-muted px-1.5 py-0.5 text-xs">
+									{history.totalEntries}
+								</span>
+							)}
+						</TabsTrigger>
+						<TabsTrigger value="trial-balance">Trial Balance</TabsTrigger>
+					</TabsList>
+
+					<TabsContent value="overview">
+						<OverviewTab mortgages={simState.mortgages} />
+					</TabsContent>
+
+					<TabsContent value="obligations">
+						<ObligationsTab
+							onCancel={() => {
+								setSelectedObligation(null);
+								setSettledAmount("");
+							}}
+							onConfirmTrigger={handleTriggerDispersal}
+							onTrigger={(obligation) => {
+								setSelectedObligation(obligation);
+								setSettledAmount(String(obligation.amount));
+							}}
+							selectedObligation={selectedObligation}
+							setSettledAmount={setSettledAmount}
+							settledAmount={settledAmount}
+							upcoming={upcoming ?? []}
+						/>
+					</TabsContent>
+
+					<TabsContent value="dispersals">
+						<DispersalsTab
+							history={
+								history ?? {
+									entries: [],
+									totalByLender: {},
+									totalEntries: 0,
+									totalAmount: 0,
+								}
+							}
+						/>
+					</TabsContent>
+
+					<TabsContent value="trial-balance">
+						<TrialBalanceTab
+							trialBalance={
+								trialBalance ?? {
+									accounts: [],
+									totalPosted: 0,
+									totalPending: 0,
+								}
+							}
+						/>
+					</TabsContent>
+				</Tabs>
+			</div>
+		</>
+	);
+}
+
+function SimulationEventRail() {
+	const actions = [
+		"Originate Mortgage",
+		"Sell Position",
+		"Trade Mortgage",
+		"Default Mortgage",
+		"Payoff Mortgage",
+		"Renew Mortgage",
+	];
+
+	return (
+		<Card className="h-fit">
+			<CardHeader className="pb-3">
+				<CardTitle className="text-base">Event Triggers</CardTitle>
+				<CardDescription className="text-xs">
+					The simulation now mirrors the real obligation lifecycle. Additional
+					cross-entity event macros are shown here to match the target spec
+					layout.
+				</CardDescription>
+			</CardHeader>
+			<CardContent className="space-y-2">
+				{actions.map((action) => (
+					<div
+						className="flex items-center justify-between rounded-md border px-3 py-2"
+						key={action}
+					>
+						<span className="text-sm">{action}</span>
+						<Badge
+							className="bg-muted text-muted-foreground"
+							variant="secondary"
+						>
+							Planned
+						</Badge>
+					</div>
+				))}
+			</CardContent>
+		</Card>
 	);
 }
 
@@ -693,7 +858,7 @@ function OverviewTab({
 	);
 }
 
-const TOTAL_SUPPLY_FMT = "100,000,000 (¢) = $1,000,000";
+const TOTAL_SUPPLY_FMT = "10,000 ownership units";
 
 // ── Obligations Tab ────────────────────────────────────────────────────────
 
@@ -723,7 +888,7 @@ function ObligationsTab({
 			{selectedObligation && (
 				<Card className="border-blue-200 bg-blue-50/50">
 					<CardHeader className="pb-2">
-						<CardTitle className="text-base">Trigger Dispersal</CardTitle>
+						<CardTitle className="text-base">Apply Payment</CardTitle>
 					</CardHeader>
 					<CardContent className="space-y-3">
 						<div className="grid grid-cols-2 gap-4 text-sm">
@@ -735,7 +900,9 @@ function ObligationsTab({
 							</div>
 							<div>
 								<span className="text-muted-foreground">Type: </span>
-								<span className="font-medium">{selectedObligation.type}</span>
+								<span className="font-medium">
+									{obligationTypeLabel(selectedObligation.type)}
+								</span>
 							</div>
 							<div>
 								<span className="text-muted-foreground">Due: </span>
@@ -750,7 +917,7 @@ function ObligationsTab({
 								</span>
 							</div>
 							<div>
-								<span className="text-muted-foreground">Expected: </span>
+								<span className="text-muted-foreground">Outstanding: </span>
 								<span className="font-medium font-mono">
 									{centsToDollars(selectedObligation.amount)}
 								</span>
@@ -767,11 +934,11 @@ function ObligationsTab({
 								className="w-40 font-mono text-sm"
 								id="settled-amount"
 								onChange={(e) => setSettledAmount(e.target.value)}
-								placeholder="amount in cents"
+								placeholder="payment in cents"
 								value={settledAmount}
 							/>
 							<Button onClick={onConfirmTrigger} size="sm" variant="default">
-								Confirm Settlement
+								Apply Payment
 							</Button>
 							<Button onClick={onCancel} size="sm" variant="outline">
 								Cancel
@@ -783,7 +950,7 @@ function ObligationsTab({
 
 			{upcoming.length === 0 ? (
 				<div className="py-8 text-center text-muted-foreground text-sm">
-					No pending obligations. All obligations have been settled.
+					No open obligations. All obligations have been settled or waived.
 				</div>
 			) : (
 				<Table>
@@ -807,15 +974,11 @@ function ObligationsTab({
 								</TableCell>
 								<TableCell>
 									<span
-										className={`inline-block rounded px-2 py-0.5 font-medium text-xs ${
-											ob.type === "principal_repayment"
-												? "bg-purple-100 text-purple-800"
-												: "bg-blue-100 text-blue-800"
-										}`}
+										className={`inline-block rounded px-2 py-0.5 font-medium text-xs ${obligationTypeColor(
+											ob.type
+										)}`}
 									>
-										{ob.type === "principal_repayment"
-											? "Principal"
-											: "Interest"}
+										{obligationTypeLabel(ob.type)}
 									</span>
 								</TableCell>
 								<TableCell className="font-mono text-muted-foreground text-xs">
@@ -834,11 +997,7 @@ function ObligationsTab({
 								</TableCell>
 								<TableCell>
 									<Badge
-										className={
-											ob.status === "pending"
-												? "bg-yellow-100 text-yellow-800"
-												: "bg-green-100 text-green-800"
-										}
+										className={obligationStatusColor(ob.status)}
 										variant="secondary"
 									>
 										{ob.status}
@@ -846,12 +1005,12 @@ function ObligationsTab({
 								</TableCell>
 								<TableCell>
 									<Button
-										disabled={ob.status !== "pending"}
+										disabled={!canSettleObligation(ob.status)}
 										onClick={() => onTrigger(ob)}
 										size="sm"
 										variant="outline"
 									>
-										Settle
+										Pay
 									</Button>
 								</TableCell>
 							</TableRow>
