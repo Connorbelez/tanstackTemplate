@@ -9,6 +9,7 @@
 import type { Id } from "../../../../convex/_generated/dataModel";
 import type { MortgageMachineContext } from "../../../../convex/engine/machines/mortgage.machine";
 import type { EntityType } from "../../../../convex/engine/types";
+import { attachDefaultFeeSetToMortgage } from "../../../../convex/fees/resolver";
 import type { GovernedTestConvex } from "../onboarding/helpers";
 import { ensureSeededIdentity } from "../../auth/helpers";
 import { BORROWER, BROKER } from "../../auth/identities";
@@ -85,8 +86,8 @@ export async function seedMortgage(
 	const brokerOfRecordId =
 		overrides?.brokerOfRecordId ?? (await seedBrokerProfile(t));
 
-	return t.run(async (ctx) =>
-		ctx.db.insert("mortgages", {
+	return t.run(async (ctx) => {
+		const mortgageId = await ctx.db.insert("mortgages", {
 			status: overrides?.status ?? "active",
 			machineContext: overrides?.machineContext ?? {
 				missedPayments: 0,
@@ -109,8 +110,10 @@ export async function seedMortgage(
 			firstPaymentDate: "2026-02-15",
 			brokerOfRecordId,
 			createdAt: Date.now(),
-		})
-	);
+		});
+		await attachDefaultFeeSetToMortgage(ctx.db, mortgageId, 0.01);
+		return mortgageId;
+	});
 }
 
 // ── Obligation Seeding ──────────────────────────────────────────────

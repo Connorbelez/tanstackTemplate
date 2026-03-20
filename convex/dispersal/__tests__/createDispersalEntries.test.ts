@@ -9,7 +9,6 @@ const modules = import.meta.glob("/convex/**/*.ts");
 
 const DEFAULT_SOURCE = { type: "system" as const, channel: "test" };
 const NO_ACTIVE_POSITIONS_PATTERN = /no active positions for mortgage/i;
-const FEE_EXCEEDS_SETTLEMENT_PATTERN = /does not cover servicing fee/i;
 
 type TestHarness = ReturnType<typeof convexTest>;
 
@@ -280,8 +279,12 @@ describe("createDispersalEntries", () => {
 
 		expect(persistedEntries).toHaveLength(2);
 		expect(feeEntry?.amount).toBe(8333);
+		expect(feeEntry?.feeDue).toBe(8333);
+		expect(feeEntry?.feeCashApplied).toBe(8333);
+		expect(feeEntry?.feeReceivable).toBe(0);
 		expect(feeEntry?.annualRate).toBe(0.01);
 		expect(feeEntry?.principalBalance).toBe(10_000_000);
+		expect(feeEntry?.feeCode).toBe("servicing");
 		expect(
 			persistedEntries.every((entry) => entry.servicingFeeDeducted === 0)
 		).toBe(true);
@@ -409,17 +412,48 @@ describe("createDispersalEntries", () => {
 		).rejects.toThrow(NO_ACTIVE_POSITIONS_PATTERN);
 	});
 
-	it("fails when the servicing fee consumes the full settlement", async () => {
+	it("records servicing receivable when the fee exceeds collected cash", async () => {
 		const seeded = await seedDispersalScenario(t);
 
-		await expect(
-			runCreateDispersal(t, {
-				obligationId: seeded.obligationId,
-				mortgageId: seeded.mortgageId,
-				settledAmount: 8000,
-				settledDate: "2026-03-01",
-				idempotencyKey: "dispersal:test:fee-too-large",
-			})
-		).rejects.toThrow(FEE_EXCEEDS_SETTLEMENT_PATTERN);
+		const first = await runCreateDispersal(t, {
+			obligationId: seeded.obligationId,
+			mortgageId: seeded.mortgageId,
+			settledAmount: 8000,
+			settledDate: "2026-03-01",
+			idempotencyKey: "dispersal:test:fee-too-large",
+		});
+
+		expect(first.created).toBe(true);
+		expect(first.entries).toHaveLength(0);
+		expect(first.servicingFeeEntryId).toBeTruthy();
+
+		const feeEntry = await t.run(async (ctx) =>
+			first.servicingFeeEntryId
+				? ctx.db.get(first.servicingFeeEntryId as never)
+				: null
+		);
+		expect(feeEntry?.amount).toBe(8000);
+		expect(feeEntry?.feeDue).toBe(8333);
+		expect(feeEntry?.feeCashApplied).toBe(8000);
+		expect(feeEntry?.feeReceivable).toBe(333);
+
+		const persistedEntries = await t.run(async (ctx) =>
+			ctx.db
+				.query("dispersalEntries")
+				.filter((q) => q.eq(q.field("obligationId"), seeded.obligationId))
+				.collect()
+		);
+		expect(persistedEntries).toHaveLength(0);
+
+		const retry = await runCreateDispersal(t, {
+			obligationId: seeded.obligationId,
+			mortgageId: seeded.mortgageId,
+			settledAmount: 8000,
+			settledDate: "2026-03-01",
+			idempotencyKey: "dispersal:test:fee-too-large:retry",
+		});
+		expect(retry.created).toBe(false);
+		expect(retry.entries).toHaveLength(0);
+		expect(retry.servicingFeeEntryId).toBe(first.servicingFeeEntryId);
 	});
 });

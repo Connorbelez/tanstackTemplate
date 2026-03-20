@@ -1,5 +1,6 @@
 import { ConvexError, v } from "convex/values";
 import type { Doc, Id } from "../_generated/dataModel";
+import { attachDefaultFeeSetToMortgage } from "../fees/resolver";
 import { adminMutation } from "../fluent";
 import {
 	addMonthsToDateString,
@@ -242,6 +243,11 @@ export const seedMortgage = adminMutation
 				}));
 
 			if (existingMortgage) {
+				await attachDefaultFeeSetToMortgage(
+					ctx.db,
+					existingMortgage._id,
+					existingMortgage.annualServicingRate
+				);
 				reusedMortgages += 1;
 			} else {
 				await writeCreationJournalEntry(ctx, {
@@ -258,6 +264,15 @@ export const seedMortgage = adminMutation
 					},
 				});
 				createdMortgages += 1;
+
+				const seededMortgage = await ctx.db.get(mortgageId);
+				if (seededMortgage) {
+					await attachDefaultFeeSetToMortgage(
+						ctx.db,
+						mortgageId,
+						seededMortgage.annualServicingRate
+					);
+				}
 			}
 
 			const { wasCreated: linkCreated } = await ensureMortgageBorrowerLink(

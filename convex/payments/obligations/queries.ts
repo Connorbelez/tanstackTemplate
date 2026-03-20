@@ -89,11 +89,11 @@ export const getLateFeeForObligation = internalQuery({
 	handler: async (ctx, { sourceObligationId }) => {
 		return await ctx.db
 			.query("obligations")
-			.filter((q) =>
-				q.and(
-					q.eq(q.field("sourceObligationId"), sourceObligationId),
-					q.eq(q.field("type"), "late_fee")
-				)
+			.withIndex("by_type_source_and_fee_code", (q) =>
+				q
+					.eq("type", "late_fee")
+					.eq("sourceObligationId", sourceObligationId)
+					.eq("feeCode", "late_fee")
 			)
 			.first();
 	},

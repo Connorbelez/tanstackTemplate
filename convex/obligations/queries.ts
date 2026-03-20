@@ -113,8 +113,23 @@ export const getById = internalQuery({
 export const getLateFeeForObligation = internalQuery({
 	args: {
 		sourceObligationId: v.id("obligations"),
+		feeCode: v.optional(
+			v.union(v.literal("late_fee"), v.literal("nsf"), v.literal("servicing"))
+		),
 	},
-	handler: async (ctx, { sourceObligationId }) => {
+	handler: async (ctx, { sourceObligationId, feeCode }) => {
+		if (feeCode !== undefined) {
+			return await ctx.db
+				.query("obligations")
+				.withIndex("by_type_source_and_fee_code", (q) =>
+					q
+						.eq("type", "late_fee")
+						.eq("sourceObligationId", sourceObligationId)
+						.eq("feeCode", feeCode)
+				)
+				.first();
+		}
+
 		return await ctx.db
 			.query("obligations")
 			.withIndex("by_type_and_source", (q) =>

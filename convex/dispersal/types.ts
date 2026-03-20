@@ -3,12 +3,19 @@ import type { Id } from "../_generated/dataModel";
 // ── Calculation details (mirrors calculationDetailsValidator) ────
 export interface CalculationDetails {
 	distributableAmount: number;
+	feeCashApplied?: number;
+	feeCode?: "servicing" | "late_fee" | "nsf";
+	feeDue?: number;
+	feeReceivable?: number;
+	mortgageFeeId?: Id<"mortgageFees">;
 	ownershipFraction: number;
 	ownershipUnits: number;
+	policyVersion?: number;
 	rawAmount: number;
 	roundedAmount: number;
 	servicingFee: number;
 	settledAmount: number;
+	sourceObligationType?: string;
 	totalUnits: number;
 }
 
@@ -19,9 +26,11 @@ export interface DispersalEntry {
 	calculationDetails: CalculationDetails;
 	createdAt: number;
 	dispersalDate: string;
+	feeCode?: "servicing" | "late_fee" | "nsf";
 	idempotencyKey: string;
 	lenderAccountId: Id<"ledger_accounts">;
 	lenderId: Id<"lenders">;
+	mortgageFeeId?: Id<"mortgageFees">;
 	mortgageId: Id<"mortgages">;
 	obligationId: Id<"obligations">;
 	// Compatibility field only. Canonical servicing fee totals live on
@@ -37,7 +46,14 @@ export interface ServicingFeeEntry {
 	annualRate: number;
 	createdAt: number;
 	date: string;
+	feeCashApplied?: number;
+	feeCode?: "servicing" | "late_fee" | "nsf";
+	feeDue?: number;
+	feeReceivable?: number;
+	mortgageFeeId?: Id<"mortgageFees">;
 	mortgageId: Id<"mortgages">;
 	obligationId: Id<"obligations">;
+	policyVersion?: number;
 	principalBalance: number;
+	sourceObligationType?: string;
 }

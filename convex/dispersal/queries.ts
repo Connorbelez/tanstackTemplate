@@ -1,5 +1,5 @@
 import { ConvexError, v } from "convex/values";
-import type { Id } from "../_generated/dataModel";
+import type { Doc, Id } from "../_generated/dataModel";
 import type { QueryCtx } from "../_generated/server";
 import { canAccessDispersal } from "../auth/resourceChecks";
 import { authedQuery, requirePermission, type Viewer } from "../fluent";
@@ -12,32 +12,16 @@ function roundCurrency(amount: number) {
 	return Math.round(amount * 100) / 100;
 }
 
-function toHistoryEntry(
-	entry: {
-		_id: Id<"dispersalEntries">;
-		mortgageId: Id<"mortgages">;
-		lenderId: Id<"lenders">;
-		lenderAccountId: Id<"ledger_accounts">;
-		amount: number;
-		dispersalDate: string;
-		obligationId: Id<"obligations">;
-		servicingFeeDeducted: number;
-		status: "pending";
-		idempotencyKey: string;
-		calculationDetails: {
-			settledAmount: number;
-			servicingFee: number;
-			distributableAmount: number;
-			ownershipUnits: number;
-			totalUnits: number;
-			ownershipFraction: number;
-			rawAmount: number;
-			roundedAmount: number;
-		};
-		createdAt: number;
-	},
-	runningTotal: number
+function sumByField<T>(
+	entries: T[],
+	project: (entry: T) => number | undefined
 ) {
+	return roundCurrency(
+		entries.reduce((sum, entry) => sum + (project(entry) ?? 0), 0)
+	);
+}
+
+function toHistoryEntry(entry: Doc<"dispersalEntries">, runningTotal: number) {
 	return {
 		id: entry._id,
 		mortgageId: entry.mortgageId,
@@ -384,6 +368,18 @@ export const getServicingFeeHistory = dispersalQuery
 			entries: limitedEntries,
 			totalFees: overallTotalFees,
 			pageTotalFees,
+			totalFeeDue: sumByField(entries, (entry) => entry.feeDue),
+			totalFeeCashApplied: sumByField(entries, (entry) => entry.feeCashApplied),
+			totalFeeReceivable: sumByField(entries, (entry) => entry.feeReceivable),
+			pageTotalFeeDue: sumByField(limitedEntries, (entry) => entry.feeDue),
+			pageTotalFeeCashApplied: sumByField(
+				limitedEntries,
+				(entry) => entry.feeCashApplied
+			),
+			pageTotalFeeReceivable: sumByField(
+				limitedEntries,
+				(entry) => entry.feeReceivable
+			),
 		};
 	})
 	.public();
