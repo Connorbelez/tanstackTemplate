@@ -232,7 +232,7 @@ export const createDispersalEntries = internalMutation({
 
 		const lenderIdCache = new Map<string, Id<"lenders">>();
 		const normalizedPositions: Array<{
-			lenderAccountId: Id<"ledger_accounts">;
+			accountId: Id<"ledger_accounts">;
 			lenderId: Id<"lenders">;
 			units: number;
 		}> = [];
@@ -248,7 +248,7 @@ export const createDispersalEntries = internalMutation({
 			lenderIdCache.set(position.lenderAuthId, lenderId);
 
 			normalizedPositions.push({
-				lenderAccountId: position.lenderAccountId,
+				accountId: position.lenderAccountId,
 				lenderId,
 				units: position.units,
 			});
