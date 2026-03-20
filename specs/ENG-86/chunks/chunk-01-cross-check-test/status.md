@@ -1,4 +1,4 @@
-# Chunk 01: Cross-check Test — COMPLETED
+# Chunk 01: Cross-check Test — NEEDS VERIFICATION
 
 ## Summary
 Added the cross-check invariant test to `convex/dispersal/__tests__/reconciliation.test.ts`.
@@ -19,7 +19,7 @@ Added the cross-check invariant test to `convex/dispersal/__tests__/reconciliati
 ## Verification
 - `bun check` (biome): PASSED ✓
 - Test framework not runnable (node_modules not installed in this workspace)
-- Note: accrual window = 60 days (Feb 1→Apr 1 inclusive). This may produce a gap slightly larger than 1-day tolerance depending on exact settlement amounts. The test may need adjustment based on actual test run output.
+- Note: settledAmounts derived from accrual math (61,370 / 67,945 / 2,192) to ensure invariant passes. Test needs execution to confirm.
 
 ## Files modified
 - `convex/dispersal/__tests__/reconciliation.test.ts` — added cross-check test + required imports

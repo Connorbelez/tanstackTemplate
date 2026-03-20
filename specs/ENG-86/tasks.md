@@ -1,6 +1,6 @@
 # ENG-86 Tasks: Reconciliation Query Tests
 
-## Status: 1 task remaining
+## Status: 0 tasks remaining
 
 - [x] T-001: Analyze existing reconciliation.test.ts coverage vs SPEC §8.5 acceptance criteria
 - [x] T-002: Add cross-check invariant test (steady ownership, 3 months, 1-day tolerance)

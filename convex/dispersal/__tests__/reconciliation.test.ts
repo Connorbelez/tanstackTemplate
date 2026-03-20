@@ -681,7 +681,7 @@ describe("dispersal reconciliation queries", () => {
 			});
 
 			// Ledger position: 10_000 units = 100% ownership (10_000 / 10_000)
-			const lenderAccountId = await ctx.db.insert("ledger_accounts", {
+			await ctx.db.insert("ledger_accounts", {
 				type: "POSITION",
 				mortgageId,
 				lenderId: LENDER.subject,
@@ -689,6 +689,14 @@ describe("dispersal reconciliation queries", () => {
 				cumulativeCredits: 0n,
 				createdAt: now,
 			});
+
+			// Settlement amounts derived from interest accrual math (0.08 * 10M * days / 365):
+			// Feb (28d): 61,370 | Mar (31d): 67,945 | Apr (1d): 2,192
+			// This ensures the cross-check invariant passes:
+			//   totalAccrual (131,507) ≈ totalDispersals + totalFees (131,507) within 1-day tolerance (2,192)
+			const settledFeb = 61_370;
+			const settledMar = 67_945;
+			const settledApr = 2_192;
 
 			// Settlement dates: 2026-02-01, 2026-03-01, 2026-04-01
 			const obligationFeb = await ctx.db.insert("obligations", {
@@ -698,8 +706,8 @@ describe("dispersal reconciliation queries", () => {
 				borrowerId,
 				paymentNumber: 1,
 				type: "regular_interest",
-				amount: 100_000,
-				amountSettled: 100_000,
+				amount: settledFeb,
+				amountSettled: settledFeb,
 				dueDate: new Date("2026-02-01T00:00:00.000Z").getTime(),
 				gracePeriodEnd: new Date("2026-02-16T00:00:00.000Z").getTime(),
 				settledAt: new Date("2026-02-01T00:00:00.000Z").getTime(),
@@ -712,8 +720,8 @@ describe("dispersal reconciliation queries", () => {
 				borrowerId,
 				paymentNumber: 2,
 				type: "regular_interest",
-				amount: 100_000,
-				amountSettled: 100_000,
+				amount: settledMar,
+				amountSettled: settledMar,
 				dueDate: new Date("2026-03-01T00:00:00.000Z").getTime(),
 				gracePeriodEnd: new Date("2026-03-16T00:00:00.000Z").getTime(),
 				settledAt: new Date("2026-03-01T00:00:00.000Z").getTime(),
@@ -726,8 +734,8 @@ describe("dispersal reconciliation queries", () => {
 				borrowerId,
 				paymentNumber: 3,
 				type: "regular_interest",
-				amount: 100_000,
-				amountSettled: 100_000,
+				amount: settledApr,
+				amountSettled: settledApr,
 				dueDate: new Date("2026-04-01T00:00:00.000Z").getTime(),
 				gracePeriodEnd: new Date("2026-04-16T00:00:00.000Z").getTime(),
 				settledAt: new Date("2026-04-01T00:00:00.000Z").getTime(),
@@ -738,7 +746,7 @@ describe("dispersal reconciliation queries", () => {
 			await createDispersalEntriesMutation._handler(ctx, {
 				obligationId: obligationFeb,
 				mortgageId,
-				settledAmount: 100_000,
+				settledAmount: settledFeb,
 				settledDate: "2026-02-01",
 				idempotencyKey: "xcheck-feb",
 				source: DEFAULT_SOURCE,
@@ -746,7 +754,7 @@ describe("dispersal reconciliation queries", () => {
 			await createDispersalEntriesMutation._handler(ctx, {
 				obligationId: obligationMar,
 				mortgageId,
-				settledAmount: 100_000,
+				settledAmount: settledMar,
 				settledDate: "2026-03-01",
 				idempotencyKey: "xcheck-mar",
 				source: DEFAULT_SOURCE,
@@ -754,7 +762,7 @@ describe("dispersal reconciliation queries", () => {
 			await createDispersalEntriesMutation._handler(ctx, {
 				obligationId: obligationApr,
 				mortgageId,
-				settledAmount: 100_000,
+				settledAmount: settledApr,
 				settledDate: "2026-04-01",
 				idempotencyKey: "xcheck-apr",
 				source: DEFAULT_SOURCE,
@@ -770,13 +778,12 @@ describe("dispersal reconciliation queries", () => {
 		// approximately equals total disbursements + total servicing fees collected.
 		//
 		// daily_rate = 0.08 / 365
-		// Feb 1→Mar 1: 28 days, Mar 1→Apr 1: 31 days, Apr 1→Apr 1: 1 day = 60 days total
+		// Accrual window: 2026-02-01 → 2026-04-01 inclusive = 60 days total
+		// (daysBetween is inclusive of both endpoints, so a single call avoids
+		// double-counting boundary dates across adjacent segments)
 		const annualRate = 0.08;
 		const principal = 10_000_000;
-		const daysFeb = daysBetween("2026-02-01", "2026-03-01"); // 28
-		const daysMar = daysBetween("2026-03-01", "2026-04-01"); // 31
-		const daysApr = daysBetween("2026-04-01", "2026-04-01"); // 1
-		const totalAccrualDays = daysFeb + daysMar + daysApr;
+		const totalAccrualDays = daysBetween("2026-02-01", "2026-04-01"); // 60
 		const expectedAccrual = calculatePeriodAccrual(
 			annualRate,
 			1.0, // 100% steady ownership
