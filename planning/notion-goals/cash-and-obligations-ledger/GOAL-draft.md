@@ -123,7 +123,7 @@ Use a dedicated chart of accounts for cents, not units.
 | `UNAPPLIED_CASH` | Cash received but not yet matched to obligations |
 | `LENDER_PAYABLE` | Amount owed to a lender after collection/dispersal |
 | `SERVICING_REVENUE` | FairLend fee revenue |
-| `FEE_RECEIVABLE` | Optional explicit receivable for assessed fees |
+| `CONTROL` | Implementation-specific control accounts for accrual, allocation, or settlement flows |
 | `WRITE_OFF` | Loss recognition for uncollectible balances |
 | `SUSPENSE` | Exception holding bucket pending operator resolution |
 
@@ -131,11 +131,11 @@ Use a dedicated chart of accounts for cents, not units.
 
 | Event Type | Debit | Credit |
 | --- | --- | --- |
-| `OBLIGATION_ACCRUED` | `BORROWER_RECEIVABLE` | `OBLIGATION_CONTROL` or accrued-liability control |
+| `OBLIGATION_ACCRUED` | `BORROWER_RECEIVABLE` | `CONTROL` |
 | `CASH_RECEIVED` | `CASH_CLEARING` or `TRUST_CASH` | `BORROWER_RECEIVABLE` |
-| `PAYMENT_APPLIED` | `UNAPPLIED_CASH` or control | `BORROWER_RECEIVABLE` or obligation control |
-| `SERVICING_FEE_RECOGNIZED` | settlement control | `SERVICING_REVENUE` |
-| `LENDER_PAYABLE_CREATED` | settlement control | `LENDER_PAYABLE` |
+| `CASH_APPLIED` | `UNAPPLIED_CASH` or `CONTROL` | `BORROWER_RECEIVABLE` or `CONTROL` |
+| `SERVICING_FEE_RECOGNIZED` | `CONTROL` | `SERVICING_REVENUE` |
+| `LENDER_PAYABLE_CREATED` | `CONTROL` | `LENDER_PAYABLE` |
 | `LENDER_PAYOUT_SENT` | `LENDER_PAYABLE` | `TRUST_CASH` |
 | `OBLIGATION_WAIVED` | waiver/expense account | `BORROWER_RECEIVABLE` |
 | `OBLIGATION_WRITTEN_OFF` | `WRITE_OFF` | `BORROWER_RECEIVABLE` |

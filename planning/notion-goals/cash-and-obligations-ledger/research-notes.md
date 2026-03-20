@@ -8,9 +8,9 @@ ownership ledger without increasing risk and muddying boundaries.
 
 ## Important Finding
 
-The user-referenced path `specs/SPEC-ledger-cash-and-obligations.md` was not
-present in this worktree. This planning package therefore includes a new local
-draft under this directory.
+At the time of writing, no spec existed at
+`specs/SPEC-ledger-cash-and-obligations.md` in this repository. This planning
+package therefore includes a new local draft spec under this directory.
 
 ## Repo Findings
 

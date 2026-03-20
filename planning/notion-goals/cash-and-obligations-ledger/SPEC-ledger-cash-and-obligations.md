@@ -105,11 +105,14 @@ exist and stable duplication is visible.
 
 ## Core Data Model
 
+The pseudocode below uses Convex `Id<...>` references to mirror the existing
+ownership-ledger conventions in this repo.
+
 ### Accounts
 
 ```ts
 interface CashLedgerAccount {
-  id: string;
+  id: Id<"cash_ledger_accounts">;
   ledger: "cash";
   family:
     | "BORROWER_RECEIVABLE"
@@ -121,10 +124,10 @@ interface CashLedgerAccount {
     | "WRITE_OFF"
     | "SUSPENSE"
     | "CONTROL";
-  mortgageId?: string;
-  obligationId?: string;
-  lenderId?: string;
-  borrowerId?: string;
+  mortgageId?: Id<"mortgages">;
+  obligationId?: Id<"obligations">;
+  lenderId?: Id<"lenders">;
+  borrowerId?: Id<"borrowers">;
   createdAt: number;
   cumulativeDebits: bigint;
   cumulativeCredits: bigint;
@@ -132,11 +135,16 @@ interface CashLedgerAccount {
 }
 ```
 
+Use `CONTROL` as the top-level family for implementation-specific control
+subaccounts such as accrual, allocation, and settlement controls. Those
+subaccount names should not become separate family enums unless the schema later
+proves that distinction is required.
+
 ### Journal Entries
 
 ```ts
 interface CashLedgerJournalEntry {
-  id: string;
+  id: Id<"cash_ledger_journal_entries">;
   ledger: "cash";
   sequenceNumber: bigint;
   entryType:
@@ -150,19 +158,20 @@ interface CashLedgerJournalEntry {
     | "OBLIGATION_WRITTEN_OFF"
     | "REVERSAL"
     | "CORRECTION";
-  mortgageId?: string;
-  obligationId?: string;
-  attemptId?: string;
-  dispersalEntryId?: string;
-  lenderId?: string;
-  borrowerId?: string;
+  mortgageId?: Id<"mortgages">;
+  obligationId?: Id<"obligations">;
+  attemptId?: Id<"collectionAttempts">;
+  dispersalEntryId?: Id<"dispersalEntries">;
+  lenderId?: Id<"lenders">;
+  borrowerId?: Id<"borrowers">;
   effectiveDate: string;
   timestamp: number;
-  debitAccountId: string;
-  creditAccountId: string;
-  amount: bigint; // cents
+  debitAccountId: Id<"cash_ledger_accounts">;
+  creditAccountId: Id<"cash_ledger_accounts">;
+  amount: number; // safe-integer cents at API boundary; stored as int64/bigint internally
   idempotencyKey: string;
-  causedBy?: string;
+  postingGroupId?: string; // groups multi-entry upstream events like allocations
+  causedBy?: Id<"cash_ledger_journal_entries">;
   source: {
     type: "user" | "system" | "webhook" | "cron";
     actor?: string;
@@ -207,9 +216,13 @@ This journals cash against the obligation instead of only patching
 
 When settled cash is allocated:
 
-- Debit allocation control
-- Credit one or more `LENDER_PAYABLE` accounts
-- Credit `SERVICING_REVENUE` for FairLend's fee share
+- Represent the upstream allocation as multiple balanced 2-sided journal
+  entries.
+- Each entry keeps its own deterministic `idempotencyKey`, and the set shares a
+  common `postingGroupId`.
+- Lender allocation entry: debit allocation control, credit that lender's
+  `LENDER_PAYABLE` account.
+- Fee allocation entry: debit allocation control, credit `SERVICING_REVENUE`.
 
 This is the moment the system can answer "how much do we owe each lender?"
 

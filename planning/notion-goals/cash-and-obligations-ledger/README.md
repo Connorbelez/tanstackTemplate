@@ -14,8 +14,8 @@ Files:
 
 Notes:
 
-- I do not have a Notion write tool in this environment, so this package is saved
-  locally for copy/paste into Notion.
-- The user-referenced file `specs/SPEC-ledger-cash-and-obligations.md` was not
-  present in this worktree at the time of drafting, so this directory includes a
-  fresh version of that spec name.
+- This package is intended to be source material for a Notion Goal page in the
+  FairLend Product Planning System.
+- If another `SPEC-ledger-cash-and-obligations.md` exists elsewhere in the
+  repository, reconcile it with the version in this directory so there is a
+  single canonical spec before implementation begins.
