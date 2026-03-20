@@ -68,7 +68,7 @@ export interface DateRange {
  * allocation.
  */
 export interface ProRataPosition {
-	accountId: Id<"ledger_accounts">;
+	lenderAccountId: Id<"ledger_accounts">;
 	lenderId: Id<"lenders">;
 	units: number;
 }
