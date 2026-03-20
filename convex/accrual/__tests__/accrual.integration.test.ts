@@ -393,4 +393,179 @@ describe("accrual integration", () => {
 			},
 		]);
 	});
+
+	it("60/40 split on 30-day query matches hand-calculated values", async () => {
+		const t = createTestHarness();
+		await initCounter(t);
+
+		const mortgageId = await seedMortgageDoc(t);
+
+		// Issue 10,000 (100%) to lender-a, then transfer 4,000 to lender-b
+		// After transfer: lender-a=6,000 (60%), lender-b=4,000 (40%)
+		await mintAndIssue(t, String(mortgageId), "lender-a");
+		await asAdmin(t).mutation(api.ledger.mutations.transferShares, {
+			mortgageId: String(mortgageId),
+			sellerLenderId: "lender-a",
+			buyerLenderId: "lender-b",
+			amount: 4000,
+			effectiveDate: "2026-01-01",
+			idempotencyKey: "transfer-60-40",
+			source: SYS_SOURCE,
+		});
+
+		const lenderA = asLender(t, "lender-a");
+		const lenderB = asLender(t, "lender-b");
+
+		const resultA = await lenderA.query(SINGLE_LENDER_QUERY, {
+			fromDate: "2026-01-01",
+			lenderId: "lender-a",
+			mortgageId,
+			toDate: "2026-01-30",
+		});
+		const resultB = await lenderB.query(SINGLE_LENDER_QUERY, {
+			fromDate: "2026-01-01",
+			lenderId: "lender-b",
+			mortgageId,
+			toDate: "2026-01-30",
+		});
+
+		// A accrual: 1 day at 100% + 29 days at 60% ≈ $504.11
+		// B accrual: 29 days at 40% (Jan 2-30, since buyer starts day after transfer)
+		// = 0.10 × 0.4 × 100000 × 29 / 365 ≈ $317.81
+		expect(resultA.accruedInterest).toBeCloseTo(504.11, 2);
+		expect(resultB.accruedInterest).toBeCloseTo(317.81, 2);
+
+		// Combined accrual = rate × principal × 30 days / 365 ≈ $821.92
+		const combined = resultA.accruedInterest + resultB.accruedInterest;
+		expect(combined).toBeCloseTo(821.92, 1);
+	});
+
+	it("same query returns identical results (determinism check)", async () => {
+		const t = createTestHarness();
+		await initCounter(t);
+
+		const mortgageId = await seedMortgageDoc(t);
+		await mintAndIssue(t, String(mortgageId), "lender-a");
+		await asAdmin(t).mutation(api.ledger.mutations.transferShares, {
+			mortgageId: String(mortgageId),
+			sellerLenderId: "lender-a",
+			buyerLenderId: "lender-b",
+			amount: 5000,
+			effectiveDate: "2026-01-15",
+			idempotencyKey: "determinism-transfer",
+			source: SYS_SOURCE,
+		});
+
+		const lenderA = asLender(t, "lender-a");
+
+		const [first, second] = await Promise.all([
+			lenderA.query(SINGLE_LENDER_QUERY, {
+				fromDate: "2026-01-01",
+				lenderId: "lender-a",
+				mortgageId,
+				toDate: "2026-01-31",
+			}),
+			lenderA.query(SINGLE_LENDER_QUERY, {
+				fromDate: "2026-01-01",
+				lenderId: "lender-a",
+				mortgageId,
+				toDate: "2026-01-31",
+			}),
+		]);
+
+		// Strict equality — same query same data must be identical
+		expect(first.accruedInterest).toBe(second.accruedInterest);
+		expect(first.periods).toEqual(second.periods);
+		expect(first).toStrictEqual(second);
+	});
+
+	it("historical period query is deterministic after ownership changes", async () => {
+		const t = createTestHarness();
+		await initCounter(t);
+
+		const mortgageId = await seedMortgageDoc(t);
+		await mintAndIssue(t, String(mortgageId), "lender-a");
+
+		// Transfer on Jan 15: lender-a → lender-b
+		await asAdmin(t).mutation(api.ledger.mutations.transferShares, {
+			mortgageId: String(mortgageId),
+			sellerLenderId: "lender-a",
+			buyerLenderId: "lender-b",
+			amount: 5000,
+			effectiveDate: "2026-01-15",
+			idempotencyKey: "historical-transfer-1",
+			source: SYS_SOURCE,
+		});
+
+		// Query the past period (Jan 1-14) — should be deterministic
+		const lenderA = asLender(t, "lender-a");
+
+		const [janQuery1, janQuery2] = await Promise.all([
+			lenderA.query(SINGLE_LENDER_QUERY, {
+				fromDate: "2026-01-01",
+				lenderId: "lender-a",
+				mortgageId,
+				toDate: "2026-01-14",
+			}),
+			lenderA.query(SINGLE_LENDER_QUERY, {
+				fromDate: "2026-01-01",
+				lenderId: "lender-a",
+				mortgageId,
+				toDate: "2026-01-14",
+			}),
+		]);
+
+		// Identical on repeated calls
+		expect(janQuery1).toStrictEqual(janQuery2);
+		expect(janQuery1.accruedInterest).toBeCloseTo(
+			calculatePeriodAccrual(0.1, 1, 100_000, 14),
+			10
+		);
+
+		// Now make another ownership change (lender-b transfers half to lender-c)
+		await asAdmin(t).mutation(api.ledger.mutations.transferShares, {
+			mortgageId: String(mortgageId),
+			sellerLenderId: "lender-b",
+			buyerLenderId: "lender-c",
+			amount: 2500,
+			effectiveDate: "2026-01-20",
+			idempotencyKey: "historical-transfer-2",
+			source: SYS_SOURCE,
+		});
+
+		// Re-query Jan 1-14 — must still return the same deterministic result
+		const [janQuery3, janQuery4] = await Promise.all([
+			lenderA.query(SINGLE_LENDER_QUERY, {
+				fromDate: "2026-01-01",
+				lenderId: "lender-a",
+				mortgageId,
+				toDate: "2026-01-14",
+			}),
+			lenderA.query(SINGLE_LENDER_QUERY, {
+				fromDate: "2026-01-01",
+				lenderId: "lender-a",
+				mortgageId,
+				toDate: "2026-01-14",
+			}),
+		]);
+
+		// Must be identical to the earlier queries despite subsequent ownership changes
+		expect(janQuery3).toStrictEqual(janQuery1);
+		expect(janQuery4).toStrictEqual(janQuery1);
+
+		// Jan 15-19: A was 100% on Jan 15, then 50% from Jan 16 onward
+		// So the query returns two periods: Jan 15 at 100%, Jan 16-19 at 50%
+		// Accrual = 1 day at 100% + 4 days at 50% = 0.10×1.0×100000×1/365 + 0.10×0.5×100000×4/365 ≈ $82.19
+		const jan15to19 = await lenderA.query(SINGLE_LENDER_QUERY, {
+			fromDate: "2026-01-15",
+			lenderId: "lender-a",
+			mortgageId,
+			toDate: "2026-01-19",
+		});
+		expect(jan15to19.periods).toEqual([
+			{ fraction: 1, fromDate: "2026-01-15", toDate: "2026-01-15" },
+			{ fraction: 0.5, fromDate: "2026-01-16", toDate: "2026-01-19" },
+		]);
+		expect(jan15to19.accruedInterest).toBeCloseTo(82.19, 1);
+	});
 });
