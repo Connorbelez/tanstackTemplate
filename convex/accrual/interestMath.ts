@@ -6,7 +6,9 @@ import type { OwnershipPeriod, PositionShare, ProRataPosition } from "./types";
 
 const MS_PER_DAY = 86_400_000;
 const DAYS_PER_YEAR = 365;
-const CENTS_PER_DOLLAR = 100;
+const _CENTS_PER_DOLLAR = 100;
+// Kept as a documented constant for cent/dollar conversions; intentionally unused in this module.
+void _CENTS_PER_DOLLAR;
 
 // ---------------------------------------------------------------------------
 // Date helpers — all inputs/outputs are YYYY-MM-DD strings, UTC-safe
@@ -201,7 +203,7 @@ export function calculateProRataShares(
 		.sort((left, right) => left.index - right.index)
 		.map(({ index: _index, remainder: _remainder, ...share }) => ({
 			amount: share.amount,
-			lenderAccountId: share.accountId,
+			lenderAccountId: share.lenderAccountId,
 			lenderId: share.lenderId,
 			rawAmount: share.rawAmount,
 			units: share.units,

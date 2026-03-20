@@ -31,7 +31,7 @@ function makePosition(
 	overrides: Partial<ProRataPosition> = {}
 ): ProRataPosition {
 	return {
-		accountId: "ledger_account_1" as Id<"ledger_accounts">,
+		lenderAccountId: "ledger_account_1" as Id<"ledger_accounts">,
 		lenderId: "lender_1" as Id<"lenders">,
 		units: 10_000,
 		...overrides,
@@ -429,17 +429,17 @@ describe("calculateProRataShares", () => {
 		const shares = calculateProRataShares(
 			[
 				makePosition({
-					accountId: "ledger_account_1" as Id<"ledger_accounts">,
+					lenderAccountId: "ledger_account_1" as Id<"ledger_accounts">,
 					lenderId: "lender_1" as Id<"lenders">,
 					units: 3333,
 				}),
 				makePosition({
-					accountId: "ledger_account_2" as Id<"ledger_accounts">,
+					lenderAccountId: "ledger_account_2" as Id<"ledger_accounts">,
 					lenderId: "lender_2" as Id<"lenders">,
 					units: 3333,
 				}),
 				makePosition({
-					accountId: "ledger_account_3" as Id<"ledger_accounts">,
+					lenderAccountId: "ledger_account_3" as Id<"ledger_accounts">,
 					lenderId: "lender_3" as Id<"lenders">,
 					units: 3334,
 				}),
@@ -457,12 +457,12 @@ describe("calculateProRataShares", () => {
 		const shares = calculateProRataShares(
 			[
 				makePosition({
-					accountId: "ledger_account_1" as Id<"ledger_accounts">,
+					lenderAccountId: "ledger_account_1" as Id<"ledger_accounts">,
 					lenderId: "lender_1" as Id<"lenders">,
 					units: 5000,
 				}),
 				makePosition({
-					accountId: "ledger_account_2" as Id<"ledger_accounts">,
+					lenderAccountId: "ledger_account_2" as Id<"ledger_accounts">,
 					lenderId: "lender_2" as Id<"lenders">,
 					units: 5000,
 				}),
@@ -480,12 +480,12 @@ describe("calculateProRataShares", () => {
 		const shares = calculateProRataShares(
 			[
 				makePosition({
-					accountId: "ledger_account_1" as Id<"ledger_accounts">,
+					lenderAccountId: "ledger_account_1" as Id<"ledger_accounts">,
 					lenderId: "lender_1" as Id<"lenders">,
 					units: 2000,
 				}),
 				makePosition({
-					accountId: "ledger_account_2" as Id<"ledger_accounts">,
+					lenderAccountId: "ledger_account_2" as Id<"ledger_accounts">,
 					lenderId: "lender_2" as Id<"lenders">,
 					units: 1000,
 				}),
@@ -502,12 +502,12 @@ describe("calculateProRataShares", () => {
 		const shares = calculateProRataShares(
 			[
 				makePosition({
-					accountId: "ledger_account_9" as Id<"ledger_accounts">,
+					lenderAccountId: "ledger_account_9" as Id<"ledger_accounts">,
 					lenderId: "lender_9" as Id<"lenders">,
 					units: 1,
 				}),
 				makePosition({
-					accountId: "ledger_account_8" as Id<"ledger_accounts">,
+					lenderAccountId: "ledger_account_8" as Id<"ledger_accounts">,
 					lenderId: "lender_8" as Id<"lenders">,
 					units: 3,
 				}),
@@ -515,7 +515,7 @@ describe("calculateProRataShares", () => {
 			0.01
 		);
 
-		expect(shares.map((share) => share.accountId)).toEqual([
+		expect(shares.map((share) => share.lenderAccountId)).toEqual([
 			"ledger_account_9",
 			"ledger_account_8",
 		]);
@@ -537,7 +537,7 @@ describe("calculateProRataShares", () => {
 			calculateProRataShares(
 				[
 					makePosition({
-						accountId: "ledger_account_1" as Id<"ledger_accounts">,
+						lenderAccountId: "ledger_account_1" as Id<"ledger_accounts">,
 						units: 0,
 					}),
 				],
