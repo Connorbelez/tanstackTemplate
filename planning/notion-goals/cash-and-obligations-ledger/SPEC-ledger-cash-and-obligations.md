@@ -146,7 +146,7 @@ proves that distinction is required.
 interface CashLedgerJournalEntry {
   id: Id<"cash_ledger_journal_entries">;
   ledger: "cash";
-  sequenceNumber: bigint;
+  sequenceNumber: bigint; // canonical monotonic replay ordering key
   entryType:
     | "OBLIGATION_ACCRUED"
     | "CASH_RECEIVED"
@@ -255,6 +255,13 @@ For a given lender:
 
 Every confirmed external collection and every payout execution must map to at
 least one journal entry with a stable idempotency key.
+
+### Replay Ordering Invariant
+
+Point-in-time reconstruction must use `sequenceNumber` as the canonical replay
+order. Timestamps and effective dates are filter dimensions, but same-timestamp
+entries are replayed in ascending `sequenceNumber` order so all readers produce
+the same balances.
 
 ### Append-Only Correction Invariant
 

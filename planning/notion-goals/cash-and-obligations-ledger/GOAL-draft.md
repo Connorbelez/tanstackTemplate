@@ -149,6 +149,8 @@ every event posts balanced entries in cents and preserves reconstructability.
 - The journal is the source of truth. Derived balances are projections, not
   primary data.
 - Every posted money event is balanced in cents.
+- Replay order is canonical: implementations must use a stable monotonic journal
+  sequence key so same-timestamp entries replay in the same order everywhere.
 - No obligation can show a lower outstanding amount than the net balance of its
   receivable postings.
 - No payout can reduce a lender payable below zero.
@@ -210,7 +212,7 @@ beside it.
 | REQ-2 | Every confirmed collection attempt must create a balanced cash posting | No confirmed collection exists without a matching journal entry |
 | REQ-3 | Lender payables must be attributable | For any lender and timestamp, the system can show why a payable exists and which obligation(s) created it |
 | REQ-4 | Corrections must be append-only | No original journal entry is mutated or deleted; correction links back to source entry |
-| REQ-5 | Point-in-time reconstruction must be deterministic | Same timestamp and same sequence ordering always produce the same balances |
+| REQ-5 | Point-in-time reconstruction must be deterministic | Each posted entry has a stable monotonic ordering key, and replay/query paths use that canonical sequence to break same-timestamp ties and reproduce the same balances |
 | REQ-6 | Money ledger must not weaken ownership ledger guarantees | Ownership posting paths remain bounded to unit movement and existing invariants |
 | REQ-7 | Reconciliation must surface control gaps | Unapplied cash, negative payables, orphaned obligations, and suspense items are queryable |
 
