@@ -463,6 +463,9 @@ export default defineSchema({
 		priorMortgageId: v.optional(v.id("mortgages")),
 		isRenewal: v.optional(v.boolean()),
 
+		// ─── Simulation ───
+		simulationId: v.optional(v.string()),
+
 		// ─── Lifecycle ───
 		fundedAt: v.optional(v.number()),
 		createdAt: v.number(),
@@ -472,7 +475,8 @@ export default defineSchema({
 		.index("by_broker_of_record", ["brokerOfRecordId"])
 		.index("by_assigned_broker", ["assignedBrokerId"])
 		.index("by_maturity", ["maturityDate"])
-		.index("by_prior_mortgage", ["priorMortgageId"]),
+		.index("by_prior_mortgage", ["priorMortgageId"])
+		.index("by_simulation", ["simulationId"]),
 
 	mortgageBorrowers: defineTable({
 		mortgageId: v.id("mortgages"),
@@ -1366,4 +1370,14 @@ export default defineSchema({
 	})
 		.index("by_entity", ["entityId"])
 		.index("by_journal", ["journalEntryId"]),
+
+	// ══════════════════════════════════════════════════════════
+	// SIMULATION DEMO
+	// ══════════════════════════════════════════════════════════
+
+	simulation_clock: defineTable({
+		clockId: v.string(), // singleton key, e.g. "simulation"
+		currentDate: v.string(), // YYYY-MM-DD
+		startedAt: v.number(), // unix timestamp
+	}).index("by_clockId", ["clockId"]),
 });

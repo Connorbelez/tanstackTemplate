@@ -27,6 +27,7 @@ import { Route as DemoWorkosRouteImport } from './routes/demo/workos'
 import { Route as DemoTanstackQueryRouteImport } from './routes/demo/tanstack-query'
 import { Route as DemoTableRouteImport } from './routes/demo/table'
 import { Route as DemoStorybookRouteImport } from './routes/demo/storybook'
+import { Route as DemoSimulationRouteImport } from './routes/demo/simulation'
 import { Route as DemoProdLedgerRouteImport } from './routes/demo/prod-ledger'
 import { Route as DemoConvexWorkflowRouteImport } from './routes/demo/convex-workflow'
 import { Route as DemoConvexTriggersRouteImport } from './routes/demo/convex-triggers'
@@ -174,6 +175,11 @@ const DemoTableRoute = DemoTableRouteImport.update({
 const DemoStorybookRoute = DemoStorybookRouteImport.update({
   id: '/demo/storybook',
   path: '/demo/storybook',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DemoSimulationRoute = DemoSimulationRouteImport.update({
+  id: '/demo/simulation',
+  path: '/demo/simulation',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DemoProdLedgerRoute = DemoProdLedgerRouteImport.update({
@@ -532,6 +538,7 @@ export interface FileRoutesByFullPath {
   '/demo/convex-triggers': typeof DemoConvexTriggersRoute
   '/demo/convex-workflow': typeof DemoConvexWorkflowRoute
   '/demo/prod-ledger': typeof DemoProdLedgerRoute
+  '/demo/simulation': typeof DemoSimulationRoute
   '/demo/storybook': typeof DemoStorybookRoute
   '/demo/table': typeof DemoTableRoute
   '/demo/tanstack-query': typeof DemoTanstackQueryRoute
@@ -605,6 +612,7 @@ export interface FileRoutesByTo {
   '/demo/convex-triggers': typeof DemoConvexTriggersRoute
   '/demo/convex-workflow': typeof DemoConvexWorkflowRoute
   '/demo/prod-ledger': typeof DemoProdLedgerRoute
+  '/demo/simulation': typeof DemoSimulationRoute
   '/demo/storybook': typeof DemoStorybookRoute
   '/demo/table': typeof DemoTableRoute
   '/demo/tanstack-query': typeof DemoTanstackQueryRoute
@@ -684,6 +692,7 @@ export interface FileRoutesById {
   '/demo/convex-triggers': typeof DemoConvexTriggersRoute
   '/demo/convex-workflow': typeof DemoConvexWorkflowRoute
   '/demo/prod-ledger': typeof DemoProdLedgerRoute
+  '/demo/simulation': typeof DemoSimulationRoute
   '/demo/storybook': typeof DemoStorybookRoute
   '/demo/table': typeof DemoTableRoute
   '/demo/tanstack-query': typeof DemoTanstackQueryRoute
@@ -764,6 +773,7 @@ export interface FileRouteTypes {
     | '/demo/convex-triggers'
     | '/demo/convex-workflow'
     | '/demo/prod-ledger'
+    | '/demo/simulation'
     | '/demo/storybook'
     | '/demo/table'
     | '/demo/tanstack-query'
@@ -837,6 +847,7 @@ export interface FileRouteTypes {
     | '/demo/convex-triggers'
     | '/demo/convex-workflow'
     | '/demo/prod-ledger'
+    | '/demo/simulation'
     | '/demo/storybook'
     | '/demo/table'
     | '/demo/tanstack-query'
@@ -915,6 +926,7 @@ export interface FileRouteTypes {
     | '/demo/convex-triggers'
     | '/demo/convex-workflow'
     | '/demo/prod-ledger'
+    | '/demo/simulation'
     | '/demo/storybook'
     | '/demo/table'
     | '/demo/tanstack-query'
@@ -992,6 +1004,7 @@ export interface RootRouteChildren {
   DemoConvexTriggersRoute: typeof DemoConvexTriggersRoute
   DemoConvexWorkflowRoute: typeof DemoConvexWorkflowRoute
   DemoProdLedgerRoute: typeof DemoProdLedgerRoute
+  DemoSimulationRoute: typeof DemoSimulationRoute
   DemoStorybookRoute: typeof DemoStorybookRoute
   DemoTableRoute: typeof DemoTableRoute
   DemoTanstackQueryRoute: typeof DemoTanstackQueryRoute
@@ -1127,6 +1140,13 @@ declare module '@tanstack/react-router' {
       path: '/demo/storybook'
       fullPath: '/demo/storybook'
       preLoaderRoute: typeof DemoStorybookRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/demo/simulation': {
+      id: '/demo/simulation'
+      path: '/demo/simulation'
+      fullPath: '/demo/simulation'
+      preLoaderRoute: typeof DemoSimulationRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/demo/prod-ledger': {
@@ -1714,6 +1734,7 @@ const rootRouteChildren: RootRouteChildren = {
   DemoConvexTriggersRoute: DemoConvexTriggersRoute,
   DemoConvexWorkflowRoute: DemoConvexWorkflowRoute,
   DemoProdLedgerRoute: DemoProdLedgerRoute,
+  DemoSimulationRoute: DemoSimulationRoute,
   DemoStorybookRoute: DemoStorybookRoute,
   DemoTableRoute: DemoTableRoute,
   DemoTanstackQueryRoute: DemoTanstackQueryRoute,

@@ -9,7 +9,7 @@
     "dev": "vite dev",
     "dev:frontend": "vite dev",
     "dev:backend": "convex dev",
-    "dev:e2e": "VITE_E2E=true vite dev --host 127.0.0.1 --port 3100",
+    "dev:e2e": "WORKOS_REDIRECT_URI=http://127.0.0.1:3100/callback VITE_E2E=true vite dev --host 127.0.0.1 --port 3100",
     "build": "vite build",
     "preview": "vite preview",
     "test": "ALLOW_TEST_AUTH_ENDPOINTS=true DISABLE_GT_HASHCHAIN=true vitest run",

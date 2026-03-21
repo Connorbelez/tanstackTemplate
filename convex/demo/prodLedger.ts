@@ -8,48 +8,18 @@ import {
 	getOrCreatePositionAccount,
 	getPositionAccount,
 	getPostedBalance,
-	initializeWorldAccount,
 } from "../ledger/accounts";
 import { TOTAL_SUPPLY } from "../ledger/constants";
 import { postEntry } from "../ledger/postEntry";
-import { initializeSequenceCounterInternal } from "../ledger/sequenceCounter";
 import type { EventSource } from "../ledger/types";
+import {
+	DEMO_LEDGER_MORTGAGES,
+	DEMO_LEDGER_PREFIX,
+	ensureDemoLedgerSeeded,
+	getDemoMortgageLabel,
+} from "./demoLedgerSeed";
 
 // ── Constants ────────────────────────────────────────────────────
-
-const PROD_DEMO_PREFIX = "prod-mtg-";
-const DEMO_SOURCE: EventSource = {
-	type: "system",
-	channel: "prod-demo-seed",
-};
-
-const PROD_DEMO_MORTGAGES = [
-	{
-		mortgageId: "prod-mtg-greenfield",
-		label: "123 Greenfield Rd",
-		allocations: [
-			{ lenderId: "lender-alice", amount: 5000 },
-			{ lenderId: "lender-bob", amount: 3000 },
-			{ lenderId: "lender-charlie", amount: 2000 },
-		],
-	},
-	{
-		mortgageId: "prod-mtg-riverside",
-		label: "456 Riverside Dr",
-		allocations: [
-			{ lenderId: "lender-alice", amount: 4000 },
-			{ lenderId: "lender-dave", amount: 6000 },
-		],
-	},
-	{
-		mortgageId: "prod-mtg-oakwood",
-		label: "789 Oakwood Ave",
-		allocations: [
-			{ lenderId: "lender-bob", amount: 5000 },
-			{ lenderId: "lender-eve", amount: 5000 },
-		],
-	},
-] as const;
 
 // ── Helpers ──────────────────────────────────────────────────────
 
@@ -98,7 +68,7 @@ export const getLedgerOverview = authedQuery
 		// Group by mortgage: find all TREASURY and POSITION accounts with prod-mtg- prefix
 		const mortgageIds = new Set<string>();
 		for (const account of allAccounts) {
-			if (account.mortgageId?.startsWith(PROD_DEMO_PREFIX)) {
+			if (account.mortgageId?.startsWith(DEMO_LEDGER_PREFIX)) {
 				mortgageIds.add(account.mortgageId);
 			}
 		}
@@ -154,10 +124,7 @@ export const getLedgerOverview = authedQuery
 			const valid = total === Number(TOTAL_SUPPLY);
 
 			// Label from seed data
-			const seedDef = PROD_DEMO_MORTGAGES.find(
-				(m) => m.mortgageId === mortgageId
-			);
-			const label = seedDef?.label ?? mortgageId;
+			const label = getDemoMortgageLabel(mortgageId);
 
 			mortgages.push({
 				mortgageId,
@@ -172,7 +139,7 @@ export const getLedgerOverview = authedQuery
 		// Reservation summary
 		const allReservations = await ctx.db.query("ledger_reservations").collect();
 		const prodReservations = allReservations.filter((r) =>
-			r.mortgageId.startsWith(PROD_DEMO_PREFIX)
+			r.mortgageId.startsWith(DEMO_LEDGER_PREFIX)
 		);
 
 		let pending = 0;
@@ -206,7 +173,7 @@ export const getJournalRegister = authedQuery
 		// so we collect all entries for prod-demo mortgages and sort in memory
 		const mortgageIds = new Set<string>();
 		for (const [, info] of accountMap) {
-			if (info.mortgageId?.startsWith(PROD_DEMO_PREFIX)) {
+			if (info.mortgageId?.startsWith(DEMO_LEDGER_PREFIX)) {
 				mortgageIds.add(info.mortgageId);
 			}
 		}
@@ -272,7 +239,7 @@ export const getReservations = authedQuery
 
 		const allReservations = await ctx.db.query("ledger_reservations").collect();
 		const prodReservations = allReservations.filter((r) =>
-			r.mortgageId.startsWith(PROD_DEMO_PREFIX)
+			r.mortgageId.startsWith(DEMO_LEDGER_PREFIX)
 		);
 
 		return prodReservations.map((r) => {
@@ -298,86 +265,17 @@ export const getReservations = authedQuery
 
 export const seedProdData = adminMutation
 	.handler(async (ctx) => {
-		// Idempotency: check if any prod demo TREASURY accounts exist
-		for (const mortgage of PROD_DEMO_MORTGAGES) {
-			const existing = await ctx.db
-				.query("ledger_accounts")
-				.withIndex("by_type_and_mortgage", (q) =>
-					q.eq("type", "TREASURY").eq("mortgageId", mortgage.mortgageId)
-				)
-				.first();
-			if (existing) {
-				return {
-					seeded: false,
-					message: "Prod demo data already exists. Clean up first.",
-				};
-			}
-		}
-
-		// Bootstrap: initialize sequence counter + WORLD account
-		await initializeSequenceCounterInternal(ctx);
-		const worldAccount = await initializeWorldAccount(ctx);
-		const effectiveDate = todayISO();
-
-		for (const mortgage of PROD_DEMO_MORTGAGES) {
-			// Create TREASURY account
-			const treasuryId = await ctx.db.insert("ledger_accounts", {
-				type: "TREASURY",
-				mortgageId: mortgage.mortgageId,
-				cumulativeDebits: 0n,
-				cumulativeCredits: 0n,
-				pendingDebits: 0n,
-				pendingCredits: 0n,
-				createdAt: Date.now(),
-			});
-
-			// MORTGAGE_MINTED via real postEntry pipeline
-			const mintEntry = await postEntry(ctx, {
-				entryType: "MORTGAGE_MINTED",
-				mortgageId: mortgage.mortgageId,
-				debitAccountId: treasuryId,
-				creditAccountId: worldAccount._id,
-				amount: Number(TOTAL_SUPPLY),
-				effectiveDate,
-				idempotencyKey: `prod-demo-mint-${mortgage.mortgageId}`,
-				source: DEMO_SOURCE,
-				metadata: { demo: true, source: "prod-seed" },
-			});
-
-			// Issue shares to each lender via real postEntry pipeline
-			for (const allocation of mortgage.allocations) {
-				const position = await getOrCreatePositionAccount(
-					ctx,
-					mortgage.mortgageId,
-					allocation.lenderId
-				);
-
-				await postEntry(ctx, {
-					entryType: "SHARES_ISSUED",
-					mortgageId: mortgage.mortgageId,
-					debitAccountId: position._id,
-					creditAccountId: treasuryId,
-					amount: allocation.amount,
-					effectiveDate,
-					idempotencyKey: `prod-demo-issue-${mortgage.mortgageId}-${allocation.lenderId}`,
-					source: DEMO_SOURCE,
-					causedBy: mintEntry._id,
-					metadata: { demo: true, source: "prod-seed" },
-				});
-			}
-
-			// Belt-and-suspenders: verify treasury balance = 0
-			const treasuryDoc = await ctx.db.get(treasuryId);
-			if (treasuryDoc && getPostedBalance(treasuryDoc) !== 0n) {
-				throw new Error(
-					`TREASURY balance for ${mortgage.mortgageId} is ${getPostedBalance(treasuryDoc)}, expected 0 after full allocation`
-				);
-			}
+		const result = await ensureDemoLedgerSeeded(ctx);
+		if (!result.seeded) {
+			return {
+				seeded: false,
+				message: "Prod demo data already exists. Clean up first.",
+			};
 		}
 
 		return {
 			seeded: true,
-			message: `Seeded ${PROD_DEMO_MORTGAGES.length} prod demo mortgages with lenders.`,
+			message: `Seeded ${DEMO_LEDGER_MORTGAGES.length} prod demo mortgages with lenders.`,
 		};
 	})
 	.public();
@@ -467,7 +365,7 @@ export const cleanupProdData = adminMutation
 		const demoAccountIds: Id<"ledger_accounts">[] = [];
 
 		for (const account of allAccounts) {
-			if (account.mortgageId?.startsWith(PROD_DEMO_PREFIX)) {
+			if (account.mortgageId?.startsWith(DEMO_LEDGER_PREFIX)) {
 				demoMortgageIds.add(account.mortgageId);
 				demoAccountIds.push(account._id);
 			}
@@ -491,7 +389,8 @@ export const cleanupProdData = adminMutation
 		const worldAccount = allAccounts.find((a) => a.type === "WORLD");
 		if (worldAccount) {
 			const hasRemainingMortgages = allAccounts.some(
-				(a) => a.type !== "WORLD" && !a.mortgageId?.startsWith(PROD_DEMO_PREFIX)
+				(a) =>
+					a.type !== "WORLD" && !a.mortgageId?.startsWith(DEMO_LEDGER_PREFIX)
 			);
 			await reconcileWorldAccount(ctx, worldAccount, hasRemainingMortgages);
 		}
