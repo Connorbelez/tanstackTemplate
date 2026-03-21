@@ -1,5 +1,7 @@
 import { v } from "convex/values";
+import type { Id } from "../../_generated/dataModel";
 import { internalMutation } from "../../_generated/server";
+import { postCashReceiptForObligation } from "../../payments/cashLedger/integrations";
 import { effectPayloadValidator } from "../validators";
 
 const obligationPaymentValidator = {
@@ -54,6 +56,20 @@ export const applyPayment = internalMutation({
 		}
 
 		await ctx.db.patch(args.entityId, patch);
+
+		// Preserve traceability: pass attemptId from PAYMENT_APPLIED payload
+		// so cash receipts link back to the originating collection attempt.
+		const attemptId = args.payload?.attemptId as
+			| Id<"collectionAttempts">
+			| undefined;
+
+		await postCashReceiptForObligation(ctx, {
+			obligationId: args.entityId,
+			amount,
+			idempotencyKey: `cash-ledger:cash-received:${args.journalEntryId}`,
+			attemptId,
+			source: args.source,
+		});
 
 		console.info(
 			`[applyPayment] obligation=${args.entityId}: amountSettled ${obligation.amountSettled} -> ${updatedAmountSettled} (payment=${amount})`

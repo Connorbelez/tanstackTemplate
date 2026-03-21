@@ -214,7 +214,7 @@ This makes the receivable explicit and journal-backed.
 
 When a collection attempt confirms:
 
-- Debit `CASH_CLEARING` or `TRUST_CASH`
+- Debit `TRUST_CASH` in phase 1
 - Credit `BORROWER_RECEIVABLE`
 
 This journals cash against the obligation instead of only patching
@@ -329,7 +329,8 @@ No money journal entry is ever mutated or deleted after posting.
 
 - Journal obligation receivables
 - Journal confirmed cash receipts
-- Keep `amountSettled` as a convenience projection if needed
+- Keep `amountSettled` as a convenience projection while the journal remains
+  authoritative
 
 ### Phase 3: Dispersal and Payables
 
@@ -351,13 +352,15 @@ No money journal entry is ever mutated or deleted after posting.
 - Ownership ledger logic remains unchanged except for integrations that publish
   or consume IDs
 
-## Open Questions
+## Resolved Decisions (ENG-179)
 
-1. Does FairLend want payable recognition at accrual time, settlement time, or
-   both?
-2. How should principal-return flows be represented relative to lender payables?
-3. Is `UNAPPLIED_CASH` necessary in phase 1, or can all confirmed cash be
-   matched immediately?
-4. Which external account abstractions exist before VoPay is integrated?
-5. Which ledger states must be visible in the first admin UI versus available
-   only via queries and exports?
+1. Payable recognition happens at confirmed settlement/allocation time, not at
+   accrual time.
+2. Principal repayment stays in the same cash ledger through the existing
+   `principal_repayment` obligation type.
+3. `TRUST_CASH` is the only canonical internal cash account required in phase 1.
+   `CASH_CLEARING` remains available for later provider-bridge work.
+4. `amountSettled` remains a patched projection for read performance. Journal
+   entries are the source of truth, and reconciliation detects drift.
+5. The implementation starts as a dedicated `convex/payments/cashLedger/*`
+   module. Shared posting-kernel extraction is deferred.

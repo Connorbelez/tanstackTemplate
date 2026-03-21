@@ -118,8 +118,8 @@ Use a dedicated chart of accounts for cents, not units.
 | Family | Example Purpose |
 | --- | --- |
 | `BORROWER_RECEIVABLE` | Amount owed by borrower for a specific obligation or mortgage |
-| `CASH_CLEARING` | External cash in transit before final allocation |
-| `TRUST_CASH` | Cash held in platform trust or settlement accounts |
+| `CASH_CLEARING` | Reserved for later bank/provider bridge work, not required in phase 1 |
+| `TRUST_CASH` | Canonical internal cash account for phase 1 collections and payouts |
 | `UNAPPLIED_CASH` | Cash received but not yet matched to obligations |
 | `LENDER_PAYABLE` | Amount owed to a lender after collection/dispersal |
 | `SERVICING_REVENUE` | FairLend fee revenue |
@@ -132,7 +132,7 @@ Use a dedicated chart of accounts for cents, not units.
 | Event Type | Debit | Credit |
 | --- | --- | --- |
 | `OBLIGATION_ACCRUED` | `BORROWER_RECEIVABLE` | `CONTROL` |
-| `CASH_RECEIVED` | `CASH_CLEARING` or `TRUST_CASH` | `BORROWER_RECEIVABLE` |
+| `CASH_RECEIVED` | `TRUST_CASH` in phase 1 (`CASH_CLEARING` only when external bridge work lands) | `BORROWER_RECEIVABLE` |
 | `CASH_APPLIED` | `UNAPPLIED_CASH` or `CONTROL` | `BORROWER_RECEIVABLE` or `CONTROL` |
 | `SERVICING_FEE_RECOGNIZED` | `CONTROL` | `SERVICING_REVENUE` |
 | `LENDER_PAYABLE_CREATED` | `CONTROL` | `LENDER_PAYABLE` |
@@ -247,18 +247,18 @@ Given a mortgage, obligation, lender, or date range, FairLend can export the
 full money-side journal and derived balances without depending on mutable
 read-model state.
 
-## Open Questions
+## Resolved Decisions (ENG-179)
 
-1. Should lender payable recognition happen at obligation accrual time, at cash
-   settlement time, or in two stages?
-2. Should principal repayment live in this same cash ledger or in a dedicated
-   capital-return flow that still journals through the same tables?
-3. What is the canonical cash account before VoPay is integrated: trust cash,
-   clearing, or both?
-4. Should `amountSettled` remain a convenience projection, or should it become a
-   fully derived field from the money ledger?
-5. Should the first implementation use a dedicated `convex/cashLedger/*` module,
-   or extract a shared posting kernel after both ledgers exist?
+1. Recognize lender payables only at confirmed cash settlement/allocation time,
+   never at obligation accrual time.
+2. Keep `principal_repayment` in this same cash ledger as an obligation type,
+   not a separate capital-return subsystem.
+3. Use `TRUST_CASH` as the canonical internal cash account in phase 1. Reserve
+   `CASH_CLEARING` for later external transfer-bridge work.
+4. Keep `obligations.amountSettled` as a read-optimized projection. The cash
+   journal is authoritative, and reconciliation must detect drift.
+5. Build a dedicated `convex/payments/cashLedger/*` module now. Defer any
+   shared posting-kernel extraction until both ledgers have stable duplication.
 
 ## Definition of Done
 
@@ -270,3 +270,4 @@ read-model state.
   dispersal data to journal-backed money state.
 - The goal clearly states that the current ownership ledger remains the unit
   ledger, while the new goal owns the cash-side ledger.
+- Phase 1 uses `TRUST_CASH` as the only required internal cash account.

@@ -21,6 +21,7 @@ This design is intentionally grounded in the current codebase, not just the prod
 - Dispersal creation already exists in [convex/dispersal/createDispersalEntries.ts](../../convex/dispersal/createDispersalEntries.ts).
 - Deal closing already has a governed state machine in [convex/engine/machines/deal.machine.ts](../../convex/engine/machines/deal.machine.ts), and ownership reroute side effects in [convex/engine/effects/dealClosingPayments.ts](../../convex/engine/effects/dealClosingPayments.ts).
 - Ledger writes already flow through a single validated write path, `postEntry`, in [convex/ledger/postEntry.ts](../../convex/ledger/postEntry.ts).
+- A cash ledger distinct from the ownership ledger now exists in [convex/payments/cashLedger/](../../convex/payments/cashLedger/), with its own `postEntry`, account model, reconciliation module, and `cash_ledger_*` schema tables (introduced in ENG-179).
 
 ### What does not exist yet
 
@@ -28,7 +29,6 @@ This design is intentionally grounded in the current codebase, not just the prod
 - A provider registry keyed by transfer type plus direction.
 - Bank account validation / mandate lifecycle as a first-class prerequisite for PAD/EFT.
 - A real provider webhook ingestion layer for transfer settlement.
-- A cash ledger distinct from the current ownership ledger.
 - A multi-leg deal closing transfer orchestrator that moves actual cash, not just future payout routing.
 
 ### Important architectural truth
@@ -328,17 +328,18 @@ The current implementation updates future payment allocation after closing, but 
 Current integration:
 
 - `postEntry` in [convex/ledger/postEntry.ts](../../convex/ledger/postEntry.ts) is the single validated write path for the ownership ledger.
-- `ledger_journal_entries` represent ownership ledger entries, not trust cash ledger entries, per [convex/schema.ts](../../convex/schema.ts:953).
+- `ledger_journal_entries` represent ownership ledger entries, not trust cash ledger entries, per [convex/schema.ts](../../convex/schema.ts).
+- A dedicated cash ledger now exists in [convex/payments/cashLedger/](../../convex/payments/cashLedger/) (introduced in ENG-179), with its own `postEntry` write path, double-entry account model, and `cash_ledger_journal_entries` table.
 
 Target integration:
 
-- Do not overload the ownership ledger with trust-cash semantics.
-- Introduce a dedicated cash ledger or at minimum a new cash-journal bounded context for:
+- Do not overload the ownership ledger with trust-cash semantics. The cash ledger introduced in ENG-179 provides the separate bounded context for this.
+- Use the cash ledger for:
   - borrower cash received
   - lender payouts sent
   - seller payouts sent
   - reversals / returns / rejects
-- If the product needs one bridge in phase 1, implement a `cashLedgerBridge` module that maps confirmed transfers into cash journal entries, while leaving the ownership ledger unchanged.
+- Map confirmed transfers into cash journal entries via the cash ledger's `postEntry`, while leaving the ownership ledger unchanged.
 
 This distinction is critical. Ownership units and trust cash are not the same thing.
 
@@ -472,10 +473,16 @@ Before any outbound initiation, the system must verify sufficient available trus
 - `convex/payments/bankAccounts/queries.ts`
 - `convex/payments/bankAccounts/validation.ts`
 
-### Cash ledger bridge
+### Cash ledger (implemented in ENG-179)
 
-- `convex/payments/cashLedger/postTransferSettlement.ts`
-- `convex/payments/cashLedger/postTransferReversal.ts`
+- `convex/payments/cashLedger/postEntry.ts` — validated write path for cash journal entries
+- `convex/payments/cashLedger/accounts.ts` — cash ledger account model
+- `convex/payments/cashLedger/mutations.ts` — cash ledger mutations
+- `convex/payments/cashLedger/queries.ts` — cash ledger queries
+- `convex/payments/cashLedger/reconciliation.ts` — reconciliation between cash ledger and obligations
+- `convex/payments/cashLedger/types.ts` — cash ledger type definitions
+- `convex/payments/cashLedger/integrations.ts` — integration bridge for transfer settlement posting
+- `convex/payments/cashLedger/sequenceCounter.ts` — monotonic sequence for journal entries
 
 ## Migration Plan
 
@@ -505,10 +512,11 @@ Before any outbound initiation, the system must verify sufficient available trus
 - Replace current `FUNDS_RECEIVED` shortcut with buyer->trust and trust->seller transfer orchestration.
 - Gate ownership reroute and reservation commit on transfer confirmation.
 
-### Phase 5: Introduce dedicated cash ledger if not already done
+### Phase 5: Extend cash ledger for full transfer settlement posting
 
-- Post confirmed and reversed transfers into cash journal entries.
-- Reconcile trust cash, provider events, and outbound payouts against that ledger.
+- The dedicated cash ledger was introduced in ENG-179 with `cash_ledger_accounts`, `cash_ledger_journal_entries`, and related tables.
+- Post confirmed and reversed transfers into cash journal entries via the existing `postEntry` write path.
+- Reconcile trust cash, provider events, and outbound payouts against the cash ledger.
 
 ## Testing Strategy
 
@@ -569,7 +577,7 @@ Before any outbound initiation, the system must verify sufficient available trus
 - Whether lender monthly disbursement is executed per `dispersalEntry`, per lender/date batch, or per payout cycle aggregate.
 - Whether servicing fee is deducted from each settled payment, from interest only, or from a separate trust-cash fee path.
 - Whether principal repayment to investors flows through the same payout rail as interest distributions or through a distinct principal-return domain.
-- Whether the first version of the cash ledger is a real new bounded context or a lighter event journal bridge.
+- Whether the cash ledger introduced in ENG-179 is sufficient as the long-term bounded context or needs further extension beyond the current account model and reconciliation capabilities.
 - Whether collection attempts remain as a user-visible domain entity after transfer requests are introduced.
 
 ## Bottom Line

@@ -2,6 +2,7 @@ import { ConvexError, v } from "convex/values";
 import { internalMutation } from "../_generated/server";
 import { auditLog } from "../auditLog";
 import { appendAuditJournalEntry } from "../engine/auditJournal";
+import { postObligationAccrued } from "../payments/cashLedger/integrations";
 
 /**
  * Valid initial states for obligation creation.
@@ -126,6 +127,19 @@ export const createObligation = internalMutation({
 				},
 			},
 		});
+
+		// Only accrue the obligation immediately if it is already due at creation time.
+		// Future-dated "upcoming" obligations will be accrued later when they become due.
+		if (args.dueDate <= createdAt) {
+			await postObligationAccrued(ctx, {
+				obligationId,
+				source: {
+					channel: "scheduler",
+					actorId: "system",
+					actorType: "system",
+				},
+			});
+		}
 
 		return obligationId;
 	},

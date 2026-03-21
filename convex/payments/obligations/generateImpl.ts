@@ -5,6 +5,7 @@ import {
 	type PaymentFrequency,
 	getPeriodsPerYear,
 } from "../../mortgages/paymentFrequency";
+import { postObligationAccrued } from "../cashLedger/integrations";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -13,6 +14,12 @@ import {
 export const GRACE_PERIOD_DAYS = 15;
 
 export const MS_PER_DAY = 86_400_000;
+
+const CASH_LEDGER_SYSTEM_SOURCE = {
+	channel: "scheduler" as const,
+	actorId: "system",
+	actorType: "system" as const,
+};
 
 // ---------------------------------------------------------------------------
 // Date helpers
@@ -123,6 +130,16 @@ export async function generateObligationsImpl(
 		await ctx.db.patch(id, {
 			machineContext: { obligationId: id, paymentsApplied: 0 },
 		});
+
+		// Only post accruals for obligations that are due (or past due) as of now.
+		// Future-dated upcoming obligations will be accrued later when they
+		// transition to due via the BECAME_DUE transition.
+		if (currentTimestamp <= now) {
+			await postObligationAccrued(ctx, {
+				obligationId: id,
+				source: CASH_LEDGER_SYSTEM_SOURCE,
+			});
+		}
 
 		obligations.push(id);
 		index++;
