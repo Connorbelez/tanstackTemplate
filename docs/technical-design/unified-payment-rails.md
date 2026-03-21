@@ -567,7 +567,7 @@ Payment operations must respect the three-layer auth model:
 
 | # | Category | Foot Gun | Severity | Required Action |
 |---|----------|----------|----------|-----------------|
-| O1 | Crons | Financial crons were previously scheduled for the same 06:00 UTC window | N/A | Resolved: obligations run at 06:00 UTC; reconciliation runs at 07:00 UTC |
+| O1 | Crons | Financial crons were previously scheduled for the same early-morning UTC window | N/A | Resolved: obligations run at 06:00 UTC; reconciliation runs at 07:00 UTC |
 | O2 | Batch size | `BATCH_SIZE = 100` may be too small at scale | 🟡 Medium | Monitor batch overflow logging; increase or add second daily run |
 | O3 | Timezone | Obligations become due at UTC midnight, not borrower's local midnight | 🟡 Medium | Document; consider per-mortgage timezone field |
 | O4 | Idempotency | `idempotencyKey` format varies across tables | 🟡 Medium | Standardize format: `{entity}:{id}:{operation}:{date}` |
