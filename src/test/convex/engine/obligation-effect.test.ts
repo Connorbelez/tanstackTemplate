@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { internal } from "../../../../convex/_generated/api";
 import type { Doc, Id } from "../../../../convex/_generated/dataModel";
-import { obligationEffectTestHelpers } from "../../../../convex/engine/effects/obligation";
+import {
+	emitObligationSettled,
+	obligationEffectTestHelpers,
+} from "../../../../convex/engine/effects/obligation";
 import { executeTransition } from "../../../../convex/engine/transition";
 import type { CommandSource } from "../../../../convex/engine/types";
 
@@ -8,7 +12,19 @@ vi.mock("../../../../convex/engine/transition", () => ({
 	executeTransition: vi.fn(),
 }));
 
-const mockedExecuteTransition = vi.mocked(executeTransition);
+const mockedExecuteTransition = executeTransition as unknown as ReturnType<
+	typeof vi.fn
+>;
+
+interface ObligationEffectHandler {
+	_handler: (
+		ctx: unknown,
+		args: ReturnType<typeof createArgs>
+	) => Promise<unknown>;
+}
+
+const emitObligationSettledHandler =
+	emitObligationSettled as unknown as ObligationEffectHandler;
 
 function createObligation(
 	overrides?: Partial<Doc<"obligations">>
@@ -148,6 +164,49 @@ describe("obligation effect helpers", () => {
 		});
 		expect(warnSpy).toHaveBeenCalledWith(
 			expect.stringContaining("Skipping OBLIGATION_OVERDUE")
+		);
+	});
+
+	it("schedules dispersal using the full obligation amount, not the last payment amount", async () => {
+		const obligation = createObligation({
+			amount: 3_000,
+			amountSettled: 1_000,
+			settledAt: Date.UTC(2026, 2, 20, 12, 0, 0),
+		});
+		const args = createArgs({
+			payload: {
+				amount: 500,
+			},
+		});
+		const runAfter = vi.fn().mockResolvedValue(undefined);
+		const ctx = {
+			db: {
+				get: vi.fn().mockResolvedValue(obligation),
+			},
+			scheduler: {
+				runAfter,
+			},
+		};
+
+		mockedExecuteTransition.mockResolvedValueOnce({
+			success: true,
+			previousState: "delinquent",
+			newState: "active",
+		});
+
+		await emitObligationSettledHandler._handler(ctx, args);
+
+		expect(runAfter).toHaveBeenCalledWith(
+			0,
+			internal.dispersal.createDispersalEntries.createDispersalEntries,
+			expect.objectContaining({
+				mortgageId: obligation.mortgageId,
+				obligationId: args.entityId,
+				settledAmount: obligation.amount,
+				settledDate: "2026-03-20",
+				idempotencyKey: `dispersal:${args.entityId}`,
+				source: args.source,
+			})
 		);
 	});
 });

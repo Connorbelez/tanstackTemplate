@@ -171,12 +171,7 @@ export const emitObligationSettled = internalMutation({
 			? obligation.settledAt
 			: Date.now();
 		const settledDate = toIsoDateString(settledAt);
-		let settledAmount = obligation.amount;
-		if (isFiniteNumber(args.payload?.amount)) {
-			settledAmount = args.payload.amount;
-		} else if (obligation.amountSettled > 0) {
-			settledAmount = obligation.amountSettled;
-		}
+		const settledAmount = obligation.amount;
 
 		// Schedule dispersal entry creation (WS6 / ENG-68)
 		await ctx.scheduler.runAfter(
