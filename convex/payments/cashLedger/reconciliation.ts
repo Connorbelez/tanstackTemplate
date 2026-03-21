@@ -1,5 +1,6 @@
+import { v } from "convex/values";
 import type { Doc, Id } from "../../_generated/dataModel";
-import type { QueryCtx } from "../../_generated/server";
+import { internalQuery, type QueryCtx } from "../../_generated/server";
 
 async function loadObligationEntries(
 	ctx: QueryCtx,
@@ -63,3 +64,18 @@ export async function reconcileObligationSettlementProjectionInternal(
 		hasDrift: driftAmount !== 0n,
 	};
 }
+
+/**
+ * Internal query wrapper for getJournalSettledAmountForObligation.
+ * Returns a number (not bigint) for use in actions via ctx.runQuery.
+ */
+export const getJournalSettledAmountForObligationInternal = internalQuery({
+	args: { obligationId: v.id("obligations") },
+	handler: async (ctx, { obligationId }) => {
+		const amount = await getJournalSettledAmountForObligation(
+			ctx,
+			obligationId
+		);
+		return Number(amount);
+	},
+});

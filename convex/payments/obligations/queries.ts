@@ -79,6 +79,21 @@ export const getOverdue = internalQuery({
 });
 
 /**
+ * Get all obligations with status "settled".
+ * Used by the dispersal self-healing cron to find candidates.
+ * TODO: paginate at scale — pre-launch volume is small.
+ */
+export const getSettledObligations = internalQuery({
+	args: {},
+	handler: async (ctx) => {
+		return await ctx.db
+			.query("obligations")
+			.withIndex("by_status", (q) => q.eq("status", "settled"))
+			.collect();
+	},
+});
+
+/**
  * Find a late_fee obligation derived from a given source obligation.
  * No dedicated index exists — uses a filtered query over all obligations.
  */

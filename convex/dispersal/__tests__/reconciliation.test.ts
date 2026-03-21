@@ -17,6 +17,115 @@ import { createDispersalEntries } from "../createDispersalEntries";
 
 const modules = import.meta.glob("/convex/**/*.ts");
 
+// ---------------------------------------------------------------------------
+// Result type definitions for makeFunctionReference generics
+// ---------------------------------------------------------------------------
+
+interface DispersalSummaryByLender {
+	entryCount: number;
+	lenderId: Id<"lenders">;
+	totalAmount: number;
+}
+
+interface DispersalHistoryEntry {
+	amount: number;
+	calculationDetails: {
+		settledAmount: number;
+		servicingFee: number;
+		distributableAmount: number;
+		ownershipUnits: number;
+		totalUnits: number;
+		ownershipFraction: number;
+		rawAmount: number;
+		roundedAmount: number;
+	};
+	createdAt: number;
+	dispersalDate: string;
+	id: Id<"dispersalEntries">;
+	idempotencyKey: string;
+	lenderAccountId: Id<"ledger_accounts">;
+	lenderId: Id<"lenders">;
+	mortgageId: Id<"mortgages">;
+	obligationId: Id<"obligations">;
+	runningTotal: number;
+	servicingFeeDeducted: number;
+	status: "pending";
+}
+
+interface UndisbursedBalanceResult {
+	entryCount: number;
+	lenderId: Id<"lenders">;
+	undisbursedBalance: number;
+}
+
+interface DispersalHistoryResult {
+	entries: DispersalHistoryEntry[];
+	entryCount: number;
+	lenderId: Id<"lenders">;
+	pageTotal: number;
+	total: number;
+}
+
+interface DispersalsByMortgageEntry {
+	_id: Id<"dispersalEntries">;
+	amount: number;
+	calculationDetails: {
+		settledAmount: number;
+		servicingFee: number;
+		distributableAmount: number;
+		ownershipUnits: number;
+		totalUnits: number;
+		ownershipFraction: number;
+		rawAmount: number;
+		roundedAmount: number;
+	};
+	createdAt: number;
+	dispersalDate: string;
+	idempotencyKey: string;
+	lenderAccountId: Id<"ledger_accounts">;
+	lenderId: Id<"lenders">;
+	mortgageId: Id<"mortgages">;
+	obligationId: Id<"obligations">;
+	servicingFeeDeducted: number;
+	status: "pending";
+}
+
+interface DispersalsByMortgageResult {
+	byLender: DispersalSummaryByLender[];
+	entries: DispersalsByMortgageEntry[];
+	entryCount: number;
+	mortgageId: Id<"mortgages">;
+	pageTotal: number;
+	total: number;
+}
+
+interface DispersalsByObligationResult {
+	byLender: DispersalSummaryByLender[];
+	entries: DispersalsByMortgageEntry[];
+	entryCount: number;
+	obligationId: Id<"obligations">;
+	total: number;
+}
+
+interface ServicingFeeEntry {
+	_id: Id<"servicingFeeEntries">;
+	amount: number;
+	annualRate: number;
+	createdAt: number;
+	date: string;
+	mortgageId: Id<"mortgages">;
+	obligationId: Id<"obligations">;
+	principalBalance: number;
+}
+
+interface ServicingFeeHistoryResult {
+	entries: ServicingFeeEntry[];
+	entryCount: number;
+	mortgageId: Id<"mortgages">;
+	pageTotalFees: number;
+	totalFees: number;
+}
+
 const DEFAULT_SOURCE = { type: "system" as const, channel: "test" } as const;
 
 interface CreateDispersalEntriesHandler {

@@ -231,7 +231,8 @@ export const postCashEntry = internalMutation({
 			v.literal("OBLIGATION_WAIVED"),
 			v.literal("OBLIGATION_WRITTEN_OFF"),
 			v.literal("REVERSAL"),
-			v.literal("CORRECTION")
+			v.literal("CORRECTION"),
+			v.literal("SUSPENSE_ESCALATED")
 		),
 		effectiveDate: v.string(),
 		amount: v.number(),

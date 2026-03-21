@@ -8,9 +8,11 @@ const crons = cronJobs();
 
 // Daily reconciliation: verify entity status matches journal entries.
 // Discrepancies are logged as P0 errors.
+// Runs at 07:00 UTC (one hour after obligation transitions) to avoid
+// reading mid-transition data — see Tech Design §7.1.
 crons.daily(
 	"daily reconciliation check",
-	{ hourUTC: 6, minuteUTC: 0 },
+	{ hourUTC: 7, minuteUTC: 0 },
 	internal.engine.reconciliationAction.dailyReconciliation
 );
 
@@ -20,6 +22,15 @@ crons.daily(
 	"daily obligation transitions",
 	{ hourUTC: 6, minuteUTC: 0 },
 	internal.payments.obligations.crons.processObligationTransitions
+);
+
+// Dispersal self-healing: detect settled obligations missing dispersal entries.
+// Runs every 15 minutes to catch scheduler.runAfter(0) failures quickly.
+// See Tech Design §6.4 and Integration Foot Gun I1.
+crons.interval(
+	"dispersal self-healing",
+	{ minutes: 15 },
+	internal.dispersal.selfHealing.dispersalSelfHealingCron
 );
 
 export default crons;

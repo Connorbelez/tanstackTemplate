@@ -14,7 +14,7 @@ export function isPaymentFrequency(value: string): value is PaymentFrequency {
 }
 
 export function getPeriodsPerYear(
-	paymentFrequency: PaymentFrequency | string,
+	paymentFrequency: PaymentFrequency | string
 ): number {
 	if (!isPaymentFrequency(paymentFrequency)) {
 		throw new Error(`Unknown payment frequency: ${paymentFrequency}`);
