@@ -10,7 +10,7 @@ const crons = cronJobs();
 // Discrepancies are logged as P0 errors.
 crons.daily(
 	"daily reconciliation check",
-	{ hourUTC: 6, minuteUTC: 0 },
+	{ hourUTC: 7, minuteUTC: 0 },
 	internal.engine.reconciliationAction.dailyReconciliation
 );
 

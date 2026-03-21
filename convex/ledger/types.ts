@@ -38,7 +38,6 @@ export interface EventSource {
 // ── Entry-Type-to-Account-Type Mapping ──────────────────────────────
 // Defines the required (debitAccountType, creditAccountType) for each
 // entry type. Used in the TYPE_CHECK step of the postEntry pipeline.
-// TODO: Wire into postEntry validation pipeline and remove this TODO once consumed.
 //
 // Convention (D-7): debitAccountId = account RECEIVING units,
 //                   creditAccountId = account GIVING units.

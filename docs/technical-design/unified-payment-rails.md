@@ -416,9 +416,9 @@ The double-entry ledger enforces:
 - Sequence numbers are monotonically increasing
 - Idempotency keys prevent duplicate entries
 
-**Missing enforcement (foot gun):**
-- The `ENTRY_TYPE_ACCOUNT_MAP` validation is defined in `types.ts` with a `TODO: Wire into postEntry validation pipeline`. This means the type-check step is NOT yet enforced — a `SHARES_ISSUED` entry could theoretically debit a `WORLD` account instead of a `POSITION` account.
-- **Recommendation:** Wire `ENTRY_TYPE_ACCOUNT_MAP` into `postEntry` before adding real payment rails.
+**Current enforcement:**
+- `ENTRY_TYPE_ACCOUNT_MAP` is enforced in `convex/ledger/postEntry.ts` via the `typeCheck()` step, so invalid debit/credit account-type pairs are rejected before journal entries are posted.
+- The stale TODO in `convex/ledger/types.ts` was removed in ENG-155 to keep the code comments aligned with the actual validation pipeline.
 
 ### 4.5 Date/Time Consistency
 
@@ -544,7 +544,7 @@ Payment operations must respect the three-layer auth model:
 
 | # | Category | Foot Gun | Severity | Current Status | Required Action |
 |---|----------|----------|----------|---------------|-----------------|
-| F1 | Ledger | `ENTRY_TYPE_ACCOUNT_MAP` validation not wired into `postEntry` | 🔴 Critical | TODO in code | Wire validation before real money flows |
+| F1 | Ledger | Stale audit note claimed `ENTRY_TYPE_ACCOUNT_MAP` was not wired into `postEntry` | N/A | Resolved: validation already enforced in `typeCheck()` | Keep docs/comments aligned with implementation |
 | F2 | Servicing Fee | Fixed `/12` divisor ignores payment frequency | 🟡 Medium | Bug | Fix formula to use `paymentsPerYear` |
 | F3 | Accrual | Static principal balance doesn't decrease with principal repayments | 🟡 Medium | Design gap | Add point-in-time principal lookup |
 | F4 | Dispersal | No mechanism to reverse dispersals on payment reversal | 🔴 Critical | Not implemented | Design reversal flow before going live |
@@ -567,7 +567,7 @@ Payment operations must respect the three-layer auth model:
 
 | # | Category | Foot Gun | Severity | Required Action |
 |---|----------|----------|----------|-----------------|
-| O1 | Crons | Both financial crons at 06:00 UTC — obligation transitions AND reconciliation | 🟡 Medium | Stagger: obligations at 06:00, reconciliation at 07:00 |
+| O1 | Crons | Financial crons were previously scheduled for the same early-morning UTC window | N/A | Resolved: obligations run at 06:00 UTC; reconciliation runs at 07:00 UTC |
 | O2 | Batch size | `BATCH_SIZE = 100` may be too small at scale | 🟡 Medium | Monitor batch overflow logging; increase or add second daily run |
 | O3 | Timezone | Obligations become due at UTC midnight, not borrower's local midnight | 🟡 Medium | Document; consider per-mortgage timezone field |
 | O4 | Idempotency | `idempotencyKey` format varies across tables | 🟡 Medium | Standardize format: `{entity}:{id}:{operation}:{date}` |
@@ -578,7 +578,7 @@ Payment operations must respect the three-layer auth model:
 ## 7. Implementation Phases
 
 ### Phase 1: Foundation (Weeks 1-3)
-1. Wire `ENTRY_TYPE_ACCOUNT_MAP` validation into `postEntry` pipeline
+1. Confirm `ENTRY_TYPE_ACCOUNT_MAP` validation remains enforced in `postEntry` and keep related docs/comments in sync
 2. Fix servicing fee calculation for payment frequency
 3. Standardize date format conventions (document + enforce via validators)
 4. Add `reversed` state to collectionAttempt state machine
