@@ -1,0 +1,13 @@
+{
+  "repoPath": "/Users/connor/Dev/tanstackFairLend/fairlendapp",
+  "lastCommit": "7993c83407e1295e3ae14228e58afc53163503ea",
+  "indexedAt": "2026-03-19T20:48:55.165Z",
+  "stats": {
+    "files": 876,
+    "nodes": 2482,
+    "edges": 5175,
+    "communities": 206,
+    "processes": 69,
+    "embeddings": 0
+  }
+}
