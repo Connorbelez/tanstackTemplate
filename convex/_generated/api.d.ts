@@ -113,6 +113,7 @@ import type * as ledger_sequenceCounter from "../ledger/sequenceCounter.js";
 import type * as ledger_types from "../ledger/types.js";
 import type * as ledger_validation from "../ledger/validation.js";
 import type * as ledger_validators from "../ledger/validators.js";
+import type * as mortgages_paymentFrequency from "../mortgages/paymentFrequency.js";
 import type * as mortgages_queries from "../mortgages/queries.js";
 import type * as numbers from "../numbers.js";
 import type * as obligations_mutations from "../obligations/mutations.js";
@@ -266,6 +267,7 @@ declare const fullApi: ApiFromModules<{
   "ledger/types": typeof ledger_types;
   "ledger/validation": typeof ledger_validation;
   "ledger/validators": typeof ledger_validators;
+  "mortgages/paymentFrequency": typeof mortgages_paymentFrequency;
   "mortgages/queries": typeof mortgages_queries;
   numbers: typeof numbers;
   "obligations/mutations": typeof obligations_mutations;

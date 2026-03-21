@@ -66,6 +66,42 @@ interface CreateDispersalEntriesHandler {
 	}>;
 }
 
+interface DispersalSummaryByLender {
+	entryCount: number;
+	lenderId: Id<"lenders">;
+	totalAmount: number;
+}
+
+interface DispersalHistoryEntry {
+	amount: number;
+	dispersalDate: string;
+	lenderId: Id<"lenders">;
+	runningTotal: number;
+}
+
+interface DispersalsByObligationResult {
+	byLender: DispersalSummaryByLender[];
+	entries: Array<{
+		amount: number;
+		lenderId: Id<"lenders">;
+	}>;
+	entryCount: number;
+	total: number;
+}
+
+interface DisbursementHistoryResult {
+	entries: DispersalHistoryEntry[];
+	entryCount: number;
+	pageTotal?: number;
+	total: number;
+}
+
+interface UndisbursedBalanceResult {
+	entryCount: number;
+	lenderId: Id<"lenders">;
+	undisbursedBalance: number;
+}
+
 type TestHarness = ReturnType<typeof convexTest>;
 
 // ---------------------------------------------------------------------------
@@ -77,6 +113,26 @@ const SINGLE_LENDER_QUERY = makeFunctionReference<
 	AccruedInterestQueryArgs,
 	AccruedInterestQueryResult
 >("accrual/calculateAccruedInterest:calculateAccruedInterest");
+const GET_DISPERSALS_BY_OBLIGATION = makeFunctionReference<
+	"query",
+	{ obligationId: Id<"obligations"> },
+	DispersalsByObligationResult
+>("dispersal/queries:getDispersalsByObligation");
+const GET_DISBURSEMENT_HISTORY = makeFunctionReference<
+	"query",
+	{
+		fromDate?: string;
+		lenderId: Id<"lenders">;
+		limit?: number;
+		toDate?: string;
+	},
+	DisbursementHistoryResult
+>("dispersal/queries:getDisbursementHistory");
+const GET_UNDISBURSED_BALANCE = makeFunctionReference<
+	"query",
+	{ lenderId: Id<"lenders"> },
+	UndisbursedBalanceResult
+>("dispersal/queries:getUndisbursedBalance");
 
 const SYS_SOURCE = { type: "system" as const, channel: "test" } as const;
 
@@ -447,17 +503,13 @@ describe("dispersal integration — fullChain", () => {
 		// --- Persistence check ----------------------------------------
 		const persistedEntries = (
 			await t.run(async (ctx) =>
-				Promise.all(
-					result.entries.map((entry) => ctx.db.get(entry.id as never))
-				)
+				Promise.all(result.entries.map((entry) => ctx.db.get(entry.id)))
 			)
 		).filter((e) => e !== null);
 		expect(persistedEntries).toHaveLength(2);
 
 		const feeEntry = await t.run(async (ctx) =>
-			result.servicingFeeEntryId
-				? ctx.db.get(result.servicingFeeEntryId as never)
-				: null
+			result.servicingFeeEntryId ? ctx.db.get(result.servicingFeeEntryId) : null
 		);
 		expect(feeEntry?.amount).toBe(8333);
 		expect(feeEntry?.annualRate).toBe(0.01);
@@ -467,10 +519,9 @@ describe("dispersal integration — fullChain", () => {
 		const admin = asAdmin(t);
 
 		// getDispersalsByObligation
-		const byObligation = await admin.query(
-			api.dispersal.queries.getDispersalsByObligation,
-			{ obligationId }
-		);
+		const byObligation = await admin.query(GET_DISPERSALS_BY_OBLIGATION, {
+			obligationId,
+		});
 		expect(byObligation.entries).toHaveLength(2);
 		expect(byObligation.total).toBe(75_000);
 
@@ -483,19 +534,20 @@ describe("dispersal integration — fullChain", () => {
 		);
 		expect(lenderAEntry).toBeDefined();
 		expect(lenderBEntry).toBeDefined();
+		if (!(lenderAEntry && lenderBEntry)) {
+			throw new Error("Expected persisted lender dispersal entries to exist");
+		}
 
 		// getUndisbursedBalance — A and B each have one pending entry
-		const undisbursedA = await admin.query(
-			api.dispersal.queries.getUndisbursedBalance,
-			{ lenderId: lenderAEntry?.lenderId }
-		);
+		const undisbursedA = await admin.query(GET_UNDISBURSED_BALANCE, {
+			lenderId: lenderAEntry.lenderId,
+		});
 		expect(undisbursedA.undisbursedBalance).toBe(45_000);
 		expect(undisbursedA.entryCount).toBe(1);
 
-		const undisbursedB = await admin.query(
-			api.dispersal.queries.getUndisbursedBalance,
-			{ lenderId: lenderBEntry?.lenderId }
-		);
+		const undisbursedB = await admin.query(GET_UNDISBURSED_BALANCE, {
+			lenderId: lenderBEntry.lenderId,
+		});
 		expect(undisbursedB.undisbursedBalance).toBe(30_000);
 		expect(undisbursedB.entryCount).toBe(1);
 	});
@@ -655,10 +707,9 @@ describe("dispersal integration — multipleSettlements", () => {
 			expect(sorted[1]?.amount).toBe(16_667); // B (40% share)
 
 			// Verify obligation lookup
-			const byObligation = await admin.query(
-				api.dispersal.queries.getDispersalsByObligation,
-				{ obligationId }
-			);
+			const byObligation = await admin.query(GET_DISPERSALS_BY_OBLIGATION, {
+				obligationId,
+			});
 			expect(byObligation.entries).toHaveLength(2);
 			expect(byObligation.total).toBe(41_667);
 		}
@@ -673,14 +724,18 @@ describe("dispersal integration — multipleSettlements", () => {
 			ctx.db.query("dispersalEntries").first()
 		)) as { lenderId: Id<"lenders"> } | undefined;
 		expect(firstEntry).toBeDefined();
+		if (!firstEntry) {
+			throw new Error("Expected at least one dispersal entry");
+		}
 
-		const historyA = await admin.query(
-			api.dispersal.queries.getDisbursementHistory,
-			{ lenderId: firstEntry?.lenderId }
-		);
+		const historyA = await admin.query(GET_DISBURSEMENT_HISTORY, {
+			lenderId: firstEntry.lenderId,
+		});
 
 		// All 3 entries for this lender
-		const aEntries = historyA.entries.filter((e) => e.amount === 25_000);
+		const aEntries = historyA.entries.filter(
+			(entry) => entry.amount === 25_000
+		);
 		expect(aEntries).toHaveLength(3);
 		expect(historyA.total).toBe(75_000);
 
@@ -694,11 +749,13 @@ describe("dispersal integration — multipleSettlements", () => {
 			);
 		})) as { lenderId: Id<"lenders"> } | undefined | null;
 		expect(bEntryResult).toBeDefined();
+		if (!bEntryResult) {
+			throw new Error("Expected a dispersal entry for lender B");
+		}
 
-		const historyB = await admin.query(
-			api.dispersal.queries.getDisbursementHistory,
-			{ lenderId: bEntryResult?.lenderId }
-		);
+		const historyB = await admin.query(GET_DISBURSEMENT_HISTORY, {
+			lenderId: bEntryResult.lenderId,
+		});
 		expect(historyB.total).toBe(50_001);
 		expect(historyB.entries).toHaveLength(3);
 	});

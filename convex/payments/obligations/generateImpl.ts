@@ -1,17 +1,11 @@
 import { ConvexError } from "convex/values";
 import type { Id } from "../../_generated/dataModel";
 import type { MutationCtx } from "../../_generated/server";
+import { getPeriodsPerYear } from "../../mortgages/paymentFrequency";
 
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
-
-export const PERIODS_PER_YEAR: Record<string, number> = {
-	monthly: 12,
-	bi_weekly: 26,
-	accelerated_bi_weekly: 26,
-	weekly: 52,
-};
 
 export const GRACE_PERIOD_DAYS = 15;
 
@@ -90,8 +84,10 @@ export async function generateObligationsImpl(
 	}
 
 	// Calculate period amount (interest-only, in cents)
-	const periodsPerYear = PERIODS_PER_YEAR[paymentFrequency];
-	if (!periodsPerYear) {
+	let periodsPerYear: number;
+	try {
+		periodsPerYear = getPeriodsPerYear(paymentFrequency);
+	} catch {
 		throw new ConvexError(`Unknown payment frequency: ${paymentFrequency}`);
 	}
 	const periodAmount = Math.round((interestRate * principal) / periodsPerYear);

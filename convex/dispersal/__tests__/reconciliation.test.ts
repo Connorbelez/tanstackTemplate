@@ -1,3 +1,4 @@
+import { makeFunctionReference } from "convex/server";
 import { convexTest } from "convex-test";
 import { describe, expect, it } from "vitest";
 import {
@@ -5,7 +6,6 @@ import {
 	type MockIdentity,
 } from "../../../src/test/auth/helpers";
 import { FAIRLEND_ADMIN, LENDER } from "../../../src/test/auth/identities";
-import { api } from "../../_generated/api";
 import type { Id } from "../../_generated/dataModel";
 import type { MutationCtx } from "../../_generated/server";
 import {
@@ -44,6 +44,53 @@ interface CreateDispersalEntriesHandler {
 	}>;
 }
 
+interface DispersalSummaryByLender {
+	entryCount: number;
+	lenderId: Id<"lenders">;
+	totalAmount: number;
+}
+
+interface DispersalHistoryEntry {
+	amount: number;
+	dispersalDate: string;
+	runningTotal: number;
+}
+
+interface DispersalHistoryResult {
+	entries: DispersalHistoryEntry[];
+	entryCount: number;
+	pageTotal?: number;
+	total: number;
+}
+
+interface DispersalsByMortgageResult {
+	byLender: DispersalSummaryByLender[];
+	entries: Array<{ amount: number }>;
+	entryCount: number;
+	pageTotal?: number;
+	total: number;
+}
+
+interface DispersalsByObligationResult {
+	byLender: DispersalSummaryByLender[];
+	entries: Array<{ amount: number }>;
+	entryCount: number;
+	total: number;
+}
+
+interface ServicingFeeHistoryResult {
+	entries: Array<{ amount: number }>;
+	entryCount: number;
+	pageTotalFees?: number;
+	totalFees: number;
+}
+
+interface UndisbursedBalanceResult {
+	entryCount: number;
+	lenderId: Id<"lenders">;
+	undisbursedBalance: number;
+}
+
 const createDispersalEntriesMutation =
 	createDispersalEntries as unknown as CreateDispersalEntriesHandler;
 
@@ -62,6 +109,47 @@ const EMPTY_LENDER = createMockViewer({
 	firstName: "Empty",
 	lastName: "Lender",
 });
+
+const GET_UNDISBURSED_BALANCE = makeFunctionReference<
+	"query",
+	{ lenderId: Id<"lenders"> },
+	UndisbursedBalanceResult
+>("dispersal/queries:getUndisbursedBalance");
+const GET_DISBURSEMENT_HISTORY = makeFunctionReference<
+	"query",
+	{
+		fromDate?: string;
+		lenderId: Id<"lenders">;
+		limit?: number;
+		toDate?: string;
+	},
+	DispersalHistoryResult
+>("dispersal/queries:getDisbursementHistory");
+const GET_DISPERSALS_BY_MORTGAGE = makeFunctionReference<
+	"query",
+	{
+		fromDate?: string;
+		limit?: number;
+		mortgageId: Id<"mortgages">;
+		toDate?: string;
+	},
+	DispersalsByMortgageResult
+>("dispersal/queries:getDispersalsByMortgage");
+const GET_DISPERSALS_BY_OBLIGATION = makeFunctionReference<
+	"query",
+	{ obligationId: Id<"obligations"> },
+	DispersalsByObligationResult
+>("dispersal/queries:getDispersalsByObligation");
+const GET_SERVICING_FEE_HISTORY = makeFunctionReference<
+	"query",
+	{
+		fromDate?: string;
+		limit?: number;
+		mortgageId: Id<"mortgages">;
+		toDate?: string;
+	},
+	ServicingFeeHistoryResult
+>("dispersal/queries:getServicingFeeHistory");
 
 function createHarness() {
 	return convexTest(schema, modules);
@@ -378,11 +466,9 @@ describe("dispersal reconciliation queries", () => {
 		const t = createHarness();
 		const { lenderId } = await seedScenario(t);
 
-		const result = await t
-			.withIdentity(LENDER)
-			.query(api.dispersal.queries.getUndisbursedBalance, {
-				lenderId,
-			});
+		const result = await t.withIdentity(LENDER).query(GET_UNDISBURSED_BALANCE, {
+			lenderId,
+		});
 
 		expect(result).toEqual({
 			lenderId,
@@ -397,7 +483,7 @@ describe("dispersal reconciliation queries", () => {
 
 		const result = await t
 			.withIdentity(FAIRLEND_ADMIN)
-			.query(api.dispersal.queries.getUndisbursedBalance, {
+			.query(GET_UNDISBURSED_BALANCE, {
 				lenderId: emptyLenderId,
 			});
 
@@ -413,11 +499,9 @@ describe("dispersal reconciliation queries", () => {
 		const { lenderId } = await seedScenario(t);
 
 		await expect(
-			t
-				.withIdentity(OTHER_LENDER)
-				.query(api.dispersal.queries.getUndisbursedBalance, {
-					lenderId,
-				})
+			t.withIdentity(OTHER_LENDER).query(GET_UNDISBURSED_BALANCE, {
+				lenderId,
+			})
 		).rejects.toThrow("No access to this dispersal data");
 	});
 
@@ -427,7 +511,7 @@ describe("dispersal reconciliation queries", () => {
 
 		const result = await t
 			.withIdentity(LENDER)
-			.query(api.dispersal.queries.getDisbursementHistory, {
+			.query(GET_DISBURSEMENT_HISTORY, {
 				lenderId,
 				fromDate: "2026-03-01",
 				toDate: "2026-04-30",
@@ -451,7 +535,7 @@ describe("dispersal reconciliation queries", () => {
 
 		const result = await t
 			.withIdentity(LENDER)
-			.query(api.dispersal.queries.getDisbursementHistory, {
+			.query(GET_DISBURSEMENT_HISTORY, {
 				lenderId,
 				limit: 2,
 			});
@@ -467,16 +551,14 @@ describe("dispersal reconciliation queries", () => {
 		const { mortgageId, lenderId, otherLenderId } = await seedScenario(t);
 
 		await expect(
-			t
-				.withIdentity(LENDER)
-				.query(api.dispersal.queries.getDispersalsByMortgage, {
-					mortgageId,
-				})
+			t.withIdentity(LENDER).query(GET_DISPERSALS_BY_MORTGAGE, {
+				mortgageId,
+			})
 		).rejects.toThrow("No access to this dispersal data");
 
 		const result = await t
 			.withIdentity(FAIRLEND_ADMIN)
-			.query(api.dispersal.queries.getDispersalsByMortgage, {
+			.query(GET_DISPERSALS_BY_MORTGAGE, {
 				mortgageId,
 			});
 
@@ -494,7 +576,7 @@ describe("dispersal reconciliation queries", () => {
 
 		const result = await t
 			.withIdentity(FAIRLEND_ADMIN)
-			.query(api.dispersal.queries.getDispersalsByMortgage, {
+			.query(GET_DISPERSALS_BY_MORTGAGE, {
 				mortgageId,
 				limit: 2,
 			});
@@ -515,7 +597,7 @@ describe("dispersal reconciliation queries", () => {
 
 		const result = await t
 			.withIdentity(FAIRLEND_ADMIN)
-			.query(api.dispersal.queries.getDispersalsByObligation, {
+			.query(GET_DISPERSALS_BY_OBLIGATION, {
 				obligationId: obligationB,
 			});
 
@@ -534,7 +616,7 @@ describe("dispersal reconciliation queries", () => {
 
 		const marchOnly = await t
 			.withIdentity(FAIRLEND_ADMIN)
-			.query(api.dispersal.queries.getServicingFeeHistory, {
+			.query(GET_SERVICING_FEE_HISTORY, {
 				mortgageId,
 				fromDate: "2026-03-01",
 				toDate: "2026-03-31",
@@ -546,7 +628,7 @@ describe("dispersal reconciliation queries", () => {
 
 		const emptyRange = await t
 			.withIdentity(FAIRLEND_ADMIN)
-			.query(api.dispersal.queries.getServicingFeeHistory, {
+			.query(GET_SERVICING_FEE_HISTORY, {
 				mortgageId,
 				fromDate: "2027-01-01",
 				toDate: "2027-01-31",
@@ -563,7 +645,7 @@ describe("dispersal reconciliation queries", () => {
 
 		const result = await t
 			.withIdentity(FAIRLEND_ADMIN)
-			.query(api.dispersal.queries.getServicingFeeHistory, {
+			.query(GET_SERVICING_FEE_HISTORY, {
 				mortgageId,
 				limit: 2,
 			});
@@ -581,7 +663,7 @@ describe("dispersal reconciliation queries", () => {
 		// A lender can query their own disbursement history
 		const ownHistory = await t
 			.withIdentity(LENDER)
-			.query(api.dispersal.queries.getDisbursementHistory, {
+			.query(GET_DISBURSEMENT_HISTORY, {
 				lenderId,
 				fromDate: "2026-02-01",
 				toDate: "2026-04-30",
@@ -590,11 +672,9 @@ describe("dispersal reconciliation queries", () => {
 
 		// A lender cannot query another lender's disbursement history
 		await expect(
-			t
-				.withIdentity(LENDER)
-				.query(api.dispersal.queries.getDisbursementHistory, {
-					lenderId: otherLenderId,
-				})
+			t.withIdentity(LENDER).query(GET_DISBURSEMENT_HISTORY, {
+				lenderId: otherLenderId,
+			})
 		).rejects.toThrow("No access to this dispersal data");
 	});
 
@@ -805,7 +885,7 @@ describe("dispersal reconciliation queries", () => {
 		// ── Query actual totals via reconciliation queries ──────────────────
 		const history = await t
 			.withIdentity(LENDER)
-			.query(api.dispersal.queries.getDisbursementHistory, {
+			.query(GET_DISBURSEMENT_HISTORY, {
 				lenderId,
 				fromDate: "2026-02-01",
 				toDate: "2026-04-01",
@@ -813,7 +893,7 @@ describe("dispersal reconciliation queries", () => {
 
 		const fees = await t
 			.withIdentity(FAIRLEND_ADMIN)
-			.query(api.dispersal.queries.getServicingFeeHistory, {
+			.query(GET_SERVICING_FEE_HISTORY, {
 				mortgageId,
 				fromDate: "2026-02-01",
 				toDate: "2026-04-01",

@@ -1,6 +1,6 @@
 import { convexTest } from "convex-test";
 import { beforeEach, describe, expect, it } from "vitest";
-import type { Id } from "../../_generated/dataModel";
+import type { Doc, Id } from "../../_generated/dataModel";
 import type { MutationCtx } from "../../_generated/server";
 import schema from "../../schema";
 import { createDispersalEntries } from "../createDispersalEntries";
@@ -54,10 +54,12 @@ async function seedDispersalScenario(
 	options?: {
 		positionUnits?: [number, number] | [];
 		includeReroute?: boolean;
+		paymentFrequency?: Doc<"mortgages">["paymentFrequency"];
 		settledDate?: string;
 	}
 ) {
 	const positionUnits = options?.positionUnits ?? [6000, 4000];
+	const paymentFrequency = options?.paymentFrequency ?? "monthly";
 	const settledDate = options?.settledDate ?? "2026-03-01";
 
 	return t.run(async (ctx) => {
@@ -133,7 +135,7 @@ async function seedDispersalScenario(
 			termMonths: 12,
 			amortizationMonths: 12,
 			paymentAmount: 100_000,
-			paymentFrequency: "monthly",
+			paymentFrequency,
 			loanType: "conventional",
 			lienPosition: 1,
 			interestAdjustmentDate: "2026-01-01",
@@ -296,6 +298,31 @@ describe("createDispersalEntries", () => {
 			persistedByLender.get(seeded.lenderTwoId)?.calculationDetails
 				.ownershipUnits
 		).toBe(4000);
+	});
+
+	it("uses mortgage payment frequency when calculating bi-weekly servicing fees", async () => {
+		const seeded = await seedDispersalScenario(t, {
+			paymentFrequency: "bi_weekly",
+		});
+
+		const result = await runCreateDispersal(t, {
+			obligationId: seeded.obligationId,
+			mortgageId: seeded.mortgageId,
+			settledAmount: 100_000,
+			settledDate: "2026-03-01",
+			idempotencyKey: "dispersal:test:bi-weekly-fee",
+		});
+
+		const feeEntry = await t.run(async (ctx) =>
+			result.servicingFeeEntryId
+				? ctx.db.get(result.servicingFeeEntryId as never)
+				: null
+		);
+
+		expect(feeEntry?.amount).toBe(3846);
+		expect(result.entries.reduce((sum, entry) => sum + entry.amount, 0)).toBe(
+			96_154
+		);
 	});
 
 	it("applies deal reroutes before calculating ownership shares", async () => {

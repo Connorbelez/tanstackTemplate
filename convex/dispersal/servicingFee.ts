@@ -1,13 +1,17 @@
 /**
- * FairLend servicing fee: deducted monthly before lender distribution.
- * Formula: Math.round((annualServicingRate × principalCents) / 12)
- * Fixed monthly amount based on principal, NOT a % of collected payment.
+ * FairLend servicing fee: deducted once per settled payment period before
+ * lender distribution, based on the mortgage principal rather than the amount
+ * collected in that period.
  *
  * @see SPEC 1.6 §4.2
  */
+import type { PaymentFrequency } from "../mortgages/paymentFrequency";
+import { getPeriodsPerYear } from "../mortgages/paymentFrequency";
+
 export function calculateServicingFee(
 	annualServicingRate: number,
-	principalCents: number
+	principalCents: number,
+	paymentFrequency: PaymentFrequency
 ): number {
 	if (!Number.isFinite(annualServicingRate) || annualServicingRate < 0) {
 		throw new Error(
@@ -20,5 +24,7 @@ export function calculateServicingFee(
 		);
 	}
 
-	return Math.round((annualServicingRate * principalCents) / 12);
+	return Math.round(
+		(annualServicingRate * principalCents) / getPeriodsPerYear(paymentFrequency)
+	);
 }
