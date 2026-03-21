@@ -94,6 +94,27 @@ export const CASH_ENTRY_TYPE_FAMILY_MAP: Record<
 	},
 };
 
+// ── Transient subaccounts (must net to zero per posting group) ─
+// WAIVER is NOT transient — it's monotonically increasing (cumulative waivers).
+export const TRANSIENT_SUBACCOUNTS: ReadonlySet<ControlSubaccount> = new Set([
+	"ACCRUAL",
+	"ALLOCATION",
+	"SETTLEMENT",
+]);
+
+// ── Entry-Type → CONTROL Subaccount Mapping ──
+// Maps entry types to the CONTROL subaccount they use (if any).
+// Centralizes what was previously hardcoded in each integration function.
+export const ENTRY_TYPE_CONTROL_SUBACCOUNT: Partial<
+	Record<CashEntryType, ControlSubaccount>
+> = {
+	OBLIGATION_ACCRUED: "ACCRUAL",
+	CASH_APPLIED: "SETTLEMENT",
+	LENDER_PAYABLE_CREATED: "ALLOCATION",
+	SERVICING_FEE_RECOGNIZED: "ALLOCATION",
+	OBLIGATION_WAIVED: "WAIVER",
+};
+
 export const CREDIT_NORMAL_FAMILIES: ReadonlySet<CashAccountFamily> = new Set([
 	"LENDER_PAYABLE",
 	"SERVICING_REVENUE",

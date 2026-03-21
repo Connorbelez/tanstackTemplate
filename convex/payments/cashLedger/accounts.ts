@@ -159,6 +159,18 @@ export async function getOrCreateCashAccount(
 	return account;
 }
 
+export async function getControlAccountsBySubaccount(
+	db: DbReader,
+	subaccount: ControlSubaccount
+): Promise<Doc<"cash_ledger_accounts">[]> {
+	return db
+		.query("cash_ledger_accounts")
+		.withIndex("by_family_and_subaccount", (q) =>
+			q.eq("family", "CONTROL").eq("subaccount", subaccount)
+		)
+		.collect();
+}
+
 export function assertNonNegativeBalance(
 	account: Pick<
 		Doc<"cash_ledger_accounts">,

@@ -1,6 +1,12 @@
 import { v } from "convex/values";
 import type { Doc, Id } from "../../_generated/dataModel";
 import { internalQuery, type QueryCtx } from "../../_generated/server";
+import {
+	getCashAccountBalance,
+	getControlAccountsBySubaccount,
+} from "./accounts";
+import type { ControlSubaccount } from "./types";
+import { TRANSIENT_SUBACCOUNTS } from "./types";
 
 async function loadObligationEntries(
 	ctx: QueryCtx,
@@ -79,3 +85,60 @@ export const getJournalSettledAmountForObligationInternal = internalQuery({
 		return Number(amount);
 	},
 });
+
+// ── CONTROL Subaccount Reconciliation ─────────────────────────
+
+export interface ControlBalanceResult {
+	balance: bigint;
+	subaccount: string;
+	valid: boolean;
+}
+
+export async function validateControlNetZero(
+	ctx: QueryCtx,
+	postingGroupId: string
+): Promise<ControlBalanceResult[]> {
+	const entries = await ctx.db
+		.query("cash_ledger_journal_entries")
+		.withIndex("by_posting_group", (q) =>
+			q.eq("postingGroupId", postingGroupId)
+		)
+		.collect();
+
+	const balances = new Map<string, bigint>();
+
+	for (const entry of entries) {
+		const [debitAccount, creditAccount] = await Promise.all([
+			ctx.db.get(entry.debitAccountId),
+			ctx.db.get(entry.creditAccountId),
+		]);
+
+		if (debitAccount?.family === "CONTROL" && debitAccount.subaccount) {
+			const sub = debitAccount.subaccount;
+			balances.set(sub, (balances.get(sub) ?? 0n) + entry.amount);
+		}
+		if (creditAccount?.family === "CONTROL" && creditAccount.subaccount) {
+			const sub = creditAccount.subaccount;
+			balances.set(sub, (balances.get(sub) ?? 0n) - entry.amount);
+		}
+	}
+
+	const results: ControlBalanceResult[] = [];
+	for (const sub of TRANSIENT_SUBACCOUNTS) {
+		const balance = balances.get(sub) ?? 0n;
+		results.push({ subaccount: sub, balance, valid: balance === 0n });
+	}
+	return results;
+}
+
+export async function getControlBalanceBySubaccount(
+	ctx: QueryCtx,
+	subaccount: ControlSubaccount
+): Promise<{ totalBalance: bigint; accountCount: number }> {
+	const accounts = await getControlAccountsBySubaccount(ctx.db, subaccount);
+	let totalBalance = 0n;
+	for (const account of accounts) {
+		totalBalance += getCashAccountBalance(account);
+	}
+	return { totalBalance, accountCount: accounts.length };
+}

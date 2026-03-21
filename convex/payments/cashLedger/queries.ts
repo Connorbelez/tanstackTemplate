@@ -3,11 +3,14 @@ import { ledgerQuery } from "../../fluent";
 import {
 	findCashAccount,
 	getCashAccountBalance,
+	getControlAccountsBySubaccount,
 	isCreditNormalFamily,
 } from "./accounts";
 import {
+	getControlBalanceBySubaccount,
 	getJournalSettledAmountForObligation,
 	reconcileObligationSettlementProjectionInternal,
+	validateControlNetZero,
 } from "./reconciliation";
 
 function compareSequence(
@@ -198,5 +201,44 @@ export const getJournalSettledAmount = ledgerQuery
 	.input({ obligationId: v.id("obligations") })
 	.handler(async (ctx, args) => {
 		return getJournalSettledAmountForObligation(ctx, args.obligationId);
+	})
+	.public();
+
+// ── CONTROL Subaccount Queries ────────────────────────────────
+
+const subaccountValidator = v.union(
+	v.literal("ACCRUAL"),
+	v.literal("ALLOCATION"),
+	v.literal("SETTLEMENT"),
+	v.literal("WAIVER")
+);
+
+export const getControlAccounts = ledgerQuery
+	.input({ subaccount: subaccountValidator })
+	.handler(async (ctx, args) => {
+		const accounts = await getControlAccountsBySubaccount(
+			ctx.db,
+			args.subaccount
+		);
+		return accounts.map((account) => ({
+			accountId: account._id,
+			mortgageId: account.mortgageId,
+			obligationId: account.obligationId,
+			balance: getCashAccountBalance(account),
+		}));
+	})
+	.public();
+
+export const getControlBalance = ledgerQuery
+	.input({ subaccount: subaccountValidator })
+	.handler(async (ctx, args) => {
+		return getControlBalanceBySubaccount(ctx, args.subaccount);
+	})
+	.public();
+
+export const controlNetZeroCheck = ledgerQuery
+	.input({ postingGroupId: v.string() })
+	.handler(async (ctx, args) => {
+		return validateControlNetZero(ctx, args.postingGroupId);
 	})
 	.public();
