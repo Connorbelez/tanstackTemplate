@@ -60,6 +60,7 @@ import type * as demo_workosAuth from "../demo/workosAuth.js";
 import type * as dispersal_createDispersalEntries from "../dispersal/createDispersalEntries.js";
 import type * as dispersal_lenderIdentity from "../dispersal/lenderIdentity.js";
 import type * as dispersal_queries from "../dispersal/queries.js";
+import type * as dispersal_selfHealing from "../dispersal/selfHealing.js";
 import type * as dispersal_servicingFee from "../dispersal/servicingFee.js";
 import type * as dispersal_types from "../dispersal/types.js";
 import type * as dispersal_validators from "../dispersal/validators.js";
@@ -223,6 +224,7 @@ declare const fullApi: ApiFromModules<{
   "dispersal/createDispersalEntries": typeof dispersal_createDispersalEntries;
   "dispersal/lenderIdentity": typeof dispersal_lenderIdentity;
   "dispersal/queries": typeof dispersal_queries;
+  "dispersal/selfHealing": typeof dispersal_selfHealing;
   "dispersal/servicingFee": typeof dispersal_servicingFee;
   "dispersal/types": typeof dispersal_types;
   "dispersal/validators": typeof dispersal_validators;

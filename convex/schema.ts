@@ -915,6 +915,21 @@ export default defineSchema({
 		.index("by_mortgage", ["mortgageId", "date"])
 		.index("by_obligation", ["obligationId"]),
 
+	dispersalHealingAttempts: defineTable({
+		obligationId: v.id("obligations"),
+		attemptCount: v.number(),
+		lastAttemptAt: v.number(), // Unix ms system timestamp
+		escalatedAt: v.optional(v.number()), // Unix ms, set when escalated to SUSPENSE
+		status: v.union(
+			v.literal("retrying"),
+			v.literal("escalated"),
+			v.literal("resolved")
+		),
+		createdAt: v.number(), // Unix ms system timestamp
+	})
+		.index("by_obligation", ["obligationId"])
+		.index("by_status", ["status"]),
+
 	cash_ledger_accounts: defineTable({
 		family: v.union(
 			v.literal("BORROWER_RECEIVABLE"),
@@ -970,7 +985,8 @@ export default defineSchema({
 			v.literal("OBLIGATION_WAIVED"),
 			v.literal("OBLIGATION_WRITTEN_OFF"),
 			v.literal("REVERSAL"),
-			v.literal("CORRECTION")
+			v.literal("CORRECTION"),
+			v.literal("SUSPENSE_ESCALATED")
 		),
 		mortgageId: v.optional(v.id("mortgages")),
 		obligationId: v.optional(v.id("obligations")),

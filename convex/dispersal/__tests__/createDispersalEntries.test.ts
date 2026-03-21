@@ -271,15 +271,11 @@ describe("createDispersalEntries", () => {
 
 		const persistedEntries = (
 			await t.run(async (ctx) =>
-				Promise.all(
-					result.entries.map((entry) => ctx.db.get(entry.id))
-				)
+				Promise.all(result.entries.map((entry) => ctx.db.get(entry.id)))
 			)
 		).filter((entry) => entry !== null);
 		const feeEntry = await t.run(async (ctx) =>
-			result.servicingFeeEntryId
-				? ctx.db.get(result.servicingFeeEntryId)
-				: null
+			result.servicingFeeEntryId ? ctx.db.get(result.servicingFeeEntryId) : null
 		);
 
 		expect(persistedEntries).toHaveLength(2);
@@ -323,9 +319,7 @@ describe("createDispersalEntries", () => {
 		});
 
 		const feeEntry = await t.run(async (ctx) =>
-			result.servicingFeeEntryId
-				? ctx.db.get(result.servicingFeeEntryId)
-				: null
+			result.servicingFeeEntryId ? ctx.db.get(result.servicingFeeEntryId) : null
 		);
 
 		expect(feeEntry?.amount).toBe(3846);
@@ -358,9 +352,7 @@ describe("createDispersalEntries", () => {
 
 		const persistedEntries = (
 			await t.run(async (ctx) =>
-				Promise.all(
-					result.entries.map((entry) => ctx.db.get(entry.id))
-				)
+				Promise.all(result.entries.map((entry) => ctx.db.get(entry.id)))
 			)
 		).filter((entry) => entry !== null);
 		const persistedByLender = new Map(

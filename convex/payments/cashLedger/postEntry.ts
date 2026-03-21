@@ -93,7 +93,11 @@ function balanceCheck(
 	debitAccount: Doc<"cash_ledger_accounts">,
 	creditAccount: Doc<"cash_ledger_accounts">
 ) {
-	if (args.entryType === "REVERSAL" || args.entryType === "CORRECTION") {
+	if (
+		args.entryType === "REVERSAL" ||
+		args.entryType === "CORRECTION" ||
+		args.entryType === "SUSPENSE_ESCALATED"
+	) {
 		return;
 	}
 
@@ -231,7 +235,8 @@ export const postCashEntry = internalMutation({
 			v.literal("OBLIGATION_WAIVED"),
 			v.literal("OBLIGATION_WRITTEN_OFF"),
 			v.literal("REVERSAL"),
-			v.literal("CORRECTION")
+			v.literal("CORRECTION"),
+			v.literal("SUSPENSE_ESCALATED")
 		),
 		effectiveDate: v.string(),
 		amount: v.number(),

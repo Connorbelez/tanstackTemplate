@@ -23,6 +23,7 @@ export const CASH_ENTRY_TYPES = [
 	"OBLIGATION_WRITTEN_OFF",
 	"REVERSAL",
 	"CORRECTION",
+	"SUSPENSE_ESCALATED",
 ] as const;
 
 export type CashEntryType = (typeof CASH_ENTRY_TYPES)[number];
@@ -86,6 +87,10 @@ export const CASH_ENTRY_TYPE_FAMILY_MAP: Record<
 	CORRECTION: {
 		debit: ALL_FAMILIES,
 		credit: ALL_FAMILIES,
+	},
+	SUSPENSE_ESCALATED: {
+		debit: ["SUSPENSE"],
+		credit: ["BORROWER_RECEIVABLE"],
 	},
 };
 
