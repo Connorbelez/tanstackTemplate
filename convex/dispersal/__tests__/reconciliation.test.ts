@@ -44,55 +44,6 @@ interface CreateDispersalEntriesHandler {
 	}>;
 }
 
-
-
-interface DispersalSummaryByLender {
-	entryCount: number;
-	lenderId: Id<"lenders">;
-	totalAmount: number;
-}
-
-interface DispersalHistoryEntry {
-	amount: number;
-	dispersalDate: string;
-	runningTotal: number;
-}
-
-interface DispersalHistoryResult {
-	entries: DispersalHistoryEntry[];
-	entryCount: number;
-	pageTotal?: number;
-	total: number;
-}
-
-interface DispersalsByMortgageResult {
-	byLender: DispersalSummaryByLender[];
-	entries: Array<{ amount: number }>;
-	entryCount: number;
-	pageTotal?: number;
-	total: number;
-}
-
-interface DispersalsByObligationResult {
-	byLender: DispersalSummaryByLender[];
-	entries: Array<{ amount: number }>;
-	entryCount: number;
-	total: number;
-}
-
-interface ServicingFeeHistoryResult {
-	entries: Array<{ amount: number }>;
-	entryCount: number;
-	pageTotalFees?: number;
-	totalFees: number;
-}
-
-interface UndisbursedBalanceResult {
-	entryCount: number;
-	lenderId: Id<"lenders">;
-	undisbursedBalance: number;
-}
-
 const createDispersalEntriesMutation =
 	createDispersalEntries as unknown as CreateDispersalEntriesHandler;
 

@@ -8,6 +8,7 @@ import { sourceValidator } from "../engine/validators";
 import { getAccountLenderId } from "../ledger/accountOwnership";
 import { getPostedBalance } from "../ledger/accounts";
 import { businessDateToUnixMs } from "../lib/businessDates";
+import { postSettlementAllocation } from "../payments/cashLedger/integrations";
 import { requireLenderIdForAuthId } from "./lenderIdentity";
 import { calculateServicingFee } from "./servicingFee";
 
@@ -315,6 +316,19 @@ export const createDispersalEntries = internalMutation({
 			principalBalance: mortgage.principal,
 			date: args.settledDate,
 			createdAt: Date.now(),
+		});
+
+		await postSettlementAllocation(ctx, {
+			obligationId: args.obligationId,
+			mortgageId: args.mortgageId,
+			settledDate: args.settledDate,
+			servicingFee,
+			entries: entries.map((entry) => ({
+				dispersalEntryId: entry.id,
+				lenderId: entry.lenderId,
+				amount: entry.amount,
+			})),
+			source: args.source,
 		});
 
 		return {

@@ -17,6 +17,7 @@ import {
 	actorTypeValidator,
 	channelValidator,
 	entityTypeValidator,
+	sourceValidator,
 } from "./engine/validators";
 
 export default defineSchema({
@@ -913,6 +914,103 @@ export default defineSchema({
 	})
 		.index("by_mortgage", ["mortgageId", "date"])
 		.index("by_obligation", ["obligationId"]),
+
+	cash_ledger_accounts: defineTable({
+		family: v.union(
+			v.literal("BORROWER_RECEIVABLE"),
+			v.literal("CASH_CLEARING"),
+			v.literal("TRUST_CASH"),
+			v.literal("UNAPPLIED_CASH"),
+			v.literal("LENDER_PAYABLE"),
+			v.literal("SERVICING_REVENUE"),
+			v.literal("WRITE_OFF"),
+			v.literal("SUSPENSE"),
+			v.literal("CONTROL")
+		),
+		mortgageId: v.optional(v.id("mortgages")),
+		obligationId: v.optional(v.id("obligations")),
+		lenderId: v.optional(v.id("lenders")),
+		borrowerId: v.optional(v.id("borrowers")),
+		subaccount: v.optional(
+			v.union(
+				v.literal("ACCRUAL"),
+				v.literal("ALLOCATION"),
+				v.literal("SETTLEMENT"),
+				v.literal("WAIVER")
+			)
+		),
+		cumulativeDebits: v.int64(),
+		cumulativeCredits: v.int64(),
+		createdAt: v.number(),
+		metadata: v.optional(v.any()),
+	})
+		.index("by_family", ["family"])
+		.index("by_mortgage", ["mortgageId"])
+		.index("by_obligation", ["obligationId"])
+		.index("by_lender", ["lenderId"])
+		.index("by_borrower", ["borrowerId"])
+		.index("by_family_and_mortgage", ["family", "mortgageId"])
+		.index("by_family_and_obligation", ["family", "obligationId"])
+		.index("by_family_and_lender", ["family", "lenderId"])
+		.index("by_family_and_mortgage_and_lender", [
+			"family",
+			"mortgageId",
+			"lenderId",
+		]),
+
+	cash_ledger_journal_entries: defineTable({
+		sequenceNumber: v.int64(),
+		entryType: v.union(
+			v.literal("OBLIGATION_ACCRUED"),
+			v.literal("CASH_RECEIVED"),
+			v.literal("CASH_APPLIED"),
+			v.literal("LENDER_PAYABLE_CREATED"),
+			v.literal("SERVICING_FEE_RECOGNIZED"),
+			v.literal("LENDER_PAYOUT_SENT"),
+			v.literal("OBLIGATION_WAIVED"),
+			v.literal("OBLIGATION_WRITTEN_OFF"),
+			v.literal("REVERSAL"),
+			v.literal("CORRECTION")
+		),
+		mortgageId: v.optional(v.id("mortgages")),
+		obligationId: v.optional(v.id("obligations")),
+		attemptId: v.optional(v.id("collectionAttempts")),
+		dispersalEntryId: v.optional(v.id("dispersalEntries")),
+		lenderId: v.optional(v.id("lenders")),
+		borrowerId: v.optional(v.id("borrowers")),
+		effectiveDate: v.string(),
+		timestamp: v.number(),
+		debitAccountId: v.id("cash_ledger_accounts"),
+		creditAccountId: v.id("cash_ledger_accounts"),
+		amount: v.int64(),
+		idempotencyKey: v.string(),
+		postingGroupId: v.optional(v.string()),
+		causedBy: v.optional(v.id("cash_ledger_journal_entries")),
+		source: sourceValidator,
+		reason: v.optional(v.string()),
+		metadata: v.optional(v.any()),
+	})
+		.index("by_sequence", ["sequenceNumber"])
+		.index("by_idempotency", ["idempotencyKey"])
+		.index("by_mortgage_and_sequence", ["mortgageId", "sequenceNumber"])
+		.index("by_obligation_and_sequence", ["obligationId", "sequenceNumber"])
+		.index("by_lender_and_sequence", ["lenderId", "sequenceNumber"])
+		.index("by_debit_account_and_timestamp", ["debitAccountId", "timestamp"])
+		.index("by_credit_account_and_timestamp", ["creditAccountId", "timestamp"])
+		.index("by_posting_group", ["postingGroupId", "sequenceNumber"])
+		.index("by_caused_by", ["causedBy"])
+		.index("by_effective_date", ["effectiveDate", "sequenceNumber"]),
+
+	cash_ledger_sequence_counters: defineTable({
+		name: v.literal("cash_ledger_global"),
+		currentValue: v.int64(),
+	}).index("by_name", ["name"]),
+
+	cash_ledger_cursors: defineTable({
+		name: v.string(),
+		lastProcessedSequence: v.int64(),
+		lastProcessedAt: v.optional(v.number()),
+	}).index("by_name", ["name"]),
 
 	// ══════════════════════════════════════════════════════════
 	// GT AUDIT JOURNAL

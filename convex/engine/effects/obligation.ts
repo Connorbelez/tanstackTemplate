@@ -4,6 +4,7 @@ import type { Doc, Id } from "../../_generated/dataModel";
 import type { MutationCtx } from "../../_generated/server";
 import { internalMutation } from "../../_generated/server";
 import { unixMsToBusinessDate } from "../../lib/businessDates";
+import { getJournalSettledAmountForObligation } from "../../payments/cashLedger/reconciliation";
 import { executeTransition } from "../transition";
 import type { CommandSource, TransitionResult } from "../types";
 import { effectPayloadValidator } from "../validators";
@@ -172,7 +173,14 @@ export const emitObligationSettled = internalMutation({
 			? obligation.settledAt
 			: Date.now();
 		const settledDate = toIsoDateString(settledAt);
-		const settledAmount = obligation.amount;
+		const journalSettledAmount = await getJournalSettledAmountForObligation(
+			ctx,
+			args.entityId
+		);
+		const settledAmount =
+			journalSettledAmount > 0n
+				? Number(journalSettledAmount)
+				: obligation.amount;
 
 		// Schedule dispersal entry creation (WS6 / ENG-68)
 		await ctx.scheduler.runAfter(
