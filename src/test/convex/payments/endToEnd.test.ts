@@ -352,19 +352,6 @@ describe("AC6: partial payment accumulation (partially_settled → settled)", ()
 		const obligation = await t.run(async (ctx) => ctx.db.get(obligationId));
 		const totalAmount = obligation!.amount; // 300_000 cents
 
-		// Seed plan entry and attempt (we'll use them for the eventual success path)
-		const planEntryId = await seedPlanEntry(t, {
-			obligationIds: [obligationId],
-			amount: totalAmount,
-			method: "manual",
-		});
-
-		const attemptId = await seedCollectionAttempt(t, {
-			planEntryId,
-			method: "manual",
-			amount: totalAmount,
-		});
-
 		// For partial payments, we DON'T confirm the attempt first.
 		// Instead, we directly fire PAYMENT_APPLIED on the obligation
 		// with partial amounts to test accumulation logic.
@@ -386,9 +373,9 @@ describe("AC6: partial payment accumulation (partially_settled → settled)", ()
 		// Guard: isFullySettled → 0 + 150_000 < 300_000 → false → partially_settled
 		expect(r1.success).toBe(true);
 		expect(r1.newState).toBe("partially_settled");
-	// Note: effectsScheduled may include effects from all array paths in the machine config
-	// but the actual state transition is what matters - it went to partially_settled
-	expect(r1.effectsScheduled).toContain("applyPayment");
+		// Note: effectsScheduled may include effects from all array paths in the machine config,
+		// but the actual state transition is what matters - it went to partially_settled.
+		expect(r1.effectsScheduled).toContain("applyPayment");
 		// Invoke applyPayment with amount=150_000
 		await t.mutation(
 			applyPayment,
@@ -440,13 +427,159 @@ describe("AC6: partial payment accumulation (partially_settled → settled)", ()
 		await t.mutation(
 			emitObligationSettled,
 			buildEffectArgs(obligationId, "obligation", "emitObligationSettled", {
-				amount: 300_000,
+				amount: 150_000,
 			}),
 		);
 
 		// Mortgage receives PAYMENT_CONFIRMED
 		const mortgage = await t.run(async (ctx) => ctx.db.get(mortgageId));
 		expect(mortgage?.status).toBe("active");
+	});
+
+	it("uses the real final payment payload for a two-payment settlement path", async () => {
+		const t = createGovernedTestConvex();
+		await seedDefaultGovernedActors(t);
+		const { obligationId } = await seedBaseEntities(t);
+
+		const first = await fireTransition(t, "obligation", obligationId, "PAYMENT_APPLIED", {
+			amount: 150_000,
+			attemptId: "attempt_partial_1",
+			currentAmountSettled: 0,
+			totalAmount: 300_000,
+		});
+		expect(first.success).toBe(true);
+		expect(first.newState).toBe("partially_settled");
+		await t.mutation(
+			applyPayment,
+			buildEffectArgs(obligationId, "obligation", "applyPayment", {
+				amount: 150_000,
+			}),
+		);
+
+		const second = await fireTransition(
+			t,
+			"obligation",
+			obligationId,
+			"PAYMENT_APPLIED",
+			{
+				amount: 150_000,
+				attemptId: "attempt_partial_2",
+				currentAmountSettled: 150_000,
+				totalAmount: 300_000,
+			},
+		);
+		expect(second.success).toBe(true);
+		expect(second.newState).toBe("settled");
+		expect(second.effectsScheduled).toContain("emitObligationSettled");
+
+		await t.mutation(
+			applyPayment,
+			buildEffectArgs(obligationId, "obligation", "applyPayment", {
+				amount: 150_000,
+			}),
+		);
+		await t.mutation(
+			emitObligationSettled,
+			buildEffectArgs(obligationId, "obligation", "emitObligationSettled", {
+				amount: 150_000,
+			}),
+		);
+
+		const obligationAfterSettlement = await t.run(async (ctx) =>
+			ctx.db.get(obligationId),
+		);
+		expect(obligationAfterSettlement?.status).toBe("settled");
+		expect(obligationAfterSettlement?.amountSettled).toBe(300_000);
+	});
+
+	it("reaches settlement only on the third payment in a three-payment sequence", async () => {
+		const t = createGovernedTestConvex();
+		await seedDefaultGovernedActors(t);
+		const { mortgageId, obligationId } = await seedBaseEntities(t);
+
+		const obligation = await t.run(async (ctx) => ctx.db.get(obligationId));
+		const totalAmount = obligation!.amount;
+		const partialAmount = totalAmount / 3;
+
+		const first = await fireTransition(
+			t,
+			"obligation",
+			obligationId,
+			"PAYMENT_APPLIED",
+			{
+				amount: partialAmount,
+				attemptId: "attempt_partial_1",
+				currentAmountSettled: 0,
+				totalAmount,
+			},
+		);
+		expect(first.success).toBe(true);
+		expect(first.newState).toBe("partially_settled");
+		await t.mutation(
+			applyPayment,
+			buildEffectArgs(obligationId, "obligation", "applyPayment", {
+				amount: partialAmount,
+			}),
+		);
+
+		const second = await fireTransition(
+			t,
+			"obligation",
+			obligationId,
+			"PAYMENT_APPLIED",
+			{
+				amount: partialAmount,
+				attemptId: "attempt_partial_2",
+				currentAmountSettled: partialAmount,
+				totalAmount,
+			},
+		);
+		expect(second.success).toBe(true);
+		expect(second.newState).toBe("partially_settled");
+		await t.mutation(
+			applyPayment,
+			buildEffectArgs(obligationId, "obligation", "applyPayment", {
+				amount: partialAmount,
+			}),
+		);
+
+		const third = await fireTransition(
+			t,
+			"obligation",
+			obligationId,
+			"PAYMENT_APPLIED",
+			{
+				amount: partialAmount,
+				attemptId: "attempt_partial_3",
+				currentAmountSettled: partialAmount * 2,
+				totalAmount,
+			},
+		);
+		expect(third.success).toBe(true);
+		expect(third.newState).toBe("settled");
+		expect(third.effectsScheduled).toContain("applyPayment");
+		expect(third.effectsScheduled).toContain("emitObligationSettled");
+
+		await t.mutation(
+			applyPayment,
+			buildEffectArgs(obligationId, "obligation", "applyPayment", {
+				amount: partialAmount,
+			}),
+		);
+		await t.mutation(
+			emitObligationSettled,
+			buildEffectArgs(obligationId, "obligation", "emitObligationSettled", {
+				amount: partialAmount,
+			}),
+		);
+
+		const mortgage = await t.run(async (ctx) => ctx.db.get(mortgageId));
+		const obligationAfterSettlement = await t.run(async (ctx) =>
+			ctx.db.get(obligationId),
+		);
+		expect(mortgage?.status).toBe("active");
+		expect(obligationAfterSettlement?.status).toBe("settled");
+		expect(obligationAfterSettlement?.amountSettled).toBe(totalAmount);
 	});
 });
 
