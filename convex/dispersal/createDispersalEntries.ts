@@ -280,7 +280,10 @@ export const createDispersalEntries = internalMutation({
 				amount: share.amount,
 				dispersalDate: args.settledDate,
 				obligationId: args.obligationId,
-				servicingFeeDeducted: effectiveServicingFee,
+				// Canonical fee accounting lives on servicingFeeEntries and
+				// calculationDetails.servicingFee. Keep this row-level field as a
+				// non-overcounting compatibility value.
+				servicingFeeDeducted: 0,
 				status: "pending",
 				idempotencyKey: `${args.idempotencyKey}:${share.lenderId}`,
 				calculationDetails: {

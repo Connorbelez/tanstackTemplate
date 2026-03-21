@@ -10,17 +10,17 @@ This design is intentionally grounded in the current codebase, not just the prod
 
 ### What already exists
 
-- Borrower collection strategy abstraction exists as `PaymentMethod` in [convex/payments/methods/interface.ts](/Users/connor/Dev/tanstackFairLend/fairlendapp/convex/payments/methods/interface.ts).
+- Borrower collection strategy abstraction exists as `PaymentMethod` in [convex/payments/methods/interface.ts](../../convex/payments/methods/interface.ts).
 - Two implementations exist today:
-  - `ManualPaymentMethod` in [convex/payments/methods/manual.ts](/Users/connor/Dev/tanstackFairLend/fairlendapp/convex/payments/methods/manual.ts)
-  - `MockPADMethod` in [convex/payments/methods/mockPAD.ts](/Users/connor/Dev/tanstackFairLend/fairlendapp/convex/payments/methods/mockPAD.ts)
-- Runtime method lookup exists in [convex/payments/methods/registry.ts](/Users/connor/Dev/tanstackFairLend/fairlendapp/convex/payments/methods/registry.ts).
-- Collection attempts are already modeled as a governed entity with a lifecycle in [convex/engine/machines/collectionAttempt.machine.ts](/Users/connor/Dev/tanstackFairLend/fairlendapp/convex/engine/machines/collectionAttempt.machine.ts).
-- Collection attempt effects already fan out to obligations and retry rules in [convex/engine/effects/collectionAttempt.ts](/Users/connor/Dev/tanstackFairLend/fairlendapp/convex/engine/effects/collectionAttempt.ts).
-- Obligation settlement already schedules lender dispersal creation in [convex/engine/effects/obligation.ts](/Users/connor/Dev/tanstackFairLend/fairlendapp/convex/engine/effects/obligation.ts).
-- Dispersal creation already exists in [convex/dispersal/createDispersalEntries.ts](/Users/connor/Dev/tanstackFairLend/fairlendapp/convex/dispersal/createDispersalEntries.ts).
-- Deal closing already has a governed state machine in [convex/engine/machines/deal.machine.ts](/Users/connor/Dev/tanstackFairLend/fairlendapp/convex/engine/machines/deal.machine.ts), and ownership reroute side effects in [convex/engine/effects/dealClosingPayments.ts](/Users/connor/Dev/tanstackFairLend/fairlendapp/convex/engine/effects/dealClosingPayments.ts).
-- Ledger writes already flow through a single validated write path, `postEntry`, in [convex/ledger/postEntry.ts](/Users/connor/Dev/tanstackFairLend/fairlendapp/convex/ledger/postEntry.ts).
+  - `ManualPaymentMethod` in [convex/payments/methods/manual.ts](../../convex/payments/methods/manual.ts)
+  - `MockPADMethod` in [convex/payments/methods/mockPAD.ts](../../convex/payments/methods/mockPAD.ts)
+- Runtime method lookup exists in [convex/payments/methods/registry.ts](../../convex/payments/methods/registry.ts).
+- Collection attempts are already modeled as a governed entity with a lifecycle in [convex/engine/machines/collectionAttempt.machine.ts](../../convex/engine/machines/collectionAttempt.machine.ts).
+- Collection attempt effects already fan out to obligations and retry rules in [convex/engine/effects/collectionAttempt.ts](../../convex/engine/effects/collectionAttempt.ts).
+- Obligation settlement already schedules lender dispersal creation in [convex/engine/effects/obligation.ts](../../convex/engine/effects/obligation.ts).
+- Dispersal creation already exists in [convex/dispersal/createDispersalEntries.ts](../../convex/dispersal/createDispersalEntries.ts).
+- Deal closing already has a governed state machine in [convex/engine/machines/deal.machine.ts](../../convex/engine/machines/deal.machine.ts), and ownership reroute side effects in [convex/engine/effects/dealClosingPayments.ts](../../convex/engine/effects/dealClosingPayments.ts).
+- Ledger writes already flow through a single validated write path, `postEntry`, in [convex/ledger/postEntry.ts](../../convex/ledger/postEntry.ts).
 
 ### What does not exist yet
 
@@ -114,7 +114,7 @@ This creates a replay-safe audit trail and a dedupe barrier.
 
 ## Canonical Contract
 
-Replace the current borrower-only `InitiateParams` contract with a new transfer contract. The current interface in [convex/payments/methods/interface.ts](/Users/connor/Dev/tanstackFairLend/fairlendapp/convex/payments/methods/interface.ts) is too collection-specific because it hardcodes `borrowerId`, `mortgageId`, and `planEntryId`.
+Replace the current borrower-only `InitiateParams` contract with a new transfer contract. The current interface in [convex/payments/methods/interface.ts](../../convex/payments/methods/interface.ts) is too collection-specific because it hardcodes `borrowerId`, `mortgageId`, and `planEntryId`.
 
 ```ts
 export interface TransferRequestInput {
@@ -219,7 +219,7 @@ Recommended events:
 
 ### Why a new machine is required
 
-The existing collection attempt machine in [convex/engine/machines/collectionAttempt.machine.ts](/Users/connor/Dev/tanstackFairLend/fairlendapp/convex/engine/machines/collectionAttempt.machine.ts) is tightly shaped around borrower collection retries:
+The existing collection attempt machine in [convex/engine/machines/collectionAttempt.machine.ts](../../convex/engine/machines/collectionAttempt.machine.ts) is tightly shaped around borrower collection retries:
 
 - It assumes retry scheduling semantics.
 - It emits `PAYMENT_APPLIED` to obligations as its core success side effect.
@@ -259,8 +259,8 @@ Do not mutate the existing `PaymentMethod` registry into a kitchen sink. It is s
 
 Current integration:
 
-- `collectionPlanEntries` spawn `collectionAttempts` using a collection-specific method string in [convex/schema.ts](/Users/connor/Dev/tanstackFairLend/fairlendapp/convex/schema.ts:551).
-- Successful collection attempts emit `PAYMENT_APPLIED` directly in [convex/engine/effects/collectionAttempt.ts](/Users/connor/Dev/tanstackFairLend/fairlendapp/convex/engine/effects/collectionAttempt.ts).
+- `collectionPlanEntries` spawn `collectionAttempts` using a collection-specific method string in [convex/schema.ts](../../convex/schema.ts).
+- Successful collection attempts emit `PAYMENT_APPLIED` directly in [convex/engine/effects/collectionAttempt.ts](../../convex/engine/effects/collectionAttempt.ts).
 
 Target integration:
 
@@ -282,8 +282,8 @@ This keeps collection rules stable while moving execution into the new rail.
 
 Current integration:
 
-- `emitPaymentReceived` applies payment across referenced obligations in [convex/engine/effects/collectionAttempt.ts](/Users/connor/Dev/tanstackFairLend/fairlendapp/convex/engine/effects/collectionAttempt.ts).
-- `emitObligationSettled` then schedules dispersal creation in [convex/engine/effects/obligation.ts](/Users/connor/Dev/tanstackFairLend/fairlendapp/convex/engine/effects/obligation.ts).
+- `emitPaymentReceived` applies payment across referenced obligations in [convex/engine/effects/collectionAttempt.ts](../../convex/engine/effects/collectionAttempt.ts).
+- `emitObligationSettled` then schedules dispersal creation in [convex/engine/effects/obligation.ts](../../convex/engine/effects/obligation.ts).
 
 Target integration:
 
@@ -295,8 +295,8 @@ Target integration:
 
 Current integration:
 
-- `emitObligationSettled` schedules `createDispersalEntries` with `{ mortgageId, obligationId, settledAmount, settledDate }` in [convex/engine/effects/obligation.ts](/Users/connor/Dev/tanstackFairLend/fairlendapp/convex/engine/effects/obligation.ts:172).
-- `createDispersalEntries` derives lender shares from current ownership positions and reroutes in [convex/dispersal/createDispersalEntries.ts](/Users/connor/Dev/tanstackFairLend/fairlendapp/convex/dispersal/createDispersalEntries.ts).
+- `emitObligationSettled` schedules `createDispersalEntries` with `{ mortgageId, obligationId, settledAmount, settledDate }` in [convex/engine/effects/obligation.ts](../../convex/engine/effects/obligation.ts).
+- `createDispersalEntries` derives lender shares from current ownership positions and reroutes in [convex/dispersal/createDispersalEntries.ts](../../convex/dispersal/createDispersalEntries.ts).
 
 Target integration:
 
@@ -310,8 +310,8 @@ This is a major foot gun in the current architecture: the system already compute
 
 Current integration:
 
-- Deal closing ends with `FUNDS_RECEIVED` in [convex/engine/machines/deal.machine.ts](/Users/connor/Dev/tanstackFairLend/fairlendapp/convex/engine/machines/deal.machine.ts).
-- The current `updatePaymentSchedule` effect only inserts a future `dealReroutes` record in [convex/engine/effects/dealClosingPayments.ts](/Users/connor/Dev/tanstackFairLend/fairlendapp/convex/engine/effects/dealClosingPayments.ts).
+- Deal closing ends with `FUNDS_RECEIVED` in [convex/engine/machines/deal.machine.ts](../../convex/engine/machines/deal.machine.ts).
+- The current `updatePaymentSchedule` effect only inserts a future `dealReroutes` record in [convex/engine/effects/dealClosingPayments.ts](../../convex/engine/effects/dealClosingPayments.ts).
 
 Target integration:
 
@@ -327,8 +327,8 @@ The current implementation updates future payment allocation after closing, but 
 
 Current integration:
 
-- `postEntry` in [convex/ledger/postEntry.ts](/Users/connor/Dev/tanstackFairLend/fairlendapp/convex/ledger/postEntry.ts) is the single validated write path for the ownership ledger.
-- `ledger_journal_entries` represent ownership ledger entries, not trust cash ledger entries, per [convex/schema.ts](/Users/connor/Dev/tanstackFairLend/fairlendapp/convex/schema.ts:953).
+- `postEntry` in [convex/ledger/postEntry.ts](../../convex/ledger/postEntry.ts) is the single validated write path for the ownership ledger.
+- `ledger_journal_entries` represent ownership ledger entries, not trust cash ledger entries, per [convex/schema.ts](../../convex/schema.ts).
 
 Target integration:
 
@@ -346,9 +346,9 @@ This distinction is critical. Ownership units and trust cash are not the same th
 
 Observed auth patterns:
 
-- Query RBAC is enforced with JWT-derived permissions via `requirePermission(...)` in [convex/fluent.ts](/Users/connor/Dev/tanstackFairLend/fairlendapp/convex/fluent.ts:176).
-- Dispersal queries already require `dispersal:view` in [convex/dispersal/queries.ts](/Users/connor/Dev/tanstackFairLend/fairlendapp/convex/dispersal/queries.ts:5).
-- Engine command provenance already supports `sessionId` and command source metadata in [convex/engine/commands.ts](/Users/connor/Dev/tanstackFairLend/fairlendapp/convex/engine/commands.ts).
+- Query RBAC is enforced with JWT-derived permissions via `requirePermission(...)` in [convex/fluent.ts](../../convex/fluent.ts).
+- Dispersal queries already require `dispersal:view` in [convex/dispersal/queries.ts](../../convex/dispersal/queries.ts).
+- Engine command provenance already supports `sessionId` and command source metadata in [convex/engine/commands.ts](../../convex/engine/commands.ts).
 
 Target permissions:
 
@@ -421,11 +421,11 @@ The current ledger enforces ownership-unit constraints, not trust-cash accountin
 
 ### Foot gun 4: Using current positions instead of effective ownership snapshot incorrectly
 
-`createDispersalEntries` already adjusts current positions with `dealReroutes` by `effectiveAfterDate` in [convex/dispersal/createDispersalEntries.ts](/Users/connor/Dev/tanstackFairLend/fairlendapp/convex/dispersal/createDispersalEntries.ts:88). New transfer logic must preserve date-sensitive ownership semantics and not accidentally use “latest owner wins” logic for historical cash events.
+`createDispersalEntries` already adjusts current positions with `dealReroutes` by `effectiveAfterDate` in [convex/dispersal/createDispersalEntries.ts](../../convex/dispersal/createDispersalEntries.ts). New transfer logic must preserve date-sensitive ownership semantics and not accidentally use “latest owner wins” logic for historical cash events.
 
 ### Foot gun 5: Confusing lender auth ids with lender entity ids
 
-The codebase currently bridges between auth ids stored on ledger accounts and entity ids stored in domain tables, for example in [convex/dispersal/createDispersalEntries.ts](/Users/connor/Dev/tanstackFairLend/fairlendapp/convex/dispersal/createDispersalEntries.ts:213) and [convex/auth/resourceChecks.ts](/Users/connor/Dev/tanstackFairLend/fairlendapp/convex/auth/resourceChecks.ts:64). New transfer tables should store canonical entity ids and only use auth ids at auth boundaries.
+The codebase currently bridges between auth ids stored on ledger accounts and entity ids stored in domain tables, for example in [convex/dispersal/createDispersalEntries.ts](../../convex/dispersal/createDispersalEntries.ts) and [convex/auth/resourceChecks.ts](../../convex/auth/resourceChecks.ts). New transfer tables should store canonical entity ids and only use auth ids at auth boundaries.
 
 ### Foot gun 6: Assuming provider callbacks are exactly once
 
@@ -433,7 +433,7 @@ Webhooks will retry, arrive out of order, and occasionally conflict with polling
 
 ### Foot gun 7: Computing servicing fee from current mortgage principal without explicit principal basis
 
-Current dispersal fee calculation uses `mortgage.principal` in [convex/dispersal/createDispersalEntries.ts](/Users/connor/Dev/tanstackFairLend/fairlendapp/convex/dispersal/createDispersalEntries.ts:198). That may diverge from the economically correct principal basis if amortization or paydown semantics evolve. Unified rails should explicitly document whether fees are based on original principal, current principal, or payment-level interest slice.
+Current dispersal fee calculation uses `mortgage.principal` in [convex/dispersal/createDispersalEntries.ts](../../convex/dispersal/createDispersalEntries.ts). That may diverge from the economically correct principal basis if amortization or paydown semantics evolve. Unified rails should explicitly document whether fees are based on original principal, current principal, or payment-level interest slice.
 
 ### Foot gun 8: Allowing manual rails to bypass bank account and ledger semantics
 
