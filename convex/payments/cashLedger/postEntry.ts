@@ -156,6 +156,7 @@ function constraintCheck(args: PostCashEntryInput) {
 // No-op in Phase 1; wired to cursor advancement in Phase 4.
 async function nudge(_ctx: MutationCtx): Promise<void> {
 	// Intentionally empty — Phase 4 will wire cursor consumer notifications here.
+	void _ctx;
 }
 
 async function persistEntry(
