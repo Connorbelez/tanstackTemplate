@@ -369,13 +369,13 @@ describe("getControlBalanceBySubaccount", () => {
 	});
 });
 
-// ── T-011: getControlBalancesByPostingGroup for complete posting group ──
+// ── T-011: getControlBalancesByPostingGroup for posting groups ──
 // The allocation posting group only debits CONTROL:ALLOCATION (for lender
-// payables and servicing fee). The total debits equal the settled amount.
-// ACCRUAL and SETTLEMENT are not touched, so they report valid=true (0n).
+// payables and servicing fee). This is a one-sided posting group — ALLOCATION
+// will have a non-zero balance. ACCRUAL and SETTLEMENT are untouched.
 
 describe("getControlBalancesByPostingGroup", () => {
-	it("reports the correct ALLOCATION balance for a complete allocation posting group", async () => {
+	it("reports non-zero ALLOCATION balance for a one-sided posting group", async () => {
 		const t = createHarness();
 		const seeded = await seedCoreEntities(t);
 		const obligationId = await createSettledObligation(t, {
@@ -415,6 +415,78 @@ describe("getControlBalancesByPostingGroup", () => {
 			const settlementResult = results.find(
 				(r) => r.subaccount === "SETTLEMENT"
 			);
+			expect(settlementResult?.balance).toBe(0n);
+			expect(settlementResult?.isNetZero).toBe(true);
+		});
+	});
+
+	it("reports isNetZero=true when a transient subaccount is debited and credited equally", async () => {
+		const t = createHarness();
+		const seeded = await seedCoreEntities(t);
+
+		const obligationId = await createSettledObligation(t, {
+			mortgageId: seeded.mortgageId,
+			borrowerId: seeded.borrowerId,
+			amount: 75_000,
+		});
+
+		await t.run(async (ctx) => {
+			// Create CONTROL:SETTLEMENT and BORROWER_RECEIVABLE accounts
+			const settlementControl = await getOrCreateCashAccount(ctx, {
+				family: "CONTROL",
+				mortgageId: seeded.mortgageId,
+				obligationId,
+				subaccount: "SETTLEMENT",
+			});
+			const unappliedCash = await getOrCreateCashAccount(ctx, {
+				family: "UNAPPLIED_CASH",
+				mortgageId: seeded.mortgageId,
+			});
+			const receivable = await getOrCreateCashAccount(ctx, {
+				family: "BORROWER_RECEIVABLE",
+				mortgageId: seeded.mortgageId,
+				obligationId,
+			});
+
+			const postingGroupId = `settlement-netzero:${obligationId}`;
+
+			// Debit CONTROL:SETTLEMENT (CASH_APPLIED: debit CONTROL, credit BORROWER_RECEIVABLE)
+			await postCashEntryInternal(ctx, {
+				entryType: "CASH_APPLIED",
+				effectiveDate: "2026-03-01",
+				amount: 75_000,
+				debitAccountId: settlementControl._id,
+				creditAccountId: receivable._id,
+				idempotencyKey: `netzero-debit:${obligationId}`,
+				mortgageId: seeded.mortgageId,
+				obligationId,
+				postingGroupId,
+				source: SYSTEM_SOURCE,
+			});
+
+			// Credit CONTROL:SETTLEMENT (CASH_APPLIED: debit UNAPPLIED_CASH, credit CONTROL)
+			await postCashEntryInternal(ctx, {
+				entryType: "CASH_APPLIED",
+				effectiveDate: "2026-03-01",
+				amount: 75_000,
+				debitAccountId: unappliedCash._id,
+				creditAccountId: settlementControl._id,
+				idempotencyKey: `netzero-credit:${obligationId}`,
+				mortgageId: seeded.mortgageId,
+				obligationId,
+				postingGroupId,
+				source: SYSTEM_SOURCE,
+			});
+
+			const results = await getControlBalancesByPostingGroup(
+				ctx as unknown as QueryCtx,
+				postingGroupId
+			);
+
+			const settlementResult = results.find(
+				(r) => r.subaccount === "SETTLEMENT"
+			);
+			expect(settlementResult).toBeDefined();
 			expect(settlementResult?.balance).toBe(0n);
 			expect(settlementResult?.isNetZero).toBe(true);
 		});
@@ -711,6 +783,16 @@ describe("getOrCreateCashAccount with CONTROL subaccounts", () => {
 			});
 
 			expect(accrualAccount2._id).toBe(accrualAccount1._id);
+
+			// Create CONTROL account WITHOUT a subaccount — must NOT collide
+			const noSubAccount = await getOrCreateCashAccount(ctx, {
+				family: "CONTROL",
+				mortgageId,
+			});
+
+			expect(noSubAccount._id).not.toBe(accrualAccount1._id);
+			expect(noSubAccount._id).not.toBe(allocationAccount._id);
+			expect(noSubAccount.subaccount).toBeUndefined();
 		});
 	});
 });
