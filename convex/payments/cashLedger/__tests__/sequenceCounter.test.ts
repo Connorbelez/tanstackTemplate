@@ -183,7 +183,7 @@ describe("Cash Ledger Sequence Counter", () => {
 		expect(counter?.currentValue).toBe(3n);
 	});
 
-	it("rejects non-FairLend-admin from bootstrap mutation", async () => {
+	it("rejects non-FairLend-admin from initializeCashSequenceCounter mutation", async () => {
 		const t = createHarness();
 		const auth = asNonAdmin(t);
 
