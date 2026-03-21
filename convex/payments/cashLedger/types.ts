@@ -122,3 +122,9 @@ export const CREDIT_NORMAL_FAMILIES: ReadonlySet<CashAccountFamily> = new Set([
 	"LENDER_PAYABLE",
 	"SERVICING_REVENUE",
 ]);
+
+// CONTROL and BORROWER_RECEIVABLE are allowed to go negative in balance checks
+// for non-reversal entry types. Reversals/corrections/suspense-escalations are
+// already excluded from balance checks (Tech Design §9.1 Step 5).
+export const NEGATIVE_BALANCE_EXEMPT_FAMILIES: ReadonlySet<CashAccountFamily> =
+	new Set(["CONTROL", "BORROWER_RECEIVABLE"]);

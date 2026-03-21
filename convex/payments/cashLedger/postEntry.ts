@@ -1,14 +1,18 @@
-import { ConvexError, v } from "convex/values";
+import { ConvexError } from "convex/values";
 import type { Doc, Id } from "../../_generated/dataModel";
 import { internalMutation, type MutationCtx } from "../../_generated/server";
 import type { CommandSource } from "../../engine/types";
-import { sourceValidator } from "../../engine/validators";
 import {
 	assertNonNegativeBalance,
 	projectCashAccountBalance,
 } from "./accounts";
 import { getNextCashSequenceNumber } from "./sequenceCounter";
-import { CASH_ENTRY_TYPE_FAMILY_MAP, type CashEntryType } from "./types";
+import {
+	CASH_ENTRY_TYPE_FAMILY_MAP,
+	NEGATIVE_BALANCE_EXEMPT_FAMILIES,
+	type CashEntryType,
+} from "./types";
+import { postCashEntryArgsValidator } from "./validators";
 
 const BUSINESS_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -103,7 +107,7 @@ function balanceCheck(
 
 	const amount = BigInt(args.amount);
 
-	if (debitAccount.family !== "CONTROL") {
+	if (!NEGATIVE_BALANCE_EXEMPT_FAMILIES.has(debitAccount.family)) {
 		assertNonNegativeBalance(
 			debitAccount,
 			"debit",
@@ -112,7 +116,7 @@ function balanceCheck(
 		);
 	}
 
-	if (creditAccount.family !== "CONTROL") {
+	if (!NEGATIVE_BALANCE_EXEMPT_FAMILIES.has(creditAccount.family)) {
 		assertNonNegativeBalance(
 			creditAccount,
 			"credit",
@@ -126,14 +130,33 @@ function constraintCheck(args: PostCashEntryInput) {
 	if (args.entryType === "REVERSAL" && !args.causedBy) {
 		throw new ConvexError("REVERSAL entries must reference causedBy");
 	}
-	if (
-		args.entryType === "CORRECTION" &&
-		(args.source.actorType !== "admin" || !args.reason)
-	) {
-		throw new ConvexError(
-			"CORRECTION entries require admin source and a reason"
-		);
+	if (args.entryType === "CORRECTION") {
+		if (args.source.actorType !== "admin") {
+			throw new ConvexError(
+				"CORRECTION entries require admin actorType"
+			);
+		}
+		if (!args.source.actorId) {
+			throw new ConvexError(
+				"CORRECTION entries require source.actorId"
+			);
+		}
+		if (!args.causedBy) {
+			throw new ConvexError(
+				"CORRECTION entries must reference causedBy (REQ-242: append-only with back-references)"
+			);
+		}
+		if (!args.reason) {
+			throw new ConvexError("CORRECTION entries require a reason");
+		}
 	}
+}
+
+// Step 9: NUDGE — notify cursor consumers.
+// No-op in Phase 1; wired to cursor advancement in Phase 4.
+async function nudge(_ctx: MutationCtx): Promise<void> {
+	// Intentionally empty — Phase 4 will wire cursor consumer notifications here.
+	void _ctx;
 }
 
 async function persistEntry(
@@ -204,8 +227,9 @@ export async function postCashEntryInternal(
 	ctx: MutationCtx,
 	args: PostCashEntryInput
 ) {
+	// 1. VALIDATE_INPUT
 	validateInput(args);
-
+	// 2. IDEMPOTENCY
 	const existing = await checkIdempotency(ctx, args.idempotencyKey);
 	if (existing) {
 		return {
@@ -215,46 +239,24 @@ export async function postCashEntryInternal(
 		};
 	}
 
+	// 3. RESOLVE_ACCOUNTS
 	const { debitAccount, creditAccount } = await resolveAccounts(ctx, args);
+	// 4. FAMILY_CHECK
 	familyCheck(args, debitAccount, creditAccount);
+	// 5. BALANCE_CHECK
 	balanceCheck(args, debitAccount, creditAccount);
+	// 6. CONSTRAINT_CHECK
 	constraintCheck(args);
+	// 7+8. SEQUENCE + PERSIST
+	const result = await persistEntry(ctx, args, debitAccount, creditAccount);
+	// 9. NUDGE
+	await nudge(ctx);
 
-	return persistEntry(ctx, args, debitAccount, creditAccount);
+	return result;
 }
 
 export const postCashEntry = internalMutation({
-	args: {
-		entryType: v.union(
-			v.literal("OBLIGATION_ACCRUED"),
-			v.literal("CASH_RECEIVED"),
-			v.literal("CASH_APPLIED"),
-			v.literal("LENDER_PAYABLE_CREATED"),
-			v.literal("SERVICING_FEE_RECOGNIZED"),
-			v.literal("LENDER_PAYOUT_SENT"),
-			v.literal("OBLIGATION_WAIVED"),
-			v.literal("OBLIGATION_WRITTEN_OFF"),
-			v.literal("REVERSAL"),
-			v.literal("CORRECTION"),
-			v.literal("SUSPENSE_ESCALATED")
-		),
-		effectiveDate: v.string(),
-		amount: v.number(),
-		debitAccountId: v.id("cash_ledger_accounts"),
-		creditAccountId: v.id("cash_ledger_accounts"),
-		idempotencyKey: v.string(),
-		mortgageId: v.optional(v.id("mortgages")),
-		obligationId: v.optional(v.id("obligations")),
-		attemptId: v.optional(v.id("collectionAttempts")),
-		dispersalEntryId: v.optional(v.id("dispersalEntries")),
-		lenderId: v.optional(v.id("lenders")),
-		borrowerId: v.optional(v.id("borrowers")),
-		postingGroupId: v.optional(v.string()),
-		causedBy: v.optional(v.id("cash_ledger_journal_entries")),
-		reason: v.optional(v.string()),
-		source: sourceValidator,
-		metadata: v.optional(v.any()),
-	},
+	args: postCashEntryArgsValidator,
 	handler: async (ctx, args) => {
 		return postCashEntryInternal(ctx, args);
 	},
