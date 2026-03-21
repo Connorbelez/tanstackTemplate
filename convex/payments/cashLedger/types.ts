@@ -122,3 +122,8 @@ export const CREDIT_NORMAL_FAMILIES: ReadonlySet<CashAccountFamily> = new Set([
 	"LENDER_PAYABLE",
 	"SERVICING_REVENUE",
 ]);
+
+// CONTROL and BORROWER_RECEIVABLE can go negative during reversals.
+// Tech Design §9.1 Step 5: balance check exemptions.
+export const NEGATIVE_BALANCE_EXEMPT_FAMILIES: ReadonlySet<CashAccountFamily> =
+	new Set(["CONTROL", "BORROWER_RECEIVABLE"]);
