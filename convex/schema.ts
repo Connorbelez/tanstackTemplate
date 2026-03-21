@@ -971,7 +971,8 @@ export default defineSchema({
 			"family",
 			"mortgageId",
 			"lenderId",
-		]),
+		])
+		.index("by_family_and_subaccount", ["family", "subaccount"]),
 
 	cash_ledger_journal_entries: defineTable({
 		sequenceNumber: v.int64(),
