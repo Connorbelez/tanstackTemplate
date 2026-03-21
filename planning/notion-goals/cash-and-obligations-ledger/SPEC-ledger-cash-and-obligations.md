@@ -1,5 +1,13 @@
 # SPEC - Cash & Obligations Ledger
 
+> **CANONICAL VERSION**: The canonical version of this spec lives in Notion:
+> - PRD/Goal: https://www.notion.so/329fc1b4402480b2b82ffa798d6c8e73
+> - Technical Design: https://www.notion.so/329fc1b44024801da365d6ccdf137e2a
+>
+> This local file is retained for reference but may drift from the Notion pages.
+> The Notion versions were updated on 2026-03-20 with code audit findings including
+> 3 confirmed bugs, 3 critical design gaps, and 4 operational risks.
+
 ## Overview
 
 FairLend needs a ledger that tracks money-side financial truth with the same
