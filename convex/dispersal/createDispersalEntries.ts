@@ -208,7 +208,8 @@ export const createDispersalEntries = internalMutation({
 		const annualServicingRate = mortgage.annualServicingRate ?? 0.01;
 		const servicingFee = calculateServicingFee(
 			annualServicingRate,
-			mortgage.principal
+			mortgage.principal,
+			mortgage.paymentFrequency
 		);
 		if (servicingFee >= args.settledAmount) {
 			throw new ConvexError(
@@ -232,7 +233,7 @@ export const createDispersalEntries = internalMutation({
 
 		const lenderIdCache = new Map<string, Id<"lenders">>();
 		const normalizedPositions: Array<{
-			accountId: Id<"ledger_accounts">;
+			lenderAccountId: Id<"ledger_accounts">;
 			lenderId: Id<"lenders">;
 			units: number;
 		}> = [];
@@ -248,7 +249,7 @@ export const createDispersalEntries = internalMutation({
 			lenderIdCache.set(position.lenderAuthId, lenderId);
 
 			normalizedPositions.push({
-				accountId: position.lenderAccountId,
+				lenderAccountId: position.lenderAccountId,
 				lenderId,
 				units: position.units,
 			});
