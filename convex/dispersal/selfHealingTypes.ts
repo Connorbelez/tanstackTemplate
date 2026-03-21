@@ -10,7 +10,6 @@ export interface HealingCandidate {
 }
 
 export interface HealingResult {
-	alreadyResolved: number;
 	candidatesFound: number;
 	checkedAt: number;
 	escalated: number;

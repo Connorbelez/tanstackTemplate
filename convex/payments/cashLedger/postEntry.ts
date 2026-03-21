@@ -93,7 +93,11 @@ function balanceCheck(
 	debitAccount: Doc<"cash_ledger_accounts">,
 	creditAccount: Doc<"cash_ledger_accounts">
 ) {
-	if (args.entryType === "REVERSAL" || args.entryType === "CORRECTION") {
+	if (
+		args.entryType === "REVERSAL" ||
+		args.entryType === "CORRECTION" ||
+		args.entryType === "SUSPENSE_ESCALATED"
+	) {
 		return;
 	}
 

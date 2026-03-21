@@ -62,6 +62,10 @@ const HEALING_SOURCE: CommandSource = {
 
 // ── T-009: findSettledWithoutDispersals ──────────────────────────────
 
+// TODO: At scale, paginate the settled obligations query and batch the
+// per-obligation lookups to avoid N+1. Pre-launch volume is small enough
+// that the current approach is acceptable on a 15-minute interval.
+
 /**
  * Find settled obligations that have no dispersal entries,
  * filtering out those already escalated.
@@ -237,6 +241,8 @@ export const retriggerDispersal = internalMutation({
 
 /**
  * Mark a healing attempt as resolved once dispersal entries exist.
+ * Called manually by admin or by future auto-resolution logic — not by
+ * the self-healing cron itself (which only retries or escalates).
  */
 export const resolveHealingAttempt = internalMutation({
 	args: { obligationId: v.id("obligations") },
@@ -267,7 +273,6 @@ export const dispersalSelfHealingCron = internalAction({
 				candidatesFound: 0,
 				retriggered: 0,
 				escalated: 0,
-				alreadyResolved: 0,
 			};
 		}
 
@@ -317,7 +322,6 @@ export const dispersalSelfHealingCron = internalAction({
 			candidatesFound: candidates.length,
 			retriggered,
 			escalated,
-			alreadyResolved: 0,
 		};
 	},
 });
