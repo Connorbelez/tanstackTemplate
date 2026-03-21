@@ -9,10 +9,15 @@ export const PERIODS_PER_YEAR: Record<PaymentFrequency, number> = {
 	weekly: 52,
 };
 
-export function getPeriodsPerYear(paymentFrequency: string): number {
-	const periodsPerYear = PERIODS_PER_YEAR[paymentFrequency as PaymentFrequency];
-	if (!periodsPerYear) {
+export function isPaymentFrequency(value: string): value is PaymentFrequency {
+	return value in PERIODS_PER_YEAR;
+}
+
+export function getPeriodsPerYear(
+	paymentFrequency: PaymentFrequency | string,
+): number {
+	if (!isPaymentFrequency(paymentFrequency)) {
 		throw new Error(`Unknown payment frequency: ${paymentFrequency}`);
 	}
-	return periodsPerYear;
+	return PERIODS_PER_YEAR[paymentFrequency];
 }
