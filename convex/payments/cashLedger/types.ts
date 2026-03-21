@@ -94,7 +94,10 @@ export const CASH_ENTRY_TYPE_FAMILY_MAP: Record<
 	},
 };
 
-// ── Transient subaccounts (must net to zero per posting group) ─
+// ── Transient subaccounts (track intermediate accounting states) ─
+// These subaccounts represent in-flight obligations that should eventually
+// resolve. Use getControlBalancesByPostingGroup to monitor their balances
+// within a posting group. Non-zero balances indicate pending work, not errors.
 // WAIVER is NOT transient — it's monotonically increasing (cumulative waivers).
 export const TRANSIENT_SUBACCOUNTS: ReadonlySet<ControlSubaccount> = new Set([
 	"ACCRUAL",
