@@ -88,16 +88,16 @@ export const getJournalSettledAmountForObligationInternal = internalQuery({
 
 // ── CONTROL Subaccount Reconciliation ─────────────────────────
 
-export interface ControlBalanceResult {
+export interface ControlSubaccountBalance {
 	balance: bigint;
-	subaccount: string;
-	valid: boolean;
+	isNetZero: boolean;
+	subaccount: ControlSubaccount;
 }
 
-export async function validateControlNetZero(
+export async function getControlBalancesByPostingGroup(
 	ctx: QueryCtx,
 	postingGroupId: string
-): Promise<ControlBalanceResult[]> {
+): Promise<ControlSubaccountBalance[]> {
 	const entries = await ctx.db
 		.query("cash_ledger_journal_entries")
 		.withIndex("by_posting_group", (q) =>
@@ -105,12 +105,23 @@ export async function validateControlNetZero(
 		)
 		.collect();
 
-	const balances = new Map<string, bigint>();
+	const balances = new Map<ControlSubaccount, bigint>();
+	const accountCache = new Map<string, Doc<"cash_ledger_accounts"> | null>();
+
+	async function getCachedAccount(accountId: Id<"cash_ledger_accounts">) {
+		const key = accountId as string;
+		if (accountCache.has(key)) {
+			return accountCache.get(key) ?? null;
+		}
+		const account = await ctx.db.get(accountId);
+		accountCache.set(key, account);
+		return account;
+	}
 
 	for (const entry of entries) {
 		const [debitAccount, creditAccount] = await Promise.all([
-			ctx.db.get(entry.debitAccountId),
-			ctx.db.get(entry.creditAccountId),
+			getCachedAccount(entry.debitAccountId),
+			getCachedAccount(entry.creditAccountId),
 		]);
 
 		if (debitAccount?.family === "CONTROL" && debitAccount.subaccount) {
@@ -123,10 +134,10 @@ export async function validateControlNetZero(
 		}
 	}
 
-	const results: ControlBalanceResult[] = [];
+	const results: ControlSubaccountBalance[] = [];
 	for (const sub of TRANSIENT_SUBACCOUNTS) {
 		const balance = balances.get(sub) ?? 0n;
-		results.push({ subaccount: sub, balance, valid: balance === 0n });
+		results.push({ subaccount: sub, balance, isNetZero: balance === 0n });
 	}
 	return results;
 }

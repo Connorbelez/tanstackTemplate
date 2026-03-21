@@ -11,7 +11,7 @@ import {
 import { postCashEntryInternal } from "../postEntry";
 import {
 	getControlBalanceBySubaccount,
-	validateControlNetZero,
+	getControlBalancesByPostingGroup,
 } from "../reconciliation";
 import { ENTRY_TYPE_CONTROL_SUBACCOUNT, TRANSIENT_SUBACCOUNTS } from "../types";
 
@@ -369,12 +369,12 @@ describe("getControlBalanceBySubaccount", () => {
 	});
 });
 
-// ── T-011: validateControlNetZero for complete posting group ──
+// ── T-011: getControlBalancesByPostingGroup for complete posting group ──
 // The allocation posting group only debits CONTROL:ALLOCATION (for lender
 // payables and servicing fee). The total debits equal the settled amount.
 // ACCRUAL and SETTLEMENT are not touched, so they report valid=true (0n).
 
-describe("validateControlNetZero", () => {
+describe("getControlBalancesByPostingGroup", () => {
 	it("reports the correct ALLOCATION balance for a complete allocation posting group", async () => {
 		const t = createHarness();
 		const seeded = await seedCoreEntities(t);
@@ -394,7 +394,7 @@ describe("validateControlNetZero", () => {
 				source: SYSTEM_SOURCE,
 			});
 
-			const results = await validateControlNetZero(
+			const results = await getControlBalancesByPostingGroup(
 				ctx as unknown as QueryCtx,
 				`allocation:${obligationId}`
 			);
@@ -405,18 +405,18 @@ describe("validateControlNetZero", () => {
 			);
 			expect(allocationResult).toBeDefined();
 			expect(allocationResult?.balance).toBe(100_000n);
-			expect(allocationResult?.valid).toBe(false);
+			expect(allocationResult?.isNetZero).toBe(false);
 
 			// ACCRUAL and SETTLEMENT are not involved in this posting group
 			const accrualResult = results.find((r) => r.subaccount === "ACCRUAL");
 			expect(accrualResult?.balance).toBe(0n);
-			expect(accrualResult?.valid).toBe(true);
+			expect(accrualResult?.isNetZero).toBe(true);
 
 			const settlementResult = results.find(
 				(r) => r.subaccount === "SETTLEMENT"
 			);
 			expect(settlementResult?.balance).toBe(0n);
-			expect(settlementResult?.valid).toBe(true);
+			expect(settlementResult?.isNetZero).toBe(true);
 		});
 	});
 
@@ -477,7 +477,7 @@ describe("validateControlNetZero", () => {
 				source: SYSTEM_SOURCE,
 			});
 
-			const results = await validateControlNetZero(
+			const results = await getControlBalancesByPostingGroup(
 				ctx as unknown as QueryCtx,
 				`allocation:${obligationId}`
 			);
@@ -487,13 +487,13 @@ describe("validateControlNetZero", () => {
 			);
 			expect(allocationResult).toBeDefined();
 			expect(allocationResult?.balance).not.toBe(0n);
-			expect(allocationResult?.valid).toBe(false);
+			expect(allocationResult?.isNetZero).toBe(false);
 		});
 	});
 
 	// ── T-013: WAIVER subaccount exempt from net-zero ──
 
-	it("does not include WAIVER in validateControlNetZero results", async () => {
+	it("does not include WAIVER in getControlBalancesByPostingGroup results", async () => {
 		const t = createHarness();
 
 		await t.run(async (ctx) => {
@@ -607,7 +607,7 @@ describe("validateControlNetZero", () => {
 				source: SYSTEM_SOURCE,
 			});
 
-			const results = await validateControlNetZero(
+			const results = await getControlBalancesByPostingGroup(
 				ctx as unknown as QueryCtx,
 				postingGroupId
 			);
@@ -628,7 +628,7 @@ describe("validateControlNetZero", () => {
 			// The transient subaccounts should all be zero (no entries touched them)
 			for (const result of results) {
 				expect(result.balance).toBe(0n);
-				expect(result.valid).toBe(true);
+				expect(result.isNetZero).toBe(true);
 			}
 		});
 	});

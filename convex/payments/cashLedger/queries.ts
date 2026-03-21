@@ -8,9 +8,9 @@ import {
 } from "./accounts";
 import {
 	getControlBalanceBySubaccount,
+	getControlBalancesByPostingGroup,
 	getJournalSettledAmountForObligation,
 	reconcileObligationSettlementProjectionInternal,
-	validateControlNetZero,
 } from "./reconciliation";
 
 function compareSequence(
@@ -239,6 +239,6 @@ export const getControlBalance = ledgerQuery
 export const controlNetZeroCheck = ledgerQuery
 	.input({ postingGroupId: v.string() })
 	.handler(async (ctx, args) => {
-		return validateControlNetZero(ctx, args.postingGroupId);
+		return getControlBalancesByPostingGroup(ctx, args.postingGroupId);
 	})
 	.public();
