@@ -2,7 +2,6 @@ import { ConvexError, v } from "convex/values";
 import { internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
-import { calculateServicingFee } from "../dispersal/servicingFee";
 import type { CommandSource, TransitionResult } from "../engine/types";
 import { adminMutation, authedQuery } from "../fluent";
 import { getAccountLenderId } from "../ledger/accountOwnership";
@@ -783,7 +782,7 @@ export const advanceTime = adminMutation
 		}
 
 		const newDate = addDays(clock.currentDate, args.days);
-		const asOfTimestamp = Math.floor(new Date(newDate).getTime() / 1000);
+		const asOfTimestamp = Math.floor(parseDate(newDate).getTime() / 1000);
 		await ctx.db.patch(clock._id, { currentDate: newDate });
 
 		const simMtgIdSet = await getSimulationMortgageIdSet(ctx);
@@ -915,13 +914,6 @@ export const triggerDispersal = adminMutation
 		if (args.settledAmount > remainingAmount) {
 			throw new ConvexError(
 				`settledAmount ${args.settledAmount} exceeds remaining balance ${remainingAmount}.`
-			);
-		}
-
-		const servicingFee = calculateServicingFee(0.01, Number(TOTAL_SUPPLY));
-		if (args.settledAmount < servicingFee) {
-			throw new ConvexError(
-				`settledAmount ${args.settledAmount} does not cover servicing fee ${servicingFee}.`
 			);
 		}
 

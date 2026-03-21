@@ -14,14 +14,14 @@ This spec also folds in the requirement to support lower-level primitives for si
 
 The implementation must preserve the current architectural shape and should align with these files:
 
-- [convex/schema.ts](/Users/connor/Dev/tanstackFairLend/fairlendapp/convex/schema.ts)
-- [convex/ledger/postEntry.ts](/Users/connor/Dev/tanstackFairLend/fairlendapp/convex/ledger/postEntry.ts)
-- [convex/ledger/queries.ts](/Users/connor/Dev/tanstackFairLend/fairlendapp/convex/ledger/queries.ts)
-- [convex/ledger/types.ts](/Users/connor/Dev/tanstackFairLend/fairlendapp/convex/ledger/types.ts)
-- [convex/dispersal/createDispersalEntries.ts](/Users/connor/Dev/tanstackFairLend/fairlendapp/convex/dispersal/createDispersalEntries.ts)
-- [convex/accrual/ownershipPeriods.ts](/Users/connor/Dev/tanstackFairLend/fairlendapp/convex/accrual/ownershipPeriods.ts)
-- [docs/fluent-convex/middleware.md](/Users/connor/Dev/tanstackFairLend/fairlendapp/docs/fluent-convex/middleware.md)
-- [docs/fluent-convex/reusable-chains.md](/Users/connor/Dev/tanstackFairLend/fairlendapp/docs/fluent-convex/reusable-chains.md)
+- [convex/schema.ts](../convex/schema.ts)
+- [convex/ledger/postEntry.ts](../convex/ledger/postEntry.ts)
+- [convex/ledger/queries.ts](../convex/ledger/queries.ts)
+- [convex/ledger/types.ts](../convex/ledger/types.ts)
+- [convex/dispersal/createDispersalEntries.ts](../convex/dispersal/createDispersalEntries.ts)
+- [convex/accrual/ownershipPeriods.ts](../convex/accrual/ownershipPeriods.ts)
+- [docs/fluent-convex/middleware.md](../docs/fluent-convex/middleware.md)
+- [docs/fluent-convex/reusable-chains.md](../docs/fluent-convex/reusable-chains.md)
 
 The design must respect the existing ledger principles already in place:
 
@@ -367,7 +367,7 @@ The new financial query surface should support:
 - audit-ready journal export
 - reconstruction from a given day or sequence number
 
-The existing ownership queries in [convex/ledger/queries.ts](/Users/connor/Dev/tanstackFairLend/fairlendapp/convex/ledger/queries.ts) should remain available and can be extended with cross-ledger helpers only if needed.
+The existing ownership queries in [convex/ledger/queries.ts](../convex/ledger/queries.ts) should remain available and can be extended with cross-ledger helpers only if needed.
 
 ### Audit And Export Requirements
 

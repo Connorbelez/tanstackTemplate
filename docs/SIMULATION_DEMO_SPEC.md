@@ -286,7 +286,7 @@ BECAME_DUE transition fires
 emitObligationSettled mutation
         │
         ▼ (scheduler.runAfter)
-createDisbursalEntries — creates ledger entries
+createDispersalEntries — creates ledger entries
         │
         ▼
 Lenders receive funds in ledger accounts

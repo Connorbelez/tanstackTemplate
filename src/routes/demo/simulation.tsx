@@ -154,11 +154,18 @@ function truncateId(id: string, len = 10): string {
 	return id.length > len ? `${id.slice(0, len)}…` : id;
 }
 
-function daysLabel(clockDate: string | null, startedAt: number | null): string {
-	if (!(clockDate && startedAt)) {
+/** Default simulation start date used when no explicit start is available. */
+const SIMULATION_START_DATE = "2024-01-01";
+
+function daysLabel(
+	clockDate: string | null,
+	simulationStartDate?: string | null
+): string {
+	if (!clockDate) {
 		return "—";
 	}
-	const start = new Date(startedAt);
+	const startDateStr = simulationStartDate ?? SIMULATION_START_DATE;
+	const start = new Date(`${startDateStr}T00:00:00Z`);
 	const current = new Date(`${clockDate}T00:00:00Z`);
 	const days = Math.floor(
 		(current.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)
@@ -195,9 +202,28 @@ function resolveJumpDays(
 	if (Number.isNaN(target.getTime())) {
 		return { error: "Invalid date." };
 	}
-	const current = currentClockDate ?? "2024-01-01";
-	const diffMs = target.getTime() - new Date(`${current}T00:00:00Z`).getTime();
-	return { days: Math.round(diffMs / (1000 * 60 * 60 * 24)) };
+
+	// Reject normalized dates (e.g. "2024-02-31" silently becomes "2024-03-02")
+	const normalizedISO = target.toISOString().slice(0, 10);
+	if (normalizedISO !== jumpDate) {
+		return {
+			error: `Invalid calendar date. "${jumpDate}" was normalized to "${normalizedISO}".`,
+		};
+	}
+
+	const current = currentClockDate ?? SIMULATION_START_DATE;
+	const currentDate = new Date(`${current}T00:00:00Z`);
+	const diffMs = target.getTime() - currentDate.getTime();
+	const days = Math.round(diffMs / (1000 * 60 * 60 * 24));
+
+	// Reject dates in the past relative to the current simulation date
+	if (days <= 0) {
+		return {
+			error: `Target date must be after the current simulation date (${current}).`,
+		};
+	}
+
+	return { days };
 }
 
 function resolveSettlementAmount(
@@ -365,7 +391,7 @@ function SimulationDemo() {
 		handleAdvance(result.days);
 	}, [jumpDate, simState?.clockDate, handleAdvance]);
 
-	const handleTriggerDispersal = useCallback(() => {
+	const handleTriggerDispersal = useCallback(async () => {
 		if (!(selectedObligation && settledAmount)) {
 			return;
 		}
@@ -377,7 +403,7 @@ function SimulationDemo() {
 			setError(amountResult.error);
 			return;
 		}
-		runAction("Payment applied", () =>
+		await runAction("Payment applied", () =>
 			trigger({
 				obligationId: selectedObligation._id,
 				settledAmount: amountResult.amount,
@@ -411,10 +437,7 @@ function SimulationDemo() {
 								className="bg-muted text-muted-foreground"
 								variant="secondary"
 							>
-								{daysLabel(
-									simState?.clockDate ?? null,
-									simState?.startedAt ?? null
-								)}
+								{daysLabel(simState?.clockDate ?? null)}
 							</Badge>
 						</div>
 					)}
@@ -459,6 +482,7 @@ function SimulationDemo() {
 					<AlertCircle className="size-4 shrink-0" />
 					<span className="flex-1">{error}</span>
 					<button
+						aria-label="Dismiss error"
 						className="text-red-600 hover:text-red-900"
 						onClick={() => setError(null)}
 						type="button"
@@ -472,6 +496,7 @@ function SimulationDemo() {
 					<CheckCircle2 className="size-4 shrink-0" />
 					<span className="flex-1">{successMsg}</span>
 					<button
+						aria-label="Dismiss success message"
 						className="text-green-600 hover:text-green-900"
 						onClick={() => setSuccessMsg(null)}
 						type="button"
@@ -875,9 +900,6 @@ function ObligationsTab({
 	selectedObligation: UpcomingDispersal | null;
 	settledAmount: string;
 	onTrigger: (ob: UpcomingDispersal) => void;
-} & {
-	selectedObligation: UpcomingDispersal | null;
-	settledAmount: string;
 	setSettledAmount: (v: string) => void;
 	onConfirmTrigger: () => void;
 	onCancel: () => void;

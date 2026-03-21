@@ -4,7 +4,7 @@
 
 ### Overview
 
-This spec fixes the current accounting-domain defect in the dispersal pipeline. The defect is that `createDispersalEntries` rejects an ordinary settled-interest payment when the servicing fee computed from principal exceeds the amount actually settled. The current behavior is visible in [convex/dispersal/createDispersalEntries.ts](/Users/connor/Dev/tanstackFairLend/fairlendapp/convex/dispersal/createDispersalEntries.ts), where the mutation calls [convex/dispersal/servicingFee.ts](/Users/connor/Dev/tanstackFairLend/fairlendapp/convex/dispersal/servicingFee.ts) and fails if `servicingFee >= settledAmount`. That makes the system brittle for partial payments, underpayments, and any settlement that is smaller than the monthly fee.
+This spec fixes the current accounting-domain defect in the dispersal pipeline. The defect is that `createDispersalEntries` rejects an ordinary settled-interest payment when the servicing fee computed from principal exceeds the amount actually settled. The current behavior is visible in [convex/dispersal/createDispersalEntries.ts](../convex/dispersal/createDispersalEntries.ts), where the mutation calls [convex/dispersal/servicingFee.ts](../convex/dispersal/servicingFee.ts) and fails if `servicingFee >= settledAmount`. That makes the system brittle for partial payments, underpayments, and any settlement that is smaller than the monthly fee.
 
 The business goal is to make dispersal accounting correct, deterministic, and auditable:
 the system must recognize the full servicing fee that was earned, apply only the cash that was actually collected, and carry any shortfall as an explicit receivable. It must not silently cap the fee, and it must not reject an otherwise valid settlement.
@@ -42,7 +42,7 @@ In scope:
 
 Out of scope:
 
-- changing the mortgage accrual math in [convex/accrual/interestMath.ts](/Users/connor/Dev/tanstackFairLend/fairlendapp/convex/accrual/interestMath.ts),
+- changing the mortgage accrual math in [convex/accrual/interestMath.ts](../convex/accrual/interestMath.ts),
 - redesigning the full money ledger,
 - changing the payment rail/provider integration,
 - changing borrower authorization or collection plan logic,
@@ -105,7 +105,7 @@ For late-fee, principal-repayment, default-workout, renewal, or other non-regula
 - Lender payout math matches the original cash allocation when replayed from the persisted rows.
 - Non-regular-interest obligations do not inherit the regular servicing fee unless configured.
 - Existing reconciliation queries still work after the additive schema change.
-- The failure described by [convex/dispersal/__tests__/reconciliation.test.ts](/Users/connor/Dev/tanstackFairLend/fairlendapp/convex/dispersal/__tests__/reconciliation.test.ts) is eliminated by design, not by loosening tests.
+- The failure described by [convex/dispersal/__tests__/reconciliation.test.ts](../convex/dispersal/__tests__/reconciliation.test.ts) is eliminated by design, not by loosening tests.
 
 ## TDD
 
@@ -113,8 +113,8 @@ For late-fee, principal-repayment, default-workout, renewal, or other non-regula
 
 The current bug is structural, not cosmetic:
 
-- [convex/dispersal/servicingFee.ts](/Users/connor/Dev/tanstackFairLend/fairlendapp/convex/dispersal/servicingFee.ts) calculates the monthly fee from principal, which is correct as a fee formula.
-- [convex/dispersal/createDispersalEntries.ts](/Users/connor/Dev/tanstackFairLend/fairlendapp/convex/dispersal/createDispersalEntries.ts) incorrectly treats that fee as a hard threshold that must be fully covered by the settled cash before any dispersal can happen.
+- [convex/dispersal/servicingFee.ts](../convex/dispersal/servicingFee.ts) calculates the monthly fee from principal, which is correct as a fee formula.
+- [convex/dispersal/createDispersalEntries.ts](../convex/dispersal/createDispersalEntries.ts) incorrectly treats that fee as a hard threshold that must be fully covered by the settled cash before any dispersal can happen.
 - That means ordinary underpaid or partial interest settlements are rejected instead of being accounted for.
 
 The fix is not to change the fee formula. The fix is to change how the fee is applied to cash.
@@ -141,7 +141,7 @@ This keeps the system deterministic and prevents silent loss of earned fee reven
 
 #### Data model
 
-Use additive changes to the existing dispersal tables in [convex/schema.ts](/Users/connor/Dev/tanstackFairLend/fairlendapp/convex/schema.ts):
+Use additive changes to the existing dispersal tables in [convex/schema.ts](../convex/schema.ts):
 
 - `dispersalEntries`
 - `servicingFeeEntries`
@@ -195,9 +195,9 @@ The existing reconciliation query surface must remain stable, but it can expose 
 
 ### Implementation Notes
 
-1. Leave [convex/dispersal/servicingFee.ts](/Users/connor/Dev/tanstackFairLend/fairlendapp/convex/dispersal/servicingFee.ts) as the pure fee formula unless the policy layer needs a new helper name for clarity.
-2. Refactor [convex/dispersal/createDispersalEntries.ts](/Users/connor/Dev/tanstackFairLend/fairlendapp/convex/dispersal/createDispersalEntries.ts) so fee application happens before the rejection point, and remove the `servicingFee >= settledAmount` failure path.
-3. Keep the lender pro-rata math deterministic and continue using the established rounding behavior from [convex/accrual/interestMath.ts](/Users/connor/Dev/tanstackFairLend/fairlendapp/convex/accrual/interestMath.ts).
+1. Leave [convex/dispersal/servicingFee.ts](../convex/dispersal/servicingFee.ts) as the pure fee formula unless the policy layer needs a new helper name for clarity.
+2. Refactor [convex/dispersal/createDispersalEntries.ts](../convex/dispersal/createDispersalEntries.ts) so fee application happens before the rejection point, and remove the `servicingFee >= settledAmount` failure path.
+3. Keep the lender pro-rata math deterministic and continue using the established rounding behavior from [convex/accrual/interestMath.ts](../convex/accrual/interestMath.ts).
 4. Preserve the existing `idempotencyKey` flow so retries do not duplicate rows.
 5. Preserve the current `created` response contract, but update the payload to include the fee split fields if the caller consumes them.
 
@@ -229,7 +229,7 @@ Add or update tests to cover:
 - deterministic replay of persisted rows,
 - reconciliation query compatibility after schema extension.
 
-The failing case currently demonstrated in [convex/dispersal/__tests__/reconciliation.test.ts](/Users/connor/Dev/tanstackFairLend/fairlendapp/convex/dispersal/__tests__/reconciliation.test.ts) should be rewritten to assert the new split accounting instead of expecting a rejection.
+The failing case currently demonstrated in [convex/dispersal/__tests__/reconciliation.test.ts](../convex/dispersal/__tests__/reconciliation.test.ts) should be rewritten to assert the new split accounting instead of expecting a rejection.
 
 ### Rollout and Verification
 

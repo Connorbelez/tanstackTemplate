@@ -210,11 +210,11 @@ export const createDispersalEntries = internalMutation({
 			annualServicingRate,
 			mortgage.principal
 		);
-		if (servicingFee >= args.settledAmount) {
-			throw new ConvexError(
-				`createDispersalEntries: settledAmount ${args.settledAmount} does not cover servicing fee ${servicingFee}`
-			);
-		}
+		// Allow zero-distributable settlements: when the servicing fee consumes
+		// all (or more than) the settled cash, we still record entries with a
+		// distributable amount of 0 so the settlement chain is never broken.
+		const effectiveServicingFee = Math.min(servicingFee, args.settledAmount);
+		const distributableAmount = args.settledAmount - effectiveServicingFee;
 
 		const ledgerMortgageId = mortgage.simulationId ?? String(args.mortgageId);
 		const activePositions = await loadActivePositions(ctx, ledgerMortgageId);
@@ -265,8 +265,6 @@ export const createDispersalEntries = internalMutation({
 			(sum, position) => sum + position.units,
 			0
 		);
-
-		const distributableAmount = args.settledAmount - servicingFee;
 		const shares = calculateProRataShares(
 			normalizedPositions,
 			distributableAmount
@@ -281,12 +279,12 @@ export const createDispersalEntries = internalMutation({
 				amount: share.amount,
 				dispersalDate: args.settledDate,
 				obligationId: args.obligationId,
-				servicingFeeDeducted: servicingFee,
+				servicingFeeDeducted: effectiveServicingFee,
 				status: "pending",
 				idempotencyKey: `${args.idempotencyKey}:${share.lenderId}`,
 				calculationDetails: {
 					settledAmount: args.settledAmount,
-					servicingFee,
+					servicingFee: effectiveServicingFee,
 					distributableAmount,
 					ownershipUnits: share.units,
 					totalUnits,
@@ -309,7 +307,7 @@ export const createDispersalEntries = internalMutation({
 		const servicingFeeEntryId = await ctx.db.insert("servicingFeeEntries", {
 			mortgageId: args.mortgageId,
 			obligationId: args.obligationId,
-			amount: servicingFee,
+			amount: effectiveServicingFee,
 			annualRate: annualServicingRate,
 			principalBalance: mortgage.principal,
 			date: args.settledDate,

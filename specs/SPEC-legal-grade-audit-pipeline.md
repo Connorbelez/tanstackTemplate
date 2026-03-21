@@ -27,7 +27,7 @@ The pipeline must also survive legal scrutiny. That means the export cannot be a
 
 ### Current-State Gap
 
-The existing path in [convex/engine/auditJournal.ts](/Users/connor/Dev/tanstackFairLend/fairlendapp/convex/engine/auditJournal.ts), [convex/engine/hashChain.ts](/Users/connor/Dev/tanstackFairLend/fairlendapp/convex/engine/hashChain.ts), and [convex/components/auditTrail/lib.ts](/Users/connor/Dev/tanstackFairLend/fairlendapp/convex/components/auditTrail/lib.ts) already creates a layered audit mechanism, but the Layer 2 export path only forwards a reduced metadata shape. That is enough to show transition order, but not enough to reconstruct a legal-grade financial history without cross-referencing operational tables.
+The existing path in [convex/engine/auditJournal.ts](../convex/engine/auditJournal.ts), [convex/engine/hashChain.ts](../convex/engine/hashChain.ts), and [convex/components/auditTrail/lib.ts](../convex/components/auditTrail/lib.ts) already creates a layered audit mechanism, but the Layer 2 export path only forwards a reduced metadata shape. That is enough to show transition order, but not enough to reconstruct a legal-grade financial history without cross-referencing operational tables.
 
 The fix is not to weaken the hash chain. The fix is to canonicalize a richer audit envelope before hashing, keep the chain over that canonical payload, and export evidence from the full journal plus derived reconstruction inputs. In other words:
 
@@ -210,12 +210,12 @@ The implementation should treat the current Convex audit pipeline as the canonic
 
 Relevant files:
 
-- [convex/schema.ts](/Users/connor/Dev/tanstackFairLend/fairlendapp/convex/schema.ts)
-- [convex/engine/auditJournal.ts](/Users/connor/Dev/tanstackFairLend/fairlendapp/convex/engine/auditJournal.ts)
-- [convex/engine/hashChain.ts](/Users/connor/Dev/tanstackFairLend/fairlendapp/convex/engine/hashChain.ts)
-- [convex/components/auditTrail/lib.ts](/Users/connor/Dev/tanstackFairLend/fairlendapp/convex/components/auditTrail/lib.ts)
-- [convex/engine/transition.ts](/Users/connor/Dev/tanstackFairLend/fairlendapp/convex/engine/transition.ts)
-- [docs/blog/audit-traceability-architecture.md](/Users/connor/Dev/tanstackFairLend/fairlendapp/docs/blog/audit-traceability-architecture.md)
+- [convex/schema.ts](../convex/schema.ts)
+- [convex/engine/auditJournal.ts](../convex/engine/auditJournal.ts)
+- [convex/engine/hashChain.ts](../convex/engine/hashChain.ts)
+- [convex/components/auditTrail/lib.ts](../convex/components/auditTrail/lib.ts)
+- [convex/engine/transition.ts](../convex/engine/transition.ts)
+- [docs/blog/audit-traceability-architecture.md](../docs/blog/audit-traceability-architecture.md)
 
 ### Canonical Record Model
 
@@ -260,7 +260,7 @@ The important point is not the exact field names. The important point is that th
 
 ### Schema Additions
 
-Update [convex/schema.ts](/Users/connor/Dev/tanstackFairLend/fairlendapp/convex/schema.ts) so audit-related tables can store:
+Update [convex/schema.ts](../convex/schema.ts) so audit-related tables can store:
 
 - canonical event envelope,
 - export package metadata,
