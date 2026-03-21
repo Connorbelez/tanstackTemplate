@@ -178,7 +178,7 @@ export const processObligationTransitions = internalAction({
 		);
 
 		const overflowMetrics = await ctx.runMutation(
-			internal["payments/obligations/monitoring"].recordBatchOverflowMetrics,
+			internal.payments.obligations.monitoring.recordBatchOverflowMetrics,
 			{
 				jobName: JOB_NAME,
 				businessDate,

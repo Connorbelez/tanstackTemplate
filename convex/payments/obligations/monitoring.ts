@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { internalMutation, internalQuery } from "../../_generated/server";
+import { businessDateToUnixMs } from "../../lib/businessDates";
 
 function validateCount(name: string, value: number): void {
 	if (!Number.isSafeInteger(value) || value < 0) {
@@ -18,6 +19,14 @@ export const recordBatchOverflowMetrics = internalMutation({
 		pastGraceCount: v.number(),
 	},
 	handler: async (ctx, args) => {
+		try {
+			businessDateToUnixMs(args.businessDate);
+		} catch (e) {
+			throw new Error(
+				`Invalid businessDate for monitoring: ${args.businessDate} — ${e instanceof Error ? e.message : String(e)}`
+			);
+		}
+
 		validateCount("batchSize", args.batchSize);
 		validateCount("newlyDueCount", args.newlyDueCount);
 		validateCount("pastGraceCount", args.pastGraceCount);

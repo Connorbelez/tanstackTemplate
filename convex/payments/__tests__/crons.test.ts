@@ -163,7 +163,7 @@ async function seedObligationBatch(
 
 async function getCronMonitoring(t: ReturnType<typeof createTestHarness>) {
 	return t.query(
-		internal["payments/obligations/monitoring"].getBatchOverflowMetrics,
+		internal.payments.obligations.monitoring.getBatchOverflowMetrics,
 		{
 			jobName: "daily obligation transitions",
 		}

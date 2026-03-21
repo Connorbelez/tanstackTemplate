@@ -138,6 +138,7 @@ import type * as payments_methods_registry from "../payments/methods/registry.js
 import type * as payments_obligations_crons from "../payments/obligations/crons.js";
 import type * as payments_obligations_generate from "../payments/obligations/generate.js";
 import type * as payments_obligations_generateImpl from "../payments/obligations/generateImpl.js";
+import type * as payments_obligations_monitoring from "../payments/obligations/monitoring.js";
 import type * as payments_obligations_queries from "../payments/obligations/queries.js";
 import type * as prorateEntries_mutations from "../prorateEntries/mutations.js";
 import type * as prorateEntries_queries from "../prorateEntries/queries.js";
@@ -292,6 +293,7 @@ declare const fullApi: ApiFromModules<{
   "payments/obligations/crons": typeof payments_obligations_crons;
   "payments/obligations/generate": typeof payments_obligations_generate;
   "payments/obligations/generateImpl": typeof payments_obligations_generateImpl;
+  "payments/obligations/monitoring": typeof payments_obligations_monitoring;
   "payments/obligations/queries": typeof payments_obligations_queries;
   "prorateEntries/mutations": typeof prorateEntries_mutations;
   "prorateEntries/queries": typeof prorateEntries_queries;
