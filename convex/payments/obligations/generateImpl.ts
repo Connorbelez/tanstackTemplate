@@ -1,7 +1,10 @@
 import { ConvexError } from "convex/values";
 import type { Id } from "../../_generated/dataModel";
 import type { MutationCtx } from "../../_generated/server";
-import { getPeriodsPerYear } from "../../mortgages/paymentFrequency";
+import {
+	type PaymentFrequency,
+	getPeriodsPerYear,
+} from "../../mortgages/paymentFrequency";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -41,7 +44,7 @@ export interface GenerateObligationsParams {
 	interestRate: number;
 	maturityDate: string; // ISO date string
 	mortgageId: Id<"mortgages">;
-	paymentFrequency: string;
+	paymentFrequency: PaymentFrequency;
 	principal: number;
 }
 

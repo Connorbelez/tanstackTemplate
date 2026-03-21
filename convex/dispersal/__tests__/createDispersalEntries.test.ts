@@ -272,13 +272,13 @@ describe("createDispersalEntries", () => {
 		const persistedEntries = (
 			await t.run(async (ctx) =>
 				Promise.all(
-					result.entries.map((entry) => ctx.db.get(entry.id as never))
+					result.entries.map((entry) => ctx.db.get(entry.id))
 				)
 			)
 		).filter((entry) => entry !== null);
 		const feeEntry = await t.run(async (ctx) =>
 			result.servicingFeeEntryId
-				? ctx.db.get(result.servicingFeeEntryId as never)
+				? ctx.db.get(result.servicingFeeEntryId)
 				: null
 		);
 
@@ -315,7 +315,7 @@ describe("createDispersalEntries", () => {
 
 		const feeEntry = await t.run(async (ctx) =>
 			result.servicingFeeEntryId
-				? ctx.db.get(result.servicingFeeEntryId as never)
+				? ctx.db.get(result.servicingFeeEntryId)
 				: null
 		);
 
@@ -350,7 +350,7 @@ describe("createDispersalEntries", () => {
 		const persistedEntries = (
 			await t.run(async (ctx) =>
 				Promise.all(
-					result.entries.map((entry) => ctx.db.get(entry.id as never))
+					result.entries.map((entry) => ctx.db.get(entry.id))
 				)
 			)
 		).filter((entry) => entry !== null);

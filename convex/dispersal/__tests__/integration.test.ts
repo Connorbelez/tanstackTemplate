@@ -74,25 +74,42 @@ interface DispersalSummaryByLender {
 
 interface DispersalHistoryEntry {
 	amount: number;
+	calculationDetails: {
+		distributableAmount: number;
+		ownershipFraction: number;
+		ownershipUnits: number;
+		rawAmount: number;
+		roundedAmount: number;
+		servicingFee: number;
+		settledAmount: number;
+		totalUnits: number;
+	};
+	createdAt: number;
 	dispersalDate: string;
+	id: Id<"dispersalEntries">;
+	idempotencyKey: string;
+	lenderAccountId: Id<"ledger_accounts">;
 	lenderId: Id<"lenders">;
+	mortgageId: Id<"mortgages">;
+	obligationId: Id<"obligations">;
 	runningTotal: number;
+	servicingFeeDeducted: number;
+	status: "pending";
 }
 
 interface DispersalsByObligationResult {
 	byLender: DispersalSummaryByLender[];
-	entries: Array<{
-		amount: number;
-		lenderId: Id<"lenders">;
-	}>;
+	entries: DispersalHistoryEntry[];
 	entryCount: number;
+	obligationId: Id<"obligations">;
 	total: number;
 }
 
 interface DisbursementHistoryResult {
 	entries: DispersalHistoryEntry[];
 	entryCount: number;
-	pageTotal?: number;
+	lenderId: Id<"lenders">;
+	pageTotal: number;
 	total: number;
 }
 
