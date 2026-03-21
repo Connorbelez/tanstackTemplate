@@ -3,6 +3,7 @@ import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 import { internalMutation } from "../_generated/server";
 import { calculateProRataShares } from "../accrual/interestMath";
+import type { ProRataPosition } from "../accrual/types";
 import { sourceValidator } from "../engine/validators";
 import { getAccountLenderId } from "../ledger/accountOwnership";
 import { getPostedBalance } from "../ledger/accounts";
@@ -235,11 +236,7 @@ export const createDispersalEntries = internalMutation({
 		);
 
 		const lenderIdCache = new Map<string, Id<"lenders">>();
-		const normalizedPositions: Array<{
-			lenderAccountId: Id<"ledger_accounts">;
-			lenderId: Id<"lenders">;
-			units: number;
-		}> = [];
+		const normalizedPositions: ProRataPosition[] = [];
 		for (const position of activePositions) {
 			if (position.units <= 0) {
 				continue;
