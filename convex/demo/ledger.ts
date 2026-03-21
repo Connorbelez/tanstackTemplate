@@ -15,6 +15,7 @@ import {
 	redeemSharesArgsValidator,
 	transferSharesArgsValidator,
 } from "../ledger/validators";
+import { unixMsToBusinessDate } from "../lib/businessDates";
 
 // ── Constants ────────────────────────────────────────────────────
 
@@ -73,7 +74,7 @@ async function postSeedEntry(
 		sequenceNumber: seqNum,
 		entryType: args.entryType,
 		mortgageId: args.mortgageId,
-		effectiveDate: new Date().toISOString().split("T")[0],
+		effectiveDate: unixMsToBusinessDate(Date.now()),
 		timestamp: Date.now(),
 		debitAccountId: args.debitAccountId,
 		creditAccountId: args.creditAccountId,

@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { internal } from "../../_generated/api";
 import { internalAction } from "../../_generated/server";
+import { unixMsToBusinessDate } from "../../lib/businessDates";
 import { effectPayloadValidator } from "../validators";
 
 const dealEffectPayloadValidator = {
@@ -87,7 +88,7 @@ export const reserveShares = internalAction({
 		const amount = deal.fractionalShare;
 
 		// 6. Create the reservation
-		const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
+		const today = unixMsToBusinessDate(Date.now());
 
 		try {
 			const result = await ctx.runMutation(
@@ -178,7 +179,7 @@ export const voidReservation = internalAction({
 		}
 
 		// 4. Void the reservation
-		const today = new Date().toISOString().split("T")[0];
+		const today = unixMsToBusinessDate(Date.now());
 
 		try {
 			await ctx.runMutation(internal.ledger.mutations.voidReservation, {
@@ -236,8 +237,8 @@ export const commitReservation = internalAction({
 		}
 
 		const effectiveDate = deal.closingDate
-			? new Date(deal.closingDate).toISOString().split("T")[0]
-			: new Date().toISOString().split("T")[0];
+			? unixMsToBusinessDate(deal.closingDate)
+			: unixMsToBusinessDate(Date.now());
 
 		try {
 			await ctx.runMutation(internal.ledger.mutations.commitReservation, {

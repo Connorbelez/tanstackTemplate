@@ -12,6 +12,7 @@ import {
 import { TOTAL_SUPPLY } from "../ledger/constants";
 import { postEntry } from "../ledger/postEntry";
 import type { EventSource } from "../ledger/types";
+import { unixMsToBusinessDate } from "../lib/businessDates";
 import {
 	DEMO_LEDGER_MORTGAGES,
 	DEMO_LEDGER_PREFIX,
@@ -24,7 +25,7 @@ import {
 // ── Helpers ──────────────────────────────────────────────────────
 
 function todayISO(): string {
-	return new Date().toISOString().split("T")[0];
+	return unixMsToBusinessDate(Date.now());
 }
 
 function genIdempotencyKey(prefix: string): string {

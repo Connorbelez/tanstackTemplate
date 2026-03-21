@@ -1,7 +1,9 @@
+import type { GenericActionCtx, GenericDataModel } from "convex/server";
 import { internal } from "../../_generated/api";
 import type { Id } from "../../_generated/dataModel";
 import { internalAction } from "../../_generated/server";
 import type { TransitionResult } from "../../engine/types";
+import { unixMsToBusinessDate } from "../../lib/businessDates";
 
 /**
  * Batch size for processing obligations per phase.
@@ -10,6 +12,118 @@ import type { TransitionResult } from "../../engine/types";
  * If more obligations remain, the cron will pick them up on its next run.
  */
 const BATCH_SIZE = 100;
+const JOB_NAME = "daily obligation transitions";
+type CronActionCtx = Pick<GenericActionCtx<GenericDataModel>, "runMutation">;
+interface CronSource {
+	actorType: "system";
+	channel: "scheduler";
+}
+
+async function processTransitionBatch(
+	ctx: CronActionCtx,
+	obligations: Array<{ _id: Id<"obligations"> }>,
+	eventType: "BECAME_DUE" | "GRACE_PERIOD_EXPIRED",
+	source: CronSource
+) {
+	let successCount = 0;
+	let rejectedCount = 0;
+
+	for (const obligation of obligations) {
+		try {
+			const result: TransitionResult = await ctx.runMutation(
+				internal.engine.commands.transitionObligation,
+				{
+					entityId: obligation._id,
+					eventType,
+					payload: {},
+					source,
+				}
+			);
+			if (result.success) {
+				successCount++;
+			} else {
+				rejectedCount++;
+				console.warn(
+					`[Obligation Cron] ${eventType} rejected for ${obligation._id}: ${result.reason ?? "unknown reason"}`
+				);
+			}
+		} catch (error) {
+			console.error(
+				`[Obligation Cron] Failed ${eventType} for ${obligation._id}:`,
+				error
+			);
+		}
+	}
+
+	return { successCount, rejectedCount };
+}
+
+function logOverflowWarnings(args: {
+	allNewlyDueCount: number;
+	allPastGraceCount: number;
+	batchSize: number;
+	businessDate: string;
+	newlyDueOverflow: boolean;
+	pastGraceOverflow: boolean;
+	newlyDueOverflowStreak: number;
+	pastGraceOverflowStreak: number;
+}) {
+	if (args.newlyDueOverflow) {
+		console.warn(
+			`[Obligation Cron] BECAME_DUE batch overflow on ${args.businessDate}: ${args.allNewlyDueCount} obligations exceeded BATCH_SIZE=${args.batchSize} (streak=${args.newlyDueOverflowStreak})`
+		);
+	}
+	if (args.pastGraceOverflow) {
+		console.warn(
+			`[Obligation Cron] GRACE_PERIOD_EXPIRED batch overflow on ${args.businessDate}: ${args.allPastGraceCount} obligations exceeded BATCH_SIZE=${args.batchSize} (streak=${args.pastGraceOverflowStreak})`
+		);
+	}
+}
+
+function logOverflowAlerts(args: {
+	businessDate: string;
+	newlyDueOverflowStreak: number;
+	pastGraceOverflowStreak: number;
+}) {
+	if (args.newlyDueOverflowStreak > 3) {
+		console.error(
+			`[Obligation Cron] ALERT: BECAME_DUE overflow persisted for ${args.newlyDueOverflowStreak} consecutive UTC business days (job=${JOB_NAME}, businessDate=${args.businessDate})`
+		);
+	}
+	if (args.pastGraceOverflowStreak > 3) {
+		console.error(
+			`[Obligation Cron] ALERT: GRACE_PERIOD_EXPIRED overflow persisted for ${args.pastGraceOverflowStreak} consecutive UTC business days (job=${JOB_NAME}, businessDate=${args.businessDate})`
+		);
+	}
+}
+
+function formatCompletionLog(args: {
+	becameDueCount: number;
+	newlyDueLength: number;
+	becameDueRejectedCount: number;
+	gracePeriodExpiredCount: number;
+	pastGraceLength: number;
+	gracePeriodExpiredRejectedCount: number;
+	allNewlyDueCount: number;
+	allPastGraceCount: number;
+	businessDate: string;
+}) {
+	return (
+		"[Obligation Cron] Completed: " +
+		`${args.becameDueCount}/${args.newlyDueLength} BECAME_DUE succeeded` +
+		(args.becameDueRejectedCount > 0
+			? ` (${args.becameDueRejectedCount} rejected)`
+			: "") +
+		`, ${args.gracePeriodExpiredCount}/${args.pastGraceLength} GRACE_PERIOD_EXPIRED succeeded` +
+		(args.gracePeriodExpiredRejectedCount > 0
+			? ` (${args.gracePeriodExpiredRejectedCount} rejected)`
+			: "") +
+		(args.allNewlyDueCount > BATCH_SIZE || args.allPastGraceCount > BATCH_SIZE
+			? ` [BATCH_SIZE=${BATCH_SIZE} applied — remaining obligations will be processed on next run]`
+			: "") +
+		` [businessDate=${args.businessDate}]`
+	);
+}
 
 /**
  * Daily cron handler: transitions obligations through lifecycle stages.
@@ -26,6 +140,7 @@ const BATCH_SIZE = 100;
 export const processObligationTransitions = internalAction({
 	handler: async (ctx) => {
 		const now = Date.now();
+		const businessDate = unixMsToBusinessDate(now);
 		const source = {
 			channel: "scheduler" as const,
 			actorType: "system" as const,
@@ -39,35 +154,10 @@ export const processObligationTransitions = internalAction({
 
 		// Limit to BATCH_SIZE to stay within Convex action limits
 		const newlyDue = allNewlyDue.slice(0, BATCH_SIZE);
-
-		let becameDueCount = 0;
-		let becameDueRejectedCount = 0;
-		for (const obligation of newlyDue) {
-			try {
-				const result: TransitionResult = await ctx.runMutation(
-					internal.engine.commands.transitionObligation,
-					{
-						entityId: obligation._id as Id<"obligations">,
-						eventType: "BECAME_DUE",
-						payload: {},
-						source,
-					}
-				);
-				if (result.success) {
-					becameDueCount++;
-				} else {
-					becameDueRejectedCount++;
-					console.warn(
-						`[Obligation Cron] BECAME_DUE rejected for ${obligation._id}: ${result.reason ?? "unknown reason"}`
-					);
-				}
-			} catch (error) {
-				console.error(
-					`[Obligation Cron] Failed BECAME_DUE for ${obligation._id}:`,
-					error
-				);
-			}
-		}
+		const {
+			successCount: becameDueCount,
+			rejectedCount: becameDueRejectedCount,
+		} = await processTransitionBatch(ctx, newlyDue, "BECAME_DUE", source);
 
 		// ── Phase 2: due → overdue ───────────────────────────────────
 		const allPastGrace = await ctx.runQuery(
@@ -77,49 +167,58 @@ export const processObligationTransitions = internalAction({
 
 		// Limit to BATCH_SIZE to stay within Convex action limits
 		const pastGrace = allPastGrace.slice(0, BATCH_SIZE);
+		const {
+			successCount: gracePeriodExpiredCount,
+			rejectedCount: gracePeriodExpiredRejectedCount,
+		} = await processTransitionBatch(
+			ctx,
+			pastGrace,
+			"GRACE_PERIOD_EXPIRED",
+			source
+		);
 
-		let gracePeriodExpiredCount = 0;
-		let gracePeriodExpiredRejectedCount = 0;
-		for (const obligation of pastGrace) {
-			try {
-				const result: TransitionResult = await ctx.runMutation(
-					internal.engine.commands.transitionObligation,
-					{
-						entityId: obligation._id as Id<"obligations">,
-						eventType: "GRACE_PERIOD_EXPIRED",
-						payload: {},
-						source,
-					}
-				);
-				if (result.success) {
-					gracePeriodExpiredCount++;
-				} else {
-					gracePeriodExpiredRejectedCount++;
-					console.warn(
-						`[Obligation Cron] GRACE_PERIOD_EXPIRED rejected for ${obligation._id}: ${result.reason ?? "unknown reason"}`
-					);
-				}
-			} catch (error) {
-				console.error(
-					`[Obligation Cron] Failed GRACE_PERIOD_EXPIRED for ${obligation._id}:`,
-					error
-				);
+		const overflowMetrics = await ctx.runMutation(
+			internal["payments/obligations/monitoring"].recordBatchOverflowMetrics,
+			{
+				jobName: JOB_NAME,
+				businessDate,
+				batchSize: BATCH_SIZE,
+				newlyDueCount: allNewlyDue.length,
+				pastGraceCount: allPastGrace.length,
 			}
+		);
+
+		logOverflowWarnings({
+			allNewlyDueCount: allNewlyDue.length,
+			allPastGraceCount: allPastGrace.length,
+			batchSize: BATCH_SIZE,
+			businessDate,
+			newlyDueOverflow: overflowMetrics.newlyDueOverflow,
+			pastGraceOverflow: overflowMetrics.pastGraceOverflow,
+			newlyDueOverflowStreak: overflowMetrics.newlyDueOverflowStreak,
+			pastGraceOverflowStreak: overflowMetrics.pastGraceOverflowStreak,
+		});
+
+		if (!overflowMetrics.isSameBusinessDate) {
+			logOverflowAlerts({
+				businessDate,
+				newlyDueOverflowStreak: overflowMetrics.newlyDueOverflowStreak,
+				pastGraceOverflowStreak: overflowMetrics.pastGraceOverflowStreak,
+			});
 		}
 
 		console.info(
-			"[Obligation Cron] Completed: " +
-				`${becameDueCount}/${newlyDue.length} BECAME_DUE succeeded` +
-				(becameDueRejectedCount > 0
-					? ` (${becameDueRejectedCount} rejected)`
-					: "") +
-				`, ${gracePeriodExpiredCount}/${pastGrace.length} GRACE_PERIOD_EXPIRED succeeded` +
-				(gracePeriodExpiredRejectedCount > 0
-					? ` (${gracePeriodExpiredRejectedCount} rejected)`
-					: "") +
-				(allNewlyDue.length > BATCH_SIZE || allPastGrace.length > BATCH_SIZE
-					? ` [BATCH_SIZE=${BATCH_SIZE} applied — remaining obligations will be processed on next run]`
-					: "")
+			formatCompletionLog({
+				becameDueCount,
+				newlyDueLength: newlyDue.length,
+				becameDueRejectedCount,
+				gracePeriodExpiredCount,
+				pastGraceLength: pastGrace.length,
+				gracePeriodExpiredRejectedCount,
+				allNewlyDueCount: allNewlyDue.length,
+				allPastGraceCount: allPastGrace.length,
+				businessDate,
+			})
 		);
 	},
 });

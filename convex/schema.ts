@@ -516,7 +516,7 @@ export default defineSchema({
 		// ─── GT fields ───
 		status: v.string(),
 		machineContext: v.optional(v.any()),
-		lastTransitionAt: v.optional(v.number()),
+		lastTransitionAt: v.optional(v.number()), // system timestamp: Unix ms
 
 		// ─── Relationships ───
 		mortgageId: v.id("mortgages"),
@@ -534,12 +534,12 @@ export default defineSchema({
 		),
 		amount: v.number(),
 		amountSettled: v.number(), // cumulative cents settled
-		dueDate: v.number(), // unix timestamp
-		gracePeriodEnd: v.number(), // unix timestamp
+		dueDate: v.number(), // legacy system timestamp: Unix ms, not a YYYY-MM-DD business date
+		gracePeriodEnd: v.number(), // legacy system timestamp: Unix ms, not a YYYY-MM-DD business date
 		sourceObligationId: v.optional(v.id("obligations")), // for late_fee type
-		settledAt: v.optional(v.number()),
+		settledAt: v.optional(v.number()), // legacy system timestamp: Unix ms, not a YYYY-MM-DD business date
 
-		createdAt: v.number(),
+		createdAt: v.number(), // system timestamp: Unix ms
 	})
 		.index("by_status", ["status"])
 		.index("by_mortgage", ["mortgageId", "status"])
@@ -547,6 +547,16 @@ export default defineSchema({
 		.index("by_due_date", ["status", "dueDate"])
 		.index("by_type_and_source", ["type", "sourceObligationId"])
 		.index("by_borrower", ["borrowerId"]),
+
+	obligationCronMonitoring: defineTable({
+		jobName: v.string(),
+		lastRunBusinessDate: v.string(), // business date: YYYY-MM-DD at UTC midnight semantics
+		newlyDueOverflowStreak: v.number(),
+		pastGraceOverflowStreak: v.number(),
+		lastNewlyDueCount: v.number(),
+		lastPastGraceCount: v.number(),
+		updatedAt: v.number(), // system timestamp: Unix ms
+	}).index("by_job_name", ["jobName"]),
 
 	// ══════════════════════════════════════════════════════════
 	// PAYMENT RAILS (SPEC 1.5)
@@ -594,7 +604,7 @@ export default defineSchema({
 		// ─── GT fields ───
 		status: v.string(),
 		machineContext: v.optional(v.any()),
-		lastTransitionAt: v.optional(v.number()),
+		lastTransitionAt: v.optional(v.number()), // system timestamp: Unix ms
 		// ─── Domain fields ───
 		planEntryId: v.id("collectionPlanEntries"),
 		method: v.string(),
@@ -602,9 +612,9 @@ export default defineSchema({
 		providerRef: v.optional(v.string()),
 		providerStatus: v.optional(v.string()),
 		providerData: v.optional(v.any()),
-		initiatedAt: v.number(),
-		settledAt: v.optional(v.number()),
-		failedAt: v.optional(v.number()),
+		initiatedAt: v.number(), // system timestamp: Unix ms
+		settledAt: v.optional(v.number()), // system timestamp: Unix ms
+		failedAt: v.optional(v.number()), // system timestamp: Unix ms
 		failureReason: v.optional(v.string()),
 	})
 		.index("by_plan_entry", ["planEntryId"])
@@ -878,13 +888,13 @@ export default defineSchema({
 		lenderId: v.id("lenders"),
 		lenderAccountId: v.id("ledger_accounts"),
 		amount: v.number(),
-		dispersalDate: v.string(),
+		dispersalDate: v.string(), // business date: YYYY-MM-DD at UTC midnight semantics
 		obligationId: v.id("obligations"),
 		servicingFeeDeducted: v.number(),
 		status: dispersalStatusValidator,
 		idempotencyKey: v.string(),
 		calculationDetails: calculationDetailsValidator,
-		createdAt: v.number(),
+		createdAt: v.number(), // system timestamp: Unix ms
 	})
 		.index("by_lender", ["lenderId", "dispersalDate"])
 		.index("by_mortgage", ["mortgageId", "dispersalDate"])
@@ -898,8 +908,8 @@ export default defineSchema({
 		amount: v.number(),
 		annualRate: v.number(),
 		principalBalance: v.number(),
-		date: v.string(),
-		createdAt: v.number(),
+		date: v.string(), // business date: YYYY-MM-DD at UTC midnight semantics
+		createdAt: v.number(), // system timestamp: Unix ms
 	})
 		.index("by_mortgage", ["mortgageId", "date"])
 		.index("by_obligation", ["obligationId"]),
@@ -969,8 +979,8 @@ export default defineSchema({
 		),
 		reservationId: v.optional(v.id("ledger_reservations")),
 		mortgageId: v.string(),
-		effectiveDate: v.string(),
-		timestamp: v.number(),
+		effectiveDate: v.string(), // business date: YYYY-MM-DD at UTC midnight semantics
+		timestamp: v.number(), // system timestamp: Unix ms
 		debitAccountId: v.id("ledger_accounts"),
 		creditAccountId: v.id("ledger_accounts"),
 		/** Amount as a finite integer in the smallest currency unit (e.g. cents). Suitable for conversion to bigint. */

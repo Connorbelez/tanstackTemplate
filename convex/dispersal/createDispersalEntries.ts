@@ -6,6 +6,7 @@ import { calculateProRataShares } from "../accrual/interestMath";
 import { sourceValidator } from "../engine/validators";
 import { getAccountLenderId } from "../ledger/accountOwnership";
 import { getPostedBalance } from "../ledger/accounts";
+import { businessDateToUnixMs } from "../lib/businessDates";
 import { requireLenderIdForAuthId } from "./lenderIdentity";
 import { calculateServicingFee } from "./servicingFee";
 
@@ -161,8 +162,9 @@ export const createDispersalEntries = internalMutation({
 	},
 	handler: async (ctx, args): Promise<DispersalCreationResult> => {
 		validateIntegerCents(args.settledAmount, "settledAmount");
-		const parsedSettledDate = Date.parse(`${args.settledDate}T00:00:00Z`);
-		if (Number.isNaN(parsedSettledDate)) {
+		try {
+			businessDateToUnixMs(args.settledDate);
+		} catch {
 			throw new ConvexError(
 				`createDispersalEntries: settledDate must be YYYY-MM-DD, got ${args.settledDate}`
 			);

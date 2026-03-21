@@ -112,6 +112,7 @@ async function seedObligation(
 		dueDate: number;
 		gracePeriodEnd: number;
 		paymentNumber?: number;
+		settledAt?: number;
 	}
 ): Promise<Id<"obligations">> {
 	return await t.run(async (ctx) => {
@@ -126,9 +127,47 @@ async function seedObligation(
 			amountSettled: 0,
 			dueDate: opts.dueDate,
 			gracePeriodEnd: opts.gracePeriodEnd,
+			settledAt: opts.settledAt,
 			createdAt: Date.now(),
 		});
 	});
+}
+
+async function seedObligationBatch(
+	t: ReturnType<typeof createTestHarness>,
+	opts: {
+		mortgageId: Id<"mortgages">;
+		borrowerId: Id<"borrowers">;
+		status: string;
+		dueDate: number;
+		gracePeriodEnd: number;
+		count: number;
+		startPaymentNumber?: number;
+	}
+) {
+	const ids: Id<"obligations">[] = [];
+	for (let index = 0; index < opts.count; index += 1) {
+		ids.push(
+			await seedObligation(t, {
+				mortgageId: opts.mortgageId,
+				borrowerId: opts.borrowerId,
+				status: opts.status,
+				dueDate: opts.dueDate,
+				gracePeriodEnd: opts.gracePeriodEnd,
+				paymentNumber: (opts.startPaymentNumber ?? 1) + index,
+			})
+		);
+	}
+	return ids;
+}
+
+async function getCronMonitoring(t: ReturnType<typeof createTestHarness>) {
+	return t.query(
+		internal["payments/obligations/monitoring"].getBatchOverflowMetrics,
+		{
+			jobName: "daily obligation transitions",
+		}
+	);
 }
 
 // ---------------------------------------------------------------------------
@@ -314,5 +353,190 @@ describe("processObligationTransitions", () => {
 		expect(upcomingObl?.status).toBe("due");
 		expect(dueObl?.status).toBe("overdue");
 		vi.useRealTimers();
+	});
+
+	it("logs batch overflow warnings and records the UTC business-date streak", async () => {
+		vi.useFakeTimers();
+		vi.setSystemTime(new Date("2026-03-21T06:00:00.000Z"));
+		const warnSpy = vi
+			.spyOn(console, "warn")
+			.mockImplementation(() => undefined);
+
+		try {
+			const t = createTestHarness();
+			const { mortgageId, borrowerId } = await seedMortgageWithBorrower(t);
+
+			await seedObligationBatch(t, {
+				mortgageId,
+				borrowerId,
+				status: "upcoming",
+				dueDate: Date.now() - MS_PER_DAY,
+				gracePeriodEnd: Date.now() + GRACE_PERIOD_DAYS * MS_PER_DAY,
+				count: 101,
+			});
+
+			await t.action(
+				internal.payments.obligations.crons.processObligationTransitions,
+				{}
+			);
+
+			const monitoring = await getCronMonitoring(t);
+			expect(monitoring).not.toBeNull();
+			expect(monitoring?.lastRunBusinessDate).toBe("2026-03-21");
+			expect(monitoring?.newlyDueOverflowStreak).toBe(1);
+			expect(monitoring?.lastNewlyDueCount).toBe(101);
+			expect(warnSpy).toHaveBeenCalledWith(
+				expect.stringContaining("BECAME_DUE batch overflow")
+			);
+		} finally {
+			warnSpy.mockRestore();
+			vi.useRealTimers();
+		}
+	});
+
+	it("resets the overflow streak when the next UTC business day does not overflow", async () => {
+		vi.useFakeTimers();
+		const warnSpy = vi
+			.spyOn(console, "warn")
+			.mockImplementation(() => undefined);
+
+		try {
+			const t = createTestHarness();
+			const { mortgageId, borrowerId } = await seedMortgageWithBorrower(t);
+
+			await seedObligationBatch(t, {
+				mortgageId,
+				borrowerId,
+				status: "upcoming",
+				dueDate: Date.UTC(2026, 2, 20, 0, 0, 0, 0),
+				gracePeriodEnd: Date.UTC(2026, 3, 4, 0, 0, 0, 0),
+				count: 150,
+			});
+
+			vi.setSystemTime(new Date("2026-03-21T06:00:00.000Z"));
+			await t.action(
+				internal.payments.obligations.crons.processObligationTransitions,
+				{}
+			);
+
+			vi.setSystemTime(new Date("2026-03-22T06:00:00.000Z"));
+			await t.action(
+				internal.payments.obligations.crons.processObligationTransitions,
+				{}
+			);
+
+			const monitoring = await getCronMonitoring(t);
+			expect(monitoring?.newlyDueOverflowStreak).toBe(0);
+			expect(monitoring?.lastRunBusinessDate).toBe("2026-03-22");
+			expect(monitoring?.lastNewlyDueCount).toBe(50);
+		} finally {
+			warnSpy.mockRestore();
+			vi.useRealTimers();
+		}
+	});
+
+	it("does not increment overflow streaks twice when rerun on the same UTC business day", async () => {
+		vi.useFakeTimers();
+		vi.setSystemTime(new Date("2026-03-21T06:00:00.000Z"));
+		const warnSpy = vi
+			.spyOn(console, "warn")
+			.mockImplementation(() => undefined);
+
+		try {
+			const t = createTestHarness();
+			const { mortgageId, borrowerId } = await seedMortgageWithBorrower(t);
+
+			await seedObligationBatch(t, {
+				mortgageId,
+				borrowerId,
+				status: "upcoming",
+				dueDate: Date.now() - MS_PER_DAY,
+				gracePeriodEnd: Date.now() + GRACE_PERIOD_DAYS * MS_PER_DAY,
+				count: 250,
+			});
+
+			await t.action(
+				internal.payments.obligations.crons.processObligationTransitions,
+				{}
+			);
+			await t.action(
+				internal.payments.obligations.crons.processObligationTransitions,
+				{}
+			);
+
+			const monitoring = await getCronMonitoring(t);
+			expect(monitoring?.newlyDueOverflowStreak).toBe(1);
+			expect(monitoring?.lastRunBusinessDate).toBe("2026-03-21");
+			expect(monitoring?.lastNewlyDueCount).toBe(150);
+		} finally {
+			warnSpy.mockRestore();
+			vi.useRealTimers();
+		}
+	});
+
+	it("emits an alert log after more than three consecutive UTC business days of overflow", async () => {
+		vi.useFakeTimers();
+		const warnSpy = vi
+			.spyOn(console, "warn")
+			.mockImplementation(() => undefined);
+		const errorSpy = vi
+			.spyOn(console, "error")
+			.mockImplementation(() => undefined);
+
+		try {
+			const t = createTestHarness();
+			const { mortgageId, borrowerId } = await seedMortgageWithBorrower(t);
+
+			await seedObligationBatch(t, {
+				mortgageId,
+				borrowerId,
+				status: "upcoming",
+				dueDate: Date.UTC(2026, 2, 15, 0, 0, 0, 0),
+				gracePeriodEnd: Date.UTC(2026, 2, 30, 0, 0, 0, 0),
+				count: 450,
+			});
+
+			for (const day of [21, 22, 23, 24]) {
+				vi.setSystemTime(new Date(`2026-03-${day}T06:00:00.000Z`));
+				await t.action(
+					internal.payments.obligations.crons.processObligationTransitions,
+					{}
+				);
+			}
+
+			const monitoring = await getCronMonitoring(t);
+			expect(monitoring?.newlyDueOverflowStreak).toBe(4);
+			expect(errorSpy).toHaveBeenCalledWith(
+				expect.stringContaining("ALERT: BECAME_DUE overflow persisted")
+			);
+		} finally {
+			errorSpy.mockRestore();
+			warnSpy.mockRestore();
+			vi.useRealTimers();
+		}
+	});
+
+	it("preserves legacy obligation date fields as numeric timestamps", async () => {
+		const t = createTestHarness();
+		const { mortgageId, borrowerId } = await seedMortgageWithBorrower(t);
+
+		const obligationId = await seedObligation(t, {
+			mortgageId,
+			borrowerId,
+			status: "upcoming",
+			dueDate: Date.now() - MS_PER_DAY,
+			gracePeriodEnd: Date.now() + GRACE_PERIOD_DAYS * MS_PER_DAY,
+			settledAt: Date.now() - 2 * MS_PER_DAY,
+		});
+
+		await t.action(
+			internal.payments.obligations.crons.processObligationTransitions,
+			{}
+		);
+
+		const obligation = await t.run(async (ctx) => ctx.db.get(obligationId));
+		expect(typeof obligation?.dueDate).toBe("number");
+		expect(typeof obligation?.gracePeriodEnd).toBe("number");
+		expect(typeof obligation?.settledAt).toBe("number");
 	});
 });
