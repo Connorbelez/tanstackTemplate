@@ -24,6 +24,8 @@ export interface DispersalEntry {
 	lenderId: Id<"lenders">;
 	mortgageId: Id<"mortgages">;
 	obligationId: Id<"obligations">;
+	// Compatibility field only. Canonical servicing fee totals live on
+	// servicingFeeEntries and calculationDetails.servicingFee.
 	servicingFeeDeducted: number;
 	status: "pending";
 }

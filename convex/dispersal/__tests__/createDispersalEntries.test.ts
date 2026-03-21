@@ -286,6 +286,15 @@ describe("createDispersalEntries", () => {
 		expect(feeEntry?.amount).toBe(8333);
 		expect(feeEntry?.annualRate).toBe(0.01);
 		expect(feeEntry?.principalBalance).toBe(10_000_000);
+		expect(
+			persistedEntries.every((entry) => entry.servicingFeeDeducted === 0)
+		).toBe(true);
+		expect(
+			persistedEntries.reduce(
+				(sum, entry) => sum + entry.servicingFeeDeducted,
+				0
+			)
+		).toBe(0);
 
 		const persistedByLender = new Map(
 			persistedEntries.map((entry) => [entry.lenderId, entry] as const)

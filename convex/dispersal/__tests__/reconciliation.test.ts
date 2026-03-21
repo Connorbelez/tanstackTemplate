@@ -311,6 +311,9 @@ async function seedScenario(t: ReturnType<typeof createHarness>) {
 			createdAt: Date.now(),
 		});
 
+		// These fixtures intentionally preserve the historical overcounted
+		// servicingFeeDeducted values so reconciliation query coverage can
+		// exercise legacy data without depending on the current write path.
 		await ctx.db.insert("dispersalEntries", {
 			mortgageId,
 			lenderId,
