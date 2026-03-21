@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { internal } from "../../_generated/api";
 import { internalAction } from "../../_generated/server";
+import { unixMsToBusinessDate } from "../../lib/businessDates";
 import { effectPayloadValidator } from "../validators";
 
 const dealEffectPayloadValidator = {
@@ -72,9 +73,7 @@ export const prorateAccrualBetweenOwners = internalAction({
 			return;
 		}
 
-		const closingDateStr = new Date(deal.closingDate)
-			.toISOString()
-			.split("T")[0];
+		const closingDateStr = unixMsToBusinessDate(deal.closingDate);
 
 		// Derive last payment date from settled obligations
 		const lastSettled = await ctx.runQuery(
@@ -85,7 +84,7 @@ export const prorateAccrualBetweenOwners = internalAction({
 			}
 		);
 		const lastPaymentDate = lastSettled
-			? new Date(lastSettled.dueDate).toISOString().split("T")[0]
+			? unixMsToBusinessDate(lastSettled.dueDate)
 			: mortgage.termStartDate;
 
 		// Derive next payment date from future obligations (on or after closing date).
@@ -104,9 +103,7 @@ export const prorateAccrualBetweenOwners = internalAction({
 			);
 			return;
 		}
-		const nextPaymentDate = new Date(nextObligation.dueDate)
-			.toISOString()
-			.split("T")[0];
+		const nextPaymentDate = unixMsToBusinessDate(nextObligation.dueDate);
 
 		// Calculate daily rate
 		// TODO(Phase 2): use computed currentBalance once amortization engine is live

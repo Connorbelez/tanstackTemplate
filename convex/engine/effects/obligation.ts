@@ -3,6 +3,7 @@ import { internal } from "../../_generated/api";
 import type { Doc, Id } from "../../_generated/dataModel";
 import type { MutationCtx } from "../../_generated/server";
 import { internalMutation } from "../../_generated/server";
+import { unixMsToBusinessDate } from "../../lib/businessDates";
 import { executeTransition } from "../transition";
 import type { CommandSource, TransitionResult } from "../types";
 import { effectPayloadValidator } from "../validators";
@@ -34,7 +35,7 @@ function isFiniteNumber(value: unknown): value is number {
 }
 
 function toIsoDateString(timestamp: number): string {
-	return new Date(timestamp).toISOString().slice(0, 10);
+	return unixMsToBusinessDate(timestamp);
 }
 
 async function loadObligationOrThrow(

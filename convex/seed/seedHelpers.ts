@@ -8,6 +8,7 @@ import type {
 	EntityType,
 	GovernedEntityType,
 } from "../engine/types";
+import { unixMsToBusinessDate } from "../lib/businessDates";
 
 export const SEED_SOURCE: CommandSource = {
 	channel: "admin_dashboard",
@@ -102,7 +103,7 @@ export function seedTimestampSequence(
 }
 
 export function isoDateFromTimestamp(timestamp: number): string {
-	return new Date(timestamp).toISOString().slice(0, 10);
+	return unixMsToBusinessDate(timestamp);
 }
 
 export function addDaysToDateString(dateString: string, days: number): string {
