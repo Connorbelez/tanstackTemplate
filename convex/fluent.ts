@@ -396,10 +396,10 @@ export const ledgerMutation = authedMutation.use(
 	requirePermission("ledger:correct")
 );
 export const cashLedgerQuery = authedQuery.use(
-	requirePermission("cashLedger:view")
+	requirePermission("cash_ledger:view")
 );
 export const cashLedgerMutation = authedMutation.use(
-	requirePermission("cashLedger:correct")
+	requirePermission("cash_ledger:correct")
 );
 
 export const whoAmI = convex
