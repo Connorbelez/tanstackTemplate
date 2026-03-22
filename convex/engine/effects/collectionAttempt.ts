@@ -3,6 +3,7 @@ import { internal } from "../../_generated/api";
 import type { Id } from "../../_generated/dataModel";
 import type { MutationCtx } from "../../_generated/server";
 import { internalMutation } from "../../_generated/server";
+import { postOverpaymentToUnappliedCash } from "../../payments/cashLedger/integrations";
 import { executeTransition } from "../transition";
 import type { CommandSource } from "../types";
 import { effectPayloadValidator } from "../validators";
@@ -59,6 +60,7 @@ export const emitPaymentReceived = internalMutation({
 		);
 
 		let remainingAmount = attempt.amount;
+		const postingGroupId = `cash-receipt:${args.entityId}`;
 
 		for (const obligationId of planEntry.obligationIds) {
 			const obligation = await ctx.db.get(obligationId);
@@ -85,6 +87,7 @@ export const emitPaymentReceived = internalMutation({
 				payload: {
 					amount: appliedAmount,
 					attemptId: args.entityId,
+					postingGroupId,
 					currentAmountSettled: obligation.amountSettled,
 					totalAmount: obligation.amount,
 				},
@@ -105,6 +108,25 @@ export const emitPaymentReceived = internalMutation({
 			remainingAmount -= appliedAmount;
 			if (remainingAmount <= 0) {
 				break;
+			}
+		}
+
+		// Route any remaining overpayment to UNAPPLIED_CASH
+		if (remainingAmount > 0) {
+			const firstObligation = await ctx.db.get(planEntry.obligationIds[0]);
+			if (firstObligation) {
+				await postOverpaymentToUnappliedCash(ctx, {
+					attemptId: args.entityId,
+					amount: remainingAmount,
+					mortgageId: firstObligation.mortgageId,
+					borrowerId: firstObligation.borrowerId,
+					postingGroupId,
+					source: args.source,
+				});
+			} else {
+				console.warn(
+					`[emitPaymentReceived] Overpayment of ${remainingAmount} cents but no obligation found for mortgageId resolution. attempt=${args.entityId}`
+				);
 			}
 		}
 	},

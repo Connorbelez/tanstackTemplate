@@ -62,12 +62,14 @@ export const applyPayment = internalMutation({
 		const attemptId = args.payload?.attemptId as
 			| Id<"collectionAttempts">
 			| undefined;
+		const postingGroupId = args.payload?.postingGroupId as string | undefined;
 
 		await postCashReceiptForObligation(ctx, {
 			obligationId: args.entityId,
 			amount,
 			idempotencyKey: `cash-ledger:cash-received:${args.journalEntryId}`,
 			attemptId,
+			postingGroupId,
 			source: args.source,
 		});
 
