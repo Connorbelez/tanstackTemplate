@@ -23,8 +23,8 @@
 ## Chunk 01: Remaining Queries & Middleware
 
 ### T-001: Add cashLedgerQuery middleware to fluent.ts
-- [x] Add `cashLedgerQuery = authedQuery.use(requirePermission("cashLedger:view"))` to convex/fluent.ts
-- [x] Add `cashLedgerMutation = authedMutation.use(requirePermission("cashLedger:correct"))` to convex/fluent.ts
+- [x] Add `cashLedgerQuery = authedQuery.use(requirePermission("cash_ledger:view"))` to convex/fluent.ts
+- [x] Add `cashLedgerMutation = authedMutation.use(requirePermission("cash_ledger:correct"))` to convex/fluent.ts
 
 ### T-002: Migrate existing queries from ledgerQuery to cashLedgerQuery
 - [x] In convex/payments/cashLedger/queries.ts, changed import to `cashLedgerQuery`

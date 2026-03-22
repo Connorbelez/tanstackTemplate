@@ -3,8 +3,8 @@
 ## Tasks
 
 ### T-001: Add cashLedgerQuery middleware to fluent.ts
-- [ ] Add `cashLedgerQuery = authedQuery.use(requirePermission("cashLedger:view"))` after ledgerMutation
-- [ ] Add `cashLedgerMutation = authedMutation.use(requirePermission("cashLedger:correct"))` after cashLedgerQuery
+- [ ] Add `cashLedgerQuery = authedQuery.use(requirePermission("cash_ledger:view"))` after ledgerMutation
+- [ ] Add `cashLedgerMutation = authedMutation.use(requirePermission("cash_ledger:correct"))` after cashLedgerQuery
 - [ ] Export both
 
 ### T-002: Migrate existing queries from ledgerQuery to cashLedgerQuery
