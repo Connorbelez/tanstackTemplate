@@ -5,8 +5,10 @@ import type { MutationCtx, QueryCtx } from "../../../_generated/server";
 import { createDispersalEntries } from "../../../dispersal/createDispersalEntries";
 import { applyPayment } from "../../../engine/effects/obligationPayment";
 import schema from "../../../schema";
+import { getOrCreateCashAccount } from "../accounts";
 import { postObligationAccrued } from "../integrations";
 import { postLenderPayout } from "../mutations";
+import { postCashEntryInternal } from "../postEntry";
 import { reconcileObligationSettlementProjectionInternal } from "../reconciliation";
 
 const modules = import.meta.glob("/convex/**/*.ts");
@@ -17,6 +19,8 @@ const SYSTEM_SOURCE = {
 	actorType: "system" as const,
 };
 const NEGATIVE_BALANCE_PATTERN = /negative/i;
+const POSITIVE_SAFE_INTEGER_PATTERN = /positive safe integer/;
+const MUST_BE_DIFFERENT_PATTERN = /must be different/;
 
 interface ApplyPaymentHandler {
 	_handler: (
@@ -503,6 +507,82 @@ describe("cash ledger integrations", () => {
 					? lenderPayable.cumulativeCredits - lenderPayable.cumulativeDebits
 					: null
 			).toBe(0n);
+		});
+	});
+
+	it("rejects zero-amount entry", async () => {
+		const t = createHarness();
+		const seeded = await seedCoreEntities(t);
+		await t.run(async (ctx) => {
+			const debit = await getOrCreateCashAccount(ctx, {
+				family: "BORROWER_RECEIVABLE",
+				mortgageId: seeded.mortgageId,
+			});
+			const credit = await getOrCreateCashAccount(ctx, {
+				family: "CONTROL",
+				subaccount: "ACCRUAL",
+				mortgageId: seeded.mortgageId,
+			});
+			await expect(
+				postCashEntryInternal(ctx, {
+					entryType: "OBLIGATION_ACCRUED",
+					effectiveDate: "2026-03-01",
+					amount: 0,
+					debitAccountId: debit._id,
+					creditAccountId: credit._id,
+					idempotencyKey: "zero-amount-test",
+					source: SYSTEM_SOURCE,
+				})
+			).rejects.toThrow(POSITIVE_SAFE_INTEGER_PATTERN);
+		});
+	});
+
+	it("rejects negative-amount entry", async () => {
+		const t = createHarness();
+		const seeded = await seedCoreEntities(t);
+		await t.run(async (ctx) => {
+			const debit = await getOrCreateCashAccount(ctx, {
+				family: "BORROWER_RECEIVABLE",
+				mortgageId: seeded.mortgageId,
+			});
+			const credit = await getOrCreateCashAccount(ctx, {
+				family: "CONTROL",
+				subaccount: "ACCRUAL",
+				mortgageId: seeded.mortgageId,
+			});
+			await expect(
+				postCashEntryInternal(ctx, {
+					entryType: "OBLIGATION_ACCRUED",
+					effectiveDate: "2026-03-01",
+					amount: -50_000,
+					debitAccountId: debit._id,
+					creditAccountId: credit._id,
+					idempotencyKey: "negative-amount-test",
+					source: SYSTEM_SOURCE,
+				})
+			).rejects.toThrow(POSITIVE_SAFE_INTEGER_PATTERN);
+		});
+	});
+
+	it("rejects debit === credit same account", async () => {
+		const t = createHarness();
+		const seeded = await seedCoreEntities(t);
+		await t.run(async (ctx) => {
+			const account = await getOrCreateCashAccount(ctx, {
+				family: "BORROWER_RECEIVABLE",
+				mortgageId: seeded.mortgageId,
+			});
+			await expect(
+				postCashEntryInternal(ctx, {
+					entryType: "OBLIGATION_ACCRUED",
+					effectiveDate: "2026-03-01",
+					amount: 100_000,
+					debitAccountId: account._id,
+					creditAccountId: account._id,
+					idempotencyKey: "same-account-test",
+					source: SYSTEM_SOURCE,
+				})
+			).rejects.toThrow(MUST_BE_DIFFERENT_PATTERN);
 		});
 	});
 });

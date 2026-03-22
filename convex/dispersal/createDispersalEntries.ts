@@ -368,7 +368,6 @@ export const createDispersalEntries = internalMutation({
 			0
 		);
 
-
 		const shares = calculateProRataShares(
 			normalizedPositions,
 			distributableAmount

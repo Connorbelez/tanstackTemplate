@@ -337,3 +337,39 @@ describe("balanceCheck — NEGATIVE_BALANCE_EXEMPT_FAMILIES", () => {
 		});
 	});
 });
+
+// ── SUSPENSE_ESCALATED balance exemption ─────────────────────────────
+
+describe("balanceCheck — SUSPENSE_ESCALATED exemption", () => {
+	it("SUSPENSE_ESCALATED skips balance check (like REVERSAL/CORRECTION)", async () => {
+		const t = createHarness();
+
+		await t.run(async (ctx) => {
+			// Create accounts with zero balance
+			const suspenseAccount = await getOrCreateCashAccount(ctx, {
+				family: "SUSPENSE",
+			});
+			const receivableAccount = await getOrCreateCashAccount(ctx, {
+				family: "BORROWER_RECEIVABLE",
+			});
+
+			// SUSPENSE_ESCALATED: debit SUSPENSE, credit BORROWER_RECEIVABLE
+			// Both accounts have 0 balance. SUSPENSE is debit-normal, so crediting
+			// would not cause it to go negative. But debiting SUSPENSE with 0 balance
+			// keeps it positive (adding debits). The key point: SUSPENSE_ESCALATED
+			// skips the balance check entirely, just like REVERSAL and CORRECTION.
+			const result = await postCashEntryInternal(ctx, {
+				entryType: "SUSPENSE_ESCALATED",
+				effectiveDate: "2026-03-01",
+				amount: 25_000,
+				debitAccountId: suspenseAccount._id,
+				creditAccountId: receivableAccount._id,
+				idempotencyKey: "suspense-escalated-balance-exempt",
+				source: SYSTEM_SOURCE,
+			});
+
+			expect(result.entry).toBeDefined();
+			expect(result.entry.entryType).toBe("SUSPENSE_ESCALATED");
+		});
+	});
+});
