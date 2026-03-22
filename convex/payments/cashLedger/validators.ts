@@ -12,7 +12,8 @@ export const cashEntryTypeValidator = v.union(
 	v.literal("OBLIGATION_WRITTEN_OFF"),
 	v.literal("REVERSAL"),
 	v.literal("CORRECTION"),
-	v.literal("SUSPENSE_ESCALATED")
+	v.literal("SUSPENSE_ESCALATED"),
+	v.literal("SUSPENSE_ROUTED")
 );
 
 export const postCashEntryArgsValidator = {

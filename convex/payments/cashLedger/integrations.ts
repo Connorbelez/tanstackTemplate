@@ -1,6 +1,7 @@
 import { ConvexError } from "convex/values";
 import type { Id } from "../../_generated/dataModel";
 import type { MutationCtx } from "../../_generated/server";
+import { auditLog } from "../../auditLog";
 import type { CommandSource } from "../../engine/types";
 import { getOrCreateCashAccount, requireCashAccount } from "./accounts";
 import { postCashEntryInternal } from "./postEntry";
@@ -217,4 +218,111 @@ export async function postSettlementAllocation(
 			source: normalizeSource(args.source),
 		});
 	}
+}
+
+// ── SUSPENSE Routing ─────────────────────────────────────────────────
+
+async function postToSuspense(
+	ctx: MutationCtx,
+	args: {
+		mortgageId: Id<"mortgages">;
+		amount: number;
+		idempotencyKey: string;
+		effectiveDate: string;
+		source: CommandSource;
+		reason: string;
+		metadata: Record<string, unknown>;
+	}
+) {
+	const suspenseAccount = await getOrCreateCashAccount(ctx, {
+		family: "SUSPENSE",
+		mortgageId: args.mortgageId,
+	});
+
+	const cashClearingAccount = await getOrCreateCashAccount(ctx, {
+		family: "CASH_CLEARING",
+		mortgageId: args.mortgageId,
+	});
+
+	const result = await postCashEntryInternal(ctx, {
+		entryType: "SUSPENSE_ROUTED",
+		effectiveDate: args.effectiveDate,
+		amount: args.amount,
+		debitAccountId: suspenseAccount._id,
+		creditAccountId: cashClearingAccount._id,
+		idempotencyKey: args.idempotencyKey,
+		mortgageId: args.mortgageId,
+		source: args.source,
+		reason: args.reason,
+		metadata: args.metadata,
+	});
+
+	await auditLog.log(ctx, {
+		action: "cashLedger.suspense_routed",
+		actorId: "system",
+		resourceType: "mortgage",
+		resourceId: args.mortgageId,
+		severity: "warning",
+		metadata: args.metadata,
+	});
+
+	return result;
+}
+
+export async function postCashReceiptWithSuspenseFallback(
+	ctx: MutationCtx,
+	args: {
+		obligationId?: Id<"obligations">;
+		mortgageId?: Id<"mortgages">;
+		amount: number;
+		idempotencyKey: string;
+		effectiveDate?: string;
+		attemptId?: Id<"collectionAttempts">;
+		source: CommandSource;
+		mismatchReason?: string;
+	}
+) {
+	const effectiveDate = args.effectiveDate ?? unixMsToBusinessDate(Date.now());
+	const normalizedSource = normalizeSource(args.source);
+
+	// Happy path: obligation provided and exists
+	if (args.obligationId) {
+		const obligation = await ctx.db.get(args.obligationId);
+		if (obligation) {
+			return postCashReceiptForObligation(ctx, {
+				obligationId: obligation._id,
+				amount: args.amount,
+				idempotencyKey: args.idempotencyKey,
+				effectiveDate,
+				attemptId: args.attemptId,
+				source: normalizedSource,
+			});
+		}
+	}
+
+	// Fallback: route to SUSPENSE
+	const reason =
+		args.mismatchReason ??
+		(args.obligationId ? "obligation_not_found" : "no_obligation_reference");
+
+	if (!args.mortgageId) {
+		throw new ConvexError(
+			"postCashReceiptWithSuspenseFallback: mortgageId is required when routing to SUSPENSE (no matched obligation)"
+		);
+	}
+
+	return postToSuspense(ctx, {
+		mortgageId: args.mortgageId,
+		amount: args.amount,
+		idempotencyKey: `suspense-routed:${args.idempotencyKey}`,
+		effectiveDate,
+		source: normalizedSource,
+		reason,
+		metadata: {
+			reason,
+			originalObligationId: args.obligationId ?? null,
+			originalAmount: args.amount,
+			attemptId: args.attemptId ?? null,
+		},
+	});
 }

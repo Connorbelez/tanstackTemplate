@@ -136,6 +136,7 @@ export const getSuspenseItems = cashLedgerQuery
 			.withIndex("by_family", (q) => q.eq("family", "SUSPENSE"))
 			.collect();
 
+		const now = Date.now();
 		return accounts
 			.map((account) => ({
 				accountId: account._id,
@@ -143,6 +144,8 @@ export const getSuspenseItems = cashLedgerQuery
 				obligationId: account.obligationId,
 				balance: getCashAccountBalance(account),
 				metadata: account.metadata,
+				createdAt: account._creationTime,
+				ageMs: now - account._creationTime,
 			}))
 			.filter((entry) => entry.balance > 0n);
 	})
