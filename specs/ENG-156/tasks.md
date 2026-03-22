@@ -13,4 +13,4 @@
 - [x] **T-006**: Create `postToSuspense` helper function in `convex/payments/cashLedger/integrations.ts`
 - [x] **T-007**: Create `postCashReceiptWithSuspenseFallback` exported function in `convex/payments/cashLedger/integrations.ts`
 - [x] **T-008**: Enrich `getSuspenseItems()` in `convex/payments/cashLedger/queries.ts` — added `createdAt` and `ageMs`
-- [x] **T-009**: Run quality gates: `bun check && bun typecheck && bun run test` — all pass for modified files
+- [x] **T-009**: Run quality gates: `bunx convex codegen && bun check && bun typecheck` (and optional `bun run test`) — all pass for modified files
