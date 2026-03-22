@@ -24,6 +24,8 @@ export const effectRegistry: Record<
 		internal.engine.effects.obligationLateFee.createLateFeeObligation,
 	applyPayment: internal.engine.effects.obligationPayment.applyPayment,
 	recordWaiver: internal.engine.effects.obligationWaiver.recordWaiver,
+	// Obligation accrual → cash ledger (ENG-158)
+	accrueObligation: internal.engine.effects.obligationAccrual.accrueObligation,
 	// Deal Closing — effects (ENG-53)
 	notifyAllParties: internal.engine.effects.dealClosingEffects.notifyAllParties,
 	notifyCancellation:

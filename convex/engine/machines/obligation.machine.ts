@@ -40,6 +40,9 @@ export const obligationMachine = setup({
 		recordWaiver: () => {
 			/* resolved by GT effect registry */
 		},
+		accrueObligation: () => {
+			/* resolved by GT effect registry */
+		},
 	},
 }).createMachine({
 	id: "obligation",
@@ -49,7 +52,10 @@ export const obligationMachine = setup({
 	states: {
 		upcoming: {
 			on: {
-				BECAME_DUE: { target: "due" },
+				BECAME_DUE: {
+					target: "due",
+					actions: ["accrueObligation"],
+				},
 				OBLIGATION_WAIVED: {
 					target: "waived",
 					actions: ["recordWaiver"],
