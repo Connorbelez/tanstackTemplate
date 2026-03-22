@@ -9,6 +9,7 @@ import { getCashAccountBalance, isCreditNormalFamily } from "../accounts";
 const modules = import.meta.glob("/convex/**/*.ts");
 
 const UNAUTHORIZED_PATTERN = /Unauthorized/;
+const FORBIDDEN_PATTERN = /Forbidden/;
 
 const SOURCE = {
 	channel: "scheduler" as const,
@@ -23,13 +24,26 @@ const CASH_LEDGER_IDENTITY = {
 	organization_name: "FairLend Staff",
 	role: "admin",
 	roles: JSON.stringify(["admin"]),
-	permissions: JSON.stringify([
-		"cash_ledger:view",
-		"cash_ledger:correct",
-		"ledger:view",
-	]),
+	permissions: JSON.stringify(["cash_ledger:view", "cash_ledger:correct"]),
 	user_email: "cash-ledger-test@fairlend.ca",
 	user_first_name: "CashLedger",
+	user_last_name: "Tester",
+};
+
+/**
+ * Identity with "ledger:view" but NOT "cash_ledger:view".
+ * Used to prove the permission boundary — cashLedgerQuery must reject this.
+ */
+const WRONG_PERMISSION_IDENTITY = {
+	subject: "test-wrong-perm-user",
+	issuer: "https://api.workos.com",
+	org_id: FAIRLEND_STAFF_ORG_ID,
+	organization_name: "FairLend Staff",
+	role: "admin",
+	roles: JSON.stringify(["admin"]),
+	permissions: JSON.stringify(["ledger:view"]),
+	user_email: "wrong-perm-test@fairlend.ca",
+	user_first_name: "WrongPerm",
 	user_last_name: "Tester",
 };
 
@@ -630,6 +644,51 @@ describe("auth", () => {
 				mortgageId: seeded.mortgageId,
 			})
 		).rejects.toThrow(UNAUTHORIZED_PATTERN);
+	});
+
+	it("rejects ledger:view (without cash_ledger:view) on getAccountBalanceRange", async () => {
+		const t = createHarness();
+		const wrongAuth = t.withIdentity(WRONG_PERMISSION_IDENTITY);
+		const seeded = await seedCore(t);
+
+		const accountId = await insertAccount(t, {
+			family: "TRUST_CASH",
+			mortgageId: seeded.mortgageId,
+			cumulativeDebits: 0n,
+			cumulativeCredits: 0n,
+		});
+
+		await expect(
+			wrongAuth.query(api.payments.cashLedger.queries.getAccountBalanceRange, {
+				accountId,
+				fromDate: "2026-01-01",
+				toDate: "2026-12-31",
+			})
+		).rejects.toThrow(FORBIDDEN_PATTERN);
+	});
+
+	it("rejects ledger:view (without cash_ledger:view) on getBorrowerBalance", async () => {
+		const t = createHarness();
+		const wrongAuth = t.withIdentity(WRONG_PERMISSION_IDENTITY);
+		const seeded = await seedCore(t);
+
+		await expect(
+			wrongAuth.query(api.payments.cashLedger.queries.getBorrowerBalance, {
+				borrowerId: seeded.borrowerId,
+			})
+		).rejects.toThrow(FORBIDDEN_PATTERN);
+	});
+
+	it("rejects ledger:view (without cash_ledger:view) on getBalancesByFamily", async () => {
+		const t = createHarness();
+		const wrongAuth = t.withIdentity(WRONG_PERMISSION_IDENTITY);
+		const seeded = await seedCore(t);
+
+		await expect(
+			wrongAuth.query(api.payments.cashLedger.queries.getBalancesByFamily, {
+				mortgageId: seeded.mortgageId,
+			})
+		).rejects.toThrow(FORBIDDEN_PATTERN);
 	});
 });
 

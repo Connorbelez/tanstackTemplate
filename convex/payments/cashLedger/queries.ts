@@ -15,6 +15,23 @@ import {
 	reconcileObligationSettlementProjectionInternal,
 } from "./reconciliation";
 
+/** Matches YYYY-MM-DD format strictly. */
+const BUSINESS_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Converts a bigint to a number, throwing if the value exceeds
+ * Number.MAX_SAFE_INTEGER (or is below Number.MIN_SAFE_INTEGER).
+ */
+function safeBigintToNumber(value: bigint): number {
+	const num = Number(value);
+	if (!Number.isSafeInteger(num)) {
+		throw new Error(
+			`BigInt value ${value} cannot be safely represented as a Number`
+		);
+	}
+	return num;
+}
+
 function compareSequence(
 	left: { sequenceNumber: bigint },
 	right: { sequenceNumber: bigint }
@@ -254,11 +271,32 @@ export const getAccountBalanceRange = cashLedgerQuery
 		toDate: v.string(),
 	})
 	.handler(async (ctx, args) => {
+		if (!BUSINESS_DATE_PATTERN.test(args.fromDate)) {
+			throw new Error(
+				`Invalid fromDate "${args.fromDate}": expected YYYY-MM-DD format`
+			);
+		}
+		if (!BUSINESS_DATE_PATTERN.test(args.toDate)) {
+			throw new Error(
+				`Invalid toDate "${args.toDate}": expected YYYY-MM-DD format`
+			);
+		}
+		if (args.fromDate > args.toDate) {
+			throw new Error(
+				`fromDate "${args.fromDate}" must be <= toDate "${args.toDate}"`
+			);
+		}
+
 		const account = await ctx.db.get(args.accountId);
 		if (!account) {
 			throw new Error(`Cash ledger account not found: ${args.accountId}`);
 		}
 
+		// NOTE: This loads all journal entries for the account and filters
+		// in-memory. For Phase 1 this is acceptable given expected data volumes
+		// and the Convex 8 MB query size limit provides a natural ceiling. If
+		// entry counts grow significantly, cursor-based pagination should be
+		// introduced.
 		const [debits, credits] = await Promise.all([
 			ctx.db
 				.query("cash_ledger_journal_entries")
@@ -290,8 +328,13 @@ export const getAccountBalanceRange = cashLedgerQuery
 		const inRange: typeof all = [];
 
 		for (const entry of all) {
-			const isDebit = entry.debitAccountId === args.accountId;
-			const delta = isDebit ? entry.amount : -entry.amount;
+			let delta = 0n;
+			if (entry.debitAccountId === args.accountId) {
+				delta += entry.amount;
+			}
+			if (entry.creditAccountId === args.accountId) {
+				delta -= entry.amount;
+			}
 
 			if (entry.effectiveDate < args.fromDate) {
 				openingRaw += delta;
@@ -302,8 +345,14 @@ export const getAccountBalanceRange = cashLedgerQuery
 
 		let closingRaw = openingRaw;
 		for (const entry of inRange) {
-			const isDebit = entry.debitAccountId === args.accountId;
-			closingRaw += isDebit ? entry.amount : -entry.amount;
+			let delta = 0n;
+			if (entry.debitAccountId === args.accountId) {
+				delta += entry.amount;
+			}
+			if (entry.creditAccountId === args.accountId) {
+				delta -= entry.amount;
+			}
+			closingRaw += delta;
 		}
 
 		const sign = creditNormal ? -1n : 1n;
@@ -332,18 +381,26 @@ export const getBorrowerBalance = cashLedgerQuery
 		);
 
 		let total = 0n;
-		const obligations: Array<{
-			obligationId: Id<"obligations"> | undefined;
-			balance: bigint;
-		}> = [];
+		const grouped = new Map<Id<"obligations">, bigint>();
 
 		for (const acct of receivables) {
+			if (!acct.obligationId) {
+				continue;
+			}
 			const bal = getCashAccountBalance(acct);
 			total += bal;
-			obligations.push({
-				obligationId: acct.obligationId,
-				balance: bal,
-			});
+			grouped.set(
+				acct.obligationId,
+				(grouped.get(acct.obligationId) ?? 0n) + bal
+			);
+		}
+
+		const obligations: Array<{
+			obligationId: Id<"obligations">;
+			balance: bigint;
+		}> = [];
+		for (const [obligationId, balance] of grouped) {
+			obligations.push({ obligationId, balance });
 		}
 
 		return { total, obligations };
@@ -352,15 +409,13 @@ export const getBorrowerBalance = cashLedgerQuery
 
 export const getBalancesByFamily = cashLedgerQuery
 	.input({
-		mortgageId: v.optional(v.id("mortgages")),
+		mortgageId: v.id("mortgages"),
 	})
 	.handler(async (ctx, args) => {
-		const accounts = args.mortgageId
-			? await ctx.db
-					.query("cash_ledger_accounts")
-					.withIndex("by_mortgage", (q) => q.eq("mortgageId", args.mortgageId))
-					.collect()
-			: await ctx.db.query("cash_ledger_accounts").collect();
+		const accounts = await ctx.db
+			.query("cash_ledger_accounts")
+			.withIndex("by_mortgage", (q) => q.eq("mortgageId", args.mortgageId))
+			.collect();
 
 		const balancesByFamily: Record<string, bigint> = {};
 		for (const account of accounts) {
@@ -385,7 +440,7 @@ export const internalGetObligationBalance = internalQuery({
 		if (!account) {
 			return 0;
 		}
-		return Number(getCashAccountBalance(account));
+		return safeBigintToNumber(getCashAccountBalance(account));
 	},
 });
 
@@ -401,7 +456,7 @@ export const internalGetLenderPayableBalance = internalQuery({
 			.filter((a) => a.family === "LENDER_PAYABLE")
 			.reduce((sum, a) => sum + getCashAccountBalance(a), 0n);
 
-		return Number(total);
+		return safeBigintToNumber(total);
 	},
 });
 
@@ -415,8 +470,8 @@ export const internalGetMortgageCashState = internalQuery({
 
 		const state: Record<string, number> = {};
 		for (const account of accounts) {
-			const bal = getCashAccountBalance(account);
-			state[account.family] = (state[account.family] ?? 0) + Number(bal);
+			const bal = safeBigintToNumber(getCashAccountBalance(account));
+			state[account.family] = (state[account.family] ?? 0) + bal;
 		}
 
 		return state;
