@@ -1076,6 +1076,7 @@ export default defineSchema({
 		mortgageId: v.optional(v.id("mortgages")),
 		obligationId: v.optional(v.id("obligations")),
 		attemptId: v.optional(v.id("collectionAttempts")),
+		dealId: v.optional(v.id("deals")),
 		dispersalEntryId: v.optional(v.id("dispersalEntries")),
 		lenderId: v.optional(v.id("lenders")),
 		borrowerId: v.optional(v.id("borrowers")),
@@ -1100,6 +1101,7 @@ export default defineSchema({
 		.index("by_credit_account_and_timestamp", ["creditAccountId", "timestamp"])
 		.index("by_posting_group", ["postingGroupId", "sequenceNumber"])
 		.index("by_caused_by", ["causedBy"])
+		.index("by_deal", ["dealId", "entryType"])
 		.index("by_effective_date", ["effectiveDate", "sequenceNumber"]),
 
 	cash_ledger_sequence_counters: defineTable({

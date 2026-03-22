@@ -20,6 +20,7 @@ export const postCashEntryArgsValidator = {
 	entryType: cashEntryTypeValidator,
 	effectiveDate: v.string(),
 	amount: v.number(),
+	dealId: v.optional(v.id("deals")),
 	debitAccountId: v.id("cash_ledger_accounts"),
 	creditAccountId: v.id("cash_ledger_accounts"),
 	idempotencyKey: v.string(),
