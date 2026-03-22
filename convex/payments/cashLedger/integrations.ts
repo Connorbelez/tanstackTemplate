@@ -155,6 +155,159 @@ export async function postCashReceiptForObligation(
 	});
 }
 
+export async function postDealBuyerFundsReceived(
+	ctx: MutationCtx,
+	args: {
+		dealId: Id<"deals">;
+		amount: number;
+		effectiveDate: string;
+		source: CommandSource;
+	}
+) {
+	const deal = await ctx.db.get(args.dealId);
+	if (!deal) {
+		throw new ConvexError(`Deal not found: ${args.dealId}`);
+	}
+
+	const trustCashAccount = await getOrCreateCashAccount(ctx, {
+		family: "TRUST_CASH",
+		mortgageId: deal.mortgageId,
+	});
+	const cashClearingAccount = await getOrCreateCashAccount(ctx, {
+		family: "CASH_CLEARING",
+		mortgageId: deal.mortgageId,
+	});
+
+	return postCashEntryInternal(ctx, {
+		entryType: "CASH_RECEIVED",
+		effectiveDate: args.effectiveDate,
+		amount: args.amount,
+		debitAccountId: trustCashAccount._id,
+		creditAccountId: cashClearingAccount._id,
+		// One buyer-funds entry per deal — idempotency key intentionally scoped to dealId only
+		idempotencyKey: `cash-ledger:deal-buyer-funds:${args.dealId}`,
+		mortgageId: deal.mortgageId,
+		dealId: args.dealId,
+		source: normalizeSource(args.source),
+		metadata: { buyerId: deal.buyerId, sellerId: deal.sellerId },
+	});
+}
+
+export async function postDealSellerPayout(
+	ctx: MutationCtx,
+	args: {
+		dealId: Id<"deals">;
+		lenderId: Id<"lenders">;
+		amount: number;
+		effectiveDate: string;
+		source: CommandSource;
+	}
+) {
+	const deal = await ctx.db.get(args.dealId);
+	if (!deal) {
+		throw new ConvexError(`Deal not found: ${args.dealId}`);
+	}
+
+	const lenderPayableAccount = await getOrCreateCashAccount(ctx, {
+		family: "LENDER_PAYABLE",
+		mortgageId: deal.mortgageId,
+		lenderId: args.lenderId,
+	});
+	const trustCashAccount = await getOrCreateCashAccount(ctx, {
+		family: "TRUST_CASH",
+		mortgageId: deal.mortgageId,
+	});
+
+	return postCashEntryInternal(ctx, {
+		entryType: "LENDER_PAYOUT_SENT",
+		effectiveDate: args.effectiveDate,
+		amount: args.amount,
+		debitAccountId: lenderPayableAccount._id,
+		creditAccountId: trustCashAccount._id,
+		idempotencyKey: `cash-ledger:deal-seller-payout:${args.dealId}:${args.lenderId}`,
+		mortgageId: deal.mortgageId,
+		dealId: args.dealId,
+		lenderId: args.lenderId,
+		source: normalizeSource(args.source),
+		metadata: { sellerId: deal.sellerId, buyerId: deal.buyerId },
+	});
+}
+
+export async function postLockingFeeReceived(
+	ctx: MutationCtx,
+	args: {
+		feeId: string;
+		mortgageId: Id<"mortgages">;
+		amount: number;
+		effectiveDate: string;
+		dealId?: Id<"deals">;
+		source: CommandSource;
+	}
+) {
+	const trustCashAccount = await getOrCreateCashAccount(ctx, {
+		family: "TRUST_CASH",
+		mortgageId: args.mortgageId,
+	});
+	const unappliedCashAccount = await getOrCreateCashAccount(ctx, {
+		family: "UNAPPLIED_CASH",
+		mortgageId: args.mortgageId,
+	});
+
+	return postCashEntryInternal(ctx, {
+		entryType: "CASH_RECEIVED",
+		effectiveDate: args.effectiveDate,
+		amount: args.amount,
+		debitAccountId: trustCashAccount._id,
+		creditAccountId: unappliedCashAccount._id,
+		idempotencyKey: args.dealId
+			? `cash-ledger:locking-fee:${args.dealId}:${args.mortgageId}:${args.feeId}`
+			: `cash-ledger:locking-fee:${args.mortgageId}:${args.feeId}`,
+		mortgageId: args.mortgageId,
+		dealId: args.dealId,
+		source: normalizeSource(args.source),
+		metadata: { feeType: "locking_fee", feeId: args.feeId },
+	});
+}
+
+export async function postCommitmentDepositReceived(
+	ctx: MutationCtx,
+	args: {
+		depositId: string;
+		mortgageId: Id<"mortgages">;
+		amount: number;
+		effectiveDate: string;
+		dealId?: Id<"deals">;
+		source: CommandSource;
+	}
+) {
+	const trustCashAccount = await getOrCreateCashAccount(ctx, {
+		family: "TRUST_CASH",
+		mortgageId: args.mortgageId,
+	});
+	const unappliedCashAccount = await getOrCreateCashAccount(ctx, {
+		family: "UNAPPLIED_CASH",
+		mortgageId: args.mortgageId,
+	});
+
+	return postCashEntryInternal(ctx, {
+		entryType: "CASH_RECEIVED",
+		effectiveDate: args.effectiveDate,
+		amount: args.amount,
+		debitAccountId: trustCashAccount._id,
+		creditAccountId: unappliedCashAccount._id,
+		idempotencyKey: args.dealId
+			? `cash-ledger:commitment-deposit:${args.dealId}:${args.mortgageId}:${args.depositId}`
+			: `cash-ledger:commitment-deposit:${args.mortgageId}:${args.depositId}`,
+		mortgageId: args.mortgageId,
+		dealId: args.dealId,
+		source: normalizeSource(args.source),
+		metadata: {
+			feeType: "commitment_deposit",
+			depositId: args.depositId,
+		},
+	});
+}
+
 export async function postOverpaymentToUnappliedCash(
 	ctx: MutationCtx,
 	args: {

@@ -22,6 +22,7 @@ export interface PostCashEntryInput {
 	borrowerId?: Id<"borrowers">;
 	causedBy?: Id<"cash_ledger_journal_entries">;
 	creditAccountId: Id<"cash_ledger_accounts">;
+	dealId?: Id<"deals">;
 	debitAccountId: Id<"cash_ledger_accounts">;
 	dispersalEntryId?: Id<"dispersalEntries">;
 	effectiveDate: string;
@@ -180,6 +181,7 @@ async function persistEntry(
 		entryType: args.entryType,
 		mortgageId: args.mortgageId,
 		obligationId: args.obligationId,
+		dealId: args.dealId,
 		attemptId: args.attemptId,
 		dispersalEntryId: args.dispersalEntryId,
 		lenderId: args.lenderId,

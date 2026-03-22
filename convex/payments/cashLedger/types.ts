@@ -55,7 +55,7 @@ export const CASH_ENTRY_TYPE_FAMILY_MAP: Record<
 	},
 	CASH_RECEIVED: {
 		debit: ["TRUST_CASH", "CASH_CLEARING", "UNAPPLIED_CASH"],
-		credit: ["BORROWER_RECEIVABLE", "UNAPPLIED_CASH"],
+		credit: ["BORROWER_RECEIVABLE", "CASH_CLEARING", "UNAPPLIED_CASH"],
 	},
 	CASH_APPLIED: {
 		debit: ["CONTROL", "UNAPPLIED_CASH"],
@@ -124,8 +124,10 @@ export const ENTRY_TYPE_CONTROL_SUBACCOUNT: Partial<
 };
 
 export const CREDIT_NORMAL_FAMILIES: ReadonlySet<CashAccountFamily> = new Set([
+	"CASH_CLEARING",
 	"LENDER_PAYABLE",
 	"SERVICING_REVENUE",
+	"UNAPPLIED_CASH",
 ]);
 
 // CONTROL and BORROWER_RECEIVABLE are allowed to go negative in balance checks

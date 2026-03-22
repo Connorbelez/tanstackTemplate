@@ -442,6 +442,10 @@ describe("getControlBalancesByPostingGroup", () => {
 				family: "UNAPPLIED_CASH",
 				mortgageId: seeded.mortgageId,
 			});
+			// UNAPPLIED_CASH is credit-normal; pre-fund so debit doesn't go negative
+			await ctx.db.patch(unappliedCash._id, {
+				cumulativeCredits: 200_000n,
+			});
 			const receivable = await getOrCreateCashAccount(ctx, {
 				family: "BORROWER_RECEIVABLE",
 				mortgageId: seeded.mortgageId,

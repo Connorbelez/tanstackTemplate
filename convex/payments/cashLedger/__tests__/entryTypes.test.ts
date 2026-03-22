@@ -94,8 +94,8 @@ describe("Entry Type Coverage — Valid Postings", () => {
 			const credit = await getOrCreateCashAccount(ctx, {
 				family: "BORROWER_RECEIVABLE",
 			});
-			// UNAPPLIED_CASH is debit-normal; needs debit balance to avoid going negative
-			await ctx.db.patch(debit._id, { cumulativeDebits: 200_000n });
+			// UNAPPLIED_CASH is credit-normal; needs credit balance to apply from
+			await ctx.db.patch(debit._id, { cumulativeCredits: 200_000n });
 			const result = await postCashEntryInternal(ctx, {
 				entryType: "CASH_APPLIED",
 				effectiveDate: "2026-03-01",
