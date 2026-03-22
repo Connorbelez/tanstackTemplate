@@ -24,6 +24,14 @@ const SUSPENSE_WRONG_DEBIT_RECEIVABLE =
 	/SUSPENSE_ESCALATED cannot debit family BORROWER_RECEIVABLE/;
 const SUSPENSE_WRONG_CREDIT_TRUST =
 	/SUSPENSE_ESCALATED cannot credit family TRUST_CASH/;
+const ROUTED_WRONG_DEBIT_TRUST =
+	/SUSPENSE_ROUTED cannot debit family TRUST_CASH/;
+const ROUTED_WRONG_DEBIT_RECEIVABLE =
+	/SUSPENSE_ROUTED cannot debit family BORROWER_RECEIVABLE/;
+const ROUTED_WRONG_CREDIT_CONTROL =
+	/SUSPENSE_ROUTED cannot credit family CONTROL/;
+const ROUTED_WRONG_CREDIT_RECEIVABLE =
+	/SUSPENSE_ROUTED cannot credit family BORROWER_RECEIVABLE/;
 
 // ── Valid Postings — one test per entry type ─────────────────────────
 
@@ -339,6 +347,32 @@ describe("Entry Type Coverage — Valid Postings", () => {
 			expect(result.entry.amount).toBe(30_000n);
 		});
 	});
+
+	it("SUSPENSE_ROUTED: debit SUSPENSE, credit CASH_CLEARING, skips balance check", async () => {
+		const t = createHarness();
+		await t.run(async (ctx) => {
+			const debit = await getOrCreateCashAccount(ctx, {
+				family: "SUSPENSE",
+			});
+			const credit = await getOrCreateCashAccount(ctx, {
+				family: "CASH_CLEARING",
+			});
+			// Seed SUSPENSE with negative balance to prove balance exemption works
+			await ctx.db.patch(debit._id, { cumulativeCredits: 100_000n });
+			const result = await postCashEntryInternal(ctx, {
+				entryType: "SUSPENSE_ROUTED",
+				effectiveDate: "2026-03-01",
+				amount: 50_000,
+				debitAccountId: debit._id,
+				creditAccountId: credit._id,
+				idempotencyKey: "suspense-routed-valid",
+				source: SYSTEM_SOURCE,
+			});
+			expect(result.entry).toBeDefined();
+			expect(result.entry.entryType).toBe("SUSPENSE_ROUTED");
+			expect(result.entry.amount).toBe(50_000n);
+		});
+	});
 });
 
 // ── Family Rejection — invalid combos for constrained entry types ────
@@ -532,6 +566,53 @@ describe("Entry Type Coverage — Family Rejection", () => {
 		});
 	});
 
+	it("SUSPENSE_ROUTED rejects debit to TRUST_CASH (wrong debit family)", async () => {
+		const t = createHarness();
+		await t.run(async (ctx) => {
+			const debit = await getOrCreateCashAccount(ctx, {
+				family: "TRUST_CASH",
+			});
+			const credit = await getOrCreateCashAccount(ctx, {
+				family: "CASH_CLEARING",
+			});
+			await expect(
+				postCashEntryInternal(ctx, {
+					entryType: "SUSPENSE_ROUTED",
+					effectiveDate: "2026-03-01",
+					amount: 30_000,
+					debitAccountId: debit._id,
+					creditAccountId: credit._id,
+					idempotencyKey: "reject-routed-wrong-debit",
+					source: SYSTEM_SOURCE,
+				})
+			).rejects.toThrow(ROUTED_WRONG_DEBIT_TRUST);
+		});
+	});
+
+	it("SUSPENSE_ROUTED rejects credit to CONTROL (wrong credit family)", async () => {
+		const t = createHarness();
+		await t.run(async (ctx) => {
+			const debit = await getOrCreateCashAccount(ctx, {
+				family: "SUSPENSE",
+			});
+			const credit = await getOrCreateCashAccount(ctx, {
+				family: "CONTROL",
+				subaccount: "ACCRUAL",
+			});
+			await expect(
+				postCashEntryInternal(ctx, {
+					entryType: "SUSPENSE_ROUTED",
+					effectiveDate: "2026-03-01",
+					amount: 30_000,
+					debitAccountId: debit._id,
+					creditAccountId: credit._id,
+					idempotencyKey: "reject-routed-wrong-credit",
+					source: SYSTEM_SOURCE,
+				})
+			).rejects.toThrow(ROUTED_WRONG_CREDIT_CONTROL);
+		});
+	});
+
 	it("SERVICING_FEE_RECOGNIZED rejects debit to WRITE_OFF (wrong debit family)", async () => {
 		const t = createHarness();
 		await t.run(async (ctx) => {
@@ -689,6 +770,113 @@ describe("SUSPENSE_ESCALATED — balance exemption & account semantics", () => {
 					source: SYSTEM_SOURCE,
 				})
 			).rejects.toThrow(SUSPENSE_WRONG_CREDIT_TRUST);
+		});
+	});
+});
+
+// ── SUSPENSE_ROUTED-specific tests ───────────────────────────────────
+
+describe("SUSPENSE_ROUTED — balance exemption & account semantics", () => {
+	it("posts successfully with zero-balance SUSPENSE account (balance check skipped)", async () => {
+		const t = createHarness();
+		await t.run(async (ctx) => {
+			const debit = await getOrCreateCashAccount(ctx, {
+				family: "SUSPENSE",
+			});
+			const credit = await getOrCreateCashAccount(ctx, {
+				family: "CASH_CLEARING",
+			});
+			expect(debit.cumulativeDebits).toBe(0n);
+			expect(debit.cumulativeCredits).toBe(0n);
+
+			const result = await postCashEntryInternal(ctx, {
+				entryType: "SUSPENSE_ROUTED",
+				effectiveDate: "2026-03-01",
+				amount: 100_000,
+				debitAccountId: debit._id,
+				creditAccountId: credit._id,
+				idempotencyKey: "routed-zero-balance",
+				source: SYSTEM_SOURCE,
+			});
+			expect(result.entry).toBeDefined();
+			expect(result.entry.entryType).toBe("SUSPENSE_ROUTED");
+		});
+	});
+
+	it("correctly debits SUSPENSE and credits CASH_CLEARING", async () => {
+		const t = createHarness();
+		await t.run(async (ctx) => {
+			const debit = await getOrCreateCashAccount(ctx, {
+				family: "SUSPENSE",
+			});
+			const credit = await getOrCreateCashAccount(ctx, {
+				family: "CASH_CLEARING",
+			});
+
+			const result = await postCashEntryInternal(ctx, {
+				entryType: "SUSPENSE_ROUTED",
+				effectiveDate: "2026-03-01",
+				amount: 45_000,
+				debitAccountId: debit._id,
+				creditAccountId: credit._id,
+				idempotencyKey: "routed-account-update",
+				source: SYSTEM_SOURCE,
+			});
+
+			expect(result.entry.debitAccountId).toBe(debit._id);
+			expect(result.entry.creditAccountId).toBe(credit._id);
+			expect(result.entry.amount).toBe(45_000n);
+
+			const updatedDebit = await ctx.db.get(debit._id);
+			const updatedCredit = await ctx.db.get(credit._id);
+			expect(updatedDebit?.cumulativeDebits).toBe(45_000n);
+			expect(updatedCredit?.cumulativeCredits).toBe(45_000n);
+		});
+	});
+
+	it("rejects SUSPENSE_ROUTED when debit is not SUSPENSE", async () => {
+		const t = createHarness();
+		await t.run(async (ctx) => {
+			const debit = await getOrCreateCashAccount(ctx, {
+				family: "BORROWER_RECEIVABLE",
+			});
+			const credit = await getOrCreateCashAccount(ctx, {
+				family: "CASH_CLEARING",
+			});
+			await expect(
+				postCashEntryInternal(ctx, {
+					entryType: "SUSPENSE_ROUTED",
+					effectiveDate: "2026-03-01",
+					amount: 30_000,
+					debitAccountId: debit._id,
+					creditAccountId: credit._id,
+					idempotencyKey: "routed-reject-wrong-debit-family",
+					source: SYSTEM_SOURCE,
+				})
+			).rejects.toThrow(ROUTED_WRONG_DEBIT_RECEIVABLE);
+		});
+	});
+
+	it("rejects SUSPENSE_ROUTED when credit is not in allowed families", async () => {
+		const t = createHarness();
+		await t.run(async (ctx) => {
+			const debit = await getOrCreateCashAccount(ctx, {
+				family: "SUSPENSE",
+			});
+			const credit = await getOrCreateCashAccount(ctx, {
+				family: "BORROWER_RECEIVABLE",
+			});
+			await expect(
+				postCashEntryInternal(ctx, {
+					entryType: "SUSPENSE_ROUTED",
+					effectiveDate: "2026-03-01",
+					amount: 30_000,
+					debitAccountId: debit._id,
+					creditAccountId: credit._id,
+					idempotencyKey: "routed-reject-wrong-credit-family",
+					source: SYSTEM_SOURCE,
+				})
+			).rejects.toThrow(ROUTED_WRONG_CREDIT_RECEIVABLE);
 		});
 	});
 });
