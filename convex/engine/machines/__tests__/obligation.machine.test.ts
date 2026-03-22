@@ -345,13 +345,15 @@ describe("obligation machine", () => {
 		});
 
 		it("does NOT fire on any terminal state event", () => {
-			for (const event of ALL_EVENTS) {
-				const [, actions] = transition(
-					obligationMachine,
-					snapshotAt("settled"),
-					event
-				);
-				expect(actions.map((a) => a.type)).not.toContain("accrueObligation");
+			for (const terminalState of ["settled", "waived"] as const) {
+				for (const event of ALL_EVENTS) {
+					const [, actions] = transition(
+						obligationMachine,
+						snapshotAt(terminalState),
+						event
+					);
+					expect(actions.map((a) => a.type)).not.toContain("accrueObligation");
+				}
 			}
 		});
 	});
