@@ -1,5 +1,7 @@
 import { v } from "convex/values";
-import { ledgerQuery } from "../../fluent";
+import type { Id } from "../../_generated/dataModel";
+import { internalQuery } from "../../_generated/server";
+import { cashLedgerQuery } from "../../fluent";
 import {
 	findCashAccount,
 	getCashAccountBalance,
@@ -12,6 +14,23 @@ import {
 	getJournalSettledAmountForObligation,
 	reconcileObligationSettlementProjectionInternal,
 } from "./reconciliation";
+
+/** Matches YYYY-MM-DD format strictly. */
+const BUSINESS_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Converts a bigint to a number, throwing if the value exceeds
+ * Number.MAX_SAFE_INTEGER (or is below Number.MIN_SAFE_INTEGER).
+ */
+function safeBigintToNumber(value: bigint): number {
+	const num = Number(value);
+	if (!Number.isSafeInteger(num)) {
+		throw new Error(
+			`BigInt value ${value} cannot be safely represented as a Number`
+		);
+	}
+	return num;
+}
 
 function compareSequence(
 	left: { sequenceNumber: bigint },
@@ -26,7 +45,7 @@ function compareSequence(
 	return 0;
 }
 
-export const getAccountBalance = ledgerQuery
+export const getAccountBalance = cashLedgerQuery
 	.input({ accountId: v.id("cash_ledger_accounts") })
 	.handler(async (ctx, args) => {
 		const account = await ctx.db.get(args.accountId);
@@ -37,7 +56,7 @@ export const getAccountBalance = ledgerQuery
 	})
 	.public();
 
-export const getObligationBalance = ledgerQuery
+export const getObligationBalance = cashLedgerQuery
 	.input({ obligationId: v.id("obligations") })
 	.handler(async (ctx, args) => {
 		const account = await findCashAccount(ctx.db, {
@@ -57,7 +76,7 @@ export const getObligationBalance = ledgerQuery
 	})
 	.public();
 
-export const getMortgageCashState = ledgerQuery
+export const getMortgageCashState = cashLedgerQuery
 	.input({ mortgageId: v.id("mortgages") })
 	.handler(async (ctx, args) => {
 		const accounts = await ctx.db
@@ -79,7 +98,7 @@ export const getMortgageCashState = ledgerQuery
 	})
 	.public();
 
-export const getLenderPayableBalance = ledgerQuery
+export const getLenderPayableBalance = cashLedgerQuery
 	.input({ lenderId: v.id("lenders") })
 	.handler(async (ctx, args) => {
 		const accounts = await ctx.db
@@ -93,7 +112,7 @@ export const getLenderPayableBalance = ledgerQuery
 	})
 	.public();
 
-export const getUnappliedCash = ledgerQuery
+export const getUnappliedCash = cashLedgerQuery
 	.handler(async (ctx) => {
 		const accounts = await ctx.db
 			.query("cash_ledger_accounts")
@@ -110,7 +129,7 @@ export const getUnappliedCash = ledgerQuery
 	})
 	.public();
 
-export const getSuspenseItems = ledgerQuery
+export const getSuspenseItems = cashLedgerQuery
 	.handler(async (ctx) => {
 		const accounts = await ctx.db
 			.query("cash_ledger_accounts")
@@ -129,7 +148,7 @@ export const getSuspenseItems = ledgerQuery
 	})
 	.public();
 
-export const getAccountBalanceAt = ledgerQuery
+export const getAccountBalanceAt = cashLedgerQuery
 	.input({
 		accountId: v.id("cash_ledger_accounts"),
 		asOf: v.number(),
@@ -175,7 +194,7 @@ export const getAccountBalanceAt = ledgerQuery
 	})
 	.public();
 
-export const getObligationHistory = ledgerQuery
+export const getObligationHistory = cashLedgerQuery
 	.input({ obligationId: v.id("obligations") })
 	.handler(async (ctx, args) => {
 		return ctx.db
@@ -187,7 +206,7 @@ export const getObligationHistory = ledgerQuery
 	})
 	.public();
 
-export const reconcileObligationSettlementProjection = ledgerQuery
+export const reconcileObligationSettlementProjection = cashLedgerQuery
 	.input({ obligationId: v.id("obligations") })
 	.handler(async (ctx, args) => {
 		return reconcileObligationSettlementProjectionInternal(
@@ -197,7 +216,7 @@ export const reconcileObligationSettlementProjection = ledgerQuery
 	})
 	.public();
 
-export const getJournalSettledAmount = ledgerQuery
+export const getJournalSettledAmount = cashLedgerQuery
 	.input({ obligationId: v.id("obligations") })
 	.handler(async (ctx, args) => {
 		return getJournalSettledAmountForObligation(ctx, args.obligationId);
@@ -213,7 +232,7 @@ const subaccountValidator = v.union(
 	v.literal("WAIVER")
 );
 
-export const getControlAccounts = ledgerQuery
+export const getControlAccounts = cashLedgerQuery
 	.input({ subaccount: subaccountValidator })
 	.handler(async (ctx, args) => {
 		const accounts = await getControlAccountsBySubaccount(
@@ -229,16 +248,232 @@ export const getControlAccounts = ledgerQuery
 	})
 	.public();
 
-export const getControlBalance = ledgerQuery
+export const getControlBalance = cashLedgerQuery
 	.input({ subaccount: subaccountValidator })
 	.handler(async (ctx, args) => {
 		return getControlBalanceBySubaccount(ctx, args.subaccount);
 	})
 	.public();
 
-export const controlNetZeroCheck = ledgerQuery
+export const controlNetZeroCheck = cashLedgerQuery
 	.input({ postingGroupId: v.string() })
 	.handler(async (ctx, args) => {
 		return getControlBalancesByPostingGroup(ctx, args.postingGroupId);
 	})
 	.public();
+
+// ── Date Range Queries ───────────────────────────────────────
+
+export const getAccountBalanceRange = cashLedgerQuery
+	.input({
+		accountId: v.id("cash_ledger_accounts"),
+		fromDate: v.string(),
+		toDate: v.string(),
+	})
+	.handler(async (ctx, args) => {
+		if (!BUSINESS_DATE_PATTERN.test(args.fromDate)) {
+			throw new Error(
+				`Invalid fromDate "${args.fromDate}": expected YYYY-MM-DD format`
+			);
+		}
+		if (!BUSINESS_DATE_PATTERN.test(args.toDate)) {
+			throw new Error(
+				`Invalid toDate "${args.toDate}": expected YYYY-MM-DD format`
+			);
+		}
+		if (args.fromDate > args.toDate) {
+			throw new Error(
+				`fromDate "${args.fromDate}" must be <= toDate "${args.toDate}"`
+			);
+		}
+
+		const account = await ctx.db.get(args.accountId);
+		if (!account) {
+			throw new Error(`Cash ledger account not found: ${args.accountId}`);
+		}
+
+		// NOTE: This loads all journal entries for the account and filters
+		// in-memory. For Phase 1 this is acceptable given expected data volumes
+		// and the Convex 8 MB query size limit provides a natural ceiling. If
+		// entry counts grow significantly, cursor-based pagination should be
+		// introduced.
+		const [debits, credits] = await Promise.all([
+			ctx.db
+				.query("cash_ledger_journal_entries")
+				.withIndex("by_debit_account_and_timestamp", (q) =>
+					q.eq("debitAccountId", args.accountId)
+				)
+				.collect(),
+			ctx.db
+				.query("cash_ledger_journal_entries")
+				.withIndex("by_credit_account_and_timestamp", (q) =>
+					q.eq("creditAccountId", args.accountId)
+				)
+				.collect(),
+		]);
+
+		const seen = new Set<string>();
+		const all = [...debits, ...credits].filter((e) => {
+			const key = e._id as string;
+			if (seen.has(key)) {
+				return false;
+			}
+			seen.add(key);
+			return true;
+		});
+		all.sort(compareSequence);
+
+		const creditNormal = isCreditNormalFamily(account.family);
+		let openingRaw = 0n;
+		const inRange: typeof all = [];
+
+		for (const entry of all) {
+			let delta = 0n;
+			if (entry.debitAccountId === args.accountId) {
+				delta += entry.amount;
+			}
+			if (entry.creditAccountId === args.accountId) {
+				delta -= entry.amount;
+			}
+
+			if (entry.effectiveDate < args.fromDate) {
+				openingRaw += delta;
+			} else if (entry.effectiveDate <= args.toDate) {
+				inRange.push(entry);
+			}
+		}
+
+		let closingRaw = openingRaw;
+		for (const entry of inRange) {
+			let delta = 0n;
+			if (entry.debitAccountId === args.accountId) {
+				delta += entry.amount;
+			}
+			if (entry.creditAccountId === args.accountId) {
+				delta -= entry.amount;
+			}
+			closingRaw += delta;
+		}
+
+		const sign = creditNormal ? -1n : 1n;
+
+		return {
+			openingBalance: openingRaw * sign,
+			closingBalance: closingRaw * sign,
+			entries: inRange,
+			entryCount: inRange.length,
+		};
+	})
+	.public();
+
+// ── Dimension Aggregation Queries ────────────────────────────
+
+export const getBorrowerBalance = cashLedgerQuery
+	.input({ borrowerId: v.id("borrowers") })
+	.handler(async (ctx, args) => {
+		const accounts = await ctx.db
+			.query("cash_ledger_accounts")
+			.withIndex("by_borrower", (q) => q.eq("borrowerId", args.borrowerId))
+			.collect();
+
+		const receivables = accounts.filter(
+			(a) => a.family === "BORROWER_RECEIVABLE"
+		);
+
+		let total = 0n;
+		const grouped = new Map<Id<"obligations">, bigint>();
+
+		for (const acct of receivables) {
+			if (!acct.obligationId) {
+				continue;
+			}
+			const bal = getCashAccountBalance(acct);
+			total += bal;
+			grouped.set(
+				acct.obligationId,
+				(grouped.get(acct.obligationId) ?? 0n) + bal
+			);
+		}
+
+		const obligations: Array<{
+			obligationId: Id<"obligations">;
+			balance: bigint;
+		}> = [];
+		for (const [obligationId, balance] of grouped) {
+			obligations.push({ obligationId, balance });
+		}
+
+		return { total, obligations };
+	})
+	.public();
+
+export const getBalancesByFamily = cashLedgerQuery
+	.input({
+		mortgageId: v.id("mortgages"),
+	})
+	.handler(async (ctx, args) => {
+		const accounts = await ctx.db
+			.query("cash_ledger_accounts")
+			.withIndex("by_mortgage", (q) => q.eq("mortgageId", args.mortgageId))
+			.collect();
+
+		const balancesByFamily: Record<string, bigint> = {};
+		for (const account of accounts) {
+			const bal = getCashAccountBalance(account);
+			balancesByFamily[account.family] =
+				(balancesByFamily[account.family] ?? 0n) + bal;
+		}
+
+		return balancesByFamily;
+	})
+	.public();
+
+// ── Internal Query Variants (for downstream Convex functions) ─
+
+export const internalGetObligationBalance = internalQuery({
+	args: { obligationId: v.id("obligations") },
+	handler: async (ctx, args) => {
+		const account = await findCashAccount(ctx.db, {
+			family: "BORROWER_RECEIVABLE",
+			obligationId: args.obligationId,
+		});
+		if (!account) {
+			return 0;
+		}
+		return safeBigintToNumber(getCashAccountBalance(account));
+	},
+});
+
+export const internalGetLenderPayableBalance = internalQuery({
+	args: { lenderId: v.id("lenders") },
+	handler: async (ctx, args) => {
+		const accounts = await ctx.db
+			.query("cash_ledger_accounts")
+			.withIndex("by_lender", (q) => q.eq("lenderId", args.lenderId))
+			.collect();
+
+		const total = accounts
+			.filter((a) => a.family === "LENDER_PAYABLE")
+			.reduce((sum, a) => sum + getCashAccountBalance(a), 0n);
+
+		return safeBigintToNumber(total);
+	},
+});
+
+export const internalGetMortgageCashState = internalQuery({
+	args: { mortgageId: v.id("mortgages") },
+	handler: async (ctx, args) => {
+		const accounts = await ctx.db
+			.query("cash_ledger_accounts")
+			.withIndex("by_mortgage", (q) => q.eq("mortgageId", args.mortgageId))
+			.collect();
+
+		const state: Record<string, number> = {};
+		for (const account of accounts) {
+			const bal = safeBigintToNumber(getCashAccountBalance(account));
+			state[account.family] = (state[account.family] ?? 0) + bal;
+		}
+
+		return state;
+	},
+});
