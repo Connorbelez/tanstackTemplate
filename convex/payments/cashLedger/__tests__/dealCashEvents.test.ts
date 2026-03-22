@@ -183,7 +183,9 @@ describe("postLockingFeeReceived", () => {
 
 		expect(result.entry.entryType).toBe("CASH_RECEIVED");
 		expect(result.entry.amount).toBe(25_000n);
-		expect(result.entry.idempotencyKey).toBe("cash-ledger:locking-fee:fee-001");
+		expect(result.entry.idempotencyKey).toBe(
+			`cash-ledger:locking-fee:${mortgageId}:fee-001`
+		);
 
 		// Verify account families
 		await t.run(async (ctx) => {
@@ -254,7 +256,7 @@ describe("postCommitmentDepositReceived", () => {
 		expect(result.entry.entryType).toBe("CASH_RECEIVED");
 		expect(result.entry.amount).toBe(50_000n);
 		expect(result.entry.idempotencyKey).toBe(
-			"cash-ledger:commitment-deposit:dep-001"
+			`cash-ledger:commitment-deposit:${mortgageId}:dep-001`
 		);
 
 		// Verify account families

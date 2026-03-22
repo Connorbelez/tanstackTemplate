@@ -259,7 +259,9 @@ export async function postLockingFeeReceived(
 		amount: args.amount,
 		debitAccountId: trustCashAccount._id,
 		creditAccountId: unappliedCashAccount._id,
-		idempotencyKey: `cash-ledger:locking-fee:${args.feeId}`,
+		idempotencyKey: args.dealId
+			? `cash-ledger:locking-fee:${args.dealId}:${args.mortgageId}:${args.feeId}`
+			: `cash-ledger:locking-fee:${args.mortgageId}:${args.feeId}`,
 		mortgageId: args.mortgageId,
 		dealId: args.dealId,
 		source: normalizeSource(args.source),
@@ -293,7 +295,9 @@ export async function postCommitmentDepositReceived(
 		amount: args.amount,
 		debitAccountId: trustCashAccount._id,
 		creditAccountId: unappliedCashAccount._id,
-		idempotencyKey: `cash-ledger:commitment-deposit:${args.depositId}`,
+		idempotencyKey: args.dealId
+			? `cash-ledger:commitment-deposit:${args.dealId}:${args.mortgageId}:${args.depositId}`
+			: `cash-ledger:commitment-deposit:${args.mortgageId}:${args.depositId}`,
 		mortgageId: args.mortgageId,
 		dealId: args.dealId,
 		source: normalizeSource(args.source),
