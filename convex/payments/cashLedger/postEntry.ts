@@ -9,8 +9,8 @@ import {
 import { getNextCashSequenceNumber } from "./sequenceCounter";
 import {
 	CASH_ENTRY_TYPE_FAMILY_MAP,
-	NEGATIVE_BALANCE_EXEMPT_FAMILIES,
 	type CashEntryType,
+	NEGATIVE_BALANCE_EXEMPT_FAMILIES,
 } from "./types";
 import { postCashEntryArgsValidator } from "./validators";
 
@@ -132,14 +132,10 @@ function constraintCheck(args: PostCashEntryInput) {
 	}
 	if (args.entryType === "CORRECTION") {
 		if (args.source.actorType !== "admin") {
-			throw new ConvexError(
-				"CORRECTION entries require admin actorType"
-			);
+			throw new ConvexError("CORRECTION entries require admin actorType");
 		}
 		if (!args.source.actorId) {
-			throw new ConvexError(
-				"CORRECTION entries require source.actorId"
-			);
+			throw new ConvexError("CORRECTION entries require source.actorId");
 		}
 		if (!args.causedBy) {
 			throw new ConvexError(

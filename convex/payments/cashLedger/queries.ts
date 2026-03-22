@@ -1,5 +1,7 @@
 import { v } from "convex/values";
-import { ledgerQuery } from "../../fluent";
+import type { Id } from "../../_generated/dataModel";
+import { internalQuery } from "../../_generated/server";
+import { cashLedgerQuery } from "../../fluent";
 import {
 	findCashAccount,
 	getCashAccountBalance,
@@ -26,7 +28,7 @@ function compareSequence(
 	return 0;
 }
 
-export const getAccountBalance = ledgerQuery
+export const getAccountBalance = cashLedgerQuery
 	.input({ accountId: v.id("cash_ledger_accounts") })
 	.handler(async (ctx, args) => {
 		const account = await ctx.db.get(args.accountId);
@@ -37,7 +39,7 @@ export const getAccountBalance = ledgerQuery
 	})
 	.public();
 
-export const getObligationBalance = ledgerQuery
+export const getObligationBalance = cashLedgerQuery
 	.input({ obligationId: v.id("obligations") })
 	.handler(async (ctx, args) => {
 		const account = await findCashAccount(ctx.db, {
@@ -57,7 +59,7 @@ export const getObligationBalance = ledgerQuery
 	})
 	.public();
 
-export const getMortgageCashState = ledgerQuery
+export const getMortgageCashState = cashLedgerQuery
 	.input({ mortgageId: v.id("mortgages") })
 	.handler(async (ctx, args) => {
 		const accounts = await ctx.db
@@ -79,7 +81,7 @@ export const getMortgageCashState = ledgerQuery
 	})
 	.public();
 
-export const getLenderPayableBalance = ledgerQuery
+export const getLenderPayableBalance = cashLedgerQuery
 	.input({ lenderId: v.id("lenders") })
 	.handler(async (ctx, args) => {
 		const accounts = await ctx.db
@@ -93,7 +95,7 @@ export const getLenderPayableBalance = ledgerQuery
 	})
 	.public();
 
-export const getUnappliedCash = ledgerQuery
+export const getUnappliedCash = cashLedgerQuery
 	.handler(async (ctx) => {
 		const accounts = await ctx.db
 			.query("cash_ledger_accounts")
@@ -110,7 +112,7 @@ export const getUnappliedCash = ledgerQuery
 	})
 	.public();
 
-export const getSuspenseItems = ledgerQuery
+export const getSuspenseItems = cashLedgerQuery
 	.handler(async (ctx) => {
 		const accounts = await ctx.db
 			.query("cash_ledger_accounts")
@@ -129,7 +131,7 @@ export const getSuspenseItems = ledgerQuery
 	})
 	.public();
 
-export const getAccountBalanceAt = ledgerQuery
+export const getAccountBalanceAt = cashLedgerQuery
 	.input({
 		accountId: v.id("cash_ledger_accounts"),
 		asOf: v.number(),
@@ -175,7 +177,7 @@ export const getAccountBalanceAt = ledgerQuery
 	})
 	.public();
 
-export const getObligationHistory = ledgerQuery
+export const getObligationHistory = cashLedgerQuery
 	.input({ obligationId: v.id("obligations") })
 	.handler(async (ctx, args) => {
 		return ctx.db
@@ -187,7 +189,7 @@ export const getObligationHistory = ledgerQuery
 	})
 	.public();
 
-export const reconcileObligationSettlementProjection = ledgerQuery
+export const reconcileObligationSettlementProjection = cashLedgerQuery
 	.input({ obligationId: v.id("obligations") })
 	.handler(async (ctx, args) => {
 		return reconcileObligationSettlementProjectionInternal(
@@ -197,7 +199,7 @@ export const reconcileObligationSettlementProjection = ledgerQuery
 	})
 	.public();
 
-export const getJournalSettledAmount = ledgerQuery
+export const getJournalSettledAmount = cashLedgerQuery
 	.input({ obligationId: v.id("obligations") })
 	.handler(async (ctx, args) => {
 		return getJournalSettledAmountForObligation(ctx, args.obligationId);
@@ -213,7 +215,7 @@ const subaccountValidator = v.union(
 	v.literal("WAIVER")
 );
 
-export const getControlAccounts = ledgerQuery
+export const getControlAccounts = cashLedgerQuery
 	.input({ subaccount: subaccountValidator })
 	.handler(async (ctx, args) => {
 		const accounts = await getControlAccountsBySubaccount(
@@ -229,16 +231,194 @@ export const getControlAccounts = ledgerQuery
 	})
 	.public();
 
-export const getControlBalance = ledgerQuery
+export const getControlBalance = cashLedgerQuery
 	.input({ subaccount: subaccountValidator })
 	.handler(async (ctx, args) => {
 		return getControlBalanceBySubaccount(ctx, args.subaccount);
 	})
 	.public();
 
-export const controlNetZeroCheck = ledgerQuery
+export const controlNetZeroCheck = cashLedgerQuery
 	.input({ postingGroupId: v.string() })
 	.handler(async (ctx, args) => {
 		return getControlBalancesByPostingGroup(ctx, args.postingGroupId);
 	})
 	.public();
+
+// ── Date Range Queries ───────────────────────────────────────
+
+export const getAccountBalanceRange = cashLedgerQuery
+	.input({
+		accountId: v.id("cash_ledger_accounts"),
+		fromDate: v.string(),
+		toDate: v.string(),
+	})
+	.handler(async (ctx, args) => {
+		const account = await ctx.db.get(args.accountId);
+		if (!account) {
+			throw new Error(`Cash ledger account not found: ${args.accountId}`);
+		}
+
+		const [debits, credits] = await Promise.all([
+			ctx.db
+				.query("cash_ledger_journal_entries")
+				.withIndex("by_debit_account_and_timestamp", (q) =>
+					q.eq("debitAccountId", args.accountId)
+				)
+				.collect(),
+			ctx.db
+				.query("cash_ledger_journal_entries")
+				.withIndex("by_credit_account_and_timestamp", (q) =>
+					q.eq("creditAccountId", args.accountId)
+				)
+				.collect(),
+		]);
+
+		const seen = new Set<string>();
+		const all = [...debits, ...credits].filter((e) => {
+			const key = e._id as string;
+			if (seen.has(key)) {
+				return false;
+			}
+			seen.add(key);
+			return true;
+		});
+		all.sort(compareSequence);
+
+		const creditNormal = isCreditNormalFamily(account.family);
+		let openingRaw = 0n;
+		const inRange: typeof all = [];
+
+		for (const entry of all) {
+			const isDebit = entry.debitAccountId === args.accountId;
+			const delta = isDebit ? entry.amount : -entry.amount;
+
+			if (entry.effectiveDate < args.fromDate) {
+				openingRaw += delta;
+			} else if (entry.effectiveDate <= args.toDate) {
+				inRange.push(entry);
+			}
+		}
+
+		let closingRaw = openingRaw;
+		for (const entry of inRange) {
+			const isDebit = entry.debitAccountId === args.accountId;
+			closingRaw += isDebit ? entry.amount : -entry.amount;
+		}
+
+		const sign = creditNormal ? -1n : 1n;
+
+		return {
+			openingBalance: openingRaw * sign,
+			closingBalance: closingRaw * sign,
+			entries: inRange,
+			entryCount: inRange.length,
+		};
+	})
+	.public();
+
+// ── Dimension Aggregation Queries ────────────────────────────
+
+export const getBorrowerBalance = cashLedgerQuery
+	.input({ borrowerId: v.id("borrowers") })
+	.handler(async (ctx, args) => {
+		const accounts = await ctx.db
+			.query("cash_ledger_accounts")
+			.withIndex("by_borrower", (q) => q.eq("borrowerId", args.borrowerId))
+			.collect();
+
+		const receivables = accounts.filter(
+			(a) => a.family === "BORROWER_RECEIVABLE"
+		);
+
+		let total = 0n;
+		const obligations: Array<{
+			obligationId: Id<"obligations"> | undefined;
+			balance: bigint;
+		}> = [];
+
+		for (const acct of receivables) {
+			const bal = getCashAccountBalance(acct);
+			total += bal;
+			obligations.push({
+				obligationId: acct.obligationId,
+				balance: bal,
+			});
+		}
+
+		return { total, obligations };
+	})
+	.public();
+
+export const getBalancesByFamily = cashLedgerQuery
+	.input({
+		mortgageId: v.optional(v.id("mortgages")),
+	})
+	.handler(async (ctx, args) => {
+		const accounts = args.mortgageId
+			? await ctx.db
+					.query("cash_ledger_accounts")
+					.withIndex("by_mortgage", (q) => q.eq("mortgageId", args.mortgageId))
+					.collect()
+			: await ctx.db.query("cash_ledger_accounts").collect();
+
+		const balancesByFamily: Record<string, bigint> = {};
+		for (const account of accounts) {
+			const bal = getCashAccountBalance(account);
+			balancesByFamily[account.family] =
+				(balancesByFamily[account.family] ?? 0n) + bal;
+		}
+
+		return balancesByFamily;
+	})
+	.public();
+
+// ── Internal Query Variants (for downstream Convex functions) ─
+
+export const internalGetObligationBalance = internalQuery({
+	args: { obligationId: v.id("obligations") },
+	handler: async (ctx, args) => {
+		const account = await findCashAccount(ctx.db, {
+			family: "BORROWER_RECEIVABLE",
+			obligationId: args.obligationId,
+		});
+		if (!account) {
+			return 0;
+		}
+		return Number(getCashAccountBalance(account));
+	},
+});
+
+export const internalGetLenderPayableBalance = internalQuery({
+	args: { lenderId: v.id("lenders") },
+	handler: async (ctx, args) => {
+		const accounts = await ctx.db
+			.query("cash_ledger_accounts")
+			.withIndex("by_lender", (q) => q.eq("lenderId", args.lenderId))
+			.collect();
+
+		const total = accounts
+			.filter((a) => a.family === "LENDER_PAYABLE")
+			.reduce((sum, a) => sum + getCashAccountBalance(a), 0n);
+
+		return Number(total);
+	},
+});
+
+export const internalGetMortgageCashState = internalQuery({
+	args: { mortgageId: v.id("mortgages") },
+	handler: async (ctx, args) => {
+		const accounts = await ctx.db
+			.query("cash_ledger_accounts")
+			.withIndex("by_mortgage", (q) => q.eq("mortgageId", args.mortgageId))
+			.collect();
+
+		const state: Record<string, number> = {};
+		for (const account of accounts) {
+			const bal = getCashAccountBalance(account);
+			state[account.family] = (state[account.family] ?? 0) + Number(bal);
+		}
+
+		return state;
+	},
+});
