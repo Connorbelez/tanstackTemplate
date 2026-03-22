@@ -2,7 +2,7 @@ import { ConvexError } from "convex/values";
 import type { Id } from "../../_generated/dataModel";
 import type { MutationCtx } from "../../_generated/server";
 import type { CommandSource } from "../../engine/types";
-import { getOrCreateCashAccount, requireCashAccount } from "./accounts";
+import { findCashAccount, getOrCreateCashAccount } from "./accounts";
 import { postCashEntryInternal } from "./postEntry";
 
 interface LegacySource {
@@ -104,6 +104,7 @@ export async function postCashReceiptForObligation(
 		idempotencyKey: string;
 		effectiveDate?: string;
 		attemptId?: Id<"collectionAttempts">;
+		postingGroupId?: string;
 		source: CommandSource;
 	}
 ) {
@@ -112,15 +113,21 @@ export async function postCashReceiptForObligation(
 		throw new ConvexError(`Obligation not found: ${args.obligationId}`);
 	}
 
-	const receivableAccount = await requireCashAccount(
-		ctx.db,
-		{
-			family: "BORROWER_RECEIVABLE",
-			mortgageId: obligation.mortgageId,
-			obligationId: obligation._id,
-		},
-		"postCashReceiptForObligation"
-	);
+	const receivableAccount = await findCashAccount(ctx.db, {
+		family: "BORROWER_RECEIVABLE",
+		mortgageId: obligation.mortgageId,
+		obligationId: obligation._id,
+	});
+
+	if (!receivableAccount) {
+		// No matching receivable — skip posting, let ENG-156 reconciliation detect the gap.
+		// TODO: ENG-156 — implement SUSPENSE routing for unmatched cash
+		console.warn(
+			`[postCashReceiptForObligation] No BORROWER_RECEIVABLE account for obligation=${args.obligationId}. Skipping cash receipt. ENG-156 reconciliation will detect this gap.`
+		);
+		return null;
+	}
+
 	const trustCashAccount = await getOrCreateCashAccount(ctx, {
 		family: "TRUST_CASH",
 		mortgageId: obligation.mortgageId,
@@ -139,10 +146,47 @@ export async function postCashReceiptForObligation(
 		obligationId: obligation._id,
 		attemptId: args.attemptId,
 		borrowerId: obligation.borrowerId,
+		postingGroupId: args.postingGroupId,
 		source: normalizeSource(args.source),
 		metadata: {
 			projectionAmountSettled: obligation.amountSettled,
 		},
+	});
+}
+
+export async function postOverpaymentToUnappliedCash(
+	ctx: MutationCtx,
+	args: {
+		attemptId: Id<"collectionAttempts">;
+		amount: number;
+		mortgageId: Id<"mortgages">;
+		borrowerId?: Id<"borrowers">;
+		postingGroupId: string;
+		source: CommandSource;
+	}
+) {
+	const trustCashAccount = await getOrCreateCashAccount(ctx, {
+		family: "TRUST_CASH",
+		mortgageId: args.mortgageId,
+	});
+	const unappliedCashAccount = await getOrCreateCashAccount(ctx, {
+		family: "UNAPPLIED_CASH",
+		mortgageId: args.mortgageId,
+	});
+
+	return postCashEntryInternal(ctx, {
+		entryType: "CASH_RECEIVED",
+		effectiveDate: unixMsToBusinessDate(Date.now()),
+		amount: args.amount,
+		debitAccountId: trustCashAccount._id,
+		creditAccountId: unappliedCashAccount._id,
+		idempotencyKey: `cash-ledger:overpayment:${args.attemptId}`,
+		mortgageId: args.mortgageId,
+		attemptId: args.attemptId,
+		borrowerId: args.borrowerId,
+		postingGroupId: args.postingGroupId,
+		source: normalizeSource(args.source),
+		reason: "Overpayment: excess beyond obligation balances",
 	});
 }
 
