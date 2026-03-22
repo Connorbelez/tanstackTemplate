@@ -229,6 +229,7 @@ async function postToSuspense(
 		amount: number;
 		idempotencyKey: string;
 		effectiveDate: string;
+		attemptId?: Id<"collectionAttempts">;
 		source: CommandSource;
 		reason: string;
 		metadata: Record<string, unknown>;
@@ -252,6 +253,7 @@ async function postToSuspense(
 		creditAccountId: cashClearingAccount._id,
 		idempotencyKey: args.idempotencyKey,
 		mortgageId: args.mortgageId,
+		attemptId: args.attemptId,
 		source: args.source,
 		reason: args.reason,
 		metadata: args.metadata,
@@ -259,11 +261,15 @@ async function postToSuspense(
 
 	await auditLog.log(ctx, {
 		action: "cashLedger.suspense_routed",
-		actorId: "system",
+		actorId: args.source.actorId ?? "system",
 		resourceType: "mortgage",
 		resourceId: args.mortgageId,
 		severity: "warning",
-		metadata: args.metadata,
+		metadata: {
+			...args.metadata,
+			actorType: args.source.actorType,
+			channel: args.source.channel,
+		},
 	});
 
 	return result;
@@ -316,6 +322,7 @@ export async function postCashReceiptWithSuspenseFallback(
 		amount: args.amount,
 		idempotencyKey: `suspense-routed:${args.idempotencyKey}`,
 		effectiveDate,
+		attemptId: args.attemptId,
 		source: normalizedSource,
 		reason,
 		metadata: {
