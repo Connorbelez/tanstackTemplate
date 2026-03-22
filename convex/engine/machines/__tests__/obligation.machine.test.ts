@@ -72,14 +72,15 @@ describe("obligation machine", () => {
 	// ── 6×4 State × Event Matrix ───────────────────────────────────
 
 	describe("upcoming state", () => {
-		it("upcoming → due on BECAME_DUE", () => {
+		it("upcoming → due on BECAME_DUE fires accrueObligation", () => {
 			const [next, actions] = transition(
 				obligationMachine,
 				snapshotAt("upcoming"),
 				BECAME_DUE
 			);
 			expect(next.value).toBe("due");
-			expect(actions).toHaveLength(0);
+			expect(actions).toHaveLength(1);
+			expect(actions.map((a) => a.type)).toContain("accrueObligation");
 		});
 
 		it("upcoming ignores GRACE_PERIOD_EXPIRED", () => {
@@ -313,19 +314,67 @@ describe("obligation machine", () => {
 		}
 	});
 
+	// ── Accrual action specificity (ENG-158) ────────────────────────
+
+	describe("accrueObligation action fires only on BECAME_DUE", () => {
+		it("fires on upcoming → due (BECAME_DUE)", () => {
+			const [, actions] = transition(
+				obligationMachine,
+				snapshotAt("upcoming"),
+				BECAME_DUE
+			);
+			expect(actions.map((a) => a.type)).toContain("accrueObligation");
+		});
+
+		it("does NOT fire on due → overdue (GRACE_PERIOD_EXPIRED)", () => {
+			const [, actions] = transition(
+				obligationMachine,
+				snapshotAt("due"),
+				GRACE_PERIOD_EXPIRED
+			);
+			expect(actions.map((a) => a.type)).not.toContain("accrueObligation");
+		});
+
+		it("does NOT fire on due → settled (PAYMENT_APPLIED full)", () => {
+			const [, actions] = transition(
+				obligationMachine,
+				snapshotAt("due"),
+				PAYMENT_APPLIED_FULL
+			);
+			expect(actions.map((a) => a.type)).not.toContain("accrueObligation");
+		});
+
+		it("does NOT fire on any terminal state event", () => {
+			for (const event of ALL_EVENTS) {
+				const [, actions] = transition(
+					obligationMachine,
+					snapshotAt("settled"),
+					event
+				);
+				expect(actions.map((a) => a.type)).not.toContain("accrueObligation");
+			}
+		});
+	});
+
 	// ── Sentinel: total test case count ─────────────────────────────
 
 	it("covers all 6×4 state×event cells plus partial-payment branches", () => {
 		// 4 states with specific event handling (upcoming: 4, due: 5, overdue: 5, partially_settled: 5)
 		// + 2 terminal states × 4 events each = 8
 		// + 5 metadata tests
-		// = 32 total test cases (including this sentinel)
+		// + 4 accrual specificity tests (ENG-158)
+		// = 37 total test cases (including this sentinel)
 		// This sentinel exists to catch accidental test deletion.
 		const expectedNonTerminalCells = 19; // 4 + 5 + 5 + 5
 		const expectedTerminalCells = 8; // 2 × 4
 		const expectedMetadata = 5;
+		const expectedAccrualTests = 4; // ENG-158
 		const expectedTotal =
-			expectedNonTerminalCells + expectedTerminalCells + expectedMetadata + 1; // +1 for this sentinel
-		expect(expectedTotal).toBe(33);
+			expectedNonTerminalCells +
+			expectedTerminalCells +
+			expectedMetadata +
+			expectedAccrualTests +
+			1; // +1 for this sentinel
+		expect(expectedTotal).toBe(37);
 	});
 });
