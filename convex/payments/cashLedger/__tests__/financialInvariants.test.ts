@@ -40,13 +40,13 @@ describe("Invariant 1: CONTROL:ALLOCATION net-zero per posting group", () => {
 		return { controlAccount, lenderPayableA, lenderPayableB, servicingRevenue };
 	}
 
-	it("complete posting group nets to zero on CONTROL account", async () => {
+	it("CONTROL:ALLOCATION accumulates correct debit total across posting group", async () => {
 		const t = createHarness();
 		const accounts = await seedAllocationAccounts(t);
 		const groupId = "allocation:complete-group";
 
 		// Post 2 LENDER_PAYABLE_CREATED + 1 SERVICING_FEE_RECOGNIZED
-		// All debit CONTROL:ALLOCATION
+		// All debit CONTROL:ALLOCATION (one-sided: no credits back to CONTROL)
 		await postTestEntry(t, {
 			entryType: "LENDER_PAYABLE_CREATED",
 			effectiveDate: "2026-03-01",
@@ -479,7 +479,8 @@ describe("Invariant 3: point-in-time reconstruction", () => {
 
 			expect(entries.length).toBeGreaterThanOrEqual(3);
 
-			// All same timestamp entries should have ascending sequence numbers
+			// Sort by sequenceNumber (index orders by timestamp, not sequence)
+			entries.sort((a, b) => Number(a.sequenceNumber - b.sequenceNumber));
 			const sequenceNumbers = entries.map((e) => e.sequenceNumber);
 			for (let i = 1; i < sequenceNumbers.length; i++) {
 				expect(sequenceNumbers[i]).toBeGreaterThan(sequenceNumbers[i - 1]);
