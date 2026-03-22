@@ -1,11 +1,13 @@
-import { convexTest } from "convex-test";
 import { describe, expect, it } from "vitest";
-import schema from "../../../schema";
 import { getOrCreateCashAccount } from "../accounts";
 import type { PostCashEntryInput } from "../postEntry";
 import { postCashEntryInternal } from "../postEntry";
-
-const modules = import.meta.glob("/convex/**/*.ts");
+import {
+	ADMIN_SOURCE,
+	createHarness,
+	SYSTEM_SOURCE,
+	type TestHarness,
+} from "./testUtils";
 
 const CORRECTION_ADMIN_ACTOR_PATTERN =
 	/CORRECTION entries require admin actorType/;
@@ -16,24 +18,6 @@ const CORRECTION_CAUSED_BY_PATTERN =
 const CORRECTION_REASON_PATTERN = /CORRECTION entries require a reason/;
 const REVERSAL_CAUSED_BY_PATTERN = /REVERSAL entries must reference causedBy/;
 const NEGATIVE_BALANCE_PATTERN = /negative/i;
-
-const ADMIN_SOURCE = {
-	channel: "admin_dashboard" as const,
-	actorId: "admin-user-123",
-	actorType: "admin" as const,
-};
-
-const SYSTEM_SOURCE = {
-	channel: "scheduler" as const,
-	actorId: "system",
-	actorType: "system" as const,
-};
-
-type TestHarness = ReturnType<typeof convexTest>;
-
-function createHarness() {
-	return convexTest(schema, modules);
-}
 
 /**
  * Seeds a minimal set of cash ledger accounts needed for CORRECTION/REVERSAL
@@ -334,6 +318,43 @@ describe("balanceCheck — NEGATIVE_BALANCE_EXEMPT_FAMILIES", () => {
 					source: SYSTEM_SOURCE,
 				})
 			).rejects.toThrow(NEGATIVE_BALANCE_PATTERN);
+		});
+	});
+});
+
+// ── SUSPENSE_ESCALATED balance exemption ─────────────────────────────
+
+describe("balanceCheck — SUSPENSE_ESCALATED exemption", () => {
+	it("SUSPENSE_ESCALATED skips balance check (like REVERSAL/CORRECTION)", async () => {
+		const t = createHarness();
+
+		await t.run(async (ctx) => {
+			const suspenseAccount = await getOrCreateCashAccount(ctx, {
+				family: "SUSPENSE",
+			});
+			const receivableAccount = await getOrCreateCashAccount(ctx, {
+				family: "BORROWER_RECEIVABLE",
+			});
+
+			// Seed SUSPENSE with a negative balance (credits > debits).
+			// SUSPENSE is debit-normal: balance = debits - credits = 0 - 100_000 = -100_000.
+			// Debiting by 25_000 still leaves projected balance at -75_000 which would
+			// fail assertNonNegativeBalance if the check ran. This proves the exemption.
+			await ctx.db.patch(suspenseAccount._id, {
+				cumulativeCredits: 100_000n,
+			});
+			const result = await postCashEntryInternal(ctx, {
+				entryType: "SUSPENSE_ESCALATED",
+				effectiveDate: "2026-03-01",
+				amount: 25_000,
+				debitAccountId: suspenseAccount._id,
+				creditAccountId: receivableAccount._id,
+				idempotencyKey: "suspense-escalated-balance-exempt",
+				source: SYSTEM_SOURCE,
+			});
+
+			expect(result.entry).toBeDefined();
+			expect(result.entry.entryType).toBe("SUSPENSE_ESCALATED");
 		});
 	});
 });
