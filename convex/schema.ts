@@ -1070,7 +1070,8 @@ export default defineSchema({
 			v.literal("OBLIGATION_WRITTEN_OFF"),
 			v.literal("REVERSAL"),
 			v.literal("CORRECTION"),
-			v.literal("SUSPENSE_ESCALATED")
+			v.literal("SUSPENSE_ESCALATED"),
+			v.literal("SUSPENSE_ROUTED")
 		),
 		mortgageId: v.optional(v.id("mortgages")),
 		obligationId: v.optional(v.id("obligations")),

@@ -143,6 +143,7 @@ export const getSuspenseItems = cashLedgerQuery
 				obligationId: account.obligationId,
 				balance: getCashAccountBalance(account),
 				metadata: account.metadata,
+				createdAt: account._creationTime,
 			}))
 			.filter((entry) => entry.balance > 0n);
 	})

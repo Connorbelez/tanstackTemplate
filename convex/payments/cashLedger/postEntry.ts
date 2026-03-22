@@ -100,7 +100,8 @@ function balanceCheck(
 	if (
 		args.entryType === "REVERSAL" ||
 		args.entryType === "CORRECTION" ||
-		args.entryType === "SUSPENSE_ESCALATED"
+		args.entryType === "SUSPENSE_ESCALATED" ||
+		args.entryType === "SUSPENSE_ROUTED"
 	) {
 		return;
 	}
