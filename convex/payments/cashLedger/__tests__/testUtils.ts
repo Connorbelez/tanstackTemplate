@@ -208,6 +208,11 @@ export async function createTestAccount(
 					cumulativeCredits: spec.initialCreditBalance,
 				}),
 			});
+			const updated = await ctx.db.get(account._id);
+			if (!updated) {
+				throw new Error("Failed to read patched account");
+			}
+			return updated;
 		}
 
 		return account;

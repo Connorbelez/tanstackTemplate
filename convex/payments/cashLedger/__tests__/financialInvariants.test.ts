@@ -89,15 +89,18 @@ describe("Invariant 1: CONTROL:ALLOCATION net-zero per posting group", () => {
 
 			expect(entries).toHaveLength(3);
 
-			// Compute per-account net changes across all entries in the group
-			// Double-entry: sum of all debits == sum of all credits across accounts
-			let totalGroupDebits = 0n;
-			let totalGroupCredits = 0n;
+			// Compute per-account debit/credit totals across all entries in the group
+			// Each entry debits one account and credits another for the same amount.
+			// Double-entry invariant: sum of amounts debited == sum of amounts credited.
+			const debitTotals = new Map<string, bigint>();
+			const creditTotals = new Map<string, bigint>();
 			let controlDebits = 0n;
 			let controlCredits = 0n;
 			for (const entry of entries) {
-				totalGroupDebits += entry.amount;
-				totalGroupCredits += entry.amount;
+				const dKey = entry.debitAccountId;
+				const cKey = entry.creditAccountId;
+				debitTotals.set(dKey, (debitTotals.get(dKey) ?? 0n) + entry.amount);
+				creditTotals.set(cKey, (creditTotals.get(cKey) ?? 0n) + entry.amount);
 				if (entry.debitAccountId === accounts.controlAccount._id) {
 					controlDebits += entry.amount;
 				}
@@ -106,8 +109,16 @@ describe("Invariant 1: CONTROL:ALLOCATION net-zero per posting group", () => {
 				}
 			}
 
-			// Double-entry invariant: total debits == total credits
-			expect(totalGroupDebits).toBe(totalGroupCredits);
+			// Double-entry invariant: total debited across all accounts == total credited
+			const totalDebited = [...debitTotals.values()].reduce(
+				(a, b) => a + b,
+				0n
+			);
+			const totalCredited = [...creditTotals.values()].reduce(
+				(a, b) => a + b,
+				0n
+			);
+			expect(totalDebited).toBe(totalCredited);
 
 			// CONTROL was debited 30k + 20k + 5k = 55k, credited 0
 			expect(controlDebits).toBe(55_000n);

@@ -1,11 +1,13 @@
-import { convexTest } from "convex-test";
 import { describe, expect, it } from "vitest";
-import schema from "../../../schema";
 import { getOrCreateCashAccount } from "../accounts";
 import type { PostCashEntryInput } from "../postEntry";
 import { postCashEntryInternal } from "../postEntry";
-
-const modules = import.meta.glob("/convex/**/*.ts");
+import {
+	ADMIN_SOURCE,
+	createHarness,
+	SYSTEM_SOURCE,
+	type TestHarness,
+} from "./testUtils";
 
 const CORRECTION_ADMIN_ACTOR_PATTERN =
 	/CORRECTION entries require admin actorType/;
@@ -16,24 +18,6 @@ const CORRECTION_CAUSED_BY_PATTERN =
 const CORRECTION_REASON_PATTERN = /CORRECTION entries require a reason/;
 const REVERSAL_CAUSED_BY_PATTERN = /REVERSAL entries must reference causedBy/;
 const NEGATIVE_BALANCE_PATTERN = /negative/i;
-
-const ADMIN_SOURCE = {
-	channel: "admin_dashboard" as const,
-	actorId: "admin-user-123",
-	actorType: "admin" as const,
-};
-
-const SYSTEM_SOURCE = {
-	channel: "scheduler" as const,
-	actorId: "system",
-	actorType: "system" as const,
-};
-
-type TestHarness = ReturnType<typeof convexTest>;
-
-function createHarness() {
-	return convexTest(schema, modules);
-}
 
 /**
  * Seeds a minimal set of cash ledger accounts needed for CORRECTION/REVERSAL
