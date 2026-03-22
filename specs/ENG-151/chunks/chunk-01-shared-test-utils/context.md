@@ -1,10 +1,10 @@
 # Chunk 01 Context: Shared Test Utilities
 
 ## Goal
-Extract common helpers from existing test files into a shared `testUtils.test.ts` to reduce duplication across all new test files. The `.test.ts` extension is required to exclude from Convex codegen.
+Extract common helpers from existing test files into a shared `testUtils.ts` to reduce duplication across all new test files. The `.ts` extension is required because Biome's `noExportsInTest` rule prohibits exports from `.test.ts` files.
 
 ## File to Create
-`convex/payments/cashLedger/__tests__/testUtils.test.ts`
+`convex/payments/cashLedger/__tests__/testUtils.ts`
 
 ## Pattern from Existing Tests
 Every existing test file duplicates these patterns:
@@ -20,7 +20,7 @@ type TestHarness = ReturnType<typeof convexTest>;
 
 The `seedCoreEntities` function in `integration.test.ts` creates users, brokers, borrowers, lenders, properties, mortgages, and ownership ledger accounts. This is the most complete seeding function and should be the base for our shared helper.
 
-## What to Include in testUtils.test.ts
+## What to Include in testUtils.ts
 
 ### Constants
 - `SYSTEM_SOURCE` — `{ channel: "scheduler", actorId: "system", actorType: "system" }`
@@ -73,7 +73,7 @@ interface CommandSource {
 ```
 
 ## Constraints
-- File extension MUST be `.test.ts` (not `.ts`) to exclude from Convex codegen
+- File extension MUST be `.ts` (not `.test.ts`) to avoid Biome `noExportsInTest` lint errors
 - No `any` types
 - All monetary amounts as integers (cents)
 - Export everything — other test files will import from here
