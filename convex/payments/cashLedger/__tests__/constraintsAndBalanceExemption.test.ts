@@ -329,7 +329,6 @@ describe("balanceCheck — SUSPENSE_ESCALATED exemption", () => {
 		const t = createHarness();
 
 		await t.run(async (ctx) => {
-			// Create accounts with zero balance
 			const suspenseAccount = await getOrCreateCashAccount(ctx, {
 				family: "SUSPENSE",
 			});
@@ -337,11 +336,13 @@ describe("balanceCheck — SUSPENSE_ESCALATED exemption", () => {
 				family: "BORROWER_RECEIVABLE",
 			});
 
-			// SUSPENSE_ESCALATED: debit SUSPENSE, credit BORROWER_RECEIVABLE
-			// Both accounts have 0 balance. SUSPENSE is debit-normal, so crediting
-			// would not cause it to go negative. But debiting SUSPENSE with 0 balance
-			// keeps it positive (adding debits). The key point: SUSPENSE_ESCALATED
-			// skips the balance check entirely, just like REVERSAL and CORRECTION.
+			// Seed SUSPENSE with a negative balance (credits > debits).
+			// SUSPENSE is debit-normal: balance = debits - credits = 0 - 100_000 = -100_000.
+			// Debiting by 25_000 still leaves projected balance at -75_000 which would
+			// fail assertNonNegativeBalance if the check ran. This proves the exemption.
+			await ctx.db.patch(suspenseAccount._id, {
+				cumulativeCredits: 100_000n,
+			});
 			const result = await postCashEntryInternal(ctx, {
 				entryType: "SUSPENSE_ESCALATED",
 				effectiveDate: "2026-03-01",

@@ -609,10 +609,13 @@ describe("Step 5 — BALANCE_CHECK", () => {
 
 	it("skips balance check for SUSPENSE_ESCALATED", async () => {
 		const t = createHarness();
-		// SUSPENSE_ESCALATED: debit SUSPENSE, credit BORROWER_RECEIVABLE
-		// Both have zero balance — would normally fail for SUSPENSE (non-exempt)
-		// but SUSPENSE_ESCALATED skips the balance check entirely
-		const suspense = await createTestAccount(t, { family: "SUSPENSE" });
+		// Seed SUSPENSE with negative balance (credits > debits).
+		// balance = debits - credits = 0 - 100_000 = -100_000.
+		// Without the exemption, debiting would fail assertNonNegativeBalance.
+		const suspense = await createTestAccount(t, {
+			family: "SUSPENSE",
+			initialCreditBalance: 100_000n,
+		});
 		const receivable = await createTestAccount(t, {
 			family: "BORROWER_RECEIVABLE",
 		});

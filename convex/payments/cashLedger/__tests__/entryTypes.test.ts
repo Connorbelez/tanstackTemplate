@@ -322,8 +322,9 @@ describe("Entry Type Coverage — Valid Postings", () => {
 			const credit = await getOrCreateCashAccount(ctx, {
 				family: "BORROWER_RECEIVABLE",
 			});
-			// SUSPENSE account has zero balance — SUSPENSE_ESCALATED skips balance check
-			// so this should succeed even though debiting would make SUSPENSE negative
+			// Seed SUSPENSE with negative balance (credits > debits) so the posting
+			// would fail assertNonNegativeBalance if the exemption were removed.
+			await ctx.db.patch(debit._id, { cumulativeCredits: 100_000n });
 			const result = await postCashEntryInternal(ctx, {
 				entryType: "SUSPENSE_ESCALATED",
 				effectiveDate: "2026-03-01",
