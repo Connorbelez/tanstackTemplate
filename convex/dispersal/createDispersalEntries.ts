@@ -138,7 +138,8 @@ async function calculateServicingSplit(
 			? 0
 			: calculateServicingFee(
 					servicingConfig.annualRate,
-					args.mortgage.principal
+					args.mortgage.principal,
+					args.mortgage.paymentFrequency
 				);
 	const feeCashApplied = Math.min(args.settledAmount, feeDue);
 	return {
