@@ -2,7 +2,7 @@ import { makeFunctionReference } from "convex/server";
 import { convexTest } from "convex-test";
 import { describe, expect, it } from "vitest";
 import { api, internal } from "../../_generated/api";
-import type { Id } from "../../_generated/dataModel";
+import type { Doc, Id } from "../../_generated/dataModel";
 import type { MutationCtx } from "../../_generated/server";
 import { calculatePeriodAccrual } from "../../accrual/interestMath";
 import { FAIRLEND_STAFF_ORG_ID } from "../../constants";
@@ -40,6 +40,9 @@ interface AccruedInterestQueryResult {
 type CreateDispersalEntriesResult = Awaited<
 	ReturnType<CreateDispersalEntriesHandler["_handler"]>
 >;
+
+type PersistedDispersalEntry = Doc<"dispersalEntries">;
+type PersistedServicingFeeEntry = Doc<"servicingFeeEntries">;
 
 interface CreateDispersalEntriesHandler {
 	_handler: (
@@ -522,12 +525,14 @@ describe("dispersal integration — fullChain", () => {
 			await t.run(async (ctx) =>
 				Promise.all(result.entries.map((entry) => ctx.db.get(entry.id)))
 			)
-		).filter((e) => e !== null);
+		).filter((e): e is PersistedDispersalEntry => e !== null);
 		expect(persistedEntries).toHaveLength(2);
 
-		const feeEntry = await t.run(async (ctx) =>
-			result.servicingFeeEntryId ? ctx.db.get(result.servicingFeeEntryId) : null
-		);
+		const feeEntry = (await t.run(async (ctx) =>
+			result.servicingFeeEntryId
+				? ctx.db.get(result.servicingFeeEntryId as never)
+				: null
+		)) as PersistedServicingFeeEntry | null;
 		expect(feeEntry?.amount).toBe(8333);
 		expect(feeEntry?.annualRate).toBe(0.01);
 		expect(feeEntry?.principalBalance).toBe(10_000_000);
@@ -552,19 +557,21 @@ describe("dispersal integration — fullChain", () => {
 		expect(lenderAEntry).toBeDefined();
 		expect(lenderBEntry).toBeDefined();
 		if (!(lenderAEntry && lenderBEntry)) {
-			throw new Error("Expected persisted lender dispersal entries to exist");
+			throw new Error("Expected persisted lender entries");
 		}
 
 		// getUndisbursedBalance — A and B each have one pending entry
-		const undisbursedA = await admin.query(GET_UNDISBURSED_BALANCE, {
-			lenderId: lenderAEntry.lenderId,
-		});
+		const undisbursedA = await admin.query(
+			api.dispersal.queries.getUndisbursedBalance,
+			{ lenderId: lenderAEntry.lenderId }
+		);
 		expect(undisbursedA.undisbursedBalance).toBe(45_000);
 		expect(undisbursedA.entryCount).toBe(1);
 
-		const undisbursedB = await admin.query(GET_UNDISBURSED_BALANCE, {
-			lenderId: lenderBEntry.lenderId,
-		});
+		const undisbursedB = await admin.query(
+			api.dispersal.queries.getUndisbursedBalance,
+			{ lenderId: lenderBEntry.lenderId }
+		);
 		expect(undisbursedB.undisbursedBalance).toBe(30_000);
 		expect(undisbursedB.entryCount).toBe(1);
 	});
@@ -745,9 +752,10 @@ describe("dispersal integration — multipleSettlements", () => {
 			throw new Error("Expected at least one dispersal entry");
 		}
 
-		const historyA = await admin.query(GET_DISBURSEMENT_HISTORY, {
-			lenderId: firstEntry.lenderId,
-		});
+		const historyA = await admin.query(
+			api.dispersal.queries.getDisbursementHistory,
+			{ lenderId: firstEntry.lenderId }
+		);
 
 		// All 3 entries for this lender
 		const aEntries = historyA.entries.filter(
@@ -767,12 +775,13 @@ describe("dispersal integration — multipleSettlements", () => {
 		})) as { lenderId: Id<"lenders"> } | undefined | null;
 		expect(bEntryResult).toBeDefined();
 		if (!bEntryResult) {
-			throw new Error("Expected a dispersal entry for lender B");
+			throw new Error("Expected lender B dispersal entry");
 		}
 
-		const historyB = await admin.query(GET_DISBURSEMENT_HISTORY, {
-			lenderId: bEntryResult.lenderId,
-		});
+		const historyB = await admin.query(
+			api.dispersal.queries.getDisbursementHistory,
+			{ lenderId: bEntryResult.lenderId }
+		);
 		expect(historyB.total).toBe(50_001);
 		expect(historyB.entries).toHaveLength(3);
 	});

@@ -1,3 +1,4 @@
+import { makeFunctionReference } from "convex/server";
 import { internal } from "../../../_generated/api";
 import type { Id } from "../../../_generated/dataModel";
 import type { ActionCtx } from "../../../_generated/server";
@@ -10,6 +11,29 @@ interface ObligationOverduePayload {
 	obligationId: Id<"obligations">;
 }
 
+const getActiveMortgageFeeReference = makeFunctionReference<
+	"query",
+	{
+		mortgageId: Id<"mortgages">;
+		code: "late_fee";
+		surface: "borrower_charge";
+		asOfDate: string;
+	},
+	{
+		_id: Id<"mortgageFees">;
+		calculationType: "annual_rate_principal" | "fixed_amount_cents";
+		parameters: {
+			fixedAmountCents?: number;
+			dueDays?: number;
+			graceDays?: number;
+		};
+	} | null
+>("fees/queries:getActiveMortgageFee");
+
+function toIsoDateString(timestamp: number) {
+	return new Date(timestamp).toISOString().slice(0, 10);
+}
+
 /**
  * LateFeeRule: on an OBLIGATION_OVERDUE event, creates a late_fee obligation
  * linked to the overdue source obligation. Idempotent — skips if a late fee
@@ -20,13 +44,6 @@ export const lateFeeRuleHandler: RuleHandler = {
 		if (evalCtx.eventType !== "OBLIGATION_OVERDUE") {
 			return;
 		}
-
-		const params = evalCtx.rule.parameters as
-			| { feeAmountCents?: number; dueDays?: number; graceDays?: number }
-			| undefined;
-		const feeAmountCents = params?.feeAmountCents ?? 5000;
-		const dueDays = params?.dueDays ?? 30;
-		const graceDays = params?.graceDays ?? 45;
 
 		const payload = evalCtx.eventPayload as
 			| ObligationOverduePayload
@@ -43,7 +60,7 @@ export const lateFeeRuleHandler: RuleHandler = {
 		// Idempotency: skip if a late fee already exists for this obligation
 		const existingLateFee = await ctx.runQuery(
 			internal.obligations.queries.getLateFeeForObligation,
-			{ sourceObligationId: obligationId }
+			{ sourceObligationId: obligationId, feeCode: "late_fee" }
 		);
 
 		if (existingLateFee) {
@@ -64,6 +81,36 @@ export const lateFeeRuleHandler: RuleHandler = {
 		}
 
 		const now = Date.now();
+		const mortgageFee = await ctx.runQuery(getActiveMortgageFeeReference, {
+			mortgageId,
+			code: "late_fee",
+			surface: "borrower_charge",
+			asOfDate: toIsoDateString(now),
+		});
+		if (!mortgageFee) {
+			return;
+		}
+		if (mortgageFee.calculationType !== "fixed_amount_cents") {
+			console.warn(
+				`[late-fee-rule] Unsupported calculationType ${mortgageFee.calculationType} for mortgageFee=${mortgageFee._id}`
+			);
+			return;
+		}
+
+		const feeAmountCents = mortgageFee.parameters.fixedAmountCents;
+		if (
+			feeAmountCents === undefined ||
+			!Number.isSafeInteger(feeAmountCents) ||
+			feeAmountCents < 0
+		) {
+			console.warn(
+				`[late-fee-rule] Missing or invalid fixedAmountCents for mortgageFee=${mortgageFee._id}`
+			);
+			return;
+		}
+
+		const dueDays = mortgageFee.parameters.dueDays ?? 30;
+		const graceDays = mortgageFee.parameters.graceDays ?? 45;
 
 		await ctx.runMutation(internal.obligations.mutations.createObligation, {
 			mortgageId,
@@ -75,6 +122,8 @@ export const lateFeeRuleHandler: RuleHandler = {
 			dueDate: now + dueDays * MS_PER_DAY,
 			gracePeriodEnd: now + graceDays * MS_PER_DAY,
 			sourceObligationId: obligationId,
+			feeCode: "late_fee",
+			mortgageFeeId: mortgageFee._id,
 			status: "upcoming",
 		});
 	},

@@ -124,7 +124,7 @@ describe("obligation machine", () => {
 			expect(actions).toHaveLength(0);
 		});
 
-		it("due → overdue on GRACE_PERIOD_EXPIRED fires emitObligationOverdue and createLateFeeObligation", () => {
+		it("due → overdue on GRACE_PERIOD_EXPIRED fires emitObligationOverdue", () => {
 			const [next, actions] = transition(
 				obligationMachine,
 				snapshotAt("due"),
@@ -133,7 +133,7 @@ describe("obligation machine", () => {
 			expect(next.value).toBe("overdue");
 			const actionNames = actions.map((a) => a.type);
 			expect(actionNames).toContain("emitObligationOverdue");
-			expect(actionNames).toContain("createLateFeeObligation");
+			expect(actionNames).not.toContain("createLateFeeObligation");
 		});
 
 		it("due → settled on PAYMENT_APPLIED (full) fires applyPayment and emitObligationSettled", () => {

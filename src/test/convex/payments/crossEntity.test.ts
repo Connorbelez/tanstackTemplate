@@ -25,8 +25,6 @@ const emitObligationSettled =
 	internal.engine.effects.obligation.emitObligationSettled;
 const emitObligationOverdue =
 	internal.engine.effects.obligation.emitObligationOverdue;
-const createLateFeeObligation =
-	internal.engine.effects.obligationLateFee.createLateFeeObligation;
 
 // ─── Shared Setup ──────────────────────────────────────────────────
 
@@ -327,7 +325,7 @@ describe("AC3: overdue chain (obligation overdue -> mortgage delinquent + late f
 		vi.useRealTimers();
 	});
 
-	it("GRACE_PERIOD_EXPIRED -> overdue, emitObligationOverdue -> mortgage delinquent, createLateFeeObligation -> late_fee obligation", async () => {
+	it("GRACE_PERIOD_EXPIRED -> overdue, emitObligationOverdue -> mortgage delinquent, LateFeeRule -> late_fee obligation", async () => {
 		const t = createGovernedTestConvex();
 		await seedDefaultGovernedActors(t);
 		const { mortgageId, obligationId, borrowerId } =
@@ -346,9 +344,9 @@ describe("AC3: overdue chain (obligation overdue -> mortgage delinquent + late f
 		expect(r1.success).toBe(true);
 		expect(r1.newState).toBe("overdue");
 		expect(r1.effectsScheduled).toContain("emitObligationOverdue");
-		expect(r1.effectsScheduled).toContain("createLateFeeObligation");
+		expect(r1.effectsScheduled).not.toContain("createLateFeeObligation");
 
-		// createLateFeeObligation is scheduled via runAfter(0, ...) — drain before querying
+		// emitObligationOverdue schedules evaluateRules, which runs LateFeeRule.
 		await drainScheduledWork(t);
 
 		// Verify late fee obligation was created

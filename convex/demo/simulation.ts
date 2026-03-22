@@ -3,6 +3,7 @@ import { internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import type { CommandSource, TransitionResult } from "../engine/types";
+import { attachDefaultFeeSetToMortgage } from "../fees/resolver";
 import { adminMutation, authedQuery } from "../fluent";
 import { getAccountLenderId } from "../ledger/accountOwnership";
 import { getAvailableBalance, getPostedBalance } from "../ledger/accounts";
@@ -677,6 +678,11 @@ export const seedSimulation = adminMutation
 				.first();
 
 			if (existingMortgage) {
+				await attachDefaultFeeSetToMortgage(
+					ctx.db,
+					existingMortgage._id,
+					existingMortgage.annualServicingRate
+				);
 				mortgageIdMap[mortgage.ledgerMortgageId] = existingMortgage._id;
 				continue;
 			}
@@ -716,6 +722,7 @@ export const seedSimulation = adminMutation
 				createdAt: Date.now(),
 				simulationId: mortgage.ledgerMortgageId,
 			});
+			await attachDefaultFeeSetToMortgage(ctx.db, mortgageId, 0.01);
 
 			mortgageIdMap[mortgage.ledgerMortgageId] = mortgageId;
 		}

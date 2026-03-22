@@ -34,6 +34,10 @@ export const createObligation = internalMutation({
 		dueDate: v.number(),
 		gracePeriodEnd: v.number(),
 		sourceObligationId: v.optional(v.id("obligations")),
+		feeCode: v.optional(
+			v.union(v.literal("servicing"), v.literal("late_fee"), v.literal("nsf"))
+		),
+		mortgageFeeId: v.optional(v.id("mortgageFees")),
 		status: v.string(),
 	},
 	handler: async (ctx, args) => {
@@ -73,6 +77,8 @@ export const createObligation = internalMutation({
 			dueDate: args.dueDate,
 			gracePeriodEnd: args.gracePeriodEnd,
 			sourceObligationId: args.sourceObligationId,
+			feeCode: args.feeCode,
+			mortgageFeeId: args.mortgageFeeId,
 			status: args.status,
 			createdAt,
 			lastTransitionAt: createdAt,
@@ -95,6 +101,8 @@ export const createObligation = internalMutation({
 				paymentNumber: args.paymentNumber,
 				dueDate: args.dueDate,
 				sourceObligationId: args.sourceObligationId,
+				feeCode: args.feeCode,
+				mortgageFeeId: args.mortgageFeeId,
 			},
 			previousState: "none",
 			newState: args.status,
@@ -120,6 +128,8 @@ export const createObligation = internalMutation({
 				mortgageId: args.mortgageId,
 				borrowerId: args.borrowerId,
 				sourceObligationId: args.sourceObligationId,
+				feeCode: args.feeCode,
+				mortgageFeeId: args.mortgageFeeId,
 				source: {
 					channel: "scheduler",
 					actorId: "system",

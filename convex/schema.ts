@@ -19,6 +19,14 @@ import {
 	entityTypeValidator,
 	sourceValidator,
 } from "./engine/validators";
+import {
+	feeCalculationParametersValidator,
+	feeCalculationTypeValidator,
+	feeCodeValidator,
+	feeRevenueDestinationValidator,
+	feeStatusValidator,
+	feeSurfaceValidator,
+} from "./fees/validators";
 
 export default defineSchema({
 	// ══════════════════════════════════════════════════════════
@@ -538,6 +546,8 @@ export default defineSchema({
 		dueDate: v.number(), // legacy system timestamp: Unix ms, not a YYYY-MM-DD business date
 		gracePeriodEnd: v.number(), // legacy system timestamp: Unix ms, not a YYYY-MM-DD business date
 		sourceObligationId: v.optional(v.id("obligations")), // for late_fee type
+		feeCode: v.optional(feeCodeValidator),
+		mortgageFeeId: v.optional(v.id("mortgageFees")),
 		settledAt: v.optional(v.number()), // legacy system timestamp: Unix ms, not a YYYY-MM-DD business date
 
 		createdAt: v.number(), // system timestamp: Unix ms
@@ -547,6 +557,11 @@ export default defineSchema({
 		.index("by_mortgage_and_date", ["mortgageId", "dueDate"])
 		.index("by_due_date", ["status", "dueDate"])
 		.index("by_type_and_source", ["type", "sourceObligationId"])
+		.index("by_type_source_and_fee_code", [
+			"type",
+			"sourceObligationId",
+			"feeCode",
+		])
 		.index("by_borrower", ["borrowerId"]),
 
 	obligationCronMonitoring: defineTable({
@@ -558,6 +573,65 @@ export default defineSchema({
 		lastPastGraceCount: v.number(),
 		updatedAt: v.number(), // system timestamp: Unix ms
 	}).index("by_job_name", ["jobName"]),
+
+	feeTemplates: defineTable({
+		name: v.string(),
+		description: v.optional(v.string()),
+		code: feeCodeValidator,
+		surface: feeSurfaceValidator,
+		revenueDestination: feeRevenueDestinationValidator,
+		calculationType: feeCalculationTypeValidator,
+		parameters: feeCalculationParametersValidator,
+		status: feeStatusValidator,
+		createdAt: v.number(),
+		updatedAt: v.number(),
+	})
+		.index("by_code_and_surface", ["code", "surface"])
+		.index("by_status", ["status"]),
+
+	feeSetTemplates: defineTable({
+		name: v.string(),
+		description: v.optional(v.string()),
+		status: feeStatusValidator,
+		createdAt: v.number(),
+		updatedAt: v.number(),
+	}).index("by_status", ["status"]),
+
+	feeSetTemplateItems: defineTable({
+		feeSetTemplateId: v.id("feeSetTemplates"),
+		feeTemplateId: v.id("feeTemplates"),
+		sortOrder: v.number(),
+		createdAt: v.number(),
+	})
+		.index("by_fee_set_template", ["feeSetTemplateId", "sortOrder"])
+		.index("by_fee_template", ["feeTemplateId"]),
+
+	mortgageFees: defineTable({
+		mortgageId: v.id("mortgages"),
+		code: feeCodeValidator,
+		surface: feeSurfaceValidator,
+		revenueDestination: feeRevenueDestinationValidator,
+		calculationType: feeCalculationTypeValidator,
+		parameters: feeCalculationParametersValidator,
+		effectiveFrom: v.string(),
+		effectiveTo: v.optional(v.string()),
+		status: feeStatusValidator,
+		feeTemplateId: v.optional(v.id("feeTemplates")),
+		feeSetTemplateId: v.optional(v.id("feeSetTemplates")),
+		feeSetTemplateItemId: v.optional(v.id("feeSetTemplateItems")),
+		createdAt: v.number(),
+		deactivatedAt: v.optional(v.number()),
+	})
+		.index("by_mortgage", ["mortgageId", "createdAt"])
+		.index("by_mortgage_surface_status", ["mortgageId", "surface", "status"])
+		.index("by_mortgage_code_surface_status", [
+			"mortgageId",
+			"code",
+			"surface",
+			"status",
+		])
+		.index("by_fee_template", ["feeTemplateId"])
+		.index("by_fee_set_template", ["feeSetTemplateId"]),
 
 	// ══════════════════════════════════════════════════════════
 	// PAYMENT RAILS (SPEC 1.5)
@@ -895,6 +969,8 @@ export default defineSchema({
 		status: dispersalStatusValidator,
 		idempotencyKey: v.string(),
 		calculationDetails: calculationDetailsValidator,
+		mortgageFeeId: v.optional(v.id("mortgageFees")),
+		feeCode: v.optional(feeCodeValidator),
 		createdAt: v.number(), // system timestamp: Unix ms
 	})
 		.index("by_lender", ["lenderId", "dispersalDate"])
@@ -907,6 +983,13 @@ export default defineSchema({
 		mortgageId: v.id("mortgages"),
 		obligationId: v.id("obligations"),
 		amount: v.number(),
+		feeDue: v.optional(v.number()),
+		feeCashApplied: v.optional(v.number()),
+		feeReceivable: v.optional(v.number()),
+		policyVersion: v.optional(v.number()),
+		sourceObligationType: v.optional(v.string()),
+		mortgageFeeId: v.optional(v.id("mortgageFees")),
+		feeCode: v.optional(feeCodeValidator),
 		annualRate: v.number(),
 		principalBalance: v.number(),
 		date: v.string(), // business date: YYYY-MM-DD at UTC midnight semantics

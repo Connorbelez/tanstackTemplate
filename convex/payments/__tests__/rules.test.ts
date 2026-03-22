@@ -329,11 +329,18 @@ describe("LateFeeRule", () => {
 
 	it("creates late_fee obligation on OBLIGATION_OVERDUE", async () => {
 		const sourceObligation = mockObligation();
+		const mortgageFee = {
+			_id: "mortgage_fee_1" as Id<"mortgageFees">,
+			calculationType: "fixed_amount_cents" as const,
+			parameters: { fixedAmountCents: 5000, dueDays: 30, graceDays: 45 },
+		};
 
 		// getLateFeeForObligation -> no existing late fee
 		runQuery.mockResolvedValueOnce(null);
 		// getById -> source obligation
 		runQuery.mockResolvedValueOnce(sourceObligation);
+		// getActiveMortgageFee -> configured late fee
+		runQuery.mockResolvedValueOnce(mortgageFee);
 
 		await lateFeeRuleHandler.evaluate(ctx, lateFeeEvalCtx());
 
@@ -349,6 +356,8 @@ describe("LateFeeRule", () => {
 				borrowerId: sourceObligation.borrowerId,
 				mortgageId: "mortgage_1",
 				sourceObligationId: "obligation_1",
+				feeCode: "late_fee",
+				mortgageFeeId: mortgageFee._id,
 			})
 		);
 	});
@@ -366,9 +375,15 @@ describe("LateFeeRule", () => {
 
 	it("sets correct parameters: amount=5000, dueDate=+30d, gracePeriod=+45d", async () => {
 		const sourceObligation = mockObligation();
+		const mortgageFee = {
+			_id: "mortgage_fee_1" as Id<"mortgageFees">,
+			calculationType: "fixed_amount_cents" as const,
+			parameters: { fixedAmountCents: 5000, dueDays: 30, graceDays: 45 },
+		};
 
 		runQuery.mockResolvedValueOnce(null);
 		runQuery.mockResolvedValueOnce(sourceObligation);
+		runQuery.mockResolvedValueOnce(mortgageFee);
 
 		const before = Date.now();
 		await lateFeeRuleHandler.evaluate(ctx, lateFeeEvalCtx());
@@ -386,6 +401,18 @@ describe("LateFeeRule", () => {
 		// gracePeriodEnd should be approximately now + 45 days
 		expect(gracePeriodEnd).toBeGreaterThanOrEqual(before + 45 * MS_PER_DAY);
 		expect(gracePeriodEnd).toBeLessThanOrEqual(before + 45 * MS_PER_DAY + 100);
+	});
+
+	it("skips when no active late-fee config exists for the mortgage", async () => {
+		const sourceObligation = mockObligation();
+
+		runQuery.mockResolvedValueOnce(null);
+		runQuery.mockResolvedValueOnce(sourceObligation);
+		runQuery.mockResolvedValueOnce(null);
+
+		await lateFeeRuleHandler.evaluate(ctx, lateFeeEvalCtx());
+
+		expect(runMutation).not.toHaveBeenCalled();
 	});
 
 	it("ignores non-OBLIGATION_OVERDUE events", async () => {

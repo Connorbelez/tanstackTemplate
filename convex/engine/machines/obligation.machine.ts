@@ -34,9 +34,6 @@ export const obligationMachine = setup({
 		emitObligationSettled: () => {
 			/* resolved by GT effect registry */
 		},
-		createLateFeeObligation: () => {
-			/* resolved by GT effect registry */
-		},
 		applyPayment: () => {
 			/* resolved by GT effect registry */
 		},
@@ -63,7 +60,7 @@ export const obligationMachine = setup({
 			on: {
 				GRACE_PERIOD_EXPIRED: {
 					target: "overdue",
-					actions: ["emitObligationOverdue", "createLateFeeObligation"],
+					actions: ["emitObligationOverdue"],
 				},
 				PAYMENT_APPLIED: [
 					{
