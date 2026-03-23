@@ -3,6 +3,8 @@ import { getOrCreateCashAccount } from "../accounts";
 import { postCashEntryInternal } from "../postEntry";
 import { ADMIN_SOURCE, createHarness, SYSTEM_SOURCE } from "./testUtils";
 
+const modules = import.meta.glob("/convex/**/*.ts");
+
 // ── Top-level regex patterns for rejection tests ─────────────────────
 const ACCRUED_WRONG_DEBIT = /OBLIGATION_ACCRUED cannot debit family TRUST_CASH/;
 const ACCRUED_WRONG_CREDIT =
@@ -37,7 +39,7 @@ const ROUTED_WRONG_CREDIT_RECEIVABLE =
 
 describe("Entry Type Coverage — Valid Postings", () => {
 	it("OBLIGATION_ACCRUED: debit BORROWER_RECEIVABLE, credit CONTROL(ACCRUAL)", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		await t.run(async (ctx) => {
 			const debit = await getOrCreateCashAccount(ctx, {
 				family: "BORROWER_RECEIVABLE",
@@ -62,7 +64,7 @@ describe("Entry Type Coverage — Valid Postings", () => {
 	});
 
 	it("CASH_RECEIVED: debit TRUST_CASH, credit BORROWER_RECEIVABLE", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		await t.run(async (ctx) => {
 			const debit = await getOrCreateCashAccount(ctx, {
 				family: "TRUST_CASH",
@@ -86,7 +88,7 @@ describe("Entry Type Coverage — Valid Postings", () => {
 	});
 
 	it("CASH_APPLIED: debit UNAPPLIED_CASH, credit BORROWER_RECEIVABLE", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		await t.run(async (ctx) => {
 			const debit = await getOrCreateCashAccount(ctx, {
 				family: "UNAPPLIED_CASH",
@@ -112,7 +114,7 @@ describe("Entry Type Coverage — Valid Postings", () => {
 	});
 
 	it("LENDER_PAYABLE_CREATED: debit CONTROL(ALLOCATION), credit LENDER_PAYABLE", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		await t.run(async (ctx) => {
 			const debit = await getOrCreateCashAccount(ctx, {
 				family: "CONTROL",
@@ -137,7 +139,7 @@ describe("Entry Type Coverage — Valid Postings", () => {
 	});
 
 	it("SERVICING_FEE_RECOGNIZED: debit CONTROL(ALLOCATION), credit SERVICING_REVENUE", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		await t.run(async (ctx) => {
 			const debit = await getOrCreateCashAccount(ctx, {
 				family: "CONTROL",
@@ -162,7 +164,7 @@ describe("Entry Type Coverage — Valid Postings", () => {
 	});
 
 	it("LENDER_PAYOUT_SENT: debit LENDER_PAYABLE, credit TRUST_CASH", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		await t.run(async (ctx) => {
 			const debit = await getOrCreateCashAccount(ctx, {
 				family: "LENDER_PAYABLE",
@@ -191,7 +193,7 @@ describe("Entry Type Coverage — Valid Postings", () => {
 	});
 
 	it("OBLIGATION_WAIVED: debit CONTROL(WAIVER), credit BORROWER_RECEIVABLE", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		await t.run(async (ctx) => {
 			const debit = await getOrCreateCashAccount(ctx, {
 				family: "CONTROL",
@@ -216,7 +218,7 @@ describe("Entry Type Coverage — Valid Postings", () => {
 	});
 
 	it("OBLIGATION_WRITTEN_OFF: debit WRITE_OFF, credit BORROWER_RECEIVABLE", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		await t.run(async (ctx) => {
 			const debit = await getOrCreateCashAccount(ctx, {
 				family: "WRITE_OFF",
@@ -240,7 +242,7 @@ describe("Entry Type Coverage — Valid Postings", () => {
 	});
 
 	it("REVERSAL: mirrors original entry with causedBy reference", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		await t.run(async (ctx) => {
 			const debit = await getOrCreateCashAccount(ctx, {
 				family: "BORROWER_RECEIVABLE",
@@ -279,7 +281,7 @@ describe("Entry Type Coverage — Valid Postings", () => {
 	});
 
 	it("CORRECTION: admin source with causedBy and reason", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		await t.run(async (ctx) => {
 			const debit = await getOrCreateCashAccount(ctx, {
 				family: "BORROWER_RECEIVABLE",
@@ -322,7 +324,7 @@ describe("Entry Type Coverage — Valid Postings", () => {
 	});
 
 	it("SUSPENSE_ESCALATED: debit SUSPENSE, credit BORROWER_RECEIVABLE, skips balance check", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		await t.run(async (ctx) => {
 			const debit = await getOrCreateCashAccount(ctx, {
 				family: "SUSPENSE",
@@ -349,7 +351,7 @@ describe("Entry Type Coverage — Valid Postings", () => {
 	});
 
 	it("SUSPENSE_ROUTED: debit SUSPENSE, credit CASH_CLEARING, skips balance check", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		await t.run(async (ctx) => {
 			const debit = await getOrCreateCashAccount(ctx, {
 				family: "SUSPENSE",
@@ -379,7 +381,7 @@ describe("Entry Type Coverage — Valid Postings", () => {
 
 describe("Entry Type Coverage — Family Rejection", () => {
 	it("OBLIGATION_ACCRUED rejects debit to TRUST_CASH (wrong debit family)", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		await t.run(async (ctx) => {
 			const debit = await getOrCreateCashAccount(ctx, {
 				family: "TRUST_CASH",
@@ -403,7 +405,7 @@ describe("Entry Type Coverage — Family Rejection", () => {
 	});
 
 	it("OBLIGATION_ACCRUED rejects credit to TRUST_CASH (wrong credit family)", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		await t.run(async (ctx) => {
 			const debit = await getOrCreateCashAccount(ctx, {
 				family: "BORROWER_RECEIVABLE",
@@ -426,7 +428,7 @@ describe("Entry Type Coverage — Family Rejection", () => {
 	});
 
 	it("CASH_RECEIVED rejects credit to CONTROL (wrong credit family)", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		await t.run(async (ctx) => {
 			const debit = await getOrCreateCashAccount(ctx, {
 				family: "TRUST_CASH",
@@ -450,7 +452,7 @@ describe("Entry Type Coverage — Family Rejection", () => {
 	});
 
 	it("CASH_RECEIVED rejects debit to LENDER_PAYABLE (wrong debit family)", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		await t.run(async (ctx) => {
 			const debit = await getOrCreateCashAccount(ctx, {
 				family: "LENDER_PAYABLE",
@@ -473,7 +475,7 @@ describe("Entry Type Coverage — Family Rejection", () => {
 	});
 
 	it("LENDER_PAYOUT_SENT rejects debit to CONTROL (wrong debit family)", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		await t.run(async (ctx) => {
 			const debit = await getOrCreateCashAccount(ctx, {
 				family: "CONTROL",
@@ -497,7 +499,7 @@ describe("Entry Type Coverage — Family Rejection", () => {
 	});
 
 	it("LENDER_PAYOUT_SENT rejects credit to BORROWER_RECEIVABLE (wrong credit family)", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		await t.run(async (ctx) => {
 			const debit = await getOrCreateCashAccount(ctx, {
 				family: "LENDER_PAYABLE",
@@ -520,7 +522,7 @@ describe("Entry Type Coverage — Family Rejection", () => {
 	});
 
 	it("SUSPENSE_ESCALATED rejects debit to TRUST_CASH (wrong debit family)", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		await t.run(async (ctx) => {
 			const debit = await getOrCreateCashAccount(ctx, {
 				family: "TRUST_CASH",
@@ -543,7 +545,7 @@ describe("Entry Type Coverage — Family Rejection", () => {
 	});
 
 	it("SUSPENSE_ESCALATED rejects credit to CONTROL (wrong credit family)", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		await t.run(async (ctx) => {
 			const debit = await getOrCreateCashAccount(ctx, {
 				family: "SUSPENSE",
@@ -567,7 +569,7 @@ describe("Entry Type Coverage — Family Rejection", () => {
 	});
 
 	it("SUSPENSE_ROUTED rejects debit to TRUST_CASH (wrong debit family)", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		await t.run(async (ctx) => {
 			const debit = await getOrCreateCashAccount(ctx, {
 				family: "TRUST_CASH",
@@ -590,7 +592,7 @@ describe("Entry Type Coverage — Family Rejection", () => {
 	});
 
 	it("SUSPENSE_ROUTED rejects credit to CONTROL (wrong credit family)", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		await t.run(async (ctx) => {
 			const debit = await getOrCreateCashAccount(ctx, {
 				family: "SUSPENSE",
@@ -614,7 +616,7 @@ describe("Entry Type Coverage — Family Rejection", () => {
 	});
 
 	it("SERVICING_FEE_RECOGNIZED rejects debit to WRITE_OFF (wrong debit family)", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		await t.run(async (ctx) => {
 			const debit = await getOrCreateCashAccount(ctx, {
 				family: "WRITE_OFF",
@@ -637,7 +639,7 @@ describe("Entry Type Coverage — Family Rejection", () => {
 	});
 
 	it("OBLIGATION_WRITTEN_OFF rejects credit to LENDER_PAYABLE (wrong credit family)", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		await t.run(async (ctx) => {
 			const debit = await getOrCreateCashAccount(ctx, {
 				family: "WRITE_OFF",
@@ -664,7 +666,7 @@ describe("Entry Type Coverage — Family Rejection", () => {
 
 describe("SUSPENSE_ESCALATED — balance exemption & account semantics", () => {
 	it("posts successfully with zero-balance SUSPENSE account (balance check skipped)", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		await t.run(async (ctx) => {
 			const debit = await getOrCreateCashAccount(ctx, {
 				family: "SUSPENSE",
@@ -693,7 +695,7 @@ describe("SUSPENSE_ESCALATED — balance exemption & account semantics", () => {
 	});
 
 	it("correctly debits SUSPENSE and credits BORROWER_RECEIVABLE", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		await t.run(async (ctx) => {
 			const debit = await getOrCreateCashAccount(ctx, {
 				family: "SUSPENSE",
@@ -726,7 +728,7 @@ describe("SUSPENSE_ESCALATED — balance exemption & account semantics", () => {
 	});
 
 	it("rejects SUSPENSE_ESCALATED when debit is not SUSPENSE", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		await t.run(async (ctx) => {
 			const debit = await getOrCreateCashAccount(ctx, {
 				family: "BORROWER_RECEIVABLE",
@@ -751,7 +753,7 @@ describe("SUSPENSE_ESCALATED — balance exemption & account semantics", () => {
 	});
 
 	it("rejects SUSPENSE_ESCALATED when credit is not BORROWER_RECEIVABLE", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		await t.run(async (ctx) => {
 			const debit = await getOrCreateCashAccount(ctx, {
 				family: "SUSPENSE",
@@ -778,7 +780,7 @@ describe("SUSPENSE_ESCALATED — balance exemption & account semantics", () => {
 
 describe("SUSPENSE_ROUTED — balance exemption & account semantics", () => {
 	it("posts successfully with zero-balance SUSPENSE account (balance check skipped)", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		await t.run(async (ctx) => {
 			const debit = await getOrCreateCashAccount(ctx, {
 				family: "SUSPENSE",
@@ -804,7 +806,7 @@ describe("SUSPENSE_ROUTED — balance exemption & account semantics", () => {
 	});
 
 	it("correctly debits SUSPENSE and credits CASH_CLEARING", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		await t.run(async (ctx) => {
 			const debit = await getOrCreateCashAccount(ctx, {
 				family: "SUSPENSE",
@@ -835,7 +837,7 @@ describe("SUSPENSE_ROUTED — balance exemption & account semantics", () => {
 	});
 
 	it("rejects SUSPENSE_ROUTED when debit is not SUSPENSE", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		await t.run(async (ctx) => {
 			const debit = await getOrCreateCashAccount(ctx, {
 				family: "BORROWER_RECEIVABLE",
@@ -858,7 +860,7 @@ describe("SUSPENSE_ROUTED — balance exemption & account semantics", () => {
 	});
 
 	it("rejects SUSPENSE_ROUTED when credit is not in allowed families", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		await t.run(async (ctx) => {
 			const debit = await getOrCreateCashAccount(ctx, {
 				family: "SUSPENSE",

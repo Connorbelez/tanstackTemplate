@@ -178,21 +178,21 @@ async function createPlanEntryAndAttempt(
 }
 
 /**
- * UNAPPLIED_CASH is debit-normal, so crediting it from zero balance would
- * fail the balance guard. Pre-seed with a debit balance to represent prior
- * cash receipts flowing through the account.
+ * UNAPPLIED_CASH is credit-normal (balance = credits − debits), so crediting
+ * it from zero balance is fine, but debiting it requires a prior credit balance.
+ * Pre-seed with cumulative credits to represent prior cash receipts.
  */
 async function seedUnappliedCashAccount(
 	t: TestHarness,
 	mortgageId: Id<"mortgages">,
-	initialDebit: bigint
+	initialBalance: bigint
 ) {
 	return t.run(async (ctx) => {
 		const account = await getOrCreateCashAccount(ctx, {
 			family: "UNAPPLIED_CASH",
 			mortgageId,
 		});
-		await ctx.db.patch(account._id, { cumulativeDebits: initialDebit });
+		await ctx.db.patch(account._id, { cumulativeCredits: initialBalance });
 		return account._id;
 	});
 }

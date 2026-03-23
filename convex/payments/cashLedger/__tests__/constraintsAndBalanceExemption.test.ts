@@ -9,6 +9,8 @@ import {
 	type TestHarness,
 } from "./testUtils";
 
+const modules = import.meta.glob("/convex/**/*.ts");
+
 const CORRECTION_ADMIN_ACTOR_PATTERN =
 	/CORRECTION entries require admin actorType/;
 const CORRECTION_ACTOR_ID_PATTERN =
@@ -92,7 +94,7 @@ async function seedAccountsForBalanceTests(t: TestHarness) {
 
 describe("constraintCheck — CORRECTION entries", () => {
 	it("rejects CORRECTION when source.actorType is not admin", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		const seeded = await seedAccountsForConstraintTests(t);
 
 		await t.run(async (ctx) => {
@@ -115,7 +117,7 @@ describe("constraintCheck — CORRECTION entries", () => {
 	});
 
 	it("rejects CORRECTION when source.actorId is missing", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		const seeded = await seedAccountsForConstraintTests(t);
 
 		await t.run(async (ctx) => {
@@ -138,7 +140,7 @@ describe("constraintCheck — CORRECTION entries", () => {
 	});
 
 	it("rejects CORRECTION when causedBy is missing", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		const seeded = await seedAccountsForConstraintTests(t);
 
 		await t.run(async (ctx) => {
@@ -160,7 +162,7 @@ describe("constraintCheck — CORRECTION entries", () => {
 	});
 
 	it("rejects CORRECTION when reason is missing", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		const seeded = await seedAccountsForConstraintTests(t);
 
 		await t.run(async (ctx) => {
@@ -182,7 +184,7 @@ describe("constraintCheck — CORRECTION entries", () => {
 	});
 
 	it("succeeds when all required CORRECTION fields are present", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		const seeded = await seedAccountsForConstraintTests(t);
 
 		await t.run(async (ctx) => {
@@ -212,7 +214,7 @@ describe("constraintCheck — CORRECTION entries", () => {
 
 describe("constraintCheck — REVERSAL entries", () => {
 	it("rejects REVERSAL when causedBy is missing", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		const seeded = await seedAccountsForConstraintTests(t);
 
 		await t.run(async (ctx) => {
@@ -233,7 +235,7 @@ describe("constraintCheck — REVERSAL entries", () => {
 	});
 
 	it("succeeds when causedBy is present", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		const seeded = await seedAccountsForConstraintTests(t);
 
 		await t.run(async (ctx) => {
@@ -259,7 +261,7 @@ describe("constraintCheck — REVERSAL entries", () => {
 
 describe("balanceCheck — NEGATIVE_BALANCE_EXEMPT_FAMILIES", () => {
 	it("allows BORROWER_RECEIVABLE account to go negative (exempt from balance check)", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		const seeded = await seedAccountsForBalanceTests(t);
 
 		await t.run(async (ctx) => {
@@ -284,7 +286,7 @@ describe("balanceCheck — NEGATIVE_BALANCE_EXEMPT_FAMILIES", () => {
 	});
 
 	it("rejects non-exempt family (TRUST_CASH) when posting would make balance negative", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		const seeded = await seedAccountsForBalanceTests(t);
 
 		await t.run(async (ctx) => {
@@ -326,7 +328,7 @@ describe("balanceCheck — NEGATIVE_BALANCE_EXEMPT_FAMILIES", () => {
 
 describe("balanceCheck — SUSPENSE_ESCALATED exemption", () => {
 	it("SUSPENSE_ESCALATED skips balance check (like REVERSAL/CORRECTION)", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 
 		await t.run(async (ctx) => {
 			const suspenseAccount = await getOrCreateCashAccount(ctx, {

@@ -10,6 +10,8 @@ import {
 import { postCashEntryInternal } from "../postEntry";
 import { createHarness, SYSTEM_SOURCE, seedMinimalEntities } from "./testUtils";
 
+const modules = import.meta.glob("/convex/**/*.ts");
+
 const DEAL_NOT_FOUND_PATTERN = /Deal not found/;
 
 // ── Helpers ──────────────────────────────────────────────────────────
@@ -66,7 +68,7 @@ async function prefundLenderPayable(
 
 describe("postDealBuyerFundsReceived", () => {
 	it("creates CASH_RECEIVED entry with TRUST_CASH debit and CASH_CLEARING credit", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		const { mortgageId } = await seedMinimalEntities(t);
 		const dealId = await seedDeal(t, mortgageId);
 
@@ -97,7 +99,7 @@ describe("postDealBuyerFundsReceived", () => {
 	});
 
 	it("includes buyer and seller metadata", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		const { mortgageId } = await seedMinimalEntities(t);
 		const dealId = await seedDeal(t, mortgageId);
 
@@ -121,7 +123,7 @@ describe("postDealBuyerFundsReceived", () => {
 
 describe("postDealSellerPayout", () => {
 	it("creates LENDER_PAYOUT_SENT entry with LENDER_PAYABLE debit and TRUST_CASH credit", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		const { mortgageId, lenderAId } = await seedMinimalEntities(t);
 		const dealId = await seedDeal(t, mortgageId);
 
@@ -168,7 +170,7 @@ describe("postDealSellerPayout", () => {
 
 describe("postLockingFeeReceived", () => {
 	it("creates CASH_RECEIVED entry with TRUST_CASH debit and UNAPPLIED_CASH credit", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		const { mortgageId } = await seedMinimalEntities(t);
 
 		const result = await t.run(async (ctx) => {
@@ -197,7 +199,7 @@ describe("postLockingFeeReceived", () => {
 	});
 
 	it("stores feeType metadata", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		const { mortgageId } = await seedMinimalEntities(t);
 
 		const result = await t.run(async (ctx) => {
@@ -217,7 +219,7 @@ describe("postLockingFeeReceived", () => {
 	});
 
 	it("accepts optional dealId", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		const { mortgageId } = await seedMinimalEntities(t);
 		const dealId = await seedDeal(t, mortgageId);
 
@@ -240,7 +242,7 @@ describe("postLockingFeeReceived", () => {
 
 describe("postCommitmentDepositReceived", () => {
 	it("creates CASH_RECEIVED entry with TRUST_CASH debit and UNAPPLIED_CASH credit", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		const { mortgageId } = await seedMinimalEntities(t);
 
 		const result = await t.run(async (ctx) => {
@@ -269,7 +271,7 @@ describe("postCommitmentDepositReceived", () => {
 	});
 
 	it("stores depositId metadata", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		const { mortgageId } = await seedMinimalEntities(t);
 
 		const result = await t.run(async (ctx) => {
@@ -293,7 +295,7 @@ describe("postCommitmentDepositReceived", () => {
 
 describe("idempotency", () => {
 	it("deal buyer funds: second call returns existing entry", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		const { mortgageId } = await seedMinimalEntities(t);
 		const dealId = await seedDeal(t, mortgageId);
 
@@ -319,7 +321,7 @@ describe("idempotency", () => {
 	});
 
 	it("deal seller payout: second call returns existing entry", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		const { mortgageId, lenderAId } = await seedMinimalEntities(t);
 		const dealId = await seedDeal(t, mortgageId);
 
@@ -358,7 +360,7 @@ describe("idempotency", () => {
 	});
 
 	it("locking fee: second call returns existing entry", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		const { mortgageId } = await seedMinimalEntities(t);
 
 		const first = await t.run(async (ctx) => {
@@ -385,7 +387,7 @@ describe("idempotency", () => {
 	});
 
 	it("commitment deposit: second call returns existing entry", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		const { mortgageId } = await seedMinimalEntities(t);
 
 		const first = await t.run(async (ctx) => {
@@ -416,7 +418,7 @@ describe("idempotency", () => {
 
 describe("error handling", () => {
 	it("postDealBuyerFundsReceived throws for invalid dealId", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		await seedMinimalEntities(t);
 
 		await expect(
@@ -432,7 +434,7 @@ describe("error handling", () => {
 	});
 
 	it("postDealSellerPayout throws for invalid dealId", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		const { lenderAId } = await seedMinimalEntities(t);
 
 		await expect(
@@ -453,7 +455,7 @@ describe("error handling", () => {
 
 describe("CASH_RECEIVED family map expansion", () => {
 	it("accepts CASH_CLEARING as credit family", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		const { mortgageId } = await seedMinimalEntities(t);
 
 		const result = await t.run(async (ctx) => {
@@ -481,7 +483,7 @@ describe("CASH_RECEIVED family map expansion", () => {
 	});
 
 	it("accepts UNAPPLIED_CASH as credit family", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		const { mortgageId } = await seedMinimalEntities(t);
 
 		const result = await t.run(async (ctx) => {
@@ -509,7 +511,7 @@ describe("CASH_RECEIVED family map expansion", () => {
 	});
 
 	it("still accepts BORROWER_RECEIVABLE as credit family", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		const { mortgageId, borrowerId } = await seedMinimalEntities(t);
 
 		const obligationId = await t.run(async (ctx) => {

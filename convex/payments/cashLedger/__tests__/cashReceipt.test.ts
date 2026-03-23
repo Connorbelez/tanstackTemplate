@@ -13,6 +13,8 @@ import {
 	type TestHarness,
 } from "./testUtils";
 
+const modules = import.meta.glob("/convex/**/*.ts");
+
 const OVERPAYMENT_REASON_PATTERN = /Overpayment/;
 
 // ── Helpers ─────────────────────────────────────────────────────────
@@ -56,21 +58,21 @@ async function accrueObligation(
 }
 
 /**
- * UNAPPLIED_CASH is debit-normal, so crediting it from zero balance would
- * fail the balance guard. Pre-seed with a debit balance to represent prior
- * cash receipts flowing through the account.
+ * UNAPPLIED_CASH is credit-normal (balance = credits − debits), so crediting
+ * it from zero balance is fine, but debiting it requires a prior credit balance.
+ * Pre-seed with cumulative credits to represent prior cash receipts.
  */
 async function seedUnappliedCashAccount(
 	t: TestHarness,
 	mortgageId: Id<"mortgages">,
-	initialDebit: bigint
+	initialBalance: bigint
 ) {
 	return t.run(async (ctx) => {
 		const account = await getOrCreateCashAccount(ctx, {
 			family: "UNAPPLIED_CASH",
 			mortgageId,
 		});
-		await ctx.db.patch(account._id, { cumulativeDebits: initialDebit });
+		await ctx.db.patch(account._id, { cumulativeCredits: initialBalance });
 		return account._id;
 	});
 }
@@ -79,7 +81,7 @@ async function seedUnappliedCashAccount(
 
 describe("postCashReceiptForObligation", () => {
 	it("happy path: single obligation, full payment posts CASH_RECEIVED entry", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		const seeded = await seedMinimalEntities(t);
 		const obligationId = await createDueObligation(t, {
 			mortgageId: seeded.mortgageId,
@@ -112,7 +114,7 @@ describe("postCashReceiptForObligation", () => {
 	});
 
 	it("partial payment posts correct amount without fully clearing receivable", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		const seeded = await seedMinimalEntities(t);
 		const obligationId = await createDueObligation(t, {
 			mortgageId: seeded.mortgageId,
@@ -143,7 +145,7 @@ describe("postCashReceiptForObligation", () => {
 	});
 
 	it("passes postingGroupId through to the journal entry", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		const seeded = await seedMinimalEntities(t);
 		const obligationId = await createDueObligation(t, {
 			mortgageId: seeded.mortgageId,
@@ -169,7 +171,7 @@ describe("postCashReceiptForObligation", () => {
 	});
 
 	it("idempotency: duplicate call with same key returns existing entry without creating a second", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		const seeded = await seedMinimalEntities(t);
 		const obligationId = await createDueObligation(t, {
 			mortgageId: seeded.mortgageId,
@@ -217,7 +219,7 @@ describe("postCashReceiptForObligation", () => {
 	});
 
 	it("returns null when no BORROWER_RECEIVABLE account exists (no accrual)", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		const seeded = await seedMinimalEntities(t);
 		const obligationId = await createDueObligation(t, {
 			mortgageId: seeded.mortgageId,
@@ -252,7 +254,7 @@ describe("postCashReceiptForObligation", () => {
 
 describe("postOverpaymentToUnappliedCash", () => {
 	it("posts CASH_RECEIVED with debit=TRUST_CASH and credit=UNAPPLIED_CASH", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		const seeded = await seedMinimalEntities(t);
 		await seedUnappliedCashAccount(t, seeded.mortgageId, 500_000n);
 
@@ -298,7 +300,7 @@ describe("postOverpaymentToUnappliedCash", () => {
 	});
 
 	it("uses correct idempotency key format", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		const seeded = await seedMinimalEntities(t);
 		await seedUnappliedCashAccount(t, seeded.mortgageId, 500_000n);
 
@@ -338,7 +340,7 @@ describe("postOverpaymentToUnappliedCash", () => {
 	});
 
 	it("includes 'Overpayment' in reason", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		const seeded = await seedMinimalEntities(t);
 		await seedUnappliedCashAccount(t, seeded.mortgageId, 500_000n);
 
@@ -376,7 +378,7 @@ describe("postOverpaymentToUnappliedCash", () => {
 	});
 
 	it("idempotency: duplicate call with same attemptId returns existing entry", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		const seeded = await seedMinimalEntities(t);
 		await seedUnappliedCashAccount(t, seeded.mortgageId, 500_000n);
 

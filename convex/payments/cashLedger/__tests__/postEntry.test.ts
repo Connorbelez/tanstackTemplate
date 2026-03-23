@@ -10,6 +10,8 @@ import {
 	type TestHarness,
 } from "./testUtils";
 
+const modules = import.meta.glob("/convex/**/*.ts");
+
 // ── Regex patterns (top-level for Biome useTopLevelRegex) ───────────
 const POSITIVE_SAFE_INTEGER_PATTERN = /positive safe integer/;
 const DIFFERENT_ACCOUNTS_PATTERN =
@@ -61,7 +63,7 @@ function validArgs(
 
 describe("Step 1 — VALIDATE_INPUT", () => {
 	it("rejects zero amount", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		const { debitId, creditId } = await seedDefaultAccounts(t);
 
 		await t.run(async (ctx) => {
@@ -79,7 +81,7 @@ describe("Step 1 — VALIDATE_INPUT", () => {
 	});
 
 	it("rejects negative amount", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		const { debitId, creditId } = await seedDefaultAccounts(t);
 
 		await t.run(async (ctx) => {
@@ -97,7 +99,7 @@ describe("Step 1 — VALIDATE_INPUT", () => {
 	});
 
 	it("rejects non-integer (float) amount", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		const { debitId, creditId } = await seedDefaultAccounts(t);
 
 		await t.run(async (ctx) => {
@@ -115,7 +117,7 @@ describe("Step 1 — VALIDATE_INPUT", () => {
 	});
 
 	it("rejects amount exceeding MAX_SAFE_INTEGER", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		const { debitId, creditId } = await seedDefaultAccounts(t);
 
 		await t.run(async (ctx) => {
@@ -133,7 +135,7 @@ describe("Step 1 — VALIDATE_INPUT", () => {
 	});
 
 	it("rejects when debit and credit account are the same", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		const { debitId } = await seedDefaultAccounts(t);
 
 		await t.run(async (ctx) => {
@@ -150,7 +152,7 @@ describe("Step 1 — VALIDATE_INPUT", () => {
 	});
 
 	it("rejects invalid effectiveDate format", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		const { debitId, creditId } = await seedDefaultAccounts(t);
 
 		await t.run(async (ctx) => {
@@ -168,7 +170,7 @@ describe("Step 1 — VALIDATE_INPUT", () => {
 	});
 
 	it("accepts valid positive integer amount", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		const { debitId, creditId } = await seedDefaultAccounts(t);
 
 		const result = await postTestEntry(
@@ -192,7 +194,7 @@ describe("Step 1 — VALIDATE_INPUT", () => {
 
 describe("Step 2 — IDEMPOTENCY", () => {
 	it("returns existing entry on duplicate idempotency key", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		const { debitId, creditId } = await seedDefaultAccounts(t);
 
 		const firstResult = await postTestEntry(
@@ -217,7 +219,7 @@ describe("Step 2 — IDEMPOTENCY", () => {
 	});
 
 	it("does not create a second journal entry on duplicate key", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		const { debitId, creditId } = await seedDefaultAccounts(t);
 
 		await postTestEntry(
@@ -251,7 +253,7 @@ describe("Step 2 — IDEMPOTENCY", () => {
 	});
 
 	it("returns zero projected balances on duplicate (no balance update)", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		const { debitId, creditId } = await seedDefaultAccounts(t);
 
 		await postTestEntry(
@@ -277,7 +279,7 @@ describe("Step 2 — IDEMPOTENCY", () => {
 	});
 
 	it("creates separate entries for different idempotency keys", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		const { debitId, creditId } = await seedDefaultAccounts(t);
 
 		const first = await postTestEntry(
@@ -308,7 +310,7 @@ describe("Step 2 — IDEMPOTENCY", () => {
 
 describe("Step 4 — FAMILY_CHECK", () => {
 	it("allows valid family combo: OBLIGATION_ACCRUED with BORROWER_RECEIVABLE debit and CONTROL credit", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		const { debitId, creditId } = await seedDefaultAccounts(t);
 
 		const result = await postTestEntry(
@@ -325,7 +327,7 @@ describe("Step 4 — FAMILY_CHECK", () => {
 	});
 
 	it("rejects invalid debit family: OBLIGATION_ACCRUED cannot debit TRUST_CASH", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		const trustCash = await createTestAccount(t, { family: "TRUST_CASH" });
 		const control = await createTestAccount(t, {
 			family: "CONTROL",
@@ -348,7 +350,7 @@ describe("Step 4 — FAMILY_CHECK", () => {
 	});
 
 	it("rejects invalid credit family: OBLIGATION_ACCRUED cannot credit TRUST_CASH", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		const receivable = await createTestAccount(t, {
 			family: "BORROWER_RECEIVABLE",
 		});
@@ -370,7 +372,7 @@ describe("Step 4 — FAMILY_CHECK", () => {
 	});
 
 	it("REVERSAL accepts any family combination", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		const trustCash = await createTestAccount(t, {
 			family: "TRUST_CASH",
 			initialDebitBalance: 100_000n,
@@ -410,7 +412,7 @@ describe("Step 4 — FAMILY_CHECK", () => {
 	});
 
 	it("CORRECTION accepts any family combination", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		const suspense = await createTestAccount(t, {
 			family: "SUSPENSE",
 			initialDebitBalance: 100_000n,
@@ -457,7 +459,7 @@ describe("Step 4 — FAMILY_CHECK", () => {
 
 describe("Step 5 — BALANCE_CHECK", () => {
 	it("rejects non-exempt family when posting would make balance negative", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		// LENDER_PAYOUT_SENT: debit LENDER_PAYABLE, credit TRUST_CASH
 		const lenderPayable = await createTestAccount(t, {
 			family: "LENDER_PAYABLE",
@@ -485,7 +487,7 @@ describe("Step 5 — BALANCE_CHECK", () => {
 	});
 
 	it("allows CONTROL family to go negative", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		const receivable = await createTestAccount(t, {
 			family: "BORROWER_RECEIVABLE",
 		});
@@ -510,7 +512,7 @@ describe("Step 5 — BALANCE_CHECK", () => {
 	});
 
 	it("allows BORROWER_RECEIVABLE to go negative", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		const trustCash = await createTestAccount(t, {
 			family: "TRUST_CASH",
 			initialDebitBalance: 200_000n,
@@ -535,7 +537,7 @@ describe("Step 5 — BALANCE_CHECK", () => {
 	});
 
 	it("skips balance check for REVERSAL", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		// Use TRUST_CASH with zero balance — would normally fail balance check
 		const trustCash = await createTestAccount(t, { family: "TRUST_CASH" });
 		const writeOff = await createTestAccount(t, { family: "WRITE_OFF" });
@@ -572,7 +574,7 @@ describe("Step 5 — BALANCE_CHECK", () => {
 	});
 
 	it("skips balance check for CORRECTION", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		const trustCash = await createTestAccount(t, { family: "TRUST_CASH" });
 		const writeOff = await createTestAccount(t, { family: "WRITE_OFF" });
 
@@ -608,7 +610,7 @@ describe("Step 5 — BALANCE_CHECK", () => {
 	});
 
 	it("skips balance check for SUSPENSE_ESCALATED", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		// Seed SUSPENSE with negative balance (credits > debits).
 		// balance = debits - credits = 0 - 100_000 = -100_000.
 		// Without the exemption, debiting would fail assertNonNegativeBalance.
@@ -642,7 +644,7 @@ describe("Step 5 — BALANCE_CHECK", () => {
 
 describe("Step 6 — CONSTRAINT_CHECK (representative)", () => {
 	it("rejects REVERSAL without causedBy through full pipeline", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		const receivable = await createTestAccount(t, {
 			family: "BORROWER_RECEIVABLE",
 		});
@@ -667,7 +669,7 @@ describe("Step 6 — CONSTRAINT_CHECK (representative)", () => {
 	});
 
 	it("accepts CORRECTION with all required fields through full pipeline", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		const receivable = await createTestAccount(t, {
 			family: "BORROWER_RECEIVABLE",
 		});
@@ -715,7 +717,7 @@ describe("Step 6 — CONSTRAINT_CHECK (representative)", () => {
 
 describe("Steps 7+8 — SEQUENCE + PERSIST", () => {
 	it("assigns monotonically increasing sequence numbers", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		const { debitId, creditId } = await seedDefaultAccounts(t);
 
 		const first = await postTestEntry(
@@ -754,7 +756,7 @@ describe("Steps 7+8 — SEQUENCE + PERSIST", () => {
 	});
 
 	it("updates debit account cumulativeDebits", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		const { debitId, creditId } = await seedDefaultAccounts(t);
 
 		await postTestEntry(
@@ -776,7 +778,7 @@ describe("Steps 7+8 — SEQUENCE + PERSIST", () => {
 	});
 
 	it("updates credit account cumulativeCredits", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		const { debitId, creditId } = await seedDefaultAccounts(t);
 
 		await postTestEntry(
@@ -798,7 +800,7 @@ describe("Steps 7+8 — SEQUENCE + PERSIST", () => {
 	});
 
 	it("does NOT update wrong side — debit account cumulativeCredits stays zero", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		const { debitId, creditId } = await seedDefaultAccounts(t);
 
 		await postTestEntry(
@@ -825,7 +827,7 @@ describe("Steps 7+8 — SEQUENCE + PERSIST", () => {
 	});
 
 	it("persists cross-reference fields on the journal entry", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		const { debitId, creditId } = await seedDefaultAccounts(t);
 
 		const result = await postTestEntry(
@@ -848,7 +850,7 @@ describe("Steps 7+8 — SEQUENCE + PERSIST", () => {
 	});
 
 	it("returns projected balances for both accounts", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		const { debitId, creditId } = await seedDefaultAccounts(t);
 
 		const result = await postTestEntry(
@@ -877,7 +879,7 @@ describe("Steps 7+8 — SEQUENCE + PERSIST", () => {
 
 describe("Cents integrity — bigint storage", () => {
 	it("stores amount as bigint on the journal entry", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		const { debitId, creditId } = await seedDefaultAccounts(t);
 
 		const result = await postTestEntry(
@@ -895,7 +897,7 @@ describe("Cents integrity — bigint storage", () => {
 	});
 
 	it("stores cumulative totals as bigint on accounts", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		const { debitId, creditId } = await seedDefaultAccounts(t);
 
 		await postTestEntry(
@@ -918,7 +920,7 @@ describe("Cents integrity — bigint storage", () => {
 	});
 
 	it("returns projected balance as bigint", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		const { debitId, creditId } = await seedDefaultAccounts(t);
 
 		const result = await postTestEntry(
@@ -936,7 +938,7 @@ describe("Cents integrity — bigint storage", () => {
 	});
 
 	it("no floating point drift across multiple postings", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		const { debitId, creditId } = await seedDefaultAccounts(t);
 
 		// Post three entries with amounts that would cause float drift: 0.1+0.2 != 0.3
