@@ -5,6 +5,7 @@ import { auditLog } from "../../auditLog";
 import type { CommandSource } from "../../engine/types";
 import { findCashAccount, getOrCreateCashAccount } from "./accounts";
 import { postCashEntryInternal } from "./postEntry";
+import { validatePostingGroupAmounts } from "./postingGroups";
 import { buildIdempotencyKey } from "./types";
 
 interface LegacySource {
@@ -225,7 +226,11 @@ export async function postDealSellerPayout(
 		amount: args.amount,
 		debitAccountId: lenderPayableAccount._id,
 		creditAccountId: trustCashAccount._id,
-		idempotencyKey: buildIdempotencyKey("deal-seller-payout", args.dealId, args.lenderId),
+		idempotencyKey: buildIdempotencyKey(
+			"deal-seller-payout",
+			args.dealId,
+			args.lenderId
+		),
 		mortgageId: deal.mortgageId,
 		dealId: args.dealId,
 		lenderId: args.lenderId,
@@ -261,7 +266,12 @@ export async function postLockingFeeReceived(
 		debitAccountId: trustCashAccount._id,
 		creditAccountId: unappliedCashAccount._id,
 		idempotencyKey: args.dealId
-			? buildIdempotencyKey("locking-fee", args.dealId, args.mortgageId, args.feeId)
+			? buildIdempotencyKey(
+					"locking-fee",
+					args.dealId,
+					args.mortgageId,
+					args.feeId
+				)
 			: buildIdempotencyKey("locking-fee", args.mortgageId, args.feeId),
 		mortgageId: args.mortgageId,
 		dealId: args.dealId,
@@ -297,8 +307,17 @@ export async function postCommitmentDepositReceived(
 		debitAccountId: trustCashAccount._id,
 		creditAccountId: unappliedCashAccount._id,
 		idempotencyKey: args.dealId
-			? buildIdempotencyKey("commitment-deposit", args.dealId, args.mortgageId, args.depositId)
-			: buildIdempotencyKey("commitment-deposit", args.mortgageId, args.depositId),
+			? buildIdempotencyKey(
+					"commitment-deposit",
+					args.dealId,
+					args.mortgageId,
+					args.depositId
+				)
+			: buildIdempotencyKey(
+					"commitment-deposit",
+					args.mortgageId,
+					args.depositId
+				),
 		mortgageId: args.mortgageId,
 		dealId: args.dealId,
 		source: normalizeSource(args.source),
@@ -365,6 +384,12 @@ export async function postSettlementAllocation(
 		throw new ConvexError(`Obligation not found: ${args.obligationId}`);
 	}
 
+	validatePostingGroupAmounts(
+		obligation.amount,
+		args.entries.map((e) => e.amount),
+		args.servicingFee
+	);
+
 	const allocationControlAccount = await getOrCreateCashAccount(ctx, {
 		family: "CONTROL",
 		mortgageId: args.mortgageId,
@@ -385,7 +410,10 @@ export async function postSettlementAllocation(
 			amount: entry.amount,
 			debitAccountId: allocationControlAccount._id,
 			creditAccountId: lenderPayableAccount._id,
-			idempotencyKey: buildIdempotencyKey("lender-payable", entry.dispersalEntryId),
+			idempotencyKey: buildIdempotencyKey(
+				"lender-payable",
+				entry.dispersalEntryId
+			),
 			mortgageId: args.mortgageId,
 			obligationId: args.obligationId,
 			dispersalEntryId: entry.dispersalEntryId,

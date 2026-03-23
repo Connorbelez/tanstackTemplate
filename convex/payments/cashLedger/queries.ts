@@ -7,6 +7,7 @@ import {
 	getCashAccountBalance,
 	getControlAccountsBySubaccount,
 	isCreditNormalFamily,
+	safeBigintToNumber,
 } from "./accounts";
 import {
 	getControlBalanceBySubaccount,
@@ -17,20 +18,6 @@ import {
 
 /** Matches YYYY-MM-DD format strictly. */
 const BUSINESS_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
-
-/**
- * Converts a bigint to a number, throwing if the value exceeds
- * Number.MAX_SAFE_INTEGER (or is below Number.MIN_SAFE_INTEGER).
- */
-function safeBigintToNumber(value: bigint): number {
-	const num = Number(value);
-	if (!Number.isSafeInteger(num)) {
-		throw new Error(
-			`BigInt value ${value} cannot be safely represented as a Number`
-		);
-	}
-	return num;
-}
 
 function compareSequence(
 	left: { sequenceNumber: bigint },
@@ -260,6 +247,21 @@ export const controlNetZeroCheck = cashLedgerQuery
 	.input({ postingGroupId: v.string() })
 	.handler(async (ctx, args) => {
 		return getControlBalancesByPostingGroup(ctx, args.postingGroupId);
+	})
+	.public();
+
+// ── Posting Group Queries ─────────────────────────────────────
+
+export const getPostingGroupEntries = cashLedgerQuery
+	.input({ postingGroupId: v.string() })
+	.handler(async (ctx, args) => {
+		const entries = await ctx.db
+			.query("cash_ledger_journal_entries")
+			.withIndex("by_posting_group", (q) =>
+				q.eq("postingGroupId", args.postingGroupId)
+			)
+			.collect();
+		return entries.sort(compareSequence);
 	})
 	.public();
 
