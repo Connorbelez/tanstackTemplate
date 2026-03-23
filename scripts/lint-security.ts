@@ -46,6 +46,9 @@ const CONVEX_EXCLUDED_PATTERNS = [
 	/convex\/http\.ts$/,
 	/convex\/crons\.ts$/,
 	/convex\/auth\.ts$/,
+	/convex\/.*\/__tests__\//,
+	/convex\/.*\.test\.ts$/,
+	/convex\/.*\.integration\.test\.ts$/,
 ];
 
 /**
@@ -127,6 +130,7 @@ const RE_RAW_CONVEX_EXPORT =
 	/export\s+(?:const|function)\s+\w+\s*=\s*(?:mutation|query|action)\s*\(/;
 const RE_RAW_CONVEX_NAME = /export\s+(?:const|function)\s+(\w+)/;
 const RE_LOCAL_CHAIN = /(?:^|\s)const\s+(\w+)\s*=\s*(\w+)(?:\s*\.|;|\s*$)/;
+const RE_NEW_DECLARATION = /^\s*(?:const|export)\s/;
 
 // ── File discovery ──────────────────────────────────────────────────────
 
@@ -259,13 +263,19 @@ function buildLocalChainMap(lines: string[]): Map<string, LocalChainInfo> {
 			continue;
 		}
 
-		// Collect the full statement (may span multiple lines until `;`)
+		// Collect the full statement (may span multiple lines until `;` or new declaration)
 		let fullStatement = line;
-		for (let j = i + 1; j < lines.length && j < i + 10; j++) {
-			fullStatement += lines[j];
-			if (lines[j]?.includes(";")) {
+		for (let j = i + 1; j < lines.length; j++) {
+			const nextLine = lines[j] ?? "";
+			if (nextLine.includes(";")) {
+				fullStatement += nextLine;
 				break;
 			}
+			// Stop at a new const or export declaration (next statement)
+			if (RE_NEW_DECLARATION.test(nextLine)) {
+				break;
+			}
+			fullStatement += nextLine;
 		}
 
 		const hasAuth =
@@ -389,13 +399,13 @@ function analyzeRouteFile(filePath: string): Violation[] {
 	const rel = relative(ROOT, filePath);
 	const fileName = getBasename(filePath);
 
-	// Only check layout route files (route.tsx) — leaf routes inherit guards
-	if (fileName !== "route.tsx") {
+	// Exempt specific route files (auth-flow pages, public pages)
+	if (ROUTE_GUARD_EXEMPT.has(fileName)) {
 		return violations;
 	}
 
-	// Exempt files
-	if (ROUTE_GUARD_EXEMPT.has(fileName)) {
+	// Only check route files that define a createFileRoute (skip utility/component files)
+	if (!content.includes("createFileRoute")) {
 		return violations;
 	}
 
