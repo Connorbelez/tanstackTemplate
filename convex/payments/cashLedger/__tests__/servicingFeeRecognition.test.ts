@@ -321,8 +321,8 @@ describe("servicing fee recognition — ENG-161", () => {
 
 			expect(feeEntries).toHaveLength(0);
 
-			// No SERVICING_REVENUE account created for this mortgage
-			// (unless a prior test created one — use a scoped check)
+			// No SERVICING_REVENUE account should exist for this mortgage —
+			// a zero-fee path must not eagerly create an account
 			const revenueAccounts = await ctx.db
 				.query("cash_ledger_accounts")
 				.withIndex("by_family_and_mortgage", (q) =>
@@ -332,12 +332,7 @@ describe("servicing fee recognition — ENG-161", () => {
 				)
 				.collect();
 
-			// Either no account or account with 0 balance
-			const totalRevenue = revenueAccounts.reduce(
-				(sum, a) => sum + getCashAccountBalance(a),
-				0n
-			);
-			expect(totalRevenue).toBe(0n);
+			expect(revenueAccounts).toHaveLength(0);
 		});
 	});
 

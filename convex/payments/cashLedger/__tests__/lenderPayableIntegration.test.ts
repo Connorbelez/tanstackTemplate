@@ -117,7 +117,9 @@ describe("lender payable integration — postSettlementAllocation E2E", () => {
 			// Verify lender payable accounts exist per lender
 			const payableAccounts = await ctx.db
 				.query("cash_ledger_accounts")
-				.withIndex("by_family", (q) => q.eq("family", "LENDER_PAYABLE"))
+				.withIndex("by_family_and_mortgage", (q) =>
+					q.eq("family", "LENDER_PAYABLE").eq("mortgageId", seeded.mortgageId)
+				)
 				.collect();
 			expect(payableAccounts).toHaveLength(2);
 
