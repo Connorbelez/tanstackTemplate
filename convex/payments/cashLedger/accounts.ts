@@ -180,10 +180,13 @@ export function assertNonNegativeBalance(
 	amount: bigint,
 	label: string
 ) {
+	const currentBalance = getCashAccountBalance(account);
 	const projected = projectCashAccountBalance(account, side, amount);
 	if (projected < 0n) {
 		throw new ConvexError(
-			`${label}: posting would make ${account.family} negative`
+			`${label}: posting would make ${account.family} negative ` +
+				`(attempted: ${amount} cents, current balance: ${currentBalance} cents, ` +
+				`projected: ${projected} cents)`
 		);
 	}
 }
