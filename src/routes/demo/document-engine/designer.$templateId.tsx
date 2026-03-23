@@ -125,8 +125,17 @@ function DesignerPage() {
 							pdfmeSchema: fieldConfigsToPdfmeSchemas(currentFields, pageCount),
 						},
 					});
-				} catch {
-					// Silently fail auto-save, user can manually save
+					setError(null);
+				} catch (err) {
+					const message =
+						err instanceof Error ? err.message : "Auto-save failed";
+					// Surface auth/permission errors — they indicate a real problem
+					if (
+						message.includes("Forbidden") ||
+						message.includes("Unauthorized")
+					) {
+						setError(message);
+					}
 				}
 			}, 500);
 		},

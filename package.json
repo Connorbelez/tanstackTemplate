@@ -26,7 +26,8 @@
     "build-storybook": "storybook build",
     "typecheck": "tsc --noEmit",
     "test:coverage": "ALLOW_TEST_AUTH_ENDPOINTS=true DISABLE_GT_HASHCHAIN=true vitest run --coverage",
-    "review": "bash scripts/code-review.sh"
+    "review": "bash scripts/code-review.sh",
+    "lint:security": "bun run scripts/lint-security.ts"
   },
   "dependencies": {
     "@00akshatsinha00/convex-cascading-delete": "0.1.0",
@@ -133,11 +134,5 @@
     "vite": "^7.3.1",
     "vite-tsconfig-paths": "^5.1.4",
     "vitest": "^3.0.5"
-  },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "esbuild",
-      "lightningcss"
-    ]
   }
 }

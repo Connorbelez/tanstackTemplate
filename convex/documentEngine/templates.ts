@@ -1,15 +1,21 @@
 import { ConvexError, v } from "convex/values";
-import { authedMutation, authedQuery, requirePermission } from "../fluent";
+import {
+	adminMutation,
+	authedMutation,
+	authedQuery,
+	requirePermission,
+} from "../fluent";
 import { draftStateValidator } from "./validators";
 
 // TODO: Read queries (get, list) use authedQuery (authentication only).
 // Add permission gate (e.g. requirePermission("document:view")) when moving to production.
 
+// Template design/management = admin-only. Document generation = separate permission.
 const docGenMutation = authedMutation.use(
 	requirePermission("document:generate")
 );
 
-export const create = docGenMutation
+export const create = adminMutation
 	.input({
 		name: v.string(),
 		description: v.optional(v.string()),
@@ -55,7 +61,7 @@ export const list = authedQuery
 	})
 	.public();
 
-export const saveDraft = docGenMutation
+export const saveDraft = adminMutation
 	.input({
 		id: v.id("documentTemplates"),
 		draft: draftStateValidator,
@@ -113,7 +119,7 @@ export const saveDraft = docGenMutation
 	})
 	.public();
 
-export const updateMetadata = docGenMutation
+export const updateMetadata = adminMutation
 	.input({
 		id: v.id("documentTemplates"),
 		name: v.optional(v.string()),
@@ -218,7 +224,7 @@ export const publish = docGenMutation
 	})
 	.public();
 
-export const remove = docGenMutation
+export const remove = adminMutation
 	.input({ id: v.id("documentTemplates") })
 	.handler(async (ctx, args) => {
 		// Check if template is in any group
