@@ -3,6 +3,7 @@ import type { Id } from "../../_generated/dataModel";
 import type { MutationCtx } from "../../_generated/server";
 import { auditLog } from "../../auditLog";
 import type { CommandSource } from "../../engine/types";
+import type { PaymentFrequency } from "../../mortgages/paymentFrequency";
 import { findCashAccount, getOrCreateCashAccount } from "./accounts";
 import { postCashEntryInternal } from "./postEntry";
 import { buildIdempotencyKey } from "./types";
@@ -370,9 +371,10 @@ export interface ServicingFeeMetadata {
 	feeDue: number;
 	feeReceivable: number;
 	mortgageFeeId?: string;
-	paymentFrequency: string;
+	paymentFrequency: PaymentFrequency;
 	policyVersion?: number;
 	principalBalance: number;
+	[key: string]: unknown;
 }
 
 export async function postSettlementAllocation(
@@ -450,7 +452,7 @@ export async function postSettlementAllocation(
 			source: normalizeSource(args.source),
 			...(args.feeMetadata
 				? {
-						metadata: args.feeMetadata as unknown as Record<string, unknown>,
+						metadata: args.feeMetadata,
 					}
 				: {}),
 		});
