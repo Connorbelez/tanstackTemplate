@@ -11,6 +11,8 @@ import {
 	type TestHarness,
 } from "./testUtils";
 
+const modules = import.meta.glob("/convex/**/*.ts");
+
 const NEGATIVE_BALANCE_PATTERN = /negative/i;
 const REVERSAL_CAUSED_BY_PATTERN = /REVERSAL entries must reference causedBy/;
 
@@ -41,7 +43,7 @@ describe("Invariant 1: CONTROL:ALLOCATION net-zero per posting group", () => {
 	}
 
 	it("CONTROL:ALLOCATION accumulates correct debit total across posting group", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		const accounts = await seedAllocationAccounts(t);
 		const groupId = "allocation:complete-group";
 
@@ -130,7 +132,7 @@ describe("Invariant 1: CONTROL:ALLOCATION net-zero per posting group", () => {
 	});
 
 	it("incomplete posting group has non-zero CONTROL balance", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		const accounts = await seedAllocationAccounts(t);
 		const groupId = "allocation:incomplete-group";
 
@@ -174,7 +176,7 @@ describe("Invariant 1: CONTROL:ALLOCATION net-zero per posting group", () => {
 	});
 
 	it("multiple posting groups are independent", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		const accounts = await seedAllocationAccounts(t);
 		const groupA = "allocation:groupA";
 		const groupB = "allocation:groupB";
@@ -244,7 +246,7 @@ describe("Invariant 1: CONTROL:ALLOCATION net-zero per posting group", () => {
 
 describe("Invariant 2: non-negative LENDER_PAYABLE", () => {
 	it("rejects payout exceeding LENDER_PAYABLE balance", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 
 		// LENDER_PAYABLE is credit-normal: balance = credits - debits
 		const lenderPayable = await createTestAccount(t, {
@@ -275,7 +277,7 @@ describe("Invariant 2: non-negative LENDER_PAYABLE", () => {
 	});
 
 	it("allows REVERSAL to debit LENDER_PAYABLE below zero (clawback)", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 
 		const lenderPayable = await createTestAccount(t, {
 			family: "LENDER_PAYABLE",
@@ -333,7 +335,7 @@ describe("Invariant 2: non-negative LENDER_PAYABLE", () => {
 
 describe("Invariant 3: point-in-time reconstruction", () => {
 	it("replayed balance matches running cumulative balance", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 
 		// Create accounts that will be involved
 		const controlAccount = await createTestAccount(t, {
@@ -428,7 +430,7 @@ describe("Invariant 3: point-in-time reconstruction", () => {
 	});
 
 	it("same-timestamp entries are ordered by sequenceNumber", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 
 		const controlAccount = await createTestAccount(t, {
 			family: "CONTROL",
@@ -489,7 +491,7 @@ describe("Invariant 3: point-in-time reconstruction", () => {
 	});
 
 	it("two independent replays produce identical balances", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 
 		const controlAccount = await createTestAccount(t, {
 			family: "CONTROL",
@@ -568,7 +570,7 @@ describe("Invariant 3: point-in-time reconstruction", () => {
 
 describe("Invariant 4: idempotent replay", () => {
 	it("posting same entries twice produces identical state", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 
 		const controlAccount = await createTestAccount(t, {
 			family: "CONTROL",
@@ -673,7 +675,7 @@ describe("Invariant 4: idempotent replay", () => {
 	});
 
 	it("idempotent replay returns original entry without creating duplicates", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 
 		const controlAccount = await createTestAccount(t, {
 			family: "CONTROL",
@@ -717,7 +719,7 @@ describe("Invariant 4: idempotent replay", () => {
 
 describe("Invariant 5: append-only correction", () => {
 	it("CORRECTION creates new entry with causedBy, original unchanged", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 
 		const receivable = await createTestAccount(t, {
 			family: "BORROWER_RECEIVABLE",
@@ -784,7 +786,7 @@ describe("Invariant 5: append-only correction", () => {
 	});
 
 	it("REVERSAL creates new entry leaving original intact", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 
 		const receivable = await createTestAccount(t, {
 			family: "BORROWER_RECEIVABLE",
@@ -851,7 +853,7 @@ describe("Invariant 5: append-only correction", () => {
 
 describe("Invariant 6: reversal traceability", () => {
 	it("every REVERSAL has causedBy referencing a valid entry", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 
 		const receivable = await createTestAccount(t, {
 			family: "BORROWER_RECEIVABLE",
@@ -905,7 +907,7 @@ describe("Invariant 6: reversal traceability", () => {
 	});
 
 	it("REVERSAL without causedBy is rejected", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 
 		const receivable = await createTestAccount(t, {
 			family: "BORROWER_RECEIVABLE",
@@ -931,7 +933,7 @@ describe("Invariant 6: reversal traceability", () => {
 	});
 
 	it("causedBy can be queried via by_caused_by index", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 
 		const receivable = await createTestAccount(t, {
 			family: "BORROWER_RECEIVABLE",

@@ -10,6 +10,8 @@ import { postCashEntryInternal } from "../postEntry";
 import { reconcileObligationSettlementProjectionInternal } from "../reconciliation";
 import { createHarness, SYSTEM_SOURCE, type TestHarness } from "./testUtils";
 
+const modules = import.meta.glob("/convex/**/*.ts");
+
 const NEGATIVE_BALANCE_PATTERN = /negative/i;
 const POSITIVE_SAFE_INTEGER_PATTERN = /positive safe integer/;
 const MUST_BE_DIFFERENT_PATTERN = /must be different/;
@@ -283,7 +285,7 @@ async function createSettledObligation(
 
 describe("cash ledger integrations", () => {
 	it("journals accrual for principal repayment without creating lender payables", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		const seeded = await seedCoreEntities(t);
 		const obligationId = await createUpcomingObligation(t, {
 			mortgageId: seeded.mortgageId,
@@ -322,7 +324,7 @@ describe("cash ledger integrations", () => {
 	});
 
 	it("posts cash receipts to TRUST_CASH and reconciliation detects amountSettled drift", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		const seeded = await seedCoreEntities(t);
 		const obligationId = await createUpcomingObligation(t, {
 			mortgageId: seeded.mortgageId,
@@ -371,7 +373,7 @@ describe("cash ledger integrations", () => {
 	});
 
 	it("creates lender payables and servicing revenue only after settlement allocation", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		const seeded = await seedCoreEntities(t);
 		const obligationId = await createSettledObligation(t, {
 			mortgageId: seeded.mortgageId,
@@ -432,7 +434,7 @@ describe("cash ledger integrations", () => {
 	});
 
 	it("enforces lender payable balance guards for payout posting", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		const seeded = await seedCoreEntities(t);
 		const obligationId = await createSettledObligation(t, {
 			mortgageId: seeded.mortgageId,
@@ -497,7 +499,7 @@ describe("cash ledger integrations", () => {
 	});
 
 	it("rejects zero-amount entry", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		const seeded = await seedCoreEntities(t);
 		await t.run(async (ctx) => {
 			const debit = await getOrCreateCashAccount(ctx, {
@@ -524,7 +526,7 @@ describe("cash ledger integrations", () => {
 	});
 
 	it("rejects negative-amount entry", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		const seeded = await seedCoreEntities(t);
 		await t.run(async (ctx) => {
 			const debit = await getOrCreateCashAccount(ctx, {
@@ -551,7 +553,7 @@ describe("cash ledger integrations", () => {
 	});
 
 	it("rejects debit === credit same account", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		const seeded = await seedCoreEntities(t);
 		await t.run(async (ctx) => {
 			const account = await getOrCreateCashAccount(ctx, {

@@ -12,6 +12,8 @@ import {
 	seedMinimalEntities,
 } from "./testUtils";
 
+const modules = import.meta.glob("/convex/**/*.ts");
+
 interface PostLenderPayoutHandler {
 	_handler: (
 		ctx: MutationCtx,
@@ -42,7 +44,7 @@ const internalGetLenderPayableBalanceQuery =
 
 describe("getLenderPayableBalance query", () => {
 	it("returns 0n for a lender with no payable accounts", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		const seeded = await seedMinimalEntities(t);
 
 		await t.run(async (ctx) => {
@@ -70,7 +72,7 @@ describe("getLenderPayableBalance query", () => {
 	});
 
 	it("returns correct balance for a single mortgage payable", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		const seeded = await seedMinimalEntities(t);
 
 		const controlAccount = await createTestAccount(t, {
@@ -123,7 +125,7 @@ describe("getLenderPayableBalance query", () => {
 	});
 
 	it("aggregates balances across multiple mortgages", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		const seeded = await seedMinimalEntities(t);
 
 		// Create a second mortgage
@@ -227,7 +229,7 @@ describe("getLenderPayableBalance query", () => {
 	});
 
 	it("returns net balance after partial payout", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		const seeded = await seedMinimalEntities(t);
 
 		const controlAccount = await createTestAccount(t, {
@@ -298,7 +300,7 @@ describe("getLenderPayableBalance query", () => {
 	});
 
 	it("returns per-lender balances independently", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		const seeded = await seedMinimalEntities(t);
 
 		const controlAccount = await createTestAccount(t, {

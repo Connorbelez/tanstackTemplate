@@ -5,9 +5,6 @@ import { getOrCreateCashAccount } from "../accounts";
 import { type PostCashEntryInput, postCashEntryInternal } from "../postEntry";
 import type { CashAccountFamily, ControlSubaccount } from "../types";
 
-// ── Module glob for convex-test ──────────────────────────────────────
-const modules = import.meta.glob("/convex/**/*.ts");
-
 // ── Shared Constants ─────────────────────────────────────────────────
 
 export const SYSTEM_SOURCE = {
@@ -30,8 +27,11 @@ export const ADMIN_IDENTITY = {
 };
 
 // ── Harness Factory ──────────────────────────────────────────────────
+// Callers must pass import.meta.glob("/convex/**/*.ts") from their .test.ts
+// file — import.meta.glob is a Vite-only API that crashes in Convex's runtime,
+// so it cannot live in this non-test utility module.
 
-export function createHarness() {
+export function createHarness(modules: Record<string, () => Promise<unknown>>) {
 	return convexTest(schema, modules);
 }
 

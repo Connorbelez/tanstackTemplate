@@ -10,6 +10,8 @@ import {
 	type TestHarness,
 } from "./testUtils";
 
+const modules = import.meta.glob("/convex/**/*.ts");
+
 interface CreateDispersalEntriesHandler {
 	_handler: (
 		ctx: MutationCtx,
@@ -93,7 +95,7 @@ async function createSettledObligation(
 
 describe("lender payable integration — postSettlementAllocation E2E", () => {
 	it("creates LENDER_PAYABLE_CREATED entries for multiple lenders via dispersal engine", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		const seeded = await seedMinimalEntities(t);
 		const obligationId = await createSettledObligation(t, {
 			mortgageId: seeded.mortgageId,
@@ -158,7 +160,7 @@ describe("lender payable integration — postSettlementAllocation E2E", () => {
 	});
 
 	it("all entries share the same postingGroupId", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		const seeded = await seedMinimalEntities(t);
 		const obligationId = await createSettledObligation(t, {
 			mortgageId: seeded.mortgageId,
@@ -199,7 +201,7 @@ describe("lender payable integration — postSettlementAllocation E2E", () => {
 	});
 
 	it("each entry has a unique idempotencyKey", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		const seeded = await seedMinimalEntities(t);
 		const obligationId = await createSettledObligation(t, {
 			mortgageId: seeded.mortgageId,
@@ -236,7 +238,7 @@ describe("lender payable integration — postSettlementAllocation E2E", () => {
 	});
 
 	it("sum of lender payables + servicing fee = settlement amount", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		const seeded = await seedMinimalEntities(t);
 		const settledAmount = 100_000;
 		const obligationId = await createSettledObligation(t, {
@@ -276,7 +278,7 @@ describe("lender payable integration — postSettlementAllocation E2E", () => {
 	});
 
 	it("each entry carries full traceability fields (REQ-241)", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		const seeded = await seedMinimalEntities(t);
 		const obligationId = await createSettledObligation(t, {
 			mortgageId: seeded.mortgageId,
@@ -327,7 +329,7 @@ describe("lender payable integration — postSettlementAllocation E2E", () => {
 	});
 
 	it("idempotent replay produces no duplicate entries", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		const seeded = await seedMinimalEntities(t);
 		const obligationId = await createSettledObligation(t, {
 			mortgageId: seeded.mortgageId,
@@ -379,7 +381,7 @@ describe("lender payable integration — postSettlementAllocation E2E", () => {
 	});
 
 	it("handles zero-fee allocation (non-interest obligation)", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		const seeded = await seedMinimalEntities(t);
 
 		// Create a principal_repayment obligation (no servicing fee)

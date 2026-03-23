@@ -10,6 +10,8 @@ import {
 	type TestHarness,
 } from "./testUtils";
 
+const modules = import.meta.glob("/convex/**/*.ts");
+
 interface CreateDispersalEntriesHandler {
 	_handler: (
 		ctx: MutationCtx,
@@ -95,7 +97,7 @@ async function createSettledObligation(
 
 describe("servicing fee recognition — ENG-161", () => {
 	it("SERVICING_FEE_RECOGNIZED entry posted for regular_interest allocation", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		const seeded = await seedMinimalEntities(t);
 		const obligationId = await createSettledObligation(t, {
 			mortgageId: seeded.mortgageId,
@@ -132,7 +134,7 @@ describe("servicing fee recognition — ENG-161", () => {
 	});
 
 	it("fee entry shares postingGroupId with lender payable entries", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		const seeded = await seedMinimalEntities(t);
 		const obligationId = await createSettledObligation(t, {
 			mortgageId: seeded.mortgageId,
@@ -164,7 +166,7 @@ describe("servicing fee recognition — ENG-161", () => {
 	});
 
 	it("fee entry carries full traceability fields", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		const seeded = await seedMinimalEntities(t);
 		const obligationId = await createSettledObligation(t, {
 			mortgageId: seeded.mortgageId,
@@ -207,7 +209,7 @@ describe("servicing fee recognition — ENG-161", () => {
 	});
 
 	it("SERVICING_REVENUE balance tracks cumulative revenue across multiple allocations", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		const seeded = await seedMinimalEntities(t);
 
 		const obligation1 = await createSettledObligation(t, {
@@ -288,7 +290,7 @@ describe("servicing fee recognition — ENG-161", () => {
 	});
 
 	it("zero-fee allocation (non-interest obligation) produces no fee entry", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		const seeded = await seedMinimalEntities(t);
 		const obligationId = await createSettledObligation(t, {
 			mortgageId: seeded.mortgageId,
@@ -337,7 +339,7 @@ describe("servicing fee recognition — ENG-161", () => {
 	});
 
 	it("fee debits CONTROL:ALLOCATION and credits SERVICING_REVENUE", async () => {
-		const t = createHarness();
+		const t = createHarness(modules);
 		const seeded = await seedMinimalEntities(t);
 		const obligationId = await createSettledObligation(t, {
 			mortgageId: seeded.mortgageId,
