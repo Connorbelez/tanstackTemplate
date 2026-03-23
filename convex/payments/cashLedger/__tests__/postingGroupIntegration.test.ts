@@ -1,7 +1,9 @@
 import { ConvexError } from "convex/values";
 import { describe, expect, it } from "vitest";
+import { api } from "../../../_generated/api";
 import type { Id } from "../../../_generated/dataModel";
 import type { MutationCtx } from "../../../_generated/server";
+import { FAIRLEND_STAFF_ORG_ID } from "../../../constants";
 import { createDispersalEntries } from "../../../dispersal/createDispersalEntries";
 import { getOrCreateCashAccount } from "../accounts";
 import { postSettlementAllocation } from "../integrations";
@@ -45,6 +47,19 @@ interface CreateDispersalEntriesHandler {
 
 const createDispersalEntriesMutation =
 	createDispersalEntries as unknown as CreateDispersalEntriesHandler;
+
+const CASH_LEDGER_IDENTITY = {
+	subject: "test-pgi-user",
+	issuer: "https://api.workos.com",
+	org_id: FAIRLEND_STAFF_ORG_ID,
+	organization_name: "FairLend Staff",
+	role: "admin",
+	roles: JSON.stringify(["admin"]),
+	permissions: JSON.stringify(["cash_ledger:view", "cash_ledger:correct"]),
+	user_email: "pgi-test@fairlend.ca",
+	user_first_name: "PGI",
+	user_last_name: "Tester",
+};
 
 describe("posting group integration — dispersal E2E", () => {
 	it("dispersal with correct amounts → all entries posted, posting group summary tracks allocation", async () => {
@@ -196,24 +211,23 @@ describe("posting group integration — dispersal E2E", () => {
 			});
 		});
 
-		await t.run(async (ctx) => {
-			const postingGroupId = `allocation:${obligationId}`;
-			const entries = await ctx.db
-				.query("cash_ledger_journal_entries")
-				.withIndex("by_posting_group", (q) =>
-					q.eq("postingGroupId", postingGroupId)
-				)
-				.collect();
+		// Call the actual getPostingGroupEntries query through the API
+		// to exercise the middleware chain and compareSequence sort
+		const auth = t.withIdentity(CASH_LEDGER_IDENTITY);
+		const postingGroupId = `allocation:${obligationId}`;
+		const entries = await auth.query(
+			api.payments.cashLedger.queries.getPostingGroupEntries,
+			{ postingGroupId }
+		);
 
-			expect(entries.length).toBeGreaterThanOrEqual(2);
+		expect(entries.length).toBeGreaterThanOrEqual(2);
 
-			// Verify entries are in ascending sequence order
-			for (let i = 1; i < entries.length; i++) {
-				expect(entries[i].sequenceNumber).toBeGreaterThan(
-					entries[i - 1].sequenceNumber
-				);
-			}
-		});
+		// Verify entries are sorted by ascending sequence order (compareSequence)
+		for (let i = 1; i < entries.length; i++) {
+			expect(entries[i].sequenceNumber).toBeGreaterThan(
+				entries[i - 1].sequenceNumber
+			);
+		}
 	});
 });
 
@@ -374,6 +388,118 @@ describe("posting group reconciliation — findNonZeroPostingGroups", () => {
 				(a) => a.postingGroupId === postingGroupId
 			);
 			expect(matchingAlert).toBeUndefined();
+		});
+	});
+
+	it("surfaces orphaned CONTROL:ALLOCATION accounts (no obligationId) in result.orphaned", async () => {
+		const t = createHarness(modules);
+		const seeded = await seedMinimalEntities(t);
+
+		// Create a CONTROL:ALLOCATION account WITHOUT an obligationId
+		// but with a non-zero balance — this is an anomaly
+		const orphanedAccountId = await t.run(async (ctx) => {
+			return ctx.db.insert("cash_ledger_accounts", {
+				family: "CONTROL",
+				mortgageId: seeded.mortgageId,
+				subaccount: "ALLOCATION",
+				cumulativeDebits: 75_000n,
+				cumulativeCredits: 0n,
+				createdAt: Date.now(),
+			});
+		});
+
+		await t.run(async (ctx) => {
+			const result = await findNonZeroPostingGroups(ctx);
+
+			// Should appear in orphaned, not in alerts
+			const orphaned = result.orphaned.find(
+				(o) => o.accountId === orphanedAccountId
+			);
+			expect(orphaned).toBeDefined();
+			expect(orphaned?.controlAllocationBalance).toBe(75_000n);
+
+			// Should NOT appear in alerts (no obligationId → no postingGroupId)
+			const alertWithOrphan = result.alerts.find((a) =>
+				a.postingGroupId.includes(orphanedAccountId as unknown as string)
+			);
+			expect(alertWithOrphan).toBeUndefined();
+		});
+	});
+
+	it("reports correct entryCount and oldestEntryTimestamp for alerts", async () => {
+		const t = createHarness(modules);
+		const seeded = await seedMinimalEntities(t);
+		const obligationId = await createSettledObligation(t, {
+			mortgageId: seeded.mortgageId,
+			borrowerId: seeded.borrowerId,
+			amount: 100_000,
+		});
+
+		const postingGroupId = `allocation:${obligationId}`;
+
+		await t.run(async (ctx) => {
+			const controlAccount = await getOrCreateCashAccount(ctx, {
+				family: "CONTROL",
+				mortgageId: seeded.mortgageId,
+				obligationId,
+				subaccount: "ALLOCATION",
+			});
+			const payableAccountA = await getOrCreateCashAccount(ctx, {
+				family: "LENDER_PAYABLE",
+				mortgageId: seeded.mortgageId,
+				lenderId: seeded.lenderAId,
+			});
+			const payableAccountB = await getOrCreateCashAccount(ctx, {
+				family: "LENDER_PAYABLE",
+				mortgageId: seeded.mortgageId,
+				lenderId: seeded.lenderBId,
+			});
+
+			await postCashEntryInternal(ctx, {
+				entryType: "LENDER_PAYABLE_CREATED",
+				effectiveDate: "2026-02-22",
+				amount: 60_000,
+				debitAccountId: controlAccount._id,
+				creditAccountId: payableAccountA._id,
+				idempotencyKey: buildIdempotencyKey(
+					"lender-payable",
+					"test-timestamp-a"
+				),
+				mortgageId: seeded.mortgageId,
+				obligationId,
+				lenderId: seeded.lenderAId,
+				postingGroupId,
+				source: SYSTEM_SOURCE,
+			});
+
+			await postCashEntryInternal(ctx, {
+				entryType: "LENDER_PAYABLE_CREATED",
+				effectiveDate: "2026-02-28",
+				amount: 40_000,
+				debitAccountId: controlAccount._id,
+				creditAccountId: payableAccountB._id,
+				idempotencyKey: buildIdempotencyKey(
+					"lender-payable",
+					"test-timestamp-b"
+				),
+				mortgageId: seeded.mortgageId,
+				obligationId,
+				lenderId: seeded.lenderBId,
+				postingGroupId,
+				source: SYSTEM_SOURCE,
+			});
+		});
+
+		await t.run(async (ctx) => {
+			const result = await findNonZeroPostingGroups(ctx);
+			const alert = result.alerts.find(
+				(a) => a.postingGroupId === postingGroupId
+			);
+			expect(alert).toBeDefined();
+			expect(alert?.entryCount).toBe(2);
+			// oldestEntryTimestamp should be a number (not null, since entries exist)
+			expect(typeof alert?.oldestEntryTimestamp).toBe("number");
+			expect(alert?.oldestEntryTimestamp).toBeGreaterThan(0);
 		});
 	});
 });

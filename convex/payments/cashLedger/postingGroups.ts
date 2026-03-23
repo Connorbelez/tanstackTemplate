@@ -32,11 +32,12 @@ export function validatePostingGroupAmounts(
 			value: servicingFee,
 		});
 	}
-	for (const a of lenderAmounts) {
+	for (const [index, a] of lenderAmounts.entries()) {
 		if (!Number.isSafeInteger(a)) {
 			throw new ConvexError({
 				code: "INVALID_AMOUNT" as const,
 				field: "lenderAmount",
+				index,
 				value: a,
 			});
 		}
@@ -44,6 +45,21 @@ export function validatePostingGroupAmounts(
 
 	const totalLenderAmount = lenderAmounts.reduce((sum, a) => sum + a, 0);
 	const actualTotal = totalLenderAmount + servicingFee;
+
+	// Guard against overflow: sum of safe integers can exceed MAX_SAFE_INTEGER
+	if (
+		!(
+			Number.isSafeInteger(totalLenderAmount) &&
+			Number.isSafeInteger(actualTotal)
+		)
+	) {
+		throw new ConvexError({
+			code: "AMOUNT_OVERFLOW" as const,
+			totalLenderAmount,
+			servicingFee,
+			actualTotal,
+		});
+	}
 
 	if (actualTotal !== obligationAmount) {
 		throw new ConvexError({
