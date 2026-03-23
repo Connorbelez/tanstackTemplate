@@ -135,10 +135,23 @@ describe("lender payable integration — postSettlementAllocation E2E", () => {
 			const balanceA = getCashAccountBalance(lenderAPayable);
 			const balanceB = getCashAccountBalance(lenderBPayable);
 
-			// Lender A has 6000/10000 = 60% of distributable amount
-			// Lender B has 4000/10000 = 40% of distributable amount
-			expect(balanceA).toBeGreaterThan(balanceB);
-			expect(balanceA + balanceB).toBeGreaterThan(0n);
+			// Verify the 60/40 proportional split of the total payable balance.
+			// The pro-rata engine uses largest-remainder rounding, so the split
+			// may differ from the exact fraction by at most 1 cent per lender.
+			const total = balanceA + balanceB;
+			expect(total).toBeGreaterThan(0n);
+
+			const diffA =
+				balanceA * 10n - total * 6n < 0n
+					? -(balanceA * 10n - total * 6n)
+					: balanceA * 10n - total * 6n;
+			const diffB =
+				balanceB * 10n - total * 4n < 0n
+					? -(balanceB * 10n - total * 4n)
+					: balanceB * 10n - total * 4n;
+			// Each diff is scaled by 10, so a 1-cent rounding error becomes <= 10
+			expect(diffA).toBeLessThanOrEqual(10n);
+			expect(diffB).toBeLessThanOrEqual(10n);
 		});
 	});
 
@@ -170,13 +183,16 @@ describe("lender payable integration — postSettlementAllocation E2E", () => {
 				.collect();
 
 			// Should have 2 LENDER_PAYABLE_CREATED + 1 SERVICING_FEE_RECOGNIZED = 3
-			expect(entries.length).toBeGreaterThanOrEqual(2);
+			expect(entries).toHaveLength(3);
 			expect(entries.every((e) => e.postingGroupId === expectedGroupId)).toBe(
 				true
 			);
 
 			const entryTypes = entries.map((e) => e.entryType);
-			expect(entryTypes).toContain("LENDER_PAYABLE_CREATED");
+			expect(
+				entryTypes.filter((t) => t === "LENDER_PAYABLE_CREATED")
+			).toHaveLength(2);
+			expect(entryTypes).toContain("SERVICING_FEE_RECOGNIZED");
 		});
 	});
 
