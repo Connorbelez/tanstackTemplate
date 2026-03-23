@@ -5,6 +5,7 @@ import { auditLog } from "../../auditLog";
 import type { CommandSource } from "../../engine/types";
 import { findCashAccount, getOrCreateCashAccount } from "./accounts";
 import { postCashEntryInternal } from "./postEntry";
+import { buildIdempotencyKey } from "./types";
 
 interface LegacySource {
 	actor?: string;
@@ -85,7 +86,7 @@ export async function postObligationAccrued(
 		amount: obligation.amount,
 		debitAccountId: receivableAccount._id,
 		creditAccountId: accrualControlAccount._id,
-		idempotencyKey: `cash-ledger:obligation-accrued:${obligation._id}`,
+		idempotencyKey: buildIdempotencyKey("obligation-accrued", obligation._id),
 		mortgageId: obligation.mortgageId,
 		obligationId: obligation._id,
 		borrowerId: obligation.borrowerId,
@@ -185,7 +186,7 @@ export async function postDealBuyerFundsReceived(
 		debitAccountId: trustCashAccount._id,
 		creditAccountId: cashClearingAccount._id,
 		// One buyer-funds entry per deal — idempotency key intentionally scoped to dealId only
-		idempotencyKey: `cash-ledger:deal-buyer-funds:${args.dealId}`,
+		idempotencyKey: buildIdempotencyKey("deal-buyer-funds", args.dealId),
 		mortgageId: deal.mortgageId,
 		dealId: args.dealId,
 		source: normalizeSource(args.source),
@@ -224,7 +225,7 @@ export async function postDealSellerPayout(
 		amount: args.amount,
 		debitAccountId: lenderPayableAccount._id,
 		creditAccountId: trustCashAccount._id,
-		idempotencyKey: `cash-ledger:deal-seller-payout:${args.dealId}:${args.lenderId}`,
+		idempotencyKey: buildIdempotencyKey("deal-seller-payout", args.dealId, args.lenderId),
 		mortgageId: deal.mortgageId,
 		dealId: args.dealId,
 		lenderId: args.lenderId,
@@ -260,8 +261,8 @@ export async function postLockingFeeReceived(
 		debitAccountId: trustCashAccount._id,
 		creditAccountId: unappliedCashAccount._id,
 		idempotencyKey: args.dealId
-			? `cash-ledger:locking-fee:${args.dealId}:${args.mortgageId}:${args.feeId}`
-			: `cash-ledger:locking-fee:${args.mortgageId}:${args.feeId}`,
+			? buildIdempotencyKey("locking-fee", args.dealId, args.mortgageId, args.feeId)
+			: buildIdempotencyKey("locking-fee", args.mortgageId, args.feeId),
 		mortgageId: args.mortgageId,
 		dealId: args.dealId,
 		source: normalizeSource(args.source),
@@ -296,8 +297,8 @@ export async function postCommitmentDepositReceived(
 		debitAccountId: trustCashAccount._id,
 		creditAccountId: unappliedCashAccount._id,
 		idempotencyKey: args.dealId
-			? `cash-ledger:commitment-deposit:${args.dealId}:${args.mortgageId}:${args.depositId}`
-			: `cash-ledger:commitment-deposit:${args.mortgageId}:${args.depositId}`,
+			? buildIdempotencyKey("commitment-deposit", args.dealId, args.mortgageId, args.depositId)
+			: buildIdempotencyKey("commitment-deposit", args.mortgageId, args.depositId),
 		mortgageId: args.mortgageId,
 		dealId: args.dealId,
 		source: normalizeSource(args.source),
@@ -334,7 +335,7 @@ export async function postOverpaymentToUnappliedCash(
 		amount: args.amount,
 		debitAccountId: trustCashAccount._id,
 		creditAccountId: unappliedCashAccount._id,
-		idempotencyKey: `cash-ledger:overpayment:${args.attemptId}`,
+		idempotencyKey: buildIdempotencyKey("overpayment", args.attemptId),
 		mortgageId: args.mortgageId,
 		attemptId: args.attemptId,
 		borrowerId: args.borrowerId,
@@ -384,7 +385,7 @@ export async function postSettlementAllocation(
 			amount: entry.amount,
 			debitAccountId: allocationControlAccount._id,
 			creditAccountId: lenderPayableAccount._id,
-			idempotencyKey: `cash-ledger:lender-payable:${entry.dispersalEntryId}`,
+			idempotencyKey: buildIdempotencyKey("lender-payable", entry.dispersalEntryId),
 			mortgageId: args.mortgageId,
 			obligationId: args.obligationId,
 			dispersalEntryId: entry.dispersalEntryId,
@@ -407,7 +408,7 @@ export async function postSettlementAllocation(
 			amount: args.servicingFee,
 			debitAccountId: allocationControlAccount._id,
 			creditAccountId: servicingRevenueAccount._id,
-			idempotencyKey: `cash-ledger:servicing-fee:${args.obligationId}`,
+			idempotencyKey: buildIdempotencyKey("servicing-fee", args.obligationId),
 			mortgageId: args.mortgageId,
 			obligationId: args.obligationId,
 			borrowerId: obligation.borrowerId,

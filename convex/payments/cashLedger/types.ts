@@ -135,3 +135,28 @@ export const CREDIT_NORMAL_FAMILIES: ReadonlySet<CashAccountFamily> = new Set([
 // already excluded from balance checks (Tech Design §9.1 Step 5).
 export const NEGATIVE_BALANCE_EXEMPT_FAMILIES: ReadonlySet<CashAccountFamily> =
 	new Set(["CONTROL", "BORROWER_RECEIVABLE"]);
+
+// ── Idempotency Key Convention ──────────────────────────────────────
+// All cash ledger journal entries use the prefix `cash-ledger:` followed
+// by a kebab-case entry type and source identifiers:
+//   cash-ledger:{entry-type}:{source-id}
+//   cash-ledger:{entry-type}:{source-type}:{source-id}
+
+export const IDEMPOTENCY_KEY_PREFIX = "cash-ledger:" as const;
+
+/**
+ * Build a standardised idempotency key for cash ledger entries.
+ *
+ * @param entryType  Kebab-case operation name (e.g. "obligation-accrued", "cash-received")
+ * @param segments   One or more source identifiers (e.g. sourceType, sourceId)
+ * @returns          `cash-ledger:{entryType}:{segments joined by ":"}`
+ */
+export function buildIdempotencyKey(
+	entryType: string,
+	...segments: string[]
+): string {
+	if (segments.length === 0) {
+		throw new Error("buildIdempotencyKey requires at least one segment");
+	}
+	return `${IDEMPOTENCY_KEY_PREFIX}${entryType}:${segments.join(":")}`;
+}
