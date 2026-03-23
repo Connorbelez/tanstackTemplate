@@ -57,6 +57,9 @@ export const CASH_ENTRY_TYPE_FAMILY_MAP: Record<
 		debit: ["TRUST_CASH", "CASH_CLEARING", "UNAPPLIED_CASH"],
 		credit: ["BORROWER_RECEIVABLE", "CASH_CLEARING", "UNAPPLIED_CASH"],
 	},
+	// ENG-223: Phase 2+ sweep (sweepCashClearingToTrust) will need TRUST_CASH
+	// in debit and CASH_CLEARING in credit here. Current constraints only cover
+	// the obligation-applied path. Update when async providers are integrated.
 	CASH_APPLIED: {
 		debit: ["CONTROL", "UNAPPLIED_CASH"],
 		credit: ["CONTROL", "BORROWER_RECEIVABLE"],
