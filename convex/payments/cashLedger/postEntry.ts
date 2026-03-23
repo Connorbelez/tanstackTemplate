@@ -10,6 +10,7 @@ import { getNextCashSequenceNumber } from "./sequenceCounter";
 import {
 	CASH_ENTRY_TYPE_FAMILY_MAP,
 	type CashEntryType,
+	IDEMPOTENCY_KEY_PREFIX,
 	NEGATIVE_BALANCE_EXEMPT_FAMILIES,
 } from "./types";
 import { postCashEntryArgsValidator } from "./validators";
@@ -228,6 +229,12 @@ export async function postCashEntryInternal(
 ) {
 	// 1. VALIDATE_INPUT
 	validateInput(args);
+	// 1b. IDEMPOTENCY KEY PREFIX CHECK (warn-only, never reject)
+	if (!args.idempotencyKey.startsWith(IDEMPOTENCY_KEY_PREFIX)) {
+		console.warn(
+			`[postCashEntryInternal] idempotencyKey "${args.idempotencyKey}" does not start with "${IDEMPOTENCY_KEY_PREFIX}". Consider using buildIdempotencyKey().`
+		);
+	}
 	// 2. IDEMPOTENCY
 	const existing = await checkIdempotency(ctx, args.idempotencyKey);
 	if (existing) {
