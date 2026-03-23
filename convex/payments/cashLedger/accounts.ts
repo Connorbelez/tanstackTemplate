@@ -61,7 +61,7 @@ function matchesSpec(
 			account.obligationId === spec.obligationId) &&
 		(spec.lenderId === undefined || account.lenderId === spec.lenderId) &&
 		(spec.borrowerId === undefined || account.borrowerId === spec.borrowerId) &&
-		(spec.subaccount === undefined || account.subaccount === spec.subaccount)
+		account.subaccount === spec.subaccount
 	);
 }
 
