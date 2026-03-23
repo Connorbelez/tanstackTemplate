@@ -1,20 +1,16 @@
 import { v } from "convex/values";
 import { Timeline } from "convex-timeline";
 import { components } from "../_generated/api";
-import { authedMutation, requirePermission } from "../fluent";
+import { adminMutation } from "../fluent";
 import { draftStateValidator } from "./validators";
 
 const timeline = new Timeline(components.timeline);
-
-const docGenMutation = authedMutation.use(
-	requirePermission("document:generate")
-);
 
 function scopeKey(templateId: string): string {
 	return `template:${templateId}`;
 }
 
-export const pushDraftState = docGenMutation
+export const pushDraftState = adminMutation
 	.input({
 		templateId: v.id("documentTemplates"),
 		draft: draftStateValidator,
@@ -31,7 +27,7 @@ export const pushDraftState = docGenMutation
 	})
 	.public();
 
-export const undoDraft = docGenMutation
+export const undoDraft = adminMutation
 	.input({ templateId: v.id("documentTemplates") })
 	.handler(async (ctx, args) => {
 		const template = await ctx.db.get(args.templateId);
@@ -50,7 +46,7 @@ export const undoDraft = docGenMutation
 	})
 	.public();
 
-export const redoDraft = docGenMutation
+export const redoDraft = adminMutation
 	.input({ templateId: v.id("documentTemplates") })
 	.handler(async (ctx, args) => {
 		const template = await ctx.db.get(args.templateId);
@@ -69,7 +65,7 @@ export const redoDraft = docGenMutation
 	})
 	.public();
 
-export const createDraftCheckpoint = docGenMutation
+export const createDraftCheckpoint = adminMutation
 	.input({
 		templateId: v.id("documentTemplates"),
 		name: v.string(),

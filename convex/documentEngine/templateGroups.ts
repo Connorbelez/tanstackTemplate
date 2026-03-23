@@ -1,14 +1,10 @@
 import { ConvexError, v } from "convex/values";
-import { authedMutation, authedQuery, requirePermission } from "../fluent";
+import { adminMutation, authedQuery } from "../fluent";
 
 // TODO: Read queries (get, list) use authedQuery (authentication only).
 // Add permission gate (e.g. requirePermission("document:view")) when moving to production.
 
-const docGenMutation = authedMutation.use(
-	requirePermission("document:generate")
-);
-
-export const create = docGenMutation
+export const create = adminMutation
 	.input({
 		name: v.string(),
 		description: v.optional(v.string()),
@@ -54,7 +50,7 @@ export const list = authedQuery
 	})
 	.public();
 
-export const addTemplate = docGenMutation
+export const addTemplate = adminMutation
 	.input({
 		groupId: v.id("documentTemplateGroups"),
 		templateId: v.id("documentTemplates"),
@@ -138,7 +134,7 @@ export const addTemplate = docGenMutation
 	})
 	.public();
 
-export const removeTemplate = docGenMutation
+export const removeTemplate = adminMutation
 	.input({
 		groupId: v.id("documentTemplateGroups"),
 		templateId: v.id("documentTemplates"),
@@ -167,7 +163,7 @@ export const removeTemplate = docGenMutation
 	})
 	.public();
 
-export const reorderTemplates = docGenMutation
+export const reorderTemplates = adminMutation
 	.input({
 		groupId: v.id("documentTemplateGroups"),
 		templateRefs: v.array(
@@ -203,7 +199,7 @@ export const reorderTemplates = docGenMutation
 	})
 	.public();
 
-export const updateMetadata = docGenMutation
+export const updateMetadata = adminMutation
 	.input({
 		id: v.id("documentTemplateGroups"),
 		name: v.optional(v.string()),
@@ -227,7 +223,7 @@ export const updateMetadata = docGenMutation
 	})
 	.public();
 
-export const pinVersion = docGenMutation
+export const pinVersion = adminMutation
 	.input({
 		groupId: v.id("documentTemplateGroups"),
 		templateId: v.id("documentTemplates"),
@@ -259,7 +255,7 @@ export const pinVersion = docGenMutation
 	})
 	.public();
 
-export const remove = docGenMutation
+export const remove = adminMutation
 	.input({ id: v.id("documentTemplateGroups") })
 	.handler(async (ctx, args) => {
 		await ctx.db.delete(args.id);
