@@ -1103,7 +1103,7 @@ export default defineSchema({
 		.index("by_posting_group", ["postingGroupId", "sequenceNumber"])
 		.index("by_caused_by", ["causedBy"])
 		.index("by_deal", ["dealId", "entryType"])
-		.index("by_transfer_request", ["transferRequestId"])
+		.index("by_transfer_request", ["transferRequestId", "sequenceNumber"])
 		.index("by_effective_date", ["effectiveDate", "sequenceNumber"]),
 
 	cash_ledger_sequence_counters: defineTable({
@@ -1381,11 +1381,11 @@ export default defineSchema({
 		.index("by_signing_status", ["signingStatus"]),
 
 	// ══════════════════════════════════════════════════════════
-	// TRANSFER REQUESTS (stub — ENG-190)
+	// TRANSFER REQUESTS (stub — populated by ENG-190)
 	// ══════════════════════════════════════════════════════════
 
 	transferRequests: defineTable({
-		status: v.string(),
+		status: v.union(v.literal("pending"), v.literal("approved"), v.literal("processing"), v.literal("completed"), v.literal("failed"), v.literal("cancelled")),
 		createdAt: v.number(),
 	}),
 
