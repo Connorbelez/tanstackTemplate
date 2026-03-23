@@ -7,7 +7,10 @@ import { sourceValidator } from "../engine/validators";
 import { resolveServicingFeeConfig } from "../fees/resolver";
 import { getAccountLenderId } from "../ledger/accountOwnership";
 import { getPostedBalance } from "../ledger/accounts";
-import { postSettlementAllocation } from "../payments/cashLedger/integrations";
+import {
+	postSettlementAllocation,
+	type ServicingFeeMetadata,
+} from "../payments/cashLedger/integrations";
 import { requireLenderIdForAuthId } from "./lenderIdentity";
 import { calculateServicingFee } from "./servicingFee";
 
@@ -451,6 +454,28 @@ export const createDispersalEntries = internalMutation({
 					})
 				: null;
 
+		let feeMetadata: ServicingFeeMetadata | undefined;
+		if (feeCashApplied > 0) {
+			if (!servicingConfig) {
+				throw new ConvexError(
+					`createDispersalEntries: feeCashApplied=${feeCashApplied} but servicingConfig is null for obligation ${args.obligationId}. Cannot post fee without audit metadata.`
+				);
+			}
+			feeMetadata = {
+				annualRate: servicingConfig.annualRate,
+				principalBalance: mortgage.principal,
+				paymentFrequency: mortgage.paymentFrequency,
+				policyVersion: servicingConfig.policyVersion,
+				feeCode: servicingConfig.code,
+				mortgageFeeId: servicingConfig.mortgageFeeId
+					? String(servicingConfig.mortgageFeeId)
+					: undefined,
+				feeDue,
+				feeCashApplied,
+				feeReceivable,
+			};
+		}
+
 		await postSettlementAllocation(ctx, {
 			obligationId: args.obligationId,
 			mortgageId: args.mortgageId,
@@ -462,6 +487,7 @@ export const createDispersalEntries = internalMutation({
 				amount: entry.amount,
 			})),
 			source: args.source,
+			...(feeMetadata ? { feeMetadata } : {}),
 		});
 
 		return {
