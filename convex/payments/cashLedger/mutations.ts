@@ -13,6 +13,7 @@ export const postLenderPayout = internalMutation({
 		idempotencyKey: v.string(),
 		source: sourceValidator,
 		reason: v.optional(v.string()),
+		postingGroupId: v.optional(v.string()),
 	},
 	handler: async (ctx, args) => {
 		if (!Number.isSafeInteger(args.amount) || args.amount <= 0) {
@@ -48,6 +49,7 @@ export const postLenderPayout = internalMutation({
 			lenderId: args.lenderId,
 			source: args.source,
 			reason: args.reason,
+			postingGroupId: args.postingGroupId,
 		});
 	},
 });
