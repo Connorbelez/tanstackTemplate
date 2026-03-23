@@ -3,6 +3,7 @@ import type { Id } from "../../../_generated/dataModel";
 import type { MutationCtx } from "../../../_generated/server";
 import { createDispersalEntries } from "../../../dispersal/createDispersalEntries";
 import { getCashAccountBalance } from "../accounts";
+import type { ServicingFeeMetadata } from "../integrations";
 import {
 	createHarness,
 	SYSTEM_SOURCE,
@@ -335,6 +336,54 @@ describe("servicing fee recognition — ENG-161", () => {
 				.collect();
 
 			expect(revenueAccounts).toHaveLength(0);
+		});
+	});
+
+	it("fee entry metadata contains fee calculation details", async () => {
+		const t = createHarness(modules);
+		const seeded = await seedMinimalEntities(t);
+		const obligationId = await createSettledObligation(t, {
+			mortgageId: seeded.mortgageId,
+			borrowerId: seeded.borrowerId,
+			amount: 100_000,
+		});
+
+		await t.run(async (ctx) => {
+			await createDispersalEntriesMutation._handler(ctx, {
+				obligationId,
+				mortgageId: seeded.mortgageId,
+				settledAmount: 100_000,
+				settledDate: "2026-03-01",
+				idempotencyKey: "sfr-metadata",
+				source: SYSTEM_SOURCE,
+			});
+
+			const feeEntry = await ctx.db
+				.query("cash_ledger_journal_entries")
+				.withIndex("by_posting_group", (q) =>
+					q.eq("postingGroupId", `allocation:${obligationId}`)
+				)
+				.collect()
+				.then((entries) =>
+					entries.find((e) => e.entryType === "SERVICING_FEE_RECOGNIZED")
+				);
+
+			if (!feeEntry) {
+				throw new Error("Expected SERVICING_FEE_RECOGNIZED entry");
+			}
+
+			expect(feeEntry.metadata).toBeDefined();
+			const meta = feeEntry.metadata as ServicingFeeMetadata;
+
+			// Fee calculation inputs
+			expect(meta.annualRate).toBe(0.01);
+			expect(meta.principalBalance).toBe(10_000_000);
+			expect(meta.paymentFrequency).toBe("monthly");
+
+			// Fee calculation outputs — exact values for 10M principal, 1% annual, monthly
+			expect(meta.feeDue).toBe(8333);
+			expect(meta.feeCashApplied).toBe(8333);
+			expect(meta.feeReceivable).toBe(0);
 		});
 	});
 

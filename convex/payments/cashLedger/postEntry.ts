@@ -27,7 +27,6 @@ export interface PostCashEntryInput {
 	debitAccountId: Id<"cash_ledger_accounts">;
 	dispersalEntryId?: Id<"dispersalEntries">;
 	effectiveDate: string;
-	transferRequestId?: Id<"transferRequests">;
 	entryType: CashEntryType;
 	idempotencyKey: string;
 	lenderId?: Id<"lenders">;
@@ -37,6 +36,7 @@ export interface PostCashEntryInput {
 	postingGroupId?: string;
 	reason?: string;
 	source: CommandSource;
+	transferRequestId?: Id<"transferRequests">;
 }
 
 function validateInput(args: PostCashEntryInput) {

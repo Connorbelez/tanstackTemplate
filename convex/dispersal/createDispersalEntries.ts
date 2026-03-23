@@ -462,6 +462,30 @@ export const createDispersalEntries = internalMutation({
 				amount: entry.amount,
 			})),
 			source: args.source,
+			...(feeCashApplied > 0
+				? (() => {
+						if (!servicingConfig) {
+							throw new ConvexError(
+								`createDispersalEntries: feeCashApplied=${feeCashApplied} but servicingConfig is null for obligation ${args.obligationId}. Cannot post fee without audit metadata.`
+							);
+						}
+						return {
+							feeMetadata: {
+								annualRate: servicingConfig.annualRate,
+								principalBalance: mortgage.principal,
+								paymentFrequency: mortgage.paymentFrequency,
+								policyVersion: servicingConfig.policyVersion,
+								feeCode: servicingConfig.code,
+								mortgageFeeId: servicingConfig.mortgageFeeId
+									? String(servicingConfig.mortgageFeeId)
+									: undefined,
+								feeDue,
+								feeCashApplied,
+								feeReceivable,
+							},
+						};
+					})()
+				: {}),
 		});
 
 		return {

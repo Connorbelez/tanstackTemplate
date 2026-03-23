@@ -1385,7 +1385,14 @@ export default defineSchema({
 	// ══════════════════════════════════════════════════════════
 
 	transferRequests: defineTable({
-		status: v.union(v.literal("pending"), v.literal("approved"), v.literal("processing"), v.literal("completed"), v.literal("failed"), v.literal("cancelled")),
+		status: v.union(
+			v.literal("pending"),
+			v.literal("approved"),
+			v.literal("processing"),
+			v.literal("completed"),
+			v.literal("failed"),
+			v.literal("cancelled")
+		),
 		createdAt: v.number(),
 	}),
 
