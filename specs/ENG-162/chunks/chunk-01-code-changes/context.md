@@ -42,8 +42,8 @@ export function assertNonNegativeBalance(
 	if (projected < 0n) {
 		throw new ConvexError(
 			`${label}: posting would make ${account.family} negative ` +
-			`(attempted: ${amount}, current balance: ${currentBalance}, ` +
-			`projected: ${projected})`
+			`(attempted: ${amount} cents, current balance: ${currentBalance} cents, ` +
+			`projected: ${projected} cents)`
 		);
 	}
 }
