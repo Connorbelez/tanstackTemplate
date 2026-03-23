@@ -1078,6 +1078,7 @@ export default defineSchema({
 		attemptId: v.optional(v.id("collectionAttempts")),
 		dealId: v.optional(v.id("deals")),
 		dispersalEntryId: v.optional(v.id("dispersalEntries")),
+		transferRequestId: v.optional(v.id("transferRequests")),
 		lenderId: v.optional(v.id("lenders")),
 		borrowerId: v.optional(v.id("borrowers")),
 		effectiveDate: v.string(),
@@ -1102,6 +1103,7 @@ export default defineSchema({
 		.index("by_posting_group", ["postingGroupId", "sequenceNumber"])
 		.index("by_caused_by", ["causedBy"])
 		.index("by_deal", ["dealId", "entryType"])
+		.index("by_transfer_request", ["transferRequestId", "sequenceNumber"])
 		.index("by_effective_date", ["effectiveDate", "sequenceNumber"]),
 
 	cash_ledger_sequence_counters: defineTable({
@@ -1377,6 +1379,15 @@ export default defineSchema({
 		.index("by_template", ["templateId"])
 		.index("by_sensitivity", ["sensitivityTier", "entityType"])
 		.index("by_signing_status", ["signingStatus"]),
+
+	// ══════════════════════════════════════════════════════════
+	// TRANSFER REQUESTS (stub — populated by ENG-190)
+	// ══════════════════════════════════════════════════════════
+
+	transferRequests: defineTable({
+		status: v.union(v.literal("pending"), v.literal("approved"), v.literal("processing"), v.literal("completed"), v.literal("failed"), v.literal("cancelled")),
+		createdAt: v.number(),
+	}),
 
 	// ══════════════════════════════════════════════════════════
 	// DEMO TABLES

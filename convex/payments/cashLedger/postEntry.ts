@@ -27,6 +27,7 @@ export interface PostCashEntryInput {
 	debitAccountId: Id<"cash_ledger_accounts">;
 	dispersalEntryId?: Id<"dispersalEntries">;
 	effectiveDate: string;
+	transferRequestId?: Id<"transferRequests">;
 	entryType: CashEntryType;
 	idempotencyKey: string;
 	lenderId?: Id<"lenders">;
@@ -185,6 +186,7 @@ async function persistEntry(
 		dealId: args.dealId,
 		attemptId: args.attemptId,
 		dispersalEntryId: args.dispersalEntryId,
+		transferRequestId: args.transferRequestId,
 		lenderId: args.lenderId,
 		borrowerId: args.borrowerId,
 		effectiveDate: args.effectiveDate,

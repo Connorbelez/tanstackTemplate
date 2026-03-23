@@ -28,6 +28,7 @@ export const postCashEntryArgsValidator = {
 	obligationId: v.optional(v.id("obligations")),
 	attemptId: v.optional(v.id("collectionAttempts")),
 	dispersalEntryId: v.optional(v.id("dispersalEntries")),
+	transferRequestId: v.optional(v.id("transferRequests")),
 	lenderId: v.optional(v.id("lenders")),
 	borrowerId: v.optional(v.id("borrowers")),
 	postingGroupId: v.optional(v.string()),
