@@ -2,8 +2,10 @@ import { v } from "convex/values";
 import type { Doc, Id } from "../../_generated/dataModel";
 import { internalQuery, type QueryCtx } from "../../_generated/server";
 import {
+	createAccountCache,
 	getCashAccountBalance,
 	getControlAccountsBySubaccount,
+	safeBigintToNumber,
 } from "./accounts";
 import type { ControlSubaccount } from "./types";
 import { TRANSIENT_SUBACCOUNTS } from "./types";
@@ -86,11 +88,110 @@ export const getJournalSettledAmountForObligationInternal = internalQuery({
 	},
 });
 
+// ── Posting Group Reconciliation ──────────────────────────────
+
+export interface PostingGroupReconciliationAlert {
+	controlAllocationBalance: bigint;
+	entryCount: number;
+	obligationId: Id<"obligations">;
+	oldestEntryTimestamp: number | null;
+	postingGroupId: string;
+}
+
+export interface OrphanedAllocationAlert {
+	accountId: Id<"cash_ledger_accounts">;
+	controlAllocationBalance: bigint;
+}
+
+export interface NonZeroPostingGroupResult {
+	alerts: PostingGroupReconciliationAlert[];
+	orphaned: OrphanedAllocationAlert[];
+}
+
+export async function findNonZeroPostingGroups(
+	ctx: QueryCtx
+): Promise<NonZeroPostingGroupResult> {
+	// Get all CONTROL:ALLOCATION accounts
+	const allocationAccounts = await getControlAccountsBySubaccount(
+		ctx.db,
+		"ALLOCATION"
+	);
+
+	const alerts: PostingGroupReconciliationAlert[] = [];
+	const orphaned: OrphanedAllocationAlert[] = [];
+
+	for (const account of allocationAccounts) {
+		const balance = getCashAccountBalance(account);
+		if (balance === 0n) {
+			continue;
+		}
+
+		// Surface orphaned accounts (non-zero balance, no obligation link) instead of silently skipping
+		if (!account.obligationId) {
+			orphaned.push({
+				accountId: account._id,
+				controlAllocationBalance: balance,
+			});
+			continue;
+		}
+		const postingGroupId = `allocation:${account.obligationId}`;
+
+		// Get entries for this posting group
+		const entries = await ctx.db
+			.query("cash_ledger_journal_entries")
+			.withIndex("by_posting_group", (q) =>
+				q.eq("postingGroupId", postingGroupId)
+			)
+			.collect();
+
+		// Use reduce instead of Math.min(...spread) to avoid stack overflow on large arrays
+		const oldestEntryTimestamp =
+			entries.length > 0
+				? entries.reduce(
+						(min, e) => Math.min(min, e.timestamp),
+						entries[0].timestamp
+					)
+				: null;
+
+		alerts.push({
+			postingGroupId,
+			controlAllocationBalance: balance,
+			entryCount: entries.length,
+			oldestEntryTimestamp,
+			obligationId: account.obligationId,
+		});
+	}
+
+	return { alerts, orphaned };
+}
+
+export const findNonZeroPostingGroupsInternal = internalQuery({
+	args: {},
+	handler: async (ctx) => {
+		const result = await findNonZeroPostingGroups(ctx);
+		// Convert bigint to number for serialization across Convex action/query boundary
+		// Uses safeBigintToNumber to throw on precision loss instead of silently truncating
+		return {
+			alerts: result.alerts.map((a) => ({
+				...a,
+				controlAllocationBalance: safeBigintToNumber(
+					a.controlAllocationBalance
+				),
+			})),
+			orphaned: result.orphaned.map((o) => ({
+				...o,
+				controlAllocationBalance: safeBigintToNumber(
+					o.controlAllocationBalance
+				),
+			})),
+		};
+	},
+});
+
 // ── CONTROL Subaccount Reconciliation ─────────────────────────
 
 export interface ControlSubaccountBalance {
 	balance: bigint;
-	isNetZero: boolean;
 	subaccount: ControlSubaccount;
 }
 
@@ -106,17 +207,7 @@ export async function getControlBalancesByPostingGroup(
 		.collect();
 
 	const balances = new Map<ControlSubaccount, bigint>();
-	const accountCache = new Map<string, Doc<"cash_ledger_accounts"> | null>();
-
-	async function getCachedAccount(accountId: Id<"cash_ledger_accounts">) {
-		const key = accountId as string;
-		if (accountCache.has(key)) {
-			return accountCache.get(key) ?? null;
-		}
-		const account = await ctx.db.get(accountId);
-		accountCache.set(key, account);
-		return account;
-	}
+	const getCachedAccount = createAccountCache(ctx.db);
 
 	for (const entry of entries) {
 		const [debitAccount, creditAccount] = await Promise.all([
@@ -137,7 +228,7 @@ export async function getControlBalancesByPostingGroup(
 	const results: ControlSubaccountBalance[] = [];
 	for (const sub of TRANSIENT_SUBACCOUNTS) {
 		const balance = balances.get(sub) ?? 0n;
-		results.push({ subaccount: sub, balance, isNetZero: balance === 0n });
+		results.push({ subaccount: sub, balance });
 	}
 	return results;
 }

@@ -171,6 +171,43 @@ export async function getControlAccountsBySubaccount(
 		.collect();
 }
 
+// ── Shared Utilities ─────────────────────────────────────────
+
+/**
+ * Converts a bigint to a number, throwing if the value exceeds
+ * Number.MAX_SAFE_INTEGER (or is below Number.MIN_SAFE_INTEGER).
+ */
+export function safeBigintToNumber(value: bigint): number {
+	const num = Number(value);
+	if (!Number.isSafeInteger(num)) {
+		throw new Error(
+			`BigInt value ${value} cannot be safely represented as a Number`
+		);
+	}
+	return num;
+}
+
+// ── Account Cache Factory ────────────────────────────────────
+
+/**
+ * Creates a per-query account cache to avoid redundant db.get() calls
+ * when iterating over journal entries that share the same accounts.
+ */
+export function createAccountCache(db: DbReader) {
+	const cache = new Map<string, Doc<"cash_ledger_accounts"> | null>();
+	return async (
+		accountId: Id<"cash_ledger_accounts">
+	): Promise<Doc<"cash_ledger_accounts"> | null> => {
+		const key = accountId as string;
+		if (cache.has(key)) {
+			return cache.get(key) ?? null;
+		}
+		const account = await db.get(accountId);
+		cache.set(key, account);
+		return account;
+	};
+}
+
 export function assertNonNegativeBalance(
 	account: Pick<
 		Doc<"cash_ledger_accounts">,

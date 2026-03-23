@@ -219,6 +219,61 @@ export async function createTestAccount(
 	});
 }
 
+// ── createSettledObligation ──────────────────────────────────────────
+// Creates a settled obligation with pre-balanced BORROWER_RECEIVABLE and
+// a zeroed CONTROL:ALLOCATION account ready for dispersal testing.
+
+export async function createSettledObligation(
+	t: TestHarness,
+	args: {
+		mortgageId: Id<"mortgages">;
+		borrowerId: Id<"borrowers">;
+		amount: number;
+	}
+) {
+	return t.run(async (ctx) => {
+		const obligationId = await ctx.db.insert("obligations", {
+			status: "settled",
+			machineContext: {},
+			lastTransitionAt: Date.now(),
+			mortgageId: args.mortgageId,
+			borrowerId: args.borrowerId,
+			paymentNumber: 1,
+			type: "regular_interest",
+			amount: args.amount,
+			amountSettled: args.amount,
+			dueDate: Date.parse("2026-03-01T00:00:00Z"),
+			gracePeriodEnd: Date.parse("2026-03-16T00:00:00Z"),
+			settledAt: Date.parse("2026-03-01T00:00:00Z"),
+			createdAt: Date.now(),
+		});
+
+		// Pre-create BORROWER_RECEIVABLE with balanced debits/credits (fully settled)
+		await ctx.db.insert("cash_ledger_accounts", {
+			family: "BORROWER_RECEIVABLE",
+			mortgageId: args.mortgageId,
+			obligationId,
+			borrowerId: args.borrowerId,
+			cumulativeDebits: BigInt(args.amount),
+			cumulativeCredits: BigInt(args.amount),
+			createdAt: Date.now(),
+		});
+
+		// Pre-create CONTROL:ALLOCATION for the dispersal
+		await ctx.db.insert("cash_ledger_accounts", {
+			family: "CONTROL",
+			mortgageId: args.mortgageId,
+			obligationId,
+			subaccount: "ALLOCATION",
+			cumulativeDebits: 0n,
+			cumulativeCredits: 0n,
+			createdAt: Date.now(),
+		});
+
+		return obligationId;
+	});
+}
+
 // ── postTestEntry ────────────────────────────────────────────────────
 // Convenience wrapper around postCashEntryInternal for tests.
 

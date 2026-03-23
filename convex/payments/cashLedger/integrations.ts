@@ -6,6 +6,7 @@ import type { CommandSource } from "../../engine/types";
 import type { PaymentFrequency } from "../../mortgages/paymentFrequency";
 import { findCashAccount, getOrCreateCashAccount } from "./accounts";
 import { postCashEntryInternal } from "./postEntry";
+import { validatePostingGroupAmounts } from "./postingGroups";
 import { buildIdempotencyKey } from "./types";
 
 interface LegacySource {
@@ -397,6 +398,12 @@ export async function postSettlementAllocation(
 	if (!obligation) {
 		throw new ConvexError(`Obligation not found: ${args.obligationId}`);
 	}
+
+	validatePostingGroupAmounts(
+		obligation.amount,
+		args.entries.map((e) => e.amount),
+		args.servicingFee
+	);
 
 	const allocationControlAccount = await getOrCreateCashAccount(ctx, {
 		family: "CONTROL",

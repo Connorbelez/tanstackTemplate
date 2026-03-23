@@ -405,22 +405,19 @@ describe("getControlBalancesByPostingGroup", () => {
 			);
 			expect(allocationResult).toBeDefined();
 			expect(allocationResult?.balance).toBe(100_000n);
-			expect(allocationResult?.isNetZero).toBe(false);
 
 			// ACCRUAL and SETTLEMENT are not involved in this posting group
 			const accrualResult = results.find((r) => r.subaccount === "ACCRUAL");
 			expect(accrualResult?.balance).toBe(0n);
-			expect(accrualResult?.isNetZero).toBe(true);
 
 			const settlementResult = results.find(
 				(r) => r.subaccount === "SETTLEMENT"
 			);
 			expect(settlementResult?.balance).toBe(0n);
-			expect(settlementResult?.isNetZero).toBe(true);
 		});
 	});
 
-	it("reports isNetZero=true when a transient subaccount is debited and credited equally", async () => {
+	it("reports net-zero balance when a transient subaccount is debited and credited equally", async () => {
 		const t = createHarness();
 		const seeded = await seedCoreEntities(t);
 
@@ -492,7 +489,6 @@ describe("getControlBalancesByPostingGroup", () => {
 			);
 			expect(settlementResult).toBeDefined();
 			expect(settlementResult?.balance).toBe(0n);
-			expect(settlementResult?.isNetZero).toBe(true);
 		});
 	});
 
@@ -563,7 +559,6 @@ describe("getControlBalancesByPostingGroup", () => {
 			);
 			expect(allocationResult).toBeDefined();
 			expect(allocationResult?.balance).not.toBe(0n);
-			expect(allocationResult?.isNetZero).toBe(false);
 		});
 	});
 
@@ -704,7 +699,6 @@ describe("getControlBalancesByPostingGroup", () => {
 			// The transient subaccounts should all be zero (no entries touched them)
 			for (const result of results) {
 				expect(result.balance).toBe(0n);
-				expect(result.isNetZero).toBe(true);
 			}
 		});
 	});
