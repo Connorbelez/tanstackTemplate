@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { Id } from "../../../_generated/dataModel";
-import type { MutationCtx } from "../../../_generated/server";
+import type { MutationCtx, QueryCtx } from "../../../_generated/server";
 import { getCashAccountBalance } from "../accounts";
 import { postLenderPayout } from "../mutations";
 import { postCashEntryInternal } from "../postEntry";
+import { internalGetLenderPayableBalance } from "../queries";
 import {
 	createHarness,
 	createTestAccount,
@@ -26,8 +27,18 @@ interface PostLenderPayoutHandler {
 	) => Promise<unknown>;
 }
 
+interface InternalGetLenderPayableBalanceHandler {
+	_handler: (
+		ctx: QueryCtx,
+		args: { lenderId: Id<"lenders"> }
+	) => Promise<number>;
+}
+
 const postLenderPayoutMutation =
 	postLenderPayout as unknown as PostLenderPayoutHandler;
+
+const internalGetLenderPayableBalanceQuery =
+	internalGetLenderPayableBalance as unknown as InternalGetLenderPayableBalanceHandler;
 
 describe("getLenderPayableBalance query", () => {
 	it("returns 0n for a lender with no payable accounts", async () => {
@@ -35,6 +46,16 @@ describe("getLenderPayableBalance query", () => {
 		const seeded = await seedMinimalEntities(t);
 
 		await t.run(async (ctx) => {
+			// Call the actual query implementation
+			const queryResult = await internalGetLenderPayableBalanceQuery._handler(
+				ctx,
+				{
+					lenderId: seeded.lenderAId,
+				}
+			);
+			expect(queryResult).toBe(0);
+
+			// Direct account-level assertion as secondary check
 			const accounts = await ctx.db
 				.query("cash_ledger_accounts")
 				.withIndex("by_lender", (q) => q.eq("lenderId", seeded.lenderAId))
@@ -78,6 +99,16 @@ describe("getLenderPayableBalance query", () => {
 				source: SYSTEM_SOURCE,
 			});
 
+			// Call the actual query implementation
+			const queryResult = await internalGetLenderPayableBalanceQuery._handler(
+				ctx,
+				{
+					lenderId: seeded.lenderAId,
+				}
+			);
+			expect(queryResult).toBe(55_000);
+
+			// Direct account-level assertion as secondary check
 			const accounts = await ctx.db
 				.query("cash_ledger_accounts")
 				.withIndex("by_lender", (q) => q.eq("lenderId", seeded.lenderAId))
@@ -172,6 +203,16 @@ describe("getLenderPayableBalance query", () => {
 				source: SYSTEM_SOURCE,
 			});
 
+			// Call the actual query implementation
+			const queryResult = await internalGetLenderPayableBalanceQuery._handler(
+				ctx,
+				{
+					lenderId: seeded.lenderAId,
+				}
+			);
+			expect(queryResult).toBe(50_000);
+
+			// Direct account-level assertion as secondary check
 			const accounts = await ctx.db
 				.query("cash_ledger_accounts")
 				.withIndex("by_lender", (q) => q.eq("lenderId", seeded.lenderAId))
@@ -232,6 +273,17 @@ describe("getLenderPayableBalance query", () => {
 				source: SYSTEM_SOURCE,
 			});
 
+			// Call the actual query implementation
+			// 55,000 created - 20,000 paid out = 35,000 outstanding
+			const queryResult = await internalGetLenderPayableBalanceQuery._handler(
+				ctx,
+				{
+					lenderId: seeded.lenderAId,
+				}
+			);
+			expect(queryResult).toBe(35_000);
+
+			// Direct account-level assertion as secondary check
 			const accounts = await ctx.db
 				.query("cash_ledger_accounts")
 				.withIndex("by_lender", (q) => q.eq("lenderId", seeded.lenderAId))
@@ -241,7 +293,6 @@ describe("getLenderPayableBalance query", () => {
 				.filter((a) => a.family === "LENDER_PAYABLE")
 				.reduce((sum, a) => sum + getCashAccountBalance(a), 0n);
 
-			// 55,000 created - 20,000 paid out = 35,000 outstanding
 			expect(total).toBe(35_000n);
 		});
 	});
@@ -293,6 +344,23 @@ describe("getLenderPayableBalance query", () => {
 				source: SYSTEM_SOURCE,
 			});
 
+			// Call the actual query implementation for both lenders
+			const queryResultA = await internalGetLenderPayableBalanceQuery._handler(
+				ctx,
+				{
+					lenderId: seeded.lenderAId,
+				}
+			);
+			const queryResultB = await internalGetLenderPayableBalanceQuery._handler(
+				ctx,
+				{
+					lenderId: seeded.lenderBId,
+				}
+			);
+			expect(queryResultA).toBe(60_000);
+			expect(queryResultB).toBe(40_000);
+
+			// Direct account-level assertions as secondary check
 			// Lender A
 			const accountsA = await ctx.db
 				.query("cash_ledger_accounts")
