@@ -139,6 +139,21 @@ export const CREDIT_NORMAL_FAMILIES: ReadonlySet<CashAccountFamily> = new Set([
 export const NEGATIVE_BALANCE_EXEMPT_FAMILIES: ReadonlySet<CashAccountFamily> =
 	new Set(["CONTROL", "BORROWER_RECEIVABLE"]);
 
+// ── Balance Pair Types ─────────────────────────────────────────────
+// Shared shape for debit/credit balance pairs used across hashChain,
+// postEntry, and nudge. SerializedBalancePair for Convex validator boundaries
+// (BigInt cannot cross the Convex wire format).
+
+export interface BalancePair {
+	credit: bigint;
+	debit: bigint;
+}
+
+export interface SerializedBalancePair {
+	credit: string;
+	debit: string;
+}
+
 // ── Idempotency Key Convention ──────────────────────────────────────
 // All cash ledger journal entries use the prefix `cash-ledger:` followed
 // by a kebab-case entry type and source identifiers:

@@ -1,19 +1,26 @@
 import { ConvexError } from "convex/values";
+import { components } from "../../_generated/api";
 import type { Doc, Id } from "../../_generated/dataModel";
 import { internalMutation, type MutationCtx } from "../../_generated/server";
+import { AuditTrail } from "../../auditTrailClient";
 import type { CommandSource } from "../../engine/types";
 import {
 	assertNonNegativeBalance,
+	getCashAccountBalance,
 	projectCashAccountBalance,
 } from "./accounts";
+import { startCashLedgerHashChain } from "./hashChain";
 import { getNextCashSequenceNumber } from "./sequenceCounter";
 import {
+	type BalancePair,
 	CASH_ENTRY_TYPE_FAMILY_MAP,
 	type CashEntryType,
 	IDEMPOTENCY_KEY_PREFIX,
 	NEGATIVE_BALANCE_EXEMPT_FAMILIES,
 } from "./types";
 import { postCashEntryArgsValidator } from "./validators";
+
+const auditTrail = new AuditTrail(components.auditTrail);
 
 const BUSINESS_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -152,11 +159,20 @@ function constraintCheck(args: PostCashEntryInput) {
 	}
 }
 
-// Step 9: NUDGE — notify cursor consumers.
-// No-op in Phase 1; wired to cursor advancement in Phase 4.
-async function nudge(_ctx: MutationCtx): Promise<void> {
-	// Intentionally empty — Phase 4 will wire cursor consumer notifications here.
-	void _ctx;
+// Step 9: NUDGE — trigger Layer 2 hash-chain audit.
+async function nudge(
+	ctx: MutationCtx,
+	args: {
+		entry: Doc<"cash_ledger_journal_entries">;
+		balanceBefore: BalancePair;
+		balanceAfter: BalancePair;
+	}
+): Promise<void> {
+	await startCashLedgerHashChain(ctx, {
+		entryId: args.entry._id,
+		balanceBefore: args.balanceBefore,
+		balanceAfter: args.balanceAfter,
+	});
 }
 
 async function persistEntry(
@@ -168,6 +184,10 @@ async function persistEntry(
 	const amount = BigInt(args.amount);
 	const sequenceNumber = await getNextCashSequenceNumber(ctx);
 	const timestamp = Date.now();
+
+	// T-006: Capture balances BEFORE the update for audit trail
+	const debitBalanceBefore = getCashAccountBalance(debitAccount);
+	const creditBalanceBefore = getCashAccountBalance(creditAccount);
 
 	await Promise.all([
 		ctx.db.patch(debitAccount._id, {
@@ -220,17 +240,62 @@ async function persistEntry(
 
 	return {
 		entry,
+		debitBalanceBefore,
+		creditBalanceBefore,
 		projectedDebitBalance: projectedDebit,
 		projectedCreditBalance: projectedCredit,
 	};
+}
+
+// T-007: Insert rejection audit record for failed postings.
+// Separated to keep the main flow readable and to centralize
+// the compliance-grade error escalation (C1).
+async function insertRejectionAudit(
+	ctx: MutationCtx,
+	args: PostCashEntryInput,
+	error: unknown
+) {
+	try {
+		let rejectionReason = "Unknown error";
+		if (error instanceof ConvexError) {
+			rejectionReason = String(error.data);
+		} else if (error instanceof Error) {
+			rejectionReason = error.message;
+		}
+
+		await auditTrail.insert(ctx, {
+			entityId: `rejected:${args.idempotencyKey}`,
+			entityType: "cashLedgerEntry",
+			eventType: `${args.entryType}:REJECTED`,
+			actorId: args.source.actorId ?? "system",
+			afterState: JSON.stringify({
+				entryType: args.entryType,
+				amount: args.amount,
+				rejectionReason,
+			}),
+			metadata: JSON.stringify({
+				effectiveDate: args.effectiveDate,
+				channel: args.source.channel,
+			}),
+			timestamp: Date.now(),
+		});
+	} catch (auditError) {
+		// C1: Escalate to console.error — a silent audit gap in compliance code
+		// (O.Reg 189/08) is a regulatory risk. console.error triggers Sentry alerts.
+		console.error(
+			"[CashLedger] COMPLIANCE ALERT: Failed to insert rejection audit record. " +
+				"This rejection will have no audit trail entry. " +
+				`idempotencyKey=${args.idempotencyKey}, entryType=${args.entryType}, ` +
+				`originalError=${error instanceof Error ? error.message : String(error)}, ` +
+				`auditError=${auditError instanceof Error ? auditError.message : String(auditError)}`
+		);
+	}
 }
 
 export async function postCashEntryInternal(
 	ctx: MutationCtx,
 	args: PostCashEntryInput
 ) {
-	// 1. VALIDATE_INPUT
-	validateInput(args);
 	// 1b. IDEMPOTENCY KEY PREFIX CHECK (warn-only, never reject)
 	if (!args.idempotencyKey.startsWith(IDEMPOTENCY_KEY_PREFIX)) {
 		console.warn(
@@ -240,25 +305,57 @@ export async function postCashEntryInternal(
 	// 2. IDEMPOTENCY
 	const existing = await checkIdempotency(ctx, args.idempotencyKey);
 	if (existing) {
+		// I2: Return all fields to match the normal return shape.
+		// Values are 0n because the actual post-state is unknown for idempotent hits.
 		return {
 			entry: existing,
+			debitBalanceBefore: 0n,
+			creditBalanceBefore: 0n,
 			projectedDebitBalance: 0n,
 			projectedCreditBalance: 0n,
 		};
 	}
 
-	// 3. RESOLVE_ACCOUNTS
-	const { debitAccount, creditAccount } = await resolveAccounts(ctx, args);
-	// 4. FAMILY_CHECK
-	familyCheck(args, debitAccount, creditAccount);
-	// 5. BALANCE_CHECK
-	balanceCheck(args, debitAccount, creditAccount);
-	// 6. CONSTRAINT_CHECK
-	constraintCheck(args);
+	// 1, 3–6. VALIDATE + RESOLVE (wrapped for rejection auditing)
+	// C3: validateInput is now inside the try/catch so ALL validation failures
+	// (including input validation) get rejection audit records.
+	// C4: Only validation/business-rule steps are wrapped. persistEntry and nudge
+	// are infrastructure operations — their failures are NOT "rejections".
+	let debitAccount: Doc<"cash_ledger_accounts">;
+	let creditAccount: Doc<"cash_ledger_accounts">;
+
+	try {
+		// 1. VALIDATE_INPUT
+		validateInput(args);
+		// 3. RESOLVE_ACCOUNTS
+		const resolved = await resolveAccounts(ctx, args);
+		debitAccount = resolved.debitAccount;
+		creditAccount = resolved.creditAccount;
+		// 4. FAMILY_CHECK
+		familyCheck(args, debitAccount, creditAccount);
+		// 5. BALANCE_CHECK
+		balanceCheck(args, debitAccount, creditAccount);
+		// 6. CONSTRAINT_CHECK
+		constraintCheck(args);
+	} catch (error) {
+		await insertRejectionAudit(ctx, args, error);
+		throw error;
+	}
+
 	// 7+8. SEQUENCE + PERSIST
 	const result = await persistEntry(ctx, args, debitAccount, creditAccount);
-	// 9. NUDGE
-	await nudge(ctx);
+	// 9. NUDGE — trigger Layer 2 hash-chain audit
+	await nudge(ctx, {
+		entry: result.entry,
+		balanceBefore: {
+			debit: result.debitBalanceBefore,
+			credit: result.creditBalanceBefore,
+		},
+		balanceAfter: {
+			debit: result.projectedDebitBalance,
+			credit: result.projectedCreditBalance,
+		},
+	});
 
 	return result;
 }

@@ -1,5 +1,6 @@
 import auditLogTest from "convex-audit-log/test";
 import { describe, expect, it } from "vitest";
+import { components } from "../../../_generated/api";
 import type { Id } from "../../../_generated/dataModel";
 import { getOrCreateCashAccount } from "../accounts";
 import {
@@ -242,45 +243,23 @@ describe("postCashReceiptForObligation", () => {
 		});
 
 		// Verify an audit event was written for the missing receivable.
-		// The auditLog component has its own isolated database, so we must use
-		// runInComponent to query it.
-		// convex-test@0.0.41 has runInComponent at runtime but its types omit it
-		interface ComponentCtx {
-			db: {
-				query(table: string): {
-					withIndex(
-						name: string,
-						fn: (q: {
-							eq(f: string, v: unknown): { eq(f: string, v: unknown): unknown };
-						}) => unknown
-					): { collect(): Promise<Record<string, unknown>[]> };
-				};
-			};
-		}
-		await (
-			t as TestHarness & {
-				runInComponent(
-					name: string,
-					fn: (ctx: ComponentCtx) => Promise<void>
-				): Promise<void>;
+		// Query the auditLog component's isolated database via its public query API.
+		const auditEntries = await t.query(
+			components.auditLog.lib.queryByResource,
+			{
+				resourceType: "obligation",
+				resourceId: obligationId,
 			}
-		).runInComponent("auditLog", async (ctx) => {
-			const entries = await ctx.db
-				.query("auditLogs")
-				.withIndex("by_resource", (q) =>
-					q.eq("resourceType", "obligation").eq("resourceId", obligationId)
-				)
-				.collect();
-			expect(entries).toHaveLength(1);
-			expect(entries[0].action).toBe("cashLedger.receivable_not_found");
-			expect(entries[0].resourceType).toBe("obligation");
-			expect(entries[0].resourceId).toBe(obligationId);
-			expect(entries[0].actorId).toBe("system");
-			expect(entries[0].severity).toBe("error");
-			expect(JSON.stringify(entries[0].metadata)).toContain(
-				"BORROWER_RECEIVABLE account not found"
-			);
-		});
+		);
+		expect(auditEntries).toHaveLength(1);
+		expect(auditEntries[0].action).toBe("cashLedger.receivable_not_found");
+		expect(auditEntries[0].resourceType).toBe("obligation");
+		expect(auditEntries[0].resourceId).toBe(obligationId);
+		expect(auditEntries[0].actorId).toBe("system");
+		expect(auditEntries[0].severity).toBe("error");
+		expect(JSON.stringify(auditEntries[0].metadata)).toContain(
+			"BORROWER_RECEIVABLE account not found"
+		);
 
 		// Verify no journal entries were created
 		await t.run(async (ctx) => {

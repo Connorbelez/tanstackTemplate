@@ -133,6 +133,7 @@ import type * as onboarding_queries from "../onboarding/queries.js";
 import type * as onboarding_validators from "../onboarding/validators.js";
 import type * as payments_cashLedger___tests___testUtils from "../payments/cashLedger/__tests__/testUtils.js";
 import type * as payments_cashLedger_accounts from "../payments/cashLedger/accounts.js";
+import type * as payments_cashLedger_hashChain from "../payments/cashLedger/hashChain.js";
 import type * as payments_cashLedger_integrations from "../payments/cashLedger/integrations.js";
 import type * as payments_cashLedger_mutations from "../payments/cashLedger/mutations.js";
 import type * as payments_cashLedger_postEntry from "../payments/cashLedger/postEntry.js";
@@ -313,6 +314,7 @@ declare const fullApi: ApiFromModules<{
   "onboarding/validators": typeof onboarding_validators;
   "payments/cashLedger/__tests__/testUtils": typeof payments_cashLedger___tests___testUtils;
   "payments/cashLedger/accounts": typeof payments_cashLedger_accounts;
+  "payments/cashLedger/hashChain": typeof payments_cashLedger_hashChain;
   "payments/cashLedger/integrations": typeof payments_cashLedger_integrations;
   "payments/cashLedger/mutations": typeof payments_cashLedger_mutations;
   "payments/cashLedger/postEntry": typeof payments_cashLedger_postEntry;
