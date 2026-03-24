@@ -136,6 +136,7 @@ import type * as payments_cashLedger_accounts from "../payments/cashLedger/accou
 import type * as payments_cashLedger_integrations from "../payments/cashLedger/integrations.js";
 import type * as payments_cashLedger_mutations from "../payments/cashLedger/mutations.js";
 import type * as payments_cashLedger_postEntry from "../payments/cashLedger/postEntry.js";
+import type * as payments_cashLedger_postingGroups from "../payments/cashLedger/postingGroups.js";
 import type * as payments_cashLedger_queries from "../payments/cashLedger/queries.js";
 import type * as payments_cashLedger_reconciliation from "../payments/cashLedger/reconciliation.js";
 import type * as payments_cashLedger_sequenceCounter from "../payments/cashLedger/sequenceCounter.js";
@@ -310,6 +311,7 @@ declare const fullApi: ApiFromModules<{
   "payments/cashLedger/integrations": typeof payments_cashLedger_integrations;
   "payments/cashLedger/mutations": typeof payments_cashLedger_mutations;
   "payments/cashLedger/postEntry": typeof payments_cashLedger_postEntry;
+  "payments/cashLedger/postingGroups": typeof payments_cashLedger_postingGroups;
   "payments/cashLedger/queries": typeof payments_cashLedger_queries;
   "payments/cashLedger/reconciliation": typeof payments_cashLedger_reconciliation;
   "payments/cashLedger/sequenceCounter": typeof payments_cashLedger_sequenceCounter;

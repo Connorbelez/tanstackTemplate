@@ -108,20 +108,6 @@ interface DispersalsByObligationResult {
 	total: number;
 }
 
-interface DisbursementHistoryResult {
-	entries: DispersalHistoryEntry[];
-	entryCount: number;
-	lenderId: Id<"lenders">;
-	pageTotal: number;
-	total: number;
-}
-
-interface UndisbursedBalanceResult {
-	entryCount: number;
-	lenderId: Id<"lenders">;
-	undisbursedBalance: number;
-}
-
 type TestHarness = ReturnType<typeof convexTest>;
 
 // ---------------------------------------------------------------------------
@@ -138,21 +124,6 @@ const GET_DISPERSALS_BY_OBLIGATION = makeFunctionReference<
 	{ obligationId: Id<"obligations"> },
 	DispersalsByObligationResult
 >("dispersal/queries:getDispersalsByObligation");
-const GET_DISBURSEMENT_HISTORY = makeFunctionReference<
-	"query",
-	{
-		fromDate?: string;
-		lenderId: Id<"lenders">;
-		limit?: number;
-		toDate?: string;
-	},
-	DisbursementHistoryResult
->("dispersal/queries:getDisbursementHistory");
-const GET_UNDISBURSED_BALANCE = makeFunctionReference<
-	"query",
-	{ lenderId: Id<"lenders"> },
-	UndisbursedBalanceResult
->("dispersal/queries:getUndisbursedBalance");
 
 const SYS_SOURCE = { type: "system" as const, channel: "test" } as const;
 
