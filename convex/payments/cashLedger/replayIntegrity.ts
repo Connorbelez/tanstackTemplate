@@ -14,14 +14,23 @@ export interface ReplayScope {
 
 export interface ReplayMismatch {
 	accountId: Id<"cash_ledger_accounts">;
+	/** All numeric fields are serialized BigInt values. */
 	expectedCredits: string;
-	expectedDebits: string; // BigInt serialized
+	expectedDebits: string;
 	family: string;
 	firstDivergenceSequence: string;
 	lastEntrySequence: string;
 	storedCredits: string;
 	storedDebits: string;
 }
+
+/**
+ * Serialized variant of ReplayMismatch for use across Convex query/action boundaries
+ * where the typed Id<> cannot be serialized directly. The `accountId` is widened to string.
+ */
+export type SerializedReplayMismatch = Omit<ReplayMismatch, "accountId"> & {
+	accountId: string;
+};
 
 export interface ReplayResult {
 	accountsChecked: number;
@@ -71,11 +80,21 @@ export async function getReplayCursor(ctx: QueryCtx): Promise<bigint | null> {
  * Filter journal entries by scope. Returns only entries that match the
  * given accountId or mortgageId constraints. If neither is specified,
  * all entries pass through.
+ *
+ * NOTE: When both accountId and mortgageId are provided, accountId takes
+ * precedence and mortgageId is ignored. A runtime guard throws if both are set.
  */
 export function filterByScope(
 	entries: Doc<"cash_ledger_journal_entries">[],
 	scope: ReplayScope
 ): Doc<"cash_ledger_journal_entries">[] {
+	if (scope.accountId && scope.mortgageId) {
+		throw new Error(
+			"[filterByScope] Both accountId and mortgageId are set — accountId takes precedence. " +
+				"Pass only one scope filter to avoid ambiguity."
+		);
+	}
+
 	if (!(scope.accountId || scope.mortgageId)) {
 		return entries;
 	}
@@ -94,6 +113,15 @@ export function filterByScope(
 
 		return true;
 	});
+}
+
+// ── Predicate ───────────────────────────────────────────────
+
+/** Returns true if the replay result shows no drift and no missing sequences. */
+export function isReplayPassing(
+	r: Pick<ReplayResult, "mismatches" | "missingSequences">
+): boolean {
+	return r.mismatches.length === 0 && r.missingSequences.length === 0;
 }
 
 // ── Missing Sequence Detection ───────────────────────────────
@@ -127,6 +155,18 @@ export function detectMissingSequences(
 
 // ── Accumulation ─────────────────────────────────────────────
 
+/**
+ * Accumulate per-account debit and credit totals from journal entries in
+ * canonical sequence order.
+ *
+ * For each entry, the amount is added to the debit account's debits and to
+ * the credit account's credits. The first and last sequence numbers per
+ * account are tracked to aid mismatch diagnostics.
+ *
+ * This is the core of the O.Reg 189/08 compliance check — if the accumulated
+ * totals do not match the stored cumulativeDebits/cumulativeCredits on each
+ * account, the ledger's integrity is compromised.
+ */
 function accumulateEntries(
 	entries: Doc<"cash_ledger_journal_entries">[]
 ): Map<string, AccountAccumulator> {
@@ -170,6 +210,15 @@ function accumulateEntries(
 
 // ── Comparison ───────────────────────────────────────────────
 
+/**
+ * Compare accumulated totals against stored cumulativeDebits/cumulativeCredits
+ * on each account document.
+ *
+ * A missing account (deleted or never created) is treated as a mismatch with
+ * stored values of "0" — this surfaces as a distinct "UNKNOWN" family entry
+ * in the mismatch list. An error-level log is also emitted when an account
+ * cannot be found, since this signals a data integrity violation.
+ */
 async function compareAgainstStored(
 	ctx: QueryCtx,
 	accumulators: Map<string, AccountAccumulator>
@@ -182,6 +231,11 @@ async function compareAgainstStored(
 		const account = await getCachedAccount(accountId);
 
 		if (!account) {
+			// Missing account is a data integrity violation — log immediately at error level
+			console.error(
+				`[compareAgainstStored] Journal entry references missing account ${accountId} ` +
+					`— expected debits=${acc.debits}, credits=${acc.credits}. Treating as mismatch.`
+			);
 			mismatches.push({
 				accountId,
 				family: "UNKNOWN",
@@ -223,7 +277,9 @@ async function compareAgainstStored(
  * debits/credits on `cash_ledger_accounts`.
  *
  * This is a **read-only** operation — it never modifies journal entries
- * or account balances.
+ * or account balances. After a successful replay, call `advanceReplayCursor`
+ * to persist progress so that subsequent incremental runs start from the
+ * last verified sequence.
  */
 export async function replayJournalIntegrity(
 	ctx: QueryCtx,
@@ -235,7 +291,10 @@ export async function replayJournalIntegrity(
 	const fromSequence =
 		scope.mode === "incremental" ? ((await getReplayCursor(ctx)) ?? 0n) : 0n;
 
-	// 2. Load entries in sequence order using the by_sequence index
+	// 2. Load entries in sequence order using the by_sequence index.
+	// NOTE: Phase 1 — collects all entries into memory. The Convex 8 MB query
+	// limit provides a natural ceiling. If journal grows beyond ~50k entries,
+	// implement paginated replay with a cursor-based loop.
 	const allEntries = await ctx.db
 		.query("cash_ledger_journal_entries")
 		.withIndex("by_sequence", (q) => q.gt("sequenceNumber", fromSequence))
@@ -290,6 +349,19 @@ export const advanceReplayCursor = internalMutation({
 			.query("cash_ledger_cursors")
 			.withIndex("by_name", (q) => q.eq("name", REPLAY_CURSOR_NAME))
 			.first();
+
+		// Guard against cursor regression — a lower sequence would cause the next
+		// incremental replay to skip recent entries.
+		if (
+			existing &&
+			args.lastProcessedSequence <= existing.lastProcessedSequence
+		) {
+			console.error(
+				`[advanceReplayCursor] Attempted cursor regression: current=${existing.lastProcessedSequence}, ` +
+					`attempted=${args.lastProcessedSequence}. Ignoring.`
+			);
+			return;
+		}
 
 		if (existing) {
 			await ctx.db.patch(existing._id, {

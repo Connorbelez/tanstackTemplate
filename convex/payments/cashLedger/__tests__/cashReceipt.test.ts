@@ -1,3 +1,4 @@
+import auditLogTest from "convex-audit-log/test";
 import { describe, expect, it } from "vitest";
 import type { Id } from "../../../_generated/dataModel";
 import { getOrCreateCashAccount } from "../accounts";
@@ -220,6 +221,7 @@ describe("postCashReceiptForObligation", () => {
 
 	it("returns null when no BORROWER_RECEIVABLE account exists (no accrual)", async () => {
 		const t = createHarness(modules);
+		auditLogTest.register(t, "auditLog");
 		const seeded = await seedMinimalEntities(t);
 		const obligationId = await createDueObligation(t, {
 			mortgageId: seeded.mortgageId,

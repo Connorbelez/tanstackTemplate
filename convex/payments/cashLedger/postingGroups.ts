@@ -112,6 +112,17 @@ export async function getPostingGroupSummary(
 			getCachedAccount(entry.creditAccountId),
 		]);
 
+		// Missing accounts are a data integrity violation — log and skip rather than silently
+		// treating as non-CONTROL (which would produce incorrect balance results).
+		if (!(debitAccount && creditAccount)) {
+			console.error(
+				`[getPostingGroupSummary] Journal entry ${entry._id} references missing account(s): ` +
+					`debit=${entry.debitAccountId} (${debitAccount ? "found" : "MISSING"}), ` +
+					`credit=${entry.creditAccountId} (${creditAccount ? "found" : "MISSING"}). Skipping entry.`
+			);
+			continue;
+		}
+
 		const debitIsControlAllocation =
 			debitAccount?.family === "CONTROL" &&
 			debitAccount.subaccount === "ALLOCATION";
