@@ -30,8 +30,14 @@ export const ADMIN_IDENTITY = {
 // Callers must pass import.meta.glob("/convex/**/*.ts") from their .test.ts
 // file — import.meta.glob is a Vite-only API that crashes in Convex's runtime,
 // so it cannot live in this non-test utility module.
+//
+// The hash-chain kill switch is enabled here because createHarness does NOT
+// register workflow/workpool components that nudge() → startCashLedgerHashChain()
+// requires. Tests that exercise hash-chain behaviour use their own harnesses
+// with workflow components (e.g. cashReceiptIntegration.test.ts, auditTrail.test.ts).
 
 export function createHarness(modules: Record<string, () => Promise<unknown>>) {
+	process.env.DISABLE_CASH_LEDGER_HASHCHAIN = "true";
 	return convexTest(schema, modules);
 }
 
