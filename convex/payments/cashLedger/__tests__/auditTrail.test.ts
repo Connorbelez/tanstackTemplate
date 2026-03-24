@@ -362,6 +362,7 @@ describe("T-011 — hash chain integrity", () => {
 describe("T-012 — rejected posting creates audit record with :REJECTED", () => {
 	it("amount=0 fails validation and triggers rejection audit", async () => {
 		const t = makeHarness();
+		const idempotencyKey = `audit-rejection-${Date.now()}`;
 
 		await t.run(async (ctx) => {
 			const { getOrCreateCashAccount } = await import("../accounts");
@@ -382,15 +383,23 @@ describe("T-012 — rejected posting creates audit record with :REJECTED", () =>
 					entryType: "OBLIGATION_ACCRUED",
 					debitAccountId: debit._id,
 					creditAccountId: credit._id,
-					idempotencyKey: `audit-rejection-${Date.now()}`,
+					idempotencyKey,
 					source: SYSTEM_SOURCE,
 				})
 			).rejects.toThrow("positive safe integer");
+
+			// Verify rejection audit record was written
+			const events = await auditTrail.queryByEntity(ctx, {
+				entityId: `rejected:${idempotencyKey}`,
+			});
+			expect(events.length).toBe(1);
+			expect(events[0].eventType).toBe("OBLIGATION_ACCRUED:REJECTED");
 		});
 	});
 
 	it("negative amount fails validation and triggers rejection audit", async () => {
 		const t = makeHarness();
+		const idempotencyKey = `audit-rejection-neg-${Date.now()}`;
 
 		await t.run(async (ctx) => {
 			const { getOrCreateCashAccount } = await import("../accounts");
@@ -411,15 +420,23 @@ describe("T-012 — rejected posting creates audit record with :REJECTED", () =>
 					entryType: "OBLIGATION_ACCRUED",
 					debitAccountId: debit._id,
 					creditAccountId: credit._id,
-					idempotencyKey: `audit-rejection-neg-${Date.now()}`,
+					idempotencyKey,
 					source: SYSTEM_SOURCE,
 				})
 			).rejects.toThrow("positive safe integer");
+
+			// Verify rejection audit record was written
+			const events = await auditTrail.queryByEntity(ctx, {
+				entityId: `rejected:${idempotencyKey}`,
+			});
+			expect(events.length).toBe(1);
+			expect(events[0].eventType).toBe("OBLIGATION_ACCRUED:REJECTED");
 		});
 	});
 
 	it("CORRECTION without admin source fails constraint check and creates rejection audit", async () => {
 		const t = makeHarness();
+		const idempotencyKey = `audit-rejection-actor-${Date.now()}`;
 
 		await t.run(async (ctx) => {
 			const { getOrCreateCashAccount } = await import("../accounts");
@@ -440,12 +457,19 @@ describe("T-012 — rejected posting creates audit record with :REJECTED", () =>
 					entryType: "CORRECTION",
 					debitAccountId: debit._id,
 					creditAccountId: credit._id,
-					idempotencyKey: `audit-rejection-actor-${Date.now()}`,
+					idempotencyKey,
 					source: SYSTEM_SOURCE, // not admin
 					causedBy: debit._id as unknown as Id<"cash_ledger_journal_entries">,
 					reason: "test correction reason",
 				})
 			).rejects.toThrow("admin actorType");
+
+			// Verify rejection audit record was written
+			const events = await auditTrail.queryByEntity(ctx, {
+				entityId: `rejected:${idempotencyKey}`,
+			});
+			expect(events.length).toBe(1);
+			expect(events[0].eventType).toBe("CORRECTION:REJECTED");
 		});
 	});
 });
