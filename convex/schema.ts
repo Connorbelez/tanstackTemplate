@@ -1013,6 +1013,21 @@ export default defineSchema({
 		.index("by_obligation", ["obligationId"])
 		.index("by_status", ["status"]),
 
+	transferHealingAttempts: defineTable({
+		transferRequestId: v.id("transferRequests"),
+		attemptCount: v.number(),
+		lastAttemptAt: v.number(),
+		escalatedAt: v.optional(v.number()),
+		status: v.union(
+			v.literal("retrying"),
+			v.literal("escalated"),
+			v.literal("resolved")
+		),
+		createdAt: v.number(),
+	})
+		.index("by_transfer_request", ["transferRequestId"])
+		.index("by_status", ["status"]),
+
 	cash_ledger_accounts: defineTable({
 		family: v.union(
 			v.literal("BORROWER_RECEIVABLE"),
@@ -1390,11 +1405,29 @@ export default defineSchema({
 			v.literal("approved"),
 			v.literal("processing"),
 			v.literal("completed"),
+			v.literal("confirmed"),
+			v.literal("reversed"),
 			v.literal("failed"),
 			v.literal("cancelled")
 		),
+		direction: v.optional(v.union(v.literal("inbound"), v.literal("outbound"))),
+		transferType: v.optional(v.string()),
+		amount: v.optional(v.number()),
+		currency: v.optional(v.string()),
+		mortgageId: v.optional(v.id("mortgages")),
+		obligationId: v.optional(v.id("obligations")),
+		lenderId: v.optional(v.id("lenders")),
+		borrowerId: v.optional(v.id("borrowers")),
+		dispersalEntryId: v.optional(v.id("dispersalEntries")),
+		confirmedAt: v.optional(v.number()),
+		reversedAt: v.optional(v.number()),
 		createdAt: v.number(),
-	}),
+	})
+		.index("by_status", ["status"])
+		.index("by_status_and_direction", ["status", "direction"])
+		.index("by_mortgage", ["mortgageId", "status"])
+		.index("by_obligation", ["obligationId"])
+		.index("by_dispersal_entry", ["dispersalEntryId"]),
 
 	// ══════════════════════════════════════════════════════════
 	// DEMO TABLES

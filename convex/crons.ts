@@ -33,6 +33,17 @@ crons.interval(
 	internal.dispersal.selfHealing.dispersalSelfHealingCron
 );
 
+// Transfer reconciliation: detect confirmed transfers without journal entries.
+// Runs every 15 minutes — highest-risk gap because publishTransferConfirmed
+// runs async via scheduler.runAfter(0) and can fail silently.
+// See ENG-165 and Tech Design §10.
+crons.interval(
+	"transfer reconciliation",
+	{ minutes: 15 },
+	internal.payments.cashLedger.transferReconciliationCron
+		.transferReconciliationCron
+);
+
 // Cash ledger reconciliation: verify ledger invariants (unapplied cash,
 // negative payables, obligation drift, conservation, etc.).
 // Runs at 07:15 UTC — 15 minutes after entity reconciliation — to avoid

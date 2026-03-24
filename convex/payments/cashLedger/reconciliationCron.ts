@@ -100,7 +100,11 @@ export const cashLedgerReconciliation = internalAction({
 				`[CASH LEDGER RECONCILIATION P0] ${result.totalGapCount} gaps in: ${result.unhealthyCheckNames.join(", ")}`
 			);
 
-			const allChecks = [...result.checkResults, ...result.conservationResults];
+			const allChecks = [
+				...result.checkResults,
+				...result.conservationResults,
+				...result.transferResults,
+			];
 			const checkSummaries = allChecks.map((cr) => {
 				// Extract up to 3 sample IDs from items for investigability
 				const sampleIds = (cr.items as Record<string, unknown>[])
