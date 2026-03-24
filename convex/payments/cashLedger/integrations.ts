@@ -556,7 +556,7 @@ export async function postCashReceiptWithSuspenseFallback(
 	if (args.obligationId) {
 		const obligation = await ctx.db.get(args.obligationId);
 		if (obligation) {
-			return postCashReceiptForObligation(ctx, {
+			const result = await postCashReceiptForObligation(ctx, {
 				obligationId: obligation._id,
 				amount: args.amount,
 				idempotencyKey: args.idempotencyKey,
@@ -564,6 +564,27 @@ export async function postCashReceiptWithSuspenseFallback(
 				attemptId: args.attemptId,
 				source: normalizedSource,
 			});
+
+			// postCashReceiptForObligation returns null when the BORROWER_RECEIVABLE
+			// account is missing. Recover by routing to SUSPENSE so the receipt is journaled.
+			if (result === null) {
+				return postToSuspense(ctx, {
+					mortgageId: obligation.mortgageId,
+					amount: args.amount,
+					idempotencyKey: `suspense-routed:${args.idempotencyKey}`,
+					effectiveDate,
+					attemptId: args.attemptId,
+					source: normalizedSource,
+					reason: "receivable_not_found",
+					metadata: {
+						originalObligationId: args.obligationId,
+						originalAmount: args.amount,
+						attemptId: args.attemptId ?? null,
+					},
+				});
+			}
+
+			return result;
 		}
 	}
 
