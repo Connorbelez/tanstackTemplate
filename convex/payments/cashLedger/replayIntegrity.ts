@@ -81,8 +81,8 @@ export async function getReplayCursor(ctx: QueryCtx): Promise<bigint | null> {
  * given accountId or mortgageId constraints. If neither is specified,
  * all entries pass through.
  *
- * NOTE: When both accountId and mortgageId are provided, a runtime guard
- * throws to avoid ambiguity — pass only one scope filter.
+ * NOTE: When both accountId and mortgageId are provided, accountId takes
+ * precedence and mortgageId is ignored. A runtime guard throws if both are set.
  */
 export function filterByScope(
 	entries: Doc<"cash_ledger_journal_entries">[],
@@ -367,7 +367,7 @@ export const advanceReplayCursor = internalMutation({
 		// incremental replay to skip recent entries.
 		if (
 			existing &&
-			args.lastProcessedSequence < existing.lastProcessedSequence
+			args.lastProcessedSequence <= existing.lastProcessedSequence
 		) {
 			console.error(
 				`[advanceReplayCursor] Attempted cursor regression: current=${existing.lastProcessedSequence}, ` +
