@@ -481,6 +481,9 @@ export async function postObligationWaiver(
 		idempotencyKey: string;
 		effectiveDate?: string;
 		source: CommandSource;
+		outstandingBefore: number;
+		outstandingAfter: number;
+		isFullWaiver: boolean;
 	}
 ) {
 	const obligation = await ctx.db.get(args.obligationId);
@@ -522,6 +525,9 @@ export async function postObligationWaiver(
 			waiverAmount: args.amount,
 			obligationAmount: obligation.amount,
 			amountSettled: obligation.amountSettled,
+			outstandingBefore: args.outstandingBefore,
+			outstandingAfter: args.outstandingAfter,
+			isFullWaiver: args.isFullWaiver,
 		},
 	});
 }

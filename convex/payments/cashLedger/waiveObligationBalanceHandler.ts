@@ -21,6 +21,7 @@ export interface WaiveObligationBalanceArgs {
 }
 
 export interface WaiveObligationBalanceResult {
+	idempotencyKey: string;
 	isFullWaiver: boolean;
 	journalEntryId: Id<"cash_ledger_journal_entries">;
 	outstandingAfter: number;
@@ -65,20 +66,47 @@ async function idempotentReplayIfPresent(
 		return null;
 	}
 	const waiverAmount = safeBigintToNumber(existingEntry.amount);
-	const receivableAfter = await findCashAccount(ctx.db, {
-		family: "BORROWER_RECEIVABLE",
-		mortgageId: obligation.mortgageId,
-		obligationId: obligation._id,
-	});
-	const outstandingAfter = receivableAfter
-		? safeBigintToNumber(getCashAccountBalance(receivableAfter))
-		: 0;
+	// Prefer immutable values captured at post time, if available on the journal entry.
+	// postObligationWaiver stores outstandingBefore/outstandingAfter/isFullWaiver directly in metadata.
+	const metadata = (existingEntry.metadata ?? {}) as {
+		outstandingBefore?: number;
+		outstandingAfter?: number;
+		isFullWaiver?: boolean;
+	};
+
+	let outstandingAfter: number;
+	let outstandingBefore: number;
+	let isFullWaiver: boolean;
+
+	if (
+		typeof metadata.outstandingAfter === "number" &&
+		typeof metadata.outstandingBefore === "number" &&
+		typeof metadata.isFullWaiver === "boolean"
+	) {
+		// Use persisted values to keep idempotent replays consistent with the original call.
+		outstandingAfter = metadata.outstandingAfter;
+		outstandingBefore = metadata.outstandingBefore;
+		isFullWaiver = metadata.isFullWaiver;
+	} else {
+		// Fallback for entries without persisted waiver metadata: derive from the current balance.
+		const receivableAfter = await findCashAccount(ctx.db, {
+			family: "BORROWER_RECEIVABLE",
+			mortgageId: obligation.mortgageId,
+			obligationId: obligation._id,
+		});
+		outstandingAfter = receivableAfter
+			? safeBigintToNumber(getCashAccountBalance(receivableAfter))
+			: 0;
+		outstandingBefore = outstandingAfter + waiverAmount;
+		isFullWaiver = outstandingAfter === 0;
+	}
 	return {
+		idempotencyKey,
 		journalEntryId: existingEntry._id,
 		waiverAmount,
-		outstandingBefore: outstandingAfter + waiverAmount,
+		outstandingBefore,
 		outstandingAfter,
-		isFullWaiver: outstandingAfter === 0,
+		isFullWaiver,
 	};
 }
 
@@ -175,7 +203,7 @@ export async function runWaiveObligationBalance(
 		buildIdempotencyKey(
 			"obligation-waived-admin",
 			args.obligationId,
-			crypto.randomUUID()
+			`${args.amount}:${args.reason}`
 		);
 
 	const result = await postObligationWaiver(ctx, {
@@ -184,6 +212,9 @@ export async function runWaiveObligationBalance(
 		reason: args.reason,
 		idempotencyKey,
 		source,
+		outstandingBefore: outstandingCents,
+		outstandingAfter: outstandingCents - args.amount,
+		isFullWaiver,
 	});
 
 	if (isFullWaiver) {
@@ -200,6 +231,22 @@ export async function runWaiveObligationBalance(
 				source,
 			});
 			if (!transitionResult.success) {
+				await auditLog.log(ctx, {
+					action: "obligation.waiver_transition_rejected",
+					actorId,
+					resourceType: "obligations",
+					resourceId: args.obligationId,
+					severity: "error",
+					metadata: {
+						waiverAmount: args.amount,
+						outstandingBefore: outstandingCents,
+						outstandingAfter: outstandingCents - args.amount,
+						isFullWaiver,
+						reason: args.reason,
+						journalEntryId: result.entry._id,
+						rejectionReason: transitionResult.reason,
+					},
+				});
 				throw new ConvexError(
 					transitionResult.reason ??
 						"OBLIGATION_WAIVED transition rejected after cash ledger post"
@@ -225,6 +272,7 @@ export async function runWaiveObligationBalance(
 	});
 
 	return {
+		idempotencyKey,
 		journalEntryId: result.entry._id,
 		waiverAmount: args.amount,
 		outstandingBefore: outstandingCents,
