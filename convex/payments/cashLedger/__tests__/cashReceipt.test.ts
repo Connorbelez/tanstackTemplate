@@ -1,3 +1,4 @@
+import auditLogTest from "convex-audit-log/test";
 import { describe, expect, it } from "vitest";
 import type { Id } from "../../../_generated/dataModel";
 import { getOrCreateCashAccount } from "../accounts";
@@ -220,6 +221,7 @@ describe("postCashReceiptForObligation", () => {
 
 	it("returns null when no BORROWER_RECEIVABLE account exists (no accrual)", async () => {
 		const t = createHarness(modules);
+		auditLogTest.register(t, "auditLog");
 		const seeded = await seedMinimalEntities(t);
 		const obligationId = await createDueObligation(t, {
 			mortgageId: seeded.mortgageId,
@@ -237,6 +239,27 @@ describe("postCashReceiptForObligation", () => {
 			});
 
 			expect(result).toBeNull();
+		});
+
+		// Verify an audit event was written for the missing receivable.
+		// The auditLog component has its own isolated database, so we must use
+		// runInComponent to query it.
+		await t.runInComponent("auditLog", async (ctx) => {
+			const entries = await ctx.db
+				.query("auditLogs")
+				.withIndex("by_resource", (q) =>
+					q.eq("resourceType", "obligation").eq("resourceId", obligationId)
+				)
+				.collect();
+			expect(entries).toHaveLength(1);
+			expect(entries[0].action).toBe("cashLedger.receivable_not_found");
+			expect(entries[0].resourceType).toBe("obligation");
+			expect(entries[0].resourceId).toBe(obligationId);
+			expect(entries[0].actorId).toBe("system");
+			expect(entries[0].severity).toBe("error");
+			expect(JSON.stringify(entries[0].metadata)).toContain(
+				"BORROWER_RECEIVABLE account not found"
+			);
 		});
 
 		// Verify no journal entries were created

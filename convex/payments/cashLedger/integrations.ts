@@ -128,11 +128,25 @@ export async function postCashReceiptForObligation(
 	});
 
 	if (!receivableAccount) {
-		// No matching receivable — skip posting, let ENG-156 reconciliation detect the gap.
-		// TODO: ENG-156 — implement SUSPENSE routing for unmatched cash
-		console.warn(
-			`[postCashReceiptForObligation] No BORROWER_RECEIVABLE account for obligation=${args.obligationId}. Skipping cash receipt. ENG-156 reconciliation will detect this gap.`
+		// No matching receivable — log error and emit audit entry so the gap is immediately visible.
+		// Callers should use postCashReceiptWithSuspenseFallback to route to SUSPENSE.
+		console.error(
+			`[postCashReceiptForObligation] No BORROWER_RECEIVABLE account for obligation=${args.obligationId}. ` +
+				"Cash receipt not journaled — use postCashReceiptWithSuspenseFallback to route to SUSPENSE."
 		);
+		await auditLog.log(ctx, {
+			action: "cashLedger.receivable_not_found",
+			actorId: args.source.actorId ?? "system",
+			resourceType: "obligation",
+			resourceId: args.obligationId,
+			severity: "error",
+			metadata: {
+				amount: args.amount,
+				attemptId: args.attemptId ?? null,
+				idempotencyKey: args.idempotencyKey,
+				reason: "BORROWER_RECEIVABLE account not found",
+			},
+		});
 		return null;
 	}
 
@@ -369,7 +383,9 @@ export async function postOverpaymentToUnappliedCash(
 	});
 }
 
-export interface ServicingFeeMetadata {
+export interface ServicingFeeMetadata extends Record<string, unknown> {
+	/** Additional structured fields for future extensibility. */
+	additionalFields?: Record<string, unknown>;
 	annualRate: number;
 	feeCashApplied: number;
 	feeCode?: string;
@@ -379,7 +395,6 @@ export interface ServicingFeeMetadata {
 	paymentFrequency: PaymentFrequency;
 	policyVersion?: number;
 	principalBalance: number;
-	[key: string]: unknown;
 }
 
 export async function postSettlementAllocation(
@@ -607,7 +622,7 @@ export async function postCashReceiptWithSuspenseFallback(
 	if (args.obligationId) {
 		const obligation = await ctx.db.get(args.obligationId);
 		if (obligation) {
-			return postCashReceiptForObligation(ctx, {
+			const result = await postCashReceiptForObligation(ctx, {
 				obligationId: obligation._id,
 				amount: args.amount,
 				idempotencyKey: args.idempotencyKey,
@@ -615,6 +630,27 @@ export async function postCashReceiptWithSuspenseFallback(
 				attemptId: args.attemptId,
 				source: normalizedSource,
 			});
+
+			// postCashReceiptForObligation returns null when the BORROWER_RECEIVABLE
+			// account is missing. Recover by routing to SUSPENSE so the receipt is journaled.
+			if (result === null) {
+				return postToSuspense(ctx, {
+					mortgageId: obligation.mortgageId,
+					amount: args.amount,
+					idempotencyKey: `suspense-routed:${args.idempotencyKey}`,
+					effectiveDate,
+					attemptId: args.attemptId,
+					source: normalizedSource,
+					reason: "receivable_not_found",
+					metadata: {
+						originalObligationId: args.obligationId,
+						originalAmount: args.amount,
+						attemptId: args.attemptId ?? null,
+					},
+				});
+			}
+
+			return result;
 		}
 	}
 

@@ -1,19 +1,9 @@
 import { ConvexError, v } from "convex/values";
-import {
-	adminMutation,
-	authedMutation,
-	authedQuery,
-	requirePermission,
-} from "../fluent";
+import { adminMutation, authedQuery } from "../fluent";
 import { draftStateValidator } from "./validators";
 
 // TODO: Read queries (get, list) use authedQuery (authentication only).
 // Add permission gate (e.g. requirePermission("document:view")) when moving to production.
-
-// Template design/management = admin-only. Document generation = separate permission.
-const docGenMutation = authedMutation.use(
-	requirePermission("document:generate")
-);
 
 export const create = adminMutation
 	.input({
@@ -143,7 +133,7 @@ export const updateMetadata = adminMutation
 	})
 	.public();
 
-export const publish = docGenMutation
+export const publish = adminMutation
 	.input({
 		id: v.id("documentTemplates"),
 		publishedBy: v.optional(v.string()),

@@ -9,6 +9,7 @@ import {
 	internalQuery,
 } from "../_generated/server";
 import { auditLog } from "../auditLog";
+import type { ReplayResult } from "../payments/cashLedger/replayIntegrity";
 import { ENTITY_TABLE_MAP } from "./types";
 
 const RECONCILIATION_PAGE_SIZE = 128;
@@ -60,6 +61,20 @@ const logReconciliationDiscrepanciesRef = makeInternalFunctionReference<
 	null
 >("engine/reconciliationAction:logReconciliationDiscrepancies");
 
+// ── Replay Integrity Refs ────────────────────────────────────
+
+const runReplayIntegrityCheckRef = makeInternalFunctionReference<
+	"query",
+	Record<string, never>,
+	ReplayResult
+>("payments/cashLedger/reconciliation:runReplayIntegrityCheck");
+
+const advanceReplayCursorRef = makeInternalFunctionReference<
+	"mutation",
+	{ lastProcessedSequence: bigint },
+	null
+>("payments/cashLedger/replayIntegrity:advanceReplayCursor");
+
 async function collectLatestEntries(
 	ctx: ReconciliationCtx,
 	entityType: keyof typeof ENTITY_TABLE_MAP
@@ -98,23 +113,63 @@ async function lookupStatus(
 	entityType: string,
 	entityId: string
 ): Promise<string | null | undefined> {
-	if (entityType === "onboardingRequest") {
-		const e = await ctx.db.get(entityId as Id<"onboardingRequests">);
-		return e?.status ?? null;
+	// Table-driven lookup: entityType → typed getter.
+	switch (entityType) {
+		case "onboardingRequest":
+			return (
+				(await ctx.db.get(entityId as Id<"onboardingRequests">))?.status ?? null
+			);
+		case "mortgage":
+			return (await ctx.db.get(entityId as Id<"mortgages">))?.status ?? null;
+		case "obligation":
+			return (await ctx.db.get(entityId as Id<"obligations">))?.status ?? null;
+		case "collectionAttempt":
+			return (
+				(await ctx.db.get(entityId as Id<"collectionAttempts">))?.status ?? null
+			);
+		case "deal":
+			return (await ctx.db.get(entityId as Id<"deals">))?.status ?? null;
+		case "provisionalApplication":
+			return (
+				(await ctx.db.get(entityId as Id<"provisionalApplications">))?.status ??
+				null
+			);
+		case "applicationPackage":
+			return (
+				(await ctx.db.get(entityId as Id<"applicationPackages">))?.status ??
+				null
+			);
+		case "broker":
+			return (await ctx.db.get(entityId as Id<"brokers">))?.status ?? null;
+		case "borrower":
+			return (await ctx.db.get(entityId as Id<"borrowers">))?.status ?? null;
+		case "lender":
+			return (await ctx.db.get(entityId as Id<"lenders">))?.status ?? null;
+		case "lenderOnboarding":
+			return (
+				(await ctx.db.get(entityId as Id<"lenderOnboardings">))?.status ?? null
+			);
+		case "provisionalOffer":
+			return (
+				(await ctx.db.get(entityId as Id<"provisionalOffers">))?.status ?? null
+			);
+		case "offerCondition":
+			return (
+				(await ctx.db.get(entityId as Id<"offerConditions">))?.status ?? null
+			);
+		case "lenderRenewalIntent":
+			return (
+				(await ctx.db.get(entityId as Id<"lenderRenewalIntents">))?.status ??
+				null
+			);
+		default: {
+			// Log error for any entity type not yet covered — this prevents silent skipping
+			console.error(
+				`[RECONCILIATION] lookupStatus: unhandled entity type "${entityType}" for entity ${entityId}. This entity will NOT be reconciled.`
+			);
+			return undefined;
+		}
 	}
-	if (entityType === "mortgage") {
-		const e = await ctx.db.get(entityId as Id<"mortgages">);
-		return e?.status ?? null;
-	}
-	if (entityType === "obligation") {
-		const e = await ctx.db.get(entityId as Id<"obligations">);
-		return e?.status ?? null;
-	}
-	if (entityType === "collectionAttempt") {
-		const e = await ctx.db.get(entityId as Id<"collectionAttempts">);
-		return e?.status ?? null;
-	}
-	return undefined;
 }
 
 function buildDiscrepancy(
@@ -218,27 +273,103 @@ export const logReconciliationDiscrepancies = internalMutation({
 
 /**
  * Daily reconciliation cron action.
- * Runs Layer 1 (status vs journal) and logs discrepancies as P0 errors.
+ * Layer 1 (StatusCheck): state-machine status must match latest audit journal entry.
+ * Layer 2 (BalanceCheck): replayed journal entry totals must match stored account balances.
+ * Each layer runs independently — a failure in one does not prevent the other from running.
  */
 export const dailyReconciliation = internalAction({
 	handler: async (ctx) => {
-		const result = await ctx.runQuery(reconcileInternalRef, {});
+		// ── Layer 1: StatusCheck (status vs journal) ────────────────
+		let layer1Result: {
+			isHealthy: boolean;
+			checkedAt: number;
+			discrepancies: Discrepancy[];
+		} | null = null;
+		try {
+			layer1Result = await ctx.runQuery(reconcileInternalRef, {});
 
-		if (result.isHealthy) {
-			console.info("[RECONCILIATION] Daily check passed — zero discrepancies.");
-		} else {
+			if (layer1Result.isHealthy) {
+				console.info(
+					"[RECONCILIATION] StatusCheck passed — zero discrepancies."
+				);
+			} else {
+				console.error(
+					`[RECONCILIATION P0] ${layer1Result.discrepancies.length} discrepancies found:`,
+					JSON.stringify(layer1Result.discrepancies, null, 2)
+				);
+
+				await ctx.runMutation(logReconciliationDiscrepanciesRef, {
+					discrepancyCount: layer1Result.discrepancies.length,
+					discrepancies: layer1Result.discrepancies,
+					checkedAt: layer1Result.checkedAt,
+				});
+			}
+		} catch (error) {
 			console.error(
-				`[RECONCILIATION P0] ${result.discrepancies.length} discrepancies found:`,
-				JSON.stringify(result.discrepancies, null, 2)
+				"[RECONCILIATION FATAL] StatusCheck failed entirely:",
+				error instanceof Error ? error.message : String(error)
 			);
-
-			await ctx.runMutation(logReconciliationDiscrepanciesRef, {
-				discrepancyCount: result.discrepancies.length,
-				discrepancies: result.discrepancies,
-				checkedAt: result.checkedAt,
-			});
+			// Continue to Layer 2 so partial checks still run
 		}
 
-		return result;
+		// ── Layer 2: BalanceCheck (journal replay integrity) ───────
+		try {
+			const replayResult = await ctx.runQuery(runReplayIntegrityCheckRef, {});
+
+			if (replayResult.passed) {
+				console.info(
+					`[REPLAY INTEGRITY] BalanceCheck passed — ${replayResult.entriesReplayed} entries replayed, ` +
+						`${replayResult.accountsChecked} accounts checked in ${replayResult.durationMs}ms.`
+				);
+
+				// Advance cursor so next incremental run starts from here
+				if (replayResult.toSequence !== "0") {
+					await ctx.runMutation(advanceReplayCursorRef, {
+						lastProcessedSequence: BigInt(replayResult.toSequence),
+					});
+				}
+			} else {
+				console.error(
+					`[REPLAY INTEGRITY P0] ${replayResult.mismatches.length} mismatches, ` +
+						`${replayResult.missingSequences.length} missing sequences found:`,
+					JSON.stringify(replayResult, null, 2)
+				);
+
+				const discrepancies: Discrepancy[] = replayResult.mismatches.map(
+					(m) => ({
+						entityType: "cash_ledger_account",
+						entityId: m.accountId,
+						entityStatus: `debits=${m.storedDebits},credits=${m.storedCredits}`,
+						journalNewState: `debits=${m.expectedDebits},credits=${m.expectedCredits}`,
+						journalEntryId: `seq:${m.firstDivergenceSequence}-${m.lastEntrySequence}`,
+					})
+				);
+
+				// Gap-only failures persist an empty discrepancy list with a non-zero count
+				// without this entry — build a proper Discrepancy for missing sequences
+				for (const seq of replayResult.missingSequences) {
+					discrepancies.push({
+						entityType: "cash_ledger_sequence_gap",
+						entityId: "gap",
+						entityStatus: "SEQUENCE_MISSING",
+						journalNewState: seq.toString(),
+						journalEntryId: "gap",
+					});
+				}
+
+				await ctx.runMutation(logReconciliationDiscrepanciesRef, {
+					discrepancyCount: discrepancies.length,
+					discrepancies,
+					checkedAt: Date.now(),
+				});
+			}
+		} catch (error) {
+			console.error(
+				"[REPLAY INTEGRITY FATAL] BalanceCheck failed entirely:",
+				error instanceof Error ? error.message : String(error)
+			);
+		}
+
+		return layer1Result;
 	},
 });

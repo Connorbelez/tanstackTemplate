@@ -81,6 +81,8 @@ export interface PostingGroupValidationResult {
 		amount: bigint;
 		side: "debit" | "credit";
 	}>;
+	/** True when one or more journal entries were skipped due to missing accounts. */
+	hasCorruptEntries: boolean;
 	postingGroupId: string;
 	/** Total number of journal entries in the posting group (not just CONTROL:ALLOCATION entries). */
 	totalJournalEntryCount: number;
@@ -104,6 +106,7 @@ export async function getPostingGroupSummary(
 	const getCachedAccount = createAccountCache(ctx.db);
 
 	let controlAllocationBalance = 0n;
+	let hasCorruptEntries = false;
 	const resultEntries: PostingGroupValidationResult["entries"] = [];
 
 	for (const entry of entries) {
@@ -111,6 +114,18 @@ export async function getPostingGroupSummary(
 			getCachedAccount(entry.debitAccountId),
 			getCachedAccount(entry.creditAccountId),
 		]);
+
+		// Missing accounts are a data integrity violation — log and skip rather than silently
+		// treating as non-CONTROL (which would produce incorrect balance results).
+		if (!(debitAccount && creditAccount)) {
+			console.error(
+				`[getPostingGroupSummary] Journal entry ${entry._id} references missing account(s): ` +
+					`debit=${entry.debitAccountId} (${debitAccount ? "found" : "MISSING"}), ` +
+					`credit=${entry.creditAccountId} (${creditAccount ? "found" : "MISSING"}). Skipping entry.`
+			);
+			hasCorruptEntries = true;
+			continue;
+		}
 
 		const debitIsControlAllocation =
 			debitAccount?.family === "CONTROL" &&
@@ -139,6 +154,7 @@ export async function getPostingGroupSummary(
 	return {
 		postingGroupId,
 		controlAllocationBalance,
+		hasCorruptEntries,
 		totalJournalEntryCount: entries.length,
 		entries: resultEntries,
 	};
@@ -155,6 +171,8 @@ export function isPostingGroupComplete(
 	result: PostingGroupValidationResult
 ): boolean {
 	return (
-		result.controlAllocationBalance === 0n && result.totalJournalEntryCount > 0
+		!result.hasCorruptEntries &&
+		result.controlAllocationBalance === 0n &&
+		result.totalJournalEntryCount > 0
 	);
 }
