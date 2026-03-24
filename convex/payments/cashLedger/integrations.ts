@@ -666,7 +666,55 @@ export async function postCashCorrectionForEntry(
 	const canonicalPostingGroupId =
 		reversalResult.entry.postingGroupId ?? postingGroupId;
 
-	// 6. Optionally post replacement entry
+	// 6. Reject mismatched retries: query existing entries for this postingGroupId
+	// and verify the persisted correction matches the incoming payload.
+	{
+		const existingEntries = await ctx.db
+			.query("cash_ledger_journal_entries")
+			.withIndex("by_posting_group", (q) =>
+				q.eq("postingGroupId", canonicalPostingGroupId)
+			)
+			.collect();
+
+		// Filter out the reversal we just created (idempotency means it may already exist)
+		const persistedCorrections = existingEntries.filter(
+			(e) => e.entryType === "REPLACEMENT"
+		);
+
+		if (persistedCorrections.length > 0) {
+			const existing = persistedCorrections.at(0);
+			if (!existing) {
+				throw new ConvexError(
+					"Unexpected empty correction entries after filtering"
+				);
+			}
+			// Compare critical fields against the incoming replacement args
+			if (args.replacement) {
+				const mismatch =
+					existing.reason !== args.reason ||
+					existing.effectiveDate !== effectiveDate ||
+					existing.entryType !== args.replacement.entryType ||
+					safeBigintToNumber(existing.amount) !== args.replacement.amount ||
+					existing.debitAccountId !== args.replacement.debitAccountId ||
+					existing.creditAccountId !== args.replacement.creditAccountId ||
+					JSON.stringify(existing.metadata) !==
+						JSON.stringify(args.replacement.metadata ?? {});
+
+				if (mismatch) {
+					throw new ConvexError(
+						"Mismatched correction retry: persisted replacement does not match incoming payload"
+					);
+				}
+			} else {
+				// A replacement was persisted but the current call has no replacement
+				throw new ConvexError(
+					"Mismatched correction retry: persisted replacement exists but no replacement provided"
+				);
+			}
+		}
+	}
+
+	// 7. Optionally post replacement entry
 	let replacementResult: Awaited<
 		ReturnType<typeof postCashEntryInternal>
 	> | null = null;
@@ -703,7 +751,7 @@ export async function postCashCorrectionForEntry(
 		});
 	}
 
-	// 7. Return results (postingGroupId matches persisted reversal for idempotent retries)
+	// 8. Return results (postingGroupId matches persisted reversal for idempotent retries)
 	return {
 		reversalEntry: reversalResult.entry,
 		replacementEntry: replacementResult?.entry ?? null,
