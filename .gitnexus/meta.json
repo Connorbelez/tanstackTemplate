@@ -1,13 +1,13 @@
 {
-  "repoPath": "/Users/connor/Dev/tanstackFairLend/fairlendapp",
-  "lastCommit": "7993c83407e1295e3ae14228e58afc53163503ea",
-  "indexedAt": "2026-03-19T20:48:55.165Z",
+  "repoPath": "/Users/connor/conductor/workspaces/fairlendapp/san-diego",
+  "lastCommit": "f296eef563ec6bd772bf37013dea8bb63e76d74e",
+  "indexedAt": "2026-03-24T15:53:40.152Z",
   "stats": {
-    "files": 876,
-    "nodes": 2482,
-    "edges": 5175,
-    "communities": 206,
-    "processes": 69,
+    "files": 1010,
+    "nodes": 7661,
+    "edges": 11094,
+    "communities": 251,
+    "processes": 169,
     "embeddings": 0
   }
 }
