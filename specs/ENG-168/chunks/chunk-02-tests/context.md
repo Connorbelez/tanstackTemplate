@@ -114,9 +114,9 @@ Actually — the integration helper posts entry type REVERSAL for the reversal (
 The `postCashCorrection` internalMutation and `postCashCorrectionForEntry` should validate that the source has admin actorType at the orchestration level, not just rely on the pipeline. Add this check.
 
 ### T-010: Missing Reason Rejection
-1. The `postCashCorrectionForEntry` requires `reason` as a non-optional string arg
-2. Test that the pipeline rejects REVERSAL without causedBy (which can't happen if we pass it) — this is already tested by the pipeline
-3. Instead test: call the correction mutation without a reason via raw postCashEntryInternal for a CORRECTION type — expect rejection
+1. Call `postCashCorrectionForEntry` (and/or `postCashCorrection`) with an empty/whitespace reason
+2. Expect rejection from correction-orchestration validation
+3. Keep direct `postCashEntryInternal` reason checks in pipeline-focused tests only
 
 ### T-011: Replacement Exceeds Original Amount
 1. Post original entry for 50000
