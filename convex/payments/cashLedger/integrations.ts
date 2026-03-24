@@ -676,9 +676,10 @@ export async function postCashCorrectionForEntry(
 			)
 			.collect();
 
-		// Filter out the reversal we just created (idempotency means it may already exist)
+		// Identify replacement entries: causedBy points to the original, exclude the REVERSAL entry itself.
+		// The replacement uses the caller's entryType (e.g. OBLIGATION_ACCRUED), NOT a "REPLACEMENT" type.
 		const persistedCorrections = existingEntries.filter(
-			(e) => e.entryType === "REPLACEMENT"
+			(e) => e.causedBy === original._id && e.entryType !== "REVERSAL"
 		);
 
 		if (persistedCorrections.length > 0) {
@@ -719,6 +720,11 @@ export async function postCashCorrectionForEntry(
 		ReturnType<typeof postCashEntryInternal>
 	> | null = null;
 	if (args.replacement) {
+		if (args.replacement.amount <= 0) {
+			throw new ConvexError(
+				`Replacement amount must be positive, got ${args.replacement.amount}`
+			);
+		}
 		if (args.replacement.amount > originalAmountNumber) {
 			throw new ConvexError(
 				`Replacement amount (${args.replacement.amount}) must not exceed original amount (${originalAmountNumber})`

@@ -20,7 +20,7 @@ export const postCashCorrectionArgsValidator = {
 	originalEntryId: v.id("cash_ledger_journal_entries"),
 	reason: v.string(),
 	source: sourceValidator,
-	effectiveDate: v.string(),
+	effectiveDate: v.optional(v.string()),
 	replacement: v.optional(
 		v.object({
 			amount: v.number(),

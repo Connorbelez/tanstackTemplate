@@ -21,6 +21,7 @@ const CORRECTION_ORCHESTRATION_ADMIN_PATTERN =
 const CORRECTION_EMPTY_REASON_PATTERN =
 	/Cash correction requires a non-empty reason/;
 const REPLACEMENT_EXCEEDS_PATTERN = /must not exceed original amount/;
+const MISMATCHED_RETRY_PATTERN = /Mismatched correction retry/;
 const CORRECTION_POSTING_GROUP_PREFIX_PATTERN = /^correction:/;
 const BUSINESS_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -228,6 +229,63 @@ describe("T-008: Idempotency", () => {
 			return rows.filter((e) => e.entryType === "REVERSAL").length;
 		});
 		expect(causedByCount).toBe(1);
+	});
+
+	it("rejects a second call with a different replacement payload", async () => {
+		const t = createHarness(modules);
+
+		const receivable = await createTestAccount(t, {
+			family: "BORROWER_RECEIVABLE",
+			initialDebitBalance: 200_000n,
+		});
+		const control = await createTestAccount(t, {
+			family: "CONTROL",
+			subaccount: "ACCRUAL",
+		});
+
+		const original = await postTestEntry(t, {
+			entryType: "OBLIGATION_ACCRUED",
+			effectiveDate: "2026-03-01",
+			amount: 100_000,
+			debitAccountId: receivable._id,
+			creditAccountId: control._id,
+			idempotencyKey: "test-mismatch-original",
+			source: SYSTEM_SOURCE,
+		});
+
+		// First call: WITH replacement (creates the replacement entry)
+		await t.run(async (ctx) => {
+			return postCashCorrectionForEntry(ctx, {
+				originalEntryId: original.entry._id,
+				reason: "Original reason",
+				source: ADMIN_SOURCE,
+				effectiveDate: "2026-03-02",
+				replacement: {
+					amount: 80_000,
+					debitAccountId: receivable._id,
+					creditAccountId: control._id,
+					entryType: "OBLIGATION_ACCRUED",
+				},
+			});
+		});
+
+		// Second call: same original, different replacement reason → must reject
+		await expect(
+			t.run(async (ctx) => {
+				return postCashCorrectionForEntry(ctx, {
+					originalEntryId: original.entry._id,
+					reason: "Different reason",
+					source: ADMIN_SOURCE,
+					effectiveDate: "2026-03-03",
+					replacement: {
+						amount: 80_000,
+						debitAccountId: receivable._id,
+						creditAccountId: control._id,
+						entryType: "OBLIGATION_ACCRUED",
+					},
+				});
+			})
+		).rejects.toThrow(MISMATCHED_RETRY_PATTERN);
 	});
 });
 
