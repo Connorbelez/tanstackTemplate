@@ -11,6 +11,7 @@ import {
 	postObligationWriteOff,
 } from "./integrations";
 import { postCashEntryInternal } from "./postEntry";
+import { buildIdempotencyKey } from "./types";
 import { postCashCorrectionArgsValidator } from "./validators";
 import { runWaiveObligationBalance } from "./waiveObligationBalanceHandler";
 
@@ -159,6 +160,8 @@ export const writeOffObligationBalance = adminMutation
 		obligationId: v.id("obligations"),
 		amount: v.number(),
 		reason: v.string(),
+		/** Caller-generated UUID (or equivalent) that uniquely identifies this write-off intent. */
+		idempotencyKey: v.string(),
 	})
 	.handler(async (ctx, args) => {
 		// 1. Validate amount
@@ -166,7 +169,13 @@ export const writeOffObligationBalance = adminMutation
 			throw new ConvexError("Write-off amount must be a positive safe integer");
 		}
 
-		// 2. Load obligation, reject if settled/waived
+		// 2. Validate reason — reject blank/whitespace-only values at the public boundary
+		const reason = args.reason.trim();
+		if (reason.length === 0) {
+			throw new ConvexError("Write-off reason cannot be blank");
+		}
+
+		// 3. Load obligation, reject if settled/waived
 		const obligation = await ctx.db.get(args.obligationId);
 		if (!obligation) {
 			throw new ConvexError(`Obligation not found: ${args.obligationId}`);
@@ -195,8 +204,9 @@ export const writeOffObligationBalance = adminMutation
 		const result = await postObligationWriteOff(ctx, {
 			obligationId: args.obligationId,
 			amount: args.amount,
-			reason: args.reason,
+			reason,
 			source,
+			idempotencyKey: buildIdempotencyKey("write-off", args.idempotencyKey),
 			obligation,
 		});
 
@@ -209,7 +219,7 @@ export const writeOffObligationBalance = adminMutation
 			severity: "warning",
 			metadata: {
 				amount: args.amount,
-				reason: args.reason,
+				reason,
 				entryId: result.entry._id,
 				hasActiveCollectionWarning,
 				activeAttemptCount: activeAttempts.length,

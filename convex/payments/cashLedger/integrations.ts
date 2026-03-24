@@ -558,6 +558,8 @@ export async function postObligationWriteOff(
 		amount: number;
 		reason: string;
 		source: CommandSource;
+		/** Caller-scoped idempotency key (already prefixed via buildIdempotencyKey). */
+		idempotencyKey: string;
 		/** Pre-loaded obligation to avoid a redundant DB round-trip. If omitted the function loads it. */
 		obligation?: Doc<"obligations">;
 	}
@@ -565,6 +567,22 @@ export async function postObligationWriteOff(
 	const obligation = args.obligation ?? (await ctx.db.get(args.obligationId));
 	if (!obligation) {
 		throw new ConvexError(`Obligation not found: ${args.obligationId}`);
+	}
+
+	// Early idempotency short-circuit — must run before balance validation so
+	// retries succeed even after the first post reduced the receivable balance.
+	const existingEntry = await ctx.db
+		.query("cash_ledger_journal_entries")
+		.withIndex("by_idempotency", (q) =>
+			q.eq("idempotencyKey", args.idempotencyKey)
+		)
+		.first();
+	if (existingEntry) {
+		return {
+			entry: existingEntry,
+			projectedDebitBalance: 0n,
+			projectedCreditBalance: 0n,
+		};
 	}
 
 	// Validate: write-off amount <= outstanding receivable balance
@@ -602,11 +620,7 @@ export async function postObligationWriteOff(
 		amount: args.amount,
 		debitAccountId: writeOffAccount._id,
 		creditAccountId: receivableAccount._id,
-		idempotencyKey: buildIdempotencyKey(
-			"write-off",
-			args.obligationId,
-			String(args.amount)
-		),
+		idempotencyKey: args.idempotencyKey,
 		mortgageId: obligation.mortgageId,
 		obligationId: obligation._id,
 		borrowerId: obligation.borrowerId,

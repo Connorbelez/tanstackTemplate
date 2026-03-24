@@ -8,6 +8,7 @@ import { FAIRLEND_ADMIN } from "../../../../src/test/auth/identities";
 import type { Id } from "../../../_generated/dataModel";
 import { getCashAccountBalance } from "../accounts";
 import { postObligationWriteOff } from "../integrations";
+import { buildIdempotencyKey } from "../types";
 import {
 	ADMIN_SOURCE,
 	createHarness,
@@ -23,6 +24,7 @@ const ACCOUNT_NOT_FOUND_RE = /cash account not found/;
 const POSITIVE_SAFE_INTEGER_RE = /positive safe integer/;
 const SETTLED_RE = /settled/;
 const WAIVED_RE = /waived/;
+const BLANK_REASON_RE = /reason cannot be blank/;
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -85,6 +87,7 @@ describe("postObligationWriteOff", () => {
 				amount: 50_000,
 				reason: "Uncollectible debt",
 				source: ADMIN_SOURCE,
+				idempotencyKey: buildIdempotencyKey("write-off", "full-write-off-test"),
 			});
 
 			expect(result.entry.entryType).toBe("OBLIGATION_WRITTEN_OFF");
@@ -131,6 +134,10 @@ describe("postObligationWriteOff", () => {
 				amount: 40_000,
 				reason: "Partial write-off",
 				source: ADMIN_SOURCE,
+				idempotencyKey: buildIdempotencyKey(
+					"write-off",
+					"partial-write-off-test"
+				),
 			});
 		});
 
@@ -170,6 +177,7 @@ describe("postObligationWriteOff", () => {
 				amount: 30_000,
 				reason: "Partial write-off 1",
 				source: ADMIN_SOURCE,
+				idempotencyKey: buildIdempotencyKey("write-off", "multi-partial-1"),
 			});
 		});
 
@@ -180,6 +188,7 @@ describe("postObligationWriteOff", () => {
 				amount: 25_000,
 				reason: "Partial write-off 2",
 				source: ADMIN_SOURCE,
+				idempotencyKey: buildIdempotencyKey("write-off", "multi-partial-2"),
 			});
 		});
 
@@ -220,6 +229,10 @@ describe("postObligationWriteOff", () => {
 					amount: 75_000,
 					reason: "Over-write-off",
 					source: ADMIN_SOURCE,
+					idempotencyKey: buildIdempotencyKey(
+						"write-off",
+						"exceeds-balance-test"
+					),
 				})
 			).rejects.toThrow(EXCEEDS_BALANCE_RE);
 		});
@@ -254,6 +267,10 @@ describe("postObligationWriteOff", () => {
 					amount: 50_000,
 					reason: "No receivable",
 					source: ADMIN_SOURCE,
+					idempotencyKey: buildIdempotencyKey(
+						"write-off",
+						"no-receivable-test"
+					),
 				})
 			).rejects.toThrow(ACCOUNT_NOT_FOUND_RE);
 		});
@@ -274,6 +291,7 @@ describe("postObligationWriteOff", () => {
 				amount: 50_000,
 				reason: "Full write-off",
 				source: ADMIN_SOURCE,
+				idempotencyKey: buildIdempotencyKey("write-off", "gt-status-test"),
 			});
 		});
 
@@ -299,12 +317,61 @@ describe("postObligationWriteOff", () => {
 				amount: 10_000,
 				reason: "Borrower declared bankruptcy",
 				source: ADMIN_SOURCE,
+				idempotencyKey: buildIdempotencyKey("write-off", "source-reason-test"),
 			});
 
 			expect(result.entry.reason).toBe("Borrower declared bankruptcy");
 			expect(result.entry.source.actorId).toBe(ADMIN_SOURCE.actorId);
 			expect(result.entry.source.actorType).toBe("admin");
 			expect(result.entry.source.channel).toBe("admin_dashboard");
+		});
+	});
+
+	it("idempotent retry: same key returns existing entry without re-posting", async () => {
+		const t = createHarness(modules);
+		const seeded = await seedMinimalEntities(t);
+		const obligationId = await createObligationWithReceivable(t, {
+			mortgageId: seeded.mortgageId,
+			borrowerId: seeded.borrowerId,
+			amount: 100_000,
+		});
+
+		const idemKey = buildIdempotencyKey("write-off", "idempotency-retry-test");
+
+		// First call — posts the entry
+		const first = await t.run(async (ctx) =>
+			postObligationWriteOff(ctx, {
+				obligationId,
+				amount: 100_000,
+				reason: "Full write-off",
+				source: ADMIN_SOURCE,
+				idempotencyKey: idemKey,
+			})
+		);
+
+		// Second call with same key after balance is now 0 — must not throw
+		const second = await t.run(async (ctx) =>
+			postObligationWriteOff(ctx, {
+				obligationId,
+				amount: 100_000,
+				reason: "Full write-off",
+				source: ADMIN_SOURCE,
+				idempotencyKey: idemKey,
+			})
+		);
+
+		// Both calls return the same journal entry
+		expect(second.entry._id).toBe(first.entry._id);
+
+		// Only one entry was ever written
+		await t.run(async (ctx) => {
+			const entries = await ctx.db
+				.query("cash_ledger_journal_entries")
+				.withIndex("by_obligation_and_sequence", (q) =>
+					q.eq("obligationId", obligationId)
+				)
+				.collect();
+			expect(entries).toHaveLength(1);
 		});
 	});
 
@@ -323,6 +390,7 @@ describe("postObligationWriteOff", () => {
 				amount: 30_000,
 				reason: "Test debit-normal",
 				source: ADMIN_SOURCE,
+				idempotencyKey: buildIdempotencyKey("write-off", "debit-normal-test"),
 			});
 		});
 
@@ -356,6 +424,7 @@ const writeOffRef = makeFunctionReference<
 		obligationId: Id<"obligations">;
 		amount: number;
 		reason: string;
+		idempotencyKey: string;
 	},
 	{
 		entry: { _id: Id<"cash_ledger_journal_entries"> };
@@ -380,6 +449,7 @@ describe("writeOffObligationBalance mutation", () => {
 				obligationId,
 				amount: 0,
 				reason: "Zero write-off",
+				idempotencyKey: "mut-zero-amount",
 			})
 		).rejects.toThrow(POSITIVE_SAFE_INTEGER_RE);
 	});
@@ -399,6 +469,7 @@ describe("writeOffObligationBalance mutation", () => {
 				obligationId,
 				amount: -100,
 				reason: "Negative write-off",
+				idempotencyKey: "mut-negative-amount",
 			})
 		).rejects.toThrow(POSITIVE_SAFE_INTEGER_RE);
 	});
@@ -419,6 +490,7 @@ describe("writeOffObligationBalance mutation", () => {
 				obligationId,
 				amount: 10_000,
 				reason: "Already settled",
+				idempotencyKey: "mut-settled-rejection",
 			})
 		).rejects.toThrow(SETTLED_RE);
 	});
@@ -439,6 +511,7 @@ describe("writeOffObligationBalance mutation", () => {
 				obligationId,
 				amount: 10_000,
 				reason: "Already waived",
+				idempotencyKey: "mut-waived-rejection",
 			})
 		).rejects.toThrow(WAIVED_RE);
 	});
@@ -479,6 +552,7 @@ describe("writeOffObligationBalance mutation", () => {
 			obligationId,
 			amount: 50_000,
 			reason: "Write-off with active collection",
+			idempotencyKey: "mut-active-collection-warning",
 		});
 
 		expect(result.hasActiveCollectionWarning).toBe(true);
@@ -498,6 +572,7 @@ describe("writeOffObligationBalance mutation", () => {
 			obligationId,
 			amount: 25_000,
 			reason: "Clean write-off",
+			idempotencyKey: "mut-no-active-collection",
 		});
 
 		expect(result.hasActiveCollectionWarning).toBe(false);
@@ -518,6 +593,7 @@ describe("writeOffObligationBalance mutation", () => {
 			obligationId,
 			amount: 50_000,
 			reason: "Full write-off for verification",
+			idempotencyKey: "mut-persist-verification",
 		});
 
 		// Re-query the journal entry directly from DB to verify persistence
@@ -530,6 +606,26 @@ describe("writeOffObligationBalance mutation", () => {
 			expect(entry?.reason).toBe("Full write-off for verification");
 			expect(entry?.source.actorType).toBe("admin");
 		});
+	});
+
+	it("rejects blank reason", async () => {
+		const t = createTestConvex();
+		await ensureSeededIdentity(t, FAIRLEND_ADMIN);
+		const seeded = await seedMinimalEntities(t);
+		const obligationId = await createObligationWithReceivable(t, {
+			mortgageId: seeded.mortgageId,
+			borrowerId: seeded.borrowerId,
+			amount: 50_000,
+		});
+
+		await expect(
+			t.withIdentity(FAIRLEND_ADMIN).mutation(writeOffRef, {
+				obligationId,
+				amount: 10_000,
+				reason: "   ",
+				idempotencyKey: "mut-blank-reason",
+			})
+		).rejects.toThrow(BLANK_REASON_RE);
 	});
 
 	// "obligation not found" path (ctx.db.get → null → ConvexError) is not directly
@@ -561,6 +657,10 @@ describe("writeOffObligationBalance mutation", () => {
 				amount: 60_000,
 				reason: "Bad debt — bankruptcy",
 				source: ADMIN_SOURCE,
+				idempotencyKey: buildIdempotencyKey(
+					"write-off",
+					"recovery-anchor-test"
+				),
 			});
 		});
 
