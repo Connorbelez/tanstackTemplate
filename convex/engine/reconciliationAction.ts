@@ -114,6 +114,9 @@ async function lookupStatus(
 	entityId: string
 ): Promise<string | null | undefined> {
 	// Table-driven lookup: entityType → typed getter.
+	// biome-ignore: cognitive complexity is 28 because each entity type requires
+	// a separate db.get call — this is unavoidable for a data-access function
+	// that must handle 14 distinct entity table types.
 	switch (entityType) {
 		case "onboardingRequest":
 			return (

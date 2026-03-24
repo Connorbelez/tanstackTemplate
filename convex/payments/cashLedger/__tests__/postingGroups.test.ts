@@ -214,6 +214,7 @@ describe("isPostingGroupComplete", () => {
 			postingGroupId: "test:123",
 			controlAllocationBalance: 0n,
 			totalJournalEntryCount: 3,
+			hasCorruptEntries: false,
 			entries: [],
 		});
 		expect(result).toBe(true);
@@ -224,6 +225,7 @@ describe("isPostingGroupComplete", () => {
 			postingGroupId: "test:123",
 			controlAllocationBalance: 500n,
 			totalJournalEntryCount: 2,
+			hasCorruptEntries: false,
 			entries: [],
 		});
 		expect(result).toBe(false);
@@ -234,6 +236,7 @@ describe("isPostingGroupComplete", () => {
 			postingGroupId: "test:123",
 			controlAllocationBalance: 0n,
 			totalJournalEntryCount: 0,
+			hasCorruptEntries: false,
 			entries: [],
 		});
 		expect(result).toBe(false);

@@ -28,7 +28,7 @@ interface Violation {
 
 // ── Configuration ───────────────────────────────────────────────────────
 
-const ROOT = resolve(new URL("..", import.meta.url).pathname);
+const ROOT = resolve((import.meta as unknown as { dir: string }).dir, "..");
 const CONVEX_DIR = join(ROOT, "convex");
 const ROUTES_DIR = join(ROOT, "src", "routes");
 
