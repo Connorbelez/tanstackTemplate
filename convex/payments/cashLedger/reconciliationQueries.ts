@@ -60,12 +60,17 @@ function inUtcDayRange(
 	return true;
 }
 
-/** Lower bound on account creation from snapshot age (floor days → conservative for range checks). */
+/**
+ * Safe lower bound on account creation from snapshot age.
+ * `ageDays` uses `Math.floor`, so `checkedAt - ageDays * MS_PER_DAY` is actually
+ * an upper bound on the true creation time. Subtracting one extra day produces a
+ * conservative lower bound for date-range filtering.
+ */
 function approxAccountCreatedAt(
 	checkedAt: number,
 	itemAgeDays: number
 ): number {
-	return checkedAt - itemAgeDays * MS_PER_DAY;
+	return checkedAt - (itemAgeDays + 1) * MS_PER_DAY;
 }
 
 function monthKeyFromYmd(ymd: string): string {
@@ -142,7 +147,7 @@ export const reconciliationNegativePayables = cashLedgerQuery
 			}
 			return true;
 		});
-		return recomputeResult(result, items, (i) => i.balance);
+		return recomputeResult(result, items, (i) => Math.abs(i.balance));
 	})
 	.public();
 
@@ -304,6 +309,9 @@ export const reconciliationMortgageMonthConservation = cashLedgerQuery
 		toDate: v.optional(v.string()),
 	})
 	.handler(async (ctx, args) => {
+		// Validate date strings before using them (same as other endpoints)
+		parseInclusiveUtcDayRange(args.fromDate, args.toDate);
+
 		const result = await checkMortgageMonthConservation(ctx);
 		let items = result.items;
 
