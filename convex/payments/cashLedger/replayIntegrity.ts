@@ -287,9 +287,12 @@ export async function replayJournalIntegrity(
 ): Promise<ReplayResult> {
 	const startTime = Date.now();
 
-	// 1. Determine starting sequence
+	// 1. Determine starting sequence and query lower bound.
+	// Full replay: inclusive (gte 0n) so sequence 0 is never dropped.
+	// Incremental replay: exclusive (gt cursor) to avoid re-processing verified entries.
 	const fromSequence =
 		scope.mode === "incremental" ? ((await getReplayCursor(ctx)) ?? 0n) : 0n;
+	const queryGt = scope.mode === "incremental";
 
 	// 2. Load entries in sequence order using the by_sequence index.
 	// NOTE: Phase 1 — collects all entries into memory. The Convex 8 MB query
@@ -297,7 +300,11 @@ export async function replayJournalIntegrity(
 	// implement paginated replay with a cursor-based loop.
 	const allEntries = await ctx.db
 		.query("cash_ledger_journal_entries")
-		.withIndex("by_sequence", (q) => q.gt("sequenceNumber", fromSequence))
+		.withIndex("by_sequence", (q) =>
+			queryGt
+				? q.gt("sequenceNumber", fromSequence)
+				: q.gte("sequenceNumber", fromSequence)
+		)
 		.order("asc")
 		.collect();
 
@@ -316,16 +323,15 @@ export async function replayJournalIntegrity(
 	//    - full mode with scope filter: skip comparison (partial history vs lifetime totals would show false drift)
 	//    - incremental mode: no comparison (only has deltas)
 	const hasScopeFilter = !!(scope.accountId || scope.mortgageId);
-	const mismatches =
-		scope.mode === "full" && !hasScopeFilter
-			? await compareAgainstStored(ctx, accumulators)
-			: [];
+	const verificationPerformed = scope.mode === "full" && !hasScopeFilter;
+	const mismatches = verificationPerformed
+		? await compareAgainstStored(ctx, accumulators)
+		: [];
 
-	// 6b. In incremental mode, no verification was performed — signal that to the caller
-	const passed =
-		mismatches.length === 0 && missingSequences.length === 0
-			? scope.mode === "full"
-			: false;
+	// 6b. Only report passed=true when verification was actually performed AND results are clean
+	const passed = verificationPerformed
+		? mismatches.length === 0 && missingSequences.length === 0
+		: false;
 
 	// 7. Determine the actual sequence range
 	const lastEntry = entries.at(-1);
