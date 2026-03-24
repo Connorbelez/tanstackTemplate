@@ -470,6 +470,68 @@ export async function postSettlementAllocation(
 	}
 }
 
+// ── Waiver ───────────────────────────────────────────────────────────
+
+export async function postObligationWaiver(
+	ctx: MutationCtx,
+	args: {
+		obligationId: Id<"obligations">;
+		amount: number;
+		reason: string;
+		idempotencyKey: string;
+		effectiveDate?: string;
+		source: CommandSource;
+		outstandingBefore: number;
+		outstandingAfter: number;
+		isFullWaiver: boolean;
+	}
+) {
+	const obligation = await ctx.db.get(args.obligationId);
+	if (!obligation) {
+		throw new ConvexError(`Obligation not found: ${args.obligationId}`);
+	}
+
+	const receivableAccount = await findCashAccount(ctx.db, {
+		family: "BORROWER_RECEIVABLE",
+		mortgageId: obligation.mortgageId,
+		obligationId: obligation._id,
+	});
+	if (!receivableAccount) {
+		throw new ConvexError(
+			`No BORROWER_RECEIVABLE account for obligation=${args.obligationId}. Cannot waive without an existing receivable.`
+		);
+	}
+
+	const waiverControlAccount = await getOrCreateCashAccount(ctx, {
+		family: "CONTROL",
+		mortgageId: obligation.mortgageId,
+		obligationId: obligation._id,
+		subaccount: "WAIVER",
+	});
+
+	return postCashEntryInternal(ctx, {
+		entryType: "OBLIGATION_WAIVED",
+		effectiveDate: args.effectiveDate ?? unixMsToBusinessDate(Date.now()),
+		amount: args.amount,
+		debitAccountId: waiverControlAccount._id,
+		creditAccountId: receivableAccount._id,
+		idempotencyKey: args.idempotencyKey,
+		mortgageId: obligation.mortgageId,
+		obligationId: obligation._id,
+		borrowerId: obligation.borrowerId,
+		source: normalizeSource(args.source),
+		reason: args.reason,
+		metadata: {
+			waiverAmount: args.amount,
+			obligationAmount: obligation.amount,
+			amountSettled: obligation.amountSettled,
+			outstandingBefore: args.outstandingBefore,
+			outstandingAfter: args.outstandingAfter,
+			isFullWaiver: args.isFullWaiver,
+		},
+	});
+}
+
 // ── SUSPENSE Routing ─────────────────────────────────────────────────
 
 async function postToSuspense(

@@ -1,10 +1,12 @@
 import { ConvexError, v } from "convex/values";
 import { internalMutation } from "../../_generated/server";
 import { sourceValidator } from "../../engine/validators";
+import { adminMutation } from "../../fluent";
 import { requireCashAccount } from "./accounts";
 import { postCashCorrectionForEntry } from "./integrations";
 import { postCashEntryInternal } from "./postEntry";
 import { postCashCorrectionArgsValidator } from "./validators";
+import { runWaiveObligationBalance } from "./waiveObligationBalanceHandler";
 
 export const postLenderPayout = internalMutation({
 	args: {
@@ -68,3 +70,22 @@ export const postCashCorrection = internalMutation({
 		});
 	},
 });
+
+// ── Admin Waiver ─────────────────────────────────────────────────────
+
+export const waiveObligationBalance = adminMutation
+	.input({
+		obligationId: v.id("obligations"),
+		amount: v.number(),
+		reason: v.string(),
+		idempotencyKey: v.optional(v.string()),
+	})
+	.handler(async (ctx, args) => {
+		if (!Number.isSafeInteger(args.amount) || args.amount <= 0) {
+			throw new ConvexError(
+				"Waiver amount must be a positive safe integer (cents)"
+			);
+		}
+		return runWaiveObligationBalance(ctx, args, ctx.viewer);
+	})
+	.public();

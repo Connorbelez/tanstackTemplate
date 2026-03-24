@@ -1,5 +1,5 @@
 import { convexTest } from "convex-test";
-import type { Id } from "../../../_generated/dataModel";
+import type { Doc, Id } from "../../../_generated/dataModel";
 import schema from "../../../schema";
 import { getOrCreateCashAccount } from "../accounts";
 import { type PostCashEntryInput, postCashEntryInternal } from "../postEntry";
@@ -185,7 +185,7 @@ interface CreateTestAccountSpec {
 export async function createTestAccount(
 	t: TestHarness,
 	spec: CreateTestAccountSpec
-) {
+): Promise<Doc<"cash_ledger_accounts">> {
 	return t.run(async (ctx) => {
 		const account = await getOrCreateCashAccount(ctx, {
 			family: spec.family,
@@ -212,7 +212,7 @@ export async function createTestAccount(
 			if (!updated) {
 				throw new Error("Failed to read patched account");
 			}
-			return updated;
+			return updated as Doc<"cash_ledger_accounts">;
 		}
 
 		return account;

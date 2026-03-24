@@ -9,8 +9,6 @@ import {
 } from "../../../payments/cashLedger/__tests__/testUtils";
 import { accrueObligation } from "../obligationAccrual";
 
-const modules = import.meta.glob("/convex/**/*.ts");
-
 interface AccrueObligationHandler {
 	_handler: (
 		ctx: MutationCtx,
@@ -68,7 +66,7 @@ async function createUpcomingObligation(
 
 describe("accrueObligation effect (integration)", () => {
 	it("posts OBLIGATION_ACCRUED journal entry with correct accounts and amount", async () => {
-		const t = createHarness(modules);
+		const t = createHarness(import.meta.glob("/convex/**/*.ts"));
 		const seeded = await seedMinimalEntities(t);
 		const obligationId = await createUpcomingObligation(t, {
 			mortgageId: seeded.mortgageId,
@@ -119,7 +117,7 @@ describe("accrueObligation effect (integration)", () => {
 	});
 
 	it("is idempotent — duplicate calls produce no duplicate entries", async () => {
-		const t = createHarness(modules);
+		const t = createHarness(import.meta.glob("/convex/**/*.ts"));
 		const seeded = await seedMinimalEntities(t);
 		const obligationId = await createUpcomingObligation(t, {
 			mortgageId: seeded.mortgageId,
@@ -161,7 +159,7 @@ describe("accrueObligation effect (integration)", () => {
 	});
 
 	it("handles multiple obligations for the same mortgage independently", async () => {
-		const t = createHarness(modules);
+		const t = createHarness(import.meta.glob("/convex/**/*.ts"));
 		const seeded = await seedMinimalEntities(t);
 
 		const ob1 = await createUpcomingObligation(t, {
