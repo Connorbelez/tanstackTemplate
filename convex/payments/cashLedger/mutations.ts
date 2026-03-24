@@ -2,7 +2,9 @@ import { ConvexError, v } from "convex/values";
 import { internalMutation } from "../../_generated/server";
 import { sourceValidator } from "../../engine/validators";
 import { requireCashAccount } from "./accounts";
+import { postCashCorrectionForEntry } from "./integrations";
 import { postCashEntryInternal } from "./postEntry";
+import { postCashCorrectionArgsValidator } from "./validators";
 
 export const postLenderPayout = internalMutation({
 	args: {
@@ -50,6 +52,19 @@ export const postLenderPayout = internalMutation({
 			source: args.source,
 			reason: args.reason,
 			postingGroupId: args.postingGroupId,
+		});
+	},
+});
+
+export const postCashCorrection = internalMutation({
+	args: postCashCorrectionArgsValidator,
+	handler: async (ctx, args) => {
+		return postCashCorrectionForEntry(ctx, {
+			originalEntryId: args.originalEntryId,
+			reason: args.reason,
+			source: args.source,
+			effectiveDate: args.effectiveDate,
+			replacement: args.replacement,
 		});
 	},
 });

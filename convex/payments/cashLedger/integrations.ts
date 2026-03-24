@@ -7,7 +7,7 @@ import type { PaymentFrequency } from "../../mortgages/paymentFrequency";
 import { findCashAccount, getOrCreateCashAccount } from "./accounts";
 import { postCashEntryInternal } from "./postEntry";
 import { validatePostingGroupAmounts } from "./postingGroups";
-import { buildIdempotencyKey } from "./types";
+import { buildIdempotencyKey, type CashEntryType } from "./types";
 
 interface LegacySource {
 	actor?: string;
@@ -578,4 +578,128 @@ export async function postCashReceiptWithSuspenseFallback(
 			attemptId: args.attemptId ?? null,
 		},
 	});
+}
+
+// ── Cash Correction ──────────────────────────────────────────────────
+
+const CORRECTION_REQUIRES_ADMIN =
+	'Cash correction requires admin actorType (source.actorType must be "admin")';
+
+function assertAdminCorrectionSource(source: CommandSource) {
+	if (source.actorType !== "admin") {
+		throw new ConvexError(CORRECTION_REQUIRES_ADMIN);
+	}
+	if (!source.actorId?.trim()) {
+		throw new ConvexError("Cash correction requires source.actorId");
+	}
+}
+
+function assertNonEmptyCorrectionReason(reason: string) {
+	if (!reason.trim()) {
+		throw new ConvexError("Cash correction requires a non-empty reason");
+	}
+}
+
+export async function postCashCorrectionForEntry(
+	ctx: MutationCtx,
+	args: {
+		originalEntryId: Id<"cash_ledger_journal_entries">;
+		reason: string;
+		source: CommandSource;
+		effectiveDate?: string;
+		replacement?: {
+			amount: number;
+			debitAccountId: Id<"cash_ledger_accounts">;
+			creditAccountId: Id<"cash_ledger_accounts">;
+			entryType: CashEntryType;
+			metadata?: Record<string, unknown>;
+		};
+	}
+) {
+	assertNonEmptyCorrectionReason(args.reason);
+
+	const normalizedSource = normalizeSource(args.source);
+	assertAdminCorrectionSource(normalizedSource);
+
+	// 1. Load original entry, validate existence
+	const original = await ctx.db.get(args.originalEntryId);
+	if (!original) {
+		throw new ConvexError(`Original entry not found: ${args.originalEntryId}`);
+	}
+
+	// 2. Determine effective date
+	const effectiveDate =
+		args.effectiveDate ?? new Date().toISOString().slice(0, 10);
+
+	// 3. Generate posting group ID (reversal row carries canonical id; idempotent replays use it)
+	const postingGroupId = `correction:${original._id}:${Date.now()}`;
+
+	// 4. Post REVERSAL with swapped accounts
+	const reversalResult = await postCashEntryInternal(ctx, {
+		entryType: "REVERSAL",
+		effectiveDate,
+		amount: Number(original.amount),
+		debitAccountId: original.creditAccountId,
+		creditAccountId: original.debitAccountId,
+		causedBy: original._id,
+		postingGroupId,
+		reason: args.reason,
+		source: normalizedSource,
+		idempotencyKey: buildIdempotencyKey("correction-reversal", original._id),
+		mortgageId: original.mortgageId,
+		obligationId: original.obligationId,
+		attemptId: original.attemptId,
+		dispersalEntryId: original.dispersalEntryId,
+		lenderId: original.lenderId,
+		borrowerId: original.borrowerId,
+		dealId: original.dealId,
+		transferRequestId: original.transferRequestId,
+	});
+
+	const canonicalPostingGroupId =
+		reversalResult.entry.postingGroupId ?? postingGroupId;
+
+	// 5. Optionally post replacement entry
+	let replacementResult: Awaited<
+		ReturnType<typeof postCashEntryInternal>
+	> | null = null;
+	if (args.replacement) {
+		if (args.replacement.amount > Number(original.amount)) {
+			throw new ConvexError(
+				`Replacement amount (${args.replacement.amount}) must not exceed original amount (${Number(original.amount)})`
+			);
+		}
+
+		replacementResult = await postCashEntryInternal(ctx, {
+			entryType: args.replacement.entryType,
+			effectiveDate,
+			amount: args.replacement.amount,
+			debitAccountId: args.replacement.debitAccountId,
+			creditAccountId: args.replacement.creditAccountId,
+			causedBy: original._id,
+			postingGroupId: canonicalPostingGroupId,
+			idempotencyKey: buildIdempotencyKey(
+				"correction-replacement",
+				original._id
+			),
+			mortgageId: original.mortgageId,
+			obligationId: original.obligationId,
+			attemptId: original.attemptId,
+			dispersalEntryId: original.dispersalEntryId,
+			lenderId: original.lenderId,
+			borrowerId: original.borrowerId,
+			dealId: original.dealId,
+			transferRequestId: original.transferRequestId,
+			reason: args.reason,
+			source: normalizedSource,
+			metadata: args.replacement.metadata,
+		});
+	}
+
+	// 6. Return results (postingGroupId matches persisted reversal for idempotent retries)
+	return {
+		reversalEntry: reversalResult.entry,
+		replacementEntry: replacementResult?.entry ?? null,
+		postingGroupId: canonicalPostingGroupId,
+	};
 }

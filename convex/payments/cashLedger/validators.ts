@@ -16,6 +16,22 @@ export const cashEntryTypeValidator = v.union(
 	v.literal("SUSPENSE_ROUTED")
 );
 
+export const postCashCorrectionArgsValidator = {
+	originalEntryId: v.id("cash_ledger_journal_entries"),
+	reason: v.string(),
+	source: sourceValidator,
+	effectiveDate: v.string(),
+	replacement: v.optional(
+		v.object({
+			amount: v.number(),
+			debitAccountId: v.id("cash_ledger_accounts"),
+			creditAccountId: v.id("cash_ledger_accounts"),
+			entryType: cashEntryTypeValidator,
+			metadata: v.optional(v.any()),
+		})
+	),
+};
+
 export const postCashEntryArgsValidator = {
 	entryType: cashEntryTypeValidator,
 	effectiveDate: v.string(),
