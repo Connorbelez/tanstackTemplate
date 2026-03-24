@@ -277,7 +277,8 @@ describe("Account scope", () => {
 
 		// Should only see entries involving debitAccount._id
 		expect(result.entriesReplayed).toBe(2);
-		expect(result.passed).toBe(true);
+		// Scoped replays never report passed=true — partial history cannot verify lifetime totals
+		expect(result.passed).toBe(false);
 	});
 });
 

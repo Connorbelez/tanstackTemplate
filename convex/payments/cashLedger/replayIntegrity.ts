@@ -128,7 +128,10 @@ export function isReplayPassing(
 
 /**
  * Detect gaps in the sequence number chain. Only meaningful for full
- * mode replays where the starting sequence is 0 (loading all entries).
+ * mode replays where all entries are loaded.
+ *
+ * Sequences start at 1n (see `getNextCashSequenceNumber`), so the
+ * first expected sequence is 1, not 0.
  *
  * Returns an array of missing sequence numbers as serialized strings.
  */
@@ -140,7 +143,7 @@ export function detectMissingSequences(
 	}
 
 	const missing: string[] = [];
-	let expectedNext = 0n;
+	let expectedNext = 1n;
 
 	for (const entry of entries) {
 		while (expectedNext < entry.sequenceNumber) {
@@ -288,7 +291,7 @@ export async function replayJournalIntegrity(
 	const startTime = Date.now();
 
 	// 1. Determine starting sequence and query lower bound.
-	// Full replay: inclusive (gte 0n) so sequence 0 is never dropped.
+	// Full replay: inclusive (gte 0n) to capture all entries (sequences start at 1n).
 	// Incremental replay: exclusive (gt cursor) to avoid re-processing verified entries.
 	const fromSequence =
 		scope.mode === "incremental" ? ((await getReplayCursor(ctx)) ?? 0n) : 0n;
