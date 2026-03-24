@@ -532,15 +532,20 @@ describe("writeOffObligationBalance mutation", () => {
 		});
 	});
 
-	// Skipped: "non-existent obligationId" path.
-	// Convex's v.id("obligations") validator accepts only valid-format IDs,
-	// and all seeded obligations get real IDs in the test DB. The integration-level
-	// "not found" throw is covered by the amount-exceeds-balance and
-	// no-receivable-account tests which exercise the same error path.
+	// "obligation not found" path (ctx.db.get → null → ConvexError) is not directly
+	// testable: Convex's v.id("obligations") validator accepts only valid-format IDs,
+	// so a fake ID cannot be passed. The amount-exceeds-balance and no-receivable-
+	// account tests cover different error paths (balance check and account lookup). If
+	// postObligationWriteOff is called with a valid-format but missing obligationId,
+	// it throws "Obligation not found" as expected — callers are gated by the v.id
+	// validator so this path is only reachable via internal code bugs.
 
-	it("CORRECTION entry reverses part of a write-off (recovery flow)", async () => {
-		// This tests the spec's "Recovery After Write-Off" requirement:
-		// "If cash later collected on written-off obligation, CORRECTION entry reverses part of write-off"
+	it("write-off entry recorded correctly to serve as anchor for future CORRECTION reversal", async () => {
+		// The spec says "If cash later collected on written-off obligation, CORRECTION
+		// entry reverses part of write-off." We verify the OBLIGATION_WRITTEN_OFF entry
+		// is correctly recorded (correct amount, causedBy unset) so a future CORRECTION entry
+		// could legitimately reverse it. We do NOT post a CORRECTION here — that is a
+		// separate workflow covered by the correction workflow tests.
 		const t = createHarness(modules);
 		const seeded = await seedMinimalEntities(t);
 		const obligationId = await createObligationWithReceivable(t, {
@@ -592,10 +597,9 @@ describe("writeOffObligationBalance mutation", () => {
 			expect(entries).toHaveLength(1);
 			expect(entries[0].entryType).toBe("OBLIGATION_WRITTEN_OFF");
 			expect(entries[0].amount).toBe(60_000n);
-			// The causedBy would be set by a CORRECTION entry — verify the linkage field exists
-			expect(
-				"causedBy" in entries[0] || entries[0].causedBy === undefined
-			).toBe(true);
+			// The causedBy would be set by a future CORRECTION entry — for the original
+			// write-off entry it should be unset.
+			expect(entries[0].causedBy).toBeUndefined();
 		});
 	});
 });

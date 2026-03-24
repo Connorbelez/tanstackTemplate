@@ -1,5 +1,5 @@
 import { ConvexError } from "convex/values";
-import type { Id } from "../../_generated/dataModel";
+import type { Doc, Id } from "../../_generated/dataModel";
 import type { MutationCtx } from "../../_generated/server";
 import { auditLog } from "../../auditLog";
 import type { CommandSource } from "../../engine/types";
@@ -558,14 +558,21 @@ export async function postObligationWriteOff(
 		amount: number;
 		reason: string;
 		source: CommandSource;
+		/** Pre-loaded obligation to avoid a redundant DB round-trip. If omitted the function loads it. */
+		obligation?: Doc<"obligations">;
 	}
 ) {
-	const obligation = await ctx.db.get(args.obligationId);
+	const obligation = args.obligation ?? (await ctx.db.get(args.obligationId));
 	if (!obligation) {
 		throw new ConvexError(`Obligation not found: ${args.obligationId}`);
 	}
 
 	// Validate: write-off amount <= outstanding receivable balance
+	if (!Number.isSafeInteger(args.amount) || args.amount <= 0) {
+		throw new ConvexError(
+			"Write-off amount must be a positive safe integer (cents)"
+		);
+	}
 	const receivableAccount = await requireCashAccount(
 		ctx.db,
 		{
@@ -576,7 +583,8 @@ export async function postObligationWriteOff(
 		"postObligationWriteOff"
 	);
 	const outstandingBalance = getCashAccountBalance(receivableAccount);
-	if (BigInt(args.amount) > outstandingBalance) {
+	const writeOffAmount = BigInt(args.amount);
+	if (writeOffAmount > outstandingBalance) {
 		throw new ConvexError(
 			`Write-off amount ${args.amount} exceeds outstanding balance ${outstandingBalance}`
 		);
@@ -597,8 +605,7 @@ export async function postObligationWriteOff(
 		idempotencyKey: buildIdempotencyKey(
 			"write-off",
 			args.obligationId,
-			String(Date.now()),
-			crypto.randomUUID()
+			String(args.amount)
 		),
 		mortgageId: obligation.mortgageId,
 		obligationId: obligation._id,

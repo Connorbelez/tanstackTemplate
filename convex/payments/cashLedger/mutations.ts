@@ -112,6 +112,11 @@ async function findActiveCollectionAttempts(
 ): Promise<Doc<"collectionAttempts">[]> {
 	// collectionPlanEntries.obligationIds is an array — no index on individual
 	// obligationId, so we scan planned/executing entries and filter in JS.
+	// We at least restrict the scan to entries with relevant statuses via the
+	// `by_status` index; this is expected to run over a relatively small
+	// dataset (per obligation / per customer).
+	// The N+1 attempt queries are acknowledged — a future improvement could collect
+	// plan entry IDs first then query attempts by a batch index.
 	const activePlanEntries: Doc<"collectionPlanEntries">[] = [];
 
 	for (const status of ACTIVE_PLAN_ENTRY_STATUSES) {
@@ -186,12 +191,13 @@ export const writeOffObligationBalance = adminMutation
 			channel: "admin_dashboard",
 		};
 
-		// 5. Post the write-off entry
+		// 5. Post the write-off entry (pass pre-loaded obligation to avoid redundant load)
 		const result = await postObligationWriteOff(ctx, {
 			obligationId: args.obligationId,
 			amount: args.amount,
 			reason: args.reason,
 			source,
+			obligation,
 		});
 
 		// 6. Audit log
