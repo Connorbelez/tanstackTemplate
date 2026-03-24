@@ -77,7 +77,7 @@ export const runReplayIntegrityCheck = internalQuery({
   args: {},
   handler: async (ctx) => {
     const result = await replayJournalIntegrity(ctx, { mode: "full" });
-    // Convert bigint fields for serialization across action/query boundary
+    // Return result as-is; fromSequence, toSequence, and missingSequences are already strings per ReplayResult
     return {
       ...result,
       fromSequence: result.fromSequence,
