@@ -2,10 +2,16 @@ import { convexTest } from "convex-test";
 import { describe, expect, it } from "vitest";
 import { components } from "../../../_generated/api";
 import type { Id } from "../../../_generated/dataModel";
+import type { MutationCtx } from "../../../_generated/server";
 import { AuditTrail } from "../../../auditTrailClient";
 import auditTrailSchema from "../../../components/auditTrail/schema";
 import schema from "../../../schema";
 import { buildCashLedgerAuditArgs } from "../hashChain";
+import type {
+	CashAccountFamily,
+	CashEntryType,
+	ControlSubaccount,
+} from "../types";
 import { ADMIN_SOURCE, SYSTEM_SOURCE } from "./testUtils";
 
 const auditTrail = new AuditTrail(components.auditTrail);
@@ -25,13 +31,117 @@ function makeHarness() {
 	return t;
 }
 
+// ── I6: Shared helper — reduces ~30-line boilerplate per test ───────
+
+interface CreateEntryAndAuditOpts {
+	amount: bigint;
+	causedBy?: Id<"cash_ledger_journal_entries">;
+	creditFamily: CashAccountFamily;
+	creditSubaccount?: ControlSubaccount;
+	debitFamily: CashAccountFamily;
+	debitSubaccount?: ControlSubaccount;
+	effectiveDate?: string;
+	entryType: CashEntryType;
+	idempotencyKey?: string;
+	reason?: string;
+	source?: typeof SYSTEM_SOURCE;
+}
+
+async function createEntryAndAudit(
+	ctx: MutationCtx,
+	opts: CreateEntryAndAuditOpts
+) {
+	const { getOrCreateCashAccount } = await import("../accounts");
+	const { getCashAccountBalance, projectCashAccountBalance } = await import(
+		"../accounts"
+	);
+	const { getNextCashSequenceNumber } = await import("../sequenceCounter");
+
+	const debitRef = await getOrCreateCashAccount(ctx, {
+		family: opts.debitFamily,
+		subaccount: opts.debitSubaccount,
+	});
+	const creditRef = await getOrCreateCashAccount(ctx, {
+		family: opts.creditFamily,
+		subaccount: opts.creditSubaccount,
+	});
+
+	const debitAccount = await ctx.db.get(debitRef._id);
+	const creditAccount = await ctx.db.get(creditRef._id);
+	if (!(debitAccount && creditAccount)) {
+		throw new Error("Account not found");
+	}
+
+	const debitBalanceBefore = getCashAccountBalance(debitAccount);
+	const creditBalanceBefore = getCashAccountBalance(creditAccount);
+
+	await Promise.all([
+		ctx.db.patch(debitAccount._id, {
+			cumulativeDebits: debitAccount.cumulativeDebits + opts.amount,
+		}),
+		ctx.db.patch(creditAccount._id, {
+			cumulativeCredits: creditAccount.cumulativeCredits + opts.amount,
+		}),
+	]);
+
+	const sequenceNumber = await getNextCashSequenceNumber(ctx);
+	const eid = await ctx.db.insert("cash_ledger_journal_entries", {
+		sequenceNumber,
+		entryType: opts.entryType,
+		effectiveDate: opts.effectiveDate ?? "2026-03-01",
+		timestamp: Date.now(),
+		debitAccountId: debitAccount._id,
+		creditAccountId: creditAccount._id,
+		amount: opts.amount,
+		idempotencyKey:
+			opts.idempotencyKey ?? `test-${Date.now()}-${Math.random()}`,
+		source: opts.source ?? SYSTEM_SOURCE,
+		causedBy: opts.causedBy,
+		reason: opts.reason,
+	});
+
+	const entry = await ctx.db.get(eid);
+	if (!entry) {
+		throw new Error("Failed to create entry");
+	}
+
+	const projectedDebit = projectCashAccountBalance(
+		debitAccount,
+		"debit",
+		opts.amount
+	);
+	const projectedCredit = projectCashAccountBalance(
+		creditAccount,
+		"credit",
+		opts.amount
+	);
+
+	const auditArgs = buildCashLedgerAuditArgs(
+		entry,
+		{ debit: debitBalanceBefore, credit: creditBalanceBefore },
+		{ debit: projectedDebit, credit: projectedCredit }
+	);
+
+	await auditTrail.insert(ctx, auditArgs);
+
+	return {
+		entry,
+		debitAccount,
+		creditAccount,
+		debitBalanceBefore,
+		creditBalanceBefore,
+		projectedDebit,
+		projectedCredit,
+		auditArgs,
+	};
+}
+
 // ── T-008: Harness setup — verify component registration works ─────────
 
 describe("Audit Trail — T-008: harness setup", () => {
 	it("registers auditTrail component and runs a no-op mutation", async () => {
 		const t = makeHarness();
 
-		// Create accounts and a journal entry (no audit step)
 		const result = await t.run(async (ctx) => {
 			const { getOrCreateCashAccount } = await import("../accounts");
 			const { getCashAccountBalance } = await import("../accounts");
@@ -52,7 +162,6 @@ describe("Audit Trail — T-008: harness setup", () => {
 
 			const amount = BigInt(1000);
 			const debitBalanceBefore = getCashAccountBalance(trustAccount);
-			const creditBalanceBefore = getCashAccountBalance(borrowerAccount);
 
 			await Promise.all([
 				ctx.db.patch(trustAccount._id, {
@@ -84,539 +193,160 @@ describe("Audit Trail — T-008: harness setup", () => {
 			return {
 				entryId: entry._id as string,
 				debitBalanceBefore: debitBalanceBefore.toString(),
-				creditBalanceBefore: creditBalanceBefore.toString(),
-				trustCashId: trustAccount._id as string,
-				borrowerRecId: borrowerAccount._id as string,
 			};
 		});
 
-		// Verify entry exists (audit trail worked if we got here without error)
 		expect(result.entryId).toBeTruthy();
 		expect(result.debitBalanceBefore).toBe("0");
 	});
 });
 
 // ── T-009: Successful posting creates audit record ─────────────────
-// processCashLedgerHashChainStep throws on failure. If t.run() completes
-// without throwing, the audit record was created successfully.
+// auditTrail.insert() throws on failure. If t.run() completes without
+// throwing, the audit record was created successfully.
 
 describe("T-009 — successful posting creates audit record", () => {
-	it("processCashLedgerHashChainStep completes without error for OBLIGATION_ACCRUED", async () => {
+	it("completes without error for OBLIGATION_ACCRUED", async () => {
 		const t = makeHarness();
 
 		await t.run(async (ctx) => {
-			const { getOrCreateCashAccount } = await import("../accounts");
-			const { getCashAccountBalance, projectCashAccountBalance } = await import(
-				"../accounts"
-			);
-			const { getNextCashSequenceNumber } = await import("../sequenceCounter");
-
-			const debit = await getOrCreateCashAccount(ctx, {
-				family: "BORROWER_RECEIVABLE",
-			});
-			const credit = await getOrCreateCashAccount(ctx, {
-				family: "CONTROL",
-				subaccount: "ACCRUAL",
-			});
-
-			const debitAccount = await ctx.db.get(debit._id);
-			const creditAccount = await ctx.db.get(credit._id);
-			if (!(debitAccount && creditAccount)) {
-				throw new Error("Account not found");
-			}
-
-			const amount = BigInt(10_000);
-			const debitBalanceBefore = getCashAccountBalance(debitAccount);
-			const creditBalanceBefore = getCashAccountBalance(creditAccount);
-
-			await Promise.all([
-				ctx.db.patch(debitAccount._id, {
-					cumulativeDebits: debitAccount.cumulativeDebits + amount,
-				}),
-				ctx.db.patch(creditAccount._id, {
-					cumulativeCredits: creditAccount.cumulativeCredits + amount,
-				}),
-			]);
-
-			const sequenceNumber = await getNextCashSequenceNumber(ctx);
-			const eid = await ctx.db.insert("cash_ledger_journal_entries", {
-				sequenceNumber,
+			await createEntryAndAudit(ctx, {
 				entryType: "OBLIGATION_ACCRUED",
+				debitFamily: "BORROWER_RECEIVABLE",
+				creditFamily: "CONTROL",
+				creditSubaccount: "ACCRUAL",
+				amount: BigInt(10_000),
 				effectiveDate: "2026-01-15",
-				timestamp: Date.now(),
-				debitAccountId: debitAccount._id,
-				creditAccountId: creditAccount._id,
-				amount,
-				idempotencyKey: `audit-success-post-${Date.now()}`,
-				source: SYSTEM_SOURCE,
 			});
-
-			const entry = await ctx.db.get(eid);
-			if (!entry) {
-				throw new Error("Failed to create entry");
-			}
-
-			const projectedDebit = projectCashAccountBalance(
-				debitAccount,
-				"debit",
-				amount
-			);
-			const projectedCredit = projectCashAccountBalance(
-				creditAccount,
-				"credit",
-				amount
-			);
-
-			// This creates the audit record. If it throws, the test fails.
-			await auditTrail.insert(
-				ctx,
-				buildCashLedgerAuditArgs(
-					entry,
-					{ debit: debitBalanceBefore, credit: creditBalanceBefore },
-					{ debit: projectedDebit, credit: projectedCredit }
-				)
-			);
 		});
-
-		// If we reach here, no error was thrown — audit record was created
-		expect(true).toBe(true);
 	});
 
-	it("processCashLedgerHashChainStep completes for CASH_RECEIVED with correct eventType", async () => {
+	it("completes for CASH_RECEIVED with correct eventType", async () => {
 		const t = makeHarness();
 
-		await t.run(async (ctx) => {
-			const { getOrCreateCashAccount } = await import("../accounts");
-			const { getCashAccountBalance, projectCashAccountBalance } = await import(
-				"../accounts"
-			);
-			const { getNextCashSequenceNumber } = await import("../sequenceCounter");
-
-			const trustCash = await getOrCreateCashAccount(ctx, {
-				family: "TRUST_CASH",
-			});
-			const borrowerRec = await getOrCreateCashAccount(ctx, {
-				family: "BORROWER_RECEIVABLE",
-			});
-
-			const trustAccount = await ctx.db.get(trustCash._id);
-			const borrowerAccount = await ctx.db.get(borrowerRec._id);
-			if (!(trustAccount && borrowerAccount)) {
-				throw new Error("Account not found");
-			}
-
-			const amount = BigInt(25_000);
-			const debitBalanceBefore = getCashAccountBalance(trustAccount);
-			const creditBalanceBefore = getCashAccountBalance(borrowerAccount);
-
-			await Promise.all([
-				ctx.db.patch(trustAccount._id, {
-					cumulativeDebits: trustAccount.cumulativeDebits + amount,
-				}),
-				ctx.db.patch(borrowerAccount._id, {
-					cumulativeCredits: borrowerAccount.cumulativeCredits + amount,
-				}),
-			]);
-
-			const sequenceNumber = await getNextCashSequenceNumber(ctx);
-			const eid = await ctx.db.insert("cash_ledger_journal_entries", {
-				sequenceNumber,
+		const result = await t.run(async (ctx) => {
+			const r = await createEntryAndAudit(ctx, {
 				entryType: "CASH_RECEIVED",
+				debitFamily: "TRUST_CASH",
+				creditFamily: "BORROWER_RECEIVABLE",
+				amount: BigInt(25_000),
 				effectiveDate: "2026-02-01",
-				timestamp: Date.now(),
-				debitAccountId: trustAccount._id,
-				creditAccountId: borrowerAccount._id,
-				amount,
-				idempotencyKey: `audit-cash-received-${Date.now()}`,
-				source: SYSTEM_SOURCE,
 			});
-
-			const entry = await ctx.db.get(eid);
-			if (!entry) {
-				throw new Error("Failed to create entry");
-			}
-
-			expect(entry.entryType).toBe("CASH_RECEIVED");
-
-			const projectedDebit = projectCashAccountBalance(
-				trustAccount,
-				"debit",
-				amount
-			);
-			const projectedCredit = projectCashAccountBalance(
-				borrowerAccount,
-				"credit",
-				amount
-			);
-
-			await auditTrail.insert(
-				ctx,
-				buildCashLedgerAuditArgs(
-					entry,
-					{ debit: debitBalanceBefore, credit: creditBalanceBefore },
-					{ debit: projectedDebit, credit: projectedCredit }
-				)
-			);
+			return { eventType: r.entry.entryType };
 		});
 
-		expect(true).toBe(true);
+		expect(result.eventType).toBe("CASH_RECEIVED");
 	});
 });
 
 // ── T-010: Balance state transitions ─────────────────────────────────
 
 describe("T-010 — balance state transitions recorded in beforeState/afterState", () => {
-	it("processCashLedgerHashChainStep receives correct balance snapshots", async () => {
+	it("receives correct balance snapshots", async () => {
 		const t = makeHarness();
 
-		await t.run(async (ctx) => {
-			const { getOrCreateCashAccount } = await import("../accounts");
-			const { getCashAccountBalance, projectCashAccountBalance } = await import(
-				"../accounts"
-			);
-			const { getNextCashSequenceNumber } = await import("../sequenceCounter");
-
-			const trustCash = await getOrCreateCashAccount(ctx, {
-				family: "TRUST_CASH",
-			});
-			const borrowerRec = await getOrCreateCashAccount(ctx, {
-				family: "BORROWER_RECEIVABLE",
-			});
-
-			const trustAccount = await ctx.db.get(trustCash._id);
-			const borrowerAccount = await ctx.db.get(borrowerRec._id);
-			if (!(trustAccount && borrowerAccount)) {
-				throw new Error("Account not found");
-			}
-
+		const result = await t.run(async (ctx) => {
 			const amount = BigInt(50_000);
-			const debitBalanceBefore = getCashAccountBalance(trustAccount);
-			const creditBalanceBefore = getCashAccountBalance(borrowerAccount);
-
-			// Verify pre-state
-			expect(debitBalanceBefore >= 0n).toBe(true);
-
-			await Promise.all([
-				ctx.db.patch(trustAccount._id, {
-					cumulativeDebits: trustAccount.cumulativeDebits + amount,
-				}),
-				ctx.db.patch(borrowerAccount._id, {
-					cumulativeCredits: borrowerAccount.cumulativeCredits + amount,
-				}),
-			]);
-
-			const sequenceNumber = await getNextCashSequenceNumber(ctx);
-			const eid = await ctx.db.insert("cash_ledger_journal_entries", {
-				sequenceNumber,
+			const r = await createEntryAndAudit(ctx, {
 				entryType: "CASH_RECEIVED",
-				effectiveDate: "2026-03-01",
-				timestamp: Date.now(),
-				debitAccountId: trustAccount._id,
-				creditAccountId: borrowerAccount._id,
+				debitFamily: "TRUST_CASH",
+				creditFamily: "BORROWER_RECEIVABLE",
 				amount,
-				idempotencyKey: `audit-balance-state-${Date.now()}`,
-				source: SYSTEM_SOURCE,
+				effectiveDate: "2026-03-01",
 			});
 
-			const entry = await ctx.db.get(eid);
-			if (!entry) {
-				throw new Error("Failed to create entry");
-			}
-
-			const projectedDebit = projectCashAccountBalance(
-				trustAccount,
-				"debit",
-				amount
-			);
-			const projectedCredit = projectCashAccountBalance(
-				borrowerAccount,
-				"credit",
-				amount
-			);
-
-			// Verify projected balances incorporate the amount
-			// TRUST_CASH is debit-normal: debiting adds to balance
-			expect(projectedDebit).toBe(debitBalanceBefore + amount);
-			// BORROWER_RECEIVABLE is debit-normal: crediting reduces balance
-			expect(projectedCredit).toBe(creditBalanceBefore - amount);
-
-			await auditTrail.insert(
-				ctx,
-				buildCashLedgerAuditArgs(
-					entry,
-					{ debit: debitBalanceBefore, credit: creditBalanceBefore },
-					{ debit: projectedDebit, credit: projectedCredit }
-				)
-			);
+			return {
+				debitBalanceBefore: r.debitBalanceBefore,
+				creditBalanceBefore: r.creditBalanceBefore,
+				projectedDebit: r.projectedDebit,
+				projectedCredit: r.projectedCredit,
+				amount,
+			};
 		});
 
-		expect(true).toBe(true);
+		// TRUST_CASH is not in CREDIT_NORMAL_FAMILIES: balance = debits - credits.
+		// Debiting increases balance.
+		expect(result.projectedDebit).toBe(
+			result.debitBalanceBefore + result.amount
+		);
+		// BORROWER_RECEIVABLE is not in CREDIT_NORMAL_FAMILIES: crediting reduces balance.
+		expect(result.projectedCredit).toBe(
+			result.creditBalanceBefore - result.amount
+		);
 	});
 
 	it("beforeState/afterState include amount and account ids from entry", async () => {
 		const t = makeHarness();
 
-		await t.run(async (ctx) => {
-			const { getOrCreateCashAccount } = await import("../accounts");
-			const { getCashAccountBalance, projectCashAccountBalance } = await import(
-				"../accounts"
-			);
-			const { getNextCashSequenceNumber } = await import("../sequenceCounter");
-
-			const controlAcc = await getOrCreateCashAccount(ctx, {
-				family: "CONTROL",
-				subaccount: "ACCRUAL",
-			});
-			const borrowerRec = await getOrCreateCashAccount(ctx, {
-				family: "BORROWER_RECEIVABLE",
-			});
-
-			const controlAccount = await ctx.db.get(controlAcc._id);
-			const borrowerAccount = await ctx.db.get(borrowerRec._id);
-			if (!(controlAccount && borrowerAccount)) {
-				throw new Error("Account not found");
-			}
-
-			const amount = BigInt(15_000);
-			const debitBalanceBefore = getCashAccountBalance(controlAccount);
-			const creditBalanceBefore = getCashAccountBalance(borrowerAccount);
-
-			await Promise.all([
-				ctx.db.patch(controlAccount._id, {
-					cumulativeDebits: controlAccount.cumulativeDebits + amount,
-				}),
-				ctx.db.patch(borrowerAccount._id, {
-					cumulativeCredits: borrowerAccount.cumulativeCredits + amount,
-				}),
-			]);
-
-			const sequenceNumber = await getNextCashSequenceNumber(ctx);
-			const eid = await ctx.db.insert("cash_ledger_journal_entries", {
-				sequenceNumber,
+		const result = await t.run(async (ctx) => {
+			const r = await createEntryAndAudit(ctx, {
 				entryType: "OBLIGATION_WAIVED",
+				debitFamily: "CONTROL",
+				debitSubaccount: "ACCRUAL",
+				creditFamily: "BORROWER_RECEIVABLE",
+				amount: BigInt(15_000),
 				effectiveDate: "2026-03-05",
-				timestamp: Date.now(),
-				debitAccountId: controlAccount._id,
-				creditAccountId: borrowerAccount._id,
-				amount,
-				idempotencyKey: `audit-state-amounts-${Date.now()}`,
-				source: SYSTEM_SOURCE,
 				reason: "Borrower hardship waiver",
 			});
 
-			const entry = await ctx.db.get(eid);
-			if (!entry) {
-				throw new Error("Failed to create entry");
-			}
-
-			expect(entry.amount.toString()).toBe(amount.toString());
-			expect(entry.debitAccountId as string).toBe(controlAccount._id as string);
-			expect(entry.creditAccountId as string).toBe(
-				borrowerAccount._id as string
-			);
-
-			const projectedDebit = projectCashAccountBalance(
-				controlAccount,
-				"debit",
-				amount
-			);
-			const projectedCredit = projectCashAccountBalance(
-				borrowerAccount,
-				"credit",
-				amount
-			);
-
-			await auditTrail.insert(
-				ctx,
-				buildCashLedgerAuditArgs(
-					entry,
-					{ debit: debitBalanceBefore, credit: creditBalanceBefore },
-					{ debit: projectedDebit, credit: projectedCredit }
-				)
-			);
+			return {
+				amount: r.entry.amount.toString(),
+				debitAccountId: r.entry.debitAccountId as string,
+				creditAccountId: r.entry.creditAccountId as string,
+				controlId: r.debitAccount._id as string,
+				borrowerId: r.creditAccount._id as string,
+			};
 		});
 
-		expect(true).toBe(true);
+		expect(result.amount).toBe("15000");
+		expect(result.debitAccountId).toBe(result.controlId);
+		expect(result.creditAccountId).toBe(result.borrowerId);
 	});
 });
 
 // ── T-011: Hash chain integrity ────────────────────────────────────
 
 describe("T-011 — hash chain integrity", () => {
-	it("processCashLedgerHashChainStep completes for single entry without hash errors", async () => {
+	it("single entry inserts into audit trail without errors", async () => {
 		const t = makeHarness();
 
 		await t.run(async (ctx) => {
-			const { getOrCreateCashAccount } = await import("../accounts");
-			const { getCashAccountBalance, projectCashAccountBalance } = await import(
-				"../accounts"
-			);
-			const { getNextCashSequenceNumber } = await import("../sequenceCounter");
-
-			const trustCash = await getOrCreateCashAccount(ctx, {
-				family: "TRUST_CASH",
-			});
-			const borrowerRec = await getOrCreateCashAccount(ctx, {
-				family: "BORROWER_RECEIVABLE",
-			});
-
-			const trustAccount = await ctx.db.get(trustCash._id);
-			const borrowerAccount = await ctx.db.get(borrowerRec._id);
-			if (!(trustAccount && borrowerAccount)) {
-				throw new Error("Account not found");
-			}
-
-			const amount = BigInt(30_000);
-			const debitBalanceBefore = getCashAccountBalance(trustAccount);
-			const creditBalanceBefore = getCashAccountBalance(borrowerAccount);
-
-			await Promise.all([
-				ctx.db.patch(trustAccount._id, {
-					cumulativeDebits: trustAccount.cumulativeDebits + amount,
-				}),
-				ctx.db.patch(borrowerAccount._id, {
-					cumulativeCredits: borrowerAccount.cumulativeCredits + amount,
-				}),
-			]);
-
-			const sequenceNumber = await getNextCashSequenceNumber(ctx);
-			const eid = await ctx.db.insert("cash_ledger_journal_entries", {
-				sequenceNumber,
+			await createEntryAndAudit(ctx, {
 				entryType: "CASH_RECEIVED",
+				debitFamily: "TRUST_CASH",
+				creditFamily: "BORROWER_RECEIVABLE",
+				amount: BigInt(30_000),
 				effectiveDate: "2026-03-10",
-				timestamp: Date.now(),
-				debitAccountId: trustAccount._id,
-				creditAccountId: borrowerAccount._id,
-				amount,
-				idempotencyKey: `audit-chain-single-${Date.now()}`,
-				source: SYSTEM_SOURCE,
 			});
-
-			const entry = await ctx.db.get(eid);
-			if (!entry) {
-				throw new Error("Failed to create entry");
-			}
-
-			const projectedDebit = projectCashAccountBalance(
-				trustAccount,
-				"debit",
-				amount
-			);
-			const projectedCredit = projectCashAccountBalance(
-				borrowerAccount,
-				"credit",
-				amount
-			);
-
-			// Hash chain step computes SHA-256. If it completes, hash chain is valid for this entry.
-			await auditTrail.insert(
-				ctx,
-				buildCashLedgerAuditArgs(
-					entry,
-					{ debit: debitBalanceBefore, credit: creditBalanceBefore },
-					{ debit: projectedDebit, credit: projectedCredit }
-				)
-			);
 		});
-
-		expect(true).toBe(true);
 	});
 
-	it("processCashLedgerHashChainStep completes for multiple entries — verifies no hash collisions", async () => {
+	it("multiple sequential entries insert without errors", async () => {
 		const t = makeHarness();
 
 		await t.run(async (ctx) => {
-			const { getOrCreateCashAccount } = await import("../accounts");
-			const { getCashAccountBalance, projectCashAccountBalance } = await import(
-				"../accounts"
-			);
-			const { getNextCashSequenceNumber } = await import("../sequenceCounter");
-
-			const trustCash = await getOrCreateCashAccount(ctx, {
-				family: "TRUST_CASH",
-			});
-			const borrowerRec = await getOrCreateCashAccount(ctx, {
-				family: "BORROWER_RECEIVABLE",
-			});
-
-			const trustAccount = await ctx.db.get(trustCash._id);
-			const borrowerAccount = await ctx.db.get(borrowerRec._id);
-			if (!(trustAccount && borrowerAccount)) {
-				throw new Error("Account not found");
-			}
-
 			const amounts = [10_000, 20_000, 35_000];
-
-			for (let i = 0; i < amounts.length; i++) {
-				const amount = BigInt(amounts[i]);
-				const debitBalanceBefore = getCashAccountBalance(trustAccount);
-				const creditBalanceBefore = getCashAccountBalance(borrowerAccount);
-
-				await Promise.all([
-					ctx.db.patch(trustAccount._id, {
-						cumulativeDebits: trustAccount.cumulativeDebits + amount,
-					}),
-					ctx.db.patch(borrowerAccount._id, {
-						cumulativeCredits: borrowerAccount.cumulativeCredits + amount,
-					}),
-				]);
-
-				const updatedTrust = await ctx.db.get(trustCash._id);
-				const updatedBorrower = await ctx.db.get(borrowerRec._id);
-
-				const sequenceNumber = await getNextCashSequenceNumber(ctx);
-				const eid = await ctx.db.insert("cash_ledger_journal_entries", {
-					sequenceNumber,
+			for (const amt of amounts) {
+				await createEntryAndAudit(ctx, {
 					entryType: "CASH_RECEIVED",
+					debitFamily: "TRUST_CASH",
+					creditFamily: "BORROWER_RECEIVABLE",
+					amount: BigInt(amt),
 					effectiveDate: "2026-03-10",
-					timestamp: Date.now(),
-					debitAccountId: trustAccount._id,
-					creditAccountId: borrowerAccount._id,
-					amount,
-					idempotencyKey: `audit-chain-multi-${Date.now()}-${i}`,
-					source: SYSTEM_SOURCE,
 				});
-
-				const entry = await ctx.db.get(eid);
-				if (!entry) {
-					throw new Error("Failed to create entry");
-				}
-
-				const projectedDebit = projectCashAccountBalance(
-					updatedTrust ?? trustAccount,
-					"debit",
-					amount
-				);
-				const projectedCredit = projectCashAccountBalance(
-					updatedBorrower ?? borrowerAccount,
-					"credit",
-					amount
-				);
-
-				// Each entry gets its own hash. All must complete without collision.
-				await auditTrail.insert(
-					ctx,
-					buildCashLedgerAuditArgs(
-						entry,
-						{ debit: debitBalanceBefore, credit: creditBalanceBefore },
-						{ debit: projectedDebit, credit: projectedCredit }
-					)
-				);
 			}
 		});
-
-		expect(true).toBe(true);
 	});
 });
 
 // ── T-012: Rejected postings create audit records ───────────────────
+// C3: validateInput is now inside the try/catch, so ALL validation failures
+// (including amount=0, negative amount) trigger rejection auditing.
 
 describe("T-012 — rejected posting creates audit record with :REJECTED", () => {
-	it("records rejection audit when amount=0 fails validation", async () => {
+	it("amount=0 fails validation and triggers rejection audit", async () => {
 		const t = makeHarness();
-		const idempotencyKey = `audit-rejection-${Date.now()}`;
 
-		// Attempt invalid posting — should throw
 		await t.run(async (ctx) => {
 			const { getOrCreateCashAccount } = await import("../accounts");
 			const { postCashEntryInternal } = await import("../postEntry");
@@ -629,7 +359,6 @@ describe("T-012 — rejected posting creates audit record with :REJECTED", () =>
 				subaccount: "ACCRUAL",
 			});
 
-			// ValidationError: amount must be positive
 			await expect(
 				postCashEntryInternal(ctx, {
 					amount: 0,
@@ -637,20 +366,15 @@ describe("T-012 — rejected posting creates audit record with :REJECTED", () =>
 					entryType: "OBLIGATION_ACCRUED",
 					debitAccountId: debit._id,
 					creditAccountId: credit._id,
-					idempotencyKey,
+					idempotencyKey: `audit-rejection-${Date.now()}`,
 					source: SYSTEM_SOURCE,
 				})
-			).rejects.toThrow();
+			).rejects.toThrow("positive safe integer");
 		});
-
-		// The rejection was audited (postCashEntryInternal catches the error and calls auditTrail.insert
-		// before re-throwing). If we got here without an unhandled error, the audit was attempted.
-		expect(true).toBe(true);
 	});
 
-	it("records rejection audit when negative amount fails validation", async () => {
+	it("negative amount fails validation and triggers rejection audit", async () => {
 		const t = makeHarness();
-		const idempotencyKey = `audit-rejection-reason-${Date.now()}`;
 
 		await t.run(async (ctx) => {
 			const { getOrCreateCashAccount } = await import("../accounts");
@@ -664,7 +388,6 @@ describe("T-012 — rejected posting creates audit record with :REJECTED", () =>
 				subaccount: "ACCRUAL",
 			});
 
-			// ValidationError: negative amount
 			await expect(
 				postCashEntryInternal(ctx, {
 					amount: -500,
@@ -672,18 +395,15 @@ describe("T-012 — rejected posting creates audit record with :REJECTED", () =>
 					entryType: "OBLIGATION_ACCRUED",
 					debitAccountId: debit._id,
 					creditAccountId: credit._id,
-					idempotencyKey,
+					idempotencyKey: `audit-rejection-neg-${Date.now()}`,
 					source: SYSTEM_SOURCE,
 				})
-			).rejects.toThrow();
+			).rejects.toThrow("positive safe integer");
 		});
-
-		expect(true).toBe(true);
 	});
 
 	it("CORRECTION without admin source fails constraint check and creates rejection audit", async () => {
 		const t = makeHarness();
-		const idempotencyKey = `audit-rejection-actor-${Date.now()}`;
 
 		await t.run(async (ctx) => {
 			const { getOrCreateCashAccount } = await import("../accounts");
@@ -697,7 +417,6 @@ describe("T-012 — rejected posting creates audit record with :REJECTED", () =>
 				subaccount: "ACCRUAL",
 			});
 
-			// CORRECTION requires admin actorType — using system fails constraint check
 			await expect(
 				postCashEntryInternal(ctx, {
 					amount: 1000,
@@ -705,100 +424,41 @@ describe("T-012 — rejected posting creates audit record with :REJECTED", () =>
 					entryType: "CORRECTION",
 					debitAccountId: debit._id,
 					creditAccountId: credit._id,
-					idempotencyKey,
+					idempotencyKey: `audit-rejection-actor-${Date.now()}`,
 					source: SYSTEM_SOURCE, // not admin
 					causedBy: debit._id as unknown as Id<"cash_ledger_journal_entries">,
 					reason: "test correction reason",
 				})
-			).rejects.toThrow();
+			).rejects.toThrow("admin actorType");
 		});
-
-		expect(true).toBe(true);
 	});
 });
 
 // ── T-013: Correction chain auditable ──────────────────────────────
 
 describe("T-013 — correction chain auditable with causedBy in metadata", () => {
-	it("original entry and CORRECTION both complete processCashLedgerHashChainStep", async () => {
+	it("original entry and CORRECTION both complete audit trail insertion", async () => {
 		const t = makeHarness();
 
-		await t.run(async (ctx) => {
-			const { getOrCreateCashAccount } = await import("../accounts");
+		const result = await t.run(async (ctx) => {
+			// Post original OBLIGATION_ACCRUED
+			const orig = await createEntryAndAudit(ctx, {
+				entryType: "OBLIGATION_ACCRUED",
+				debitFamily: "CONTROL",
+				debitSubaccount: "ACCRUAL",
+				creditFamily: "BORROWER_RECEIVABLE",
+				amount: BigInt(20_000),
+				effectiveDate: "2026-01-15",
+			});
+
+			// Post CORRECTION referencing the original
 			const { getCashAccountBalance, projectCashAccountBalance } = await import(
 				"../accounts"
 			);
 			const { getNextCashSequenceNumber } = await import("../sequenceCounter");
 
-			const controlAccrual = await getOrCreateCashAccount(ctx, {
-				family: "CONTROL",
-				subaccount: "ACCRUAL",
-			});
-			const borrowerRec = await getOrCreateCashAccount(ctx, {
-				family: "BORROWER_RECEIVABLE",
-			});
-
-			const controlAccount = await ctx.db.get(controlAccrual._id);
-			const borrowerAccount = await ctx.db.get(borrowerRec._id);
-			if (!(controlAccount && borrowerAccount)) {
-				throw new Error("Account not found");
-			}
-
-			// ── Post original OBLIGATION_ACCRUED
-			const origAmount = BigInt(20_000);
-			const origDebitBalBefore = getCashAccountBalance(controlAccount);
-			const origCreditBalBefore = getCashAccountBalance(borrowerAccount);
-
-			await Promise.all([
-				ctx.db.patch(controlAccount._id, {
-					cumulativeDebits: controlAccount.cumulativeDebits + origAmount,
-				}),
-				ctx.db.patch(borrowerAccount._id, {
-					cumulativeCredits: borrowerAccount.cumulativeCredits + origAmount,
-				}),
-			]);
-
-			const seq1 = await getNextCashSequenceNumber(ctx);
-			const origEid = await ctx.db.insert("cash_ledger_journal_entries", {
-				sequenceNumber: seq1,
-				entryType: "OBLIGATION_ACCRUED",
-				effectiveDate: "2026-01-15",
-				timestamp: Date.now(),
-				debitAccountId: controlAccount._id,
-				creditAccountId: borrowerAccount._id,
-				amount: origAmount,
-				idempotencyKey: `audit-correction-orig-${Date.now()}`,
-				source: SYSTEM_SOURCE,
-			});
-
-			const origEntry = await ctx.db.get(origEid);
-			if (!origEntry) {
-				throw new Error("Failed to create original entry");
-			}
-
-			const origProjDebit = projectCashAccountBalance(
-				controlAccount,
-				"debit",
-				origAmount
-			);
-			const origProjCredit = projectCashAccountBalance(
-				borrowerAccount,
-				"credit",
-				origAmount
-			);
-
-			await auditTrail.insert(
-				ctx,
-				buildCashLedgerAuditArgs(
-					origEntry,
-					{ debit: origDebitBalBefore, credit: origCreditBalBefore },
-					{ debit: origProjDebit, credit: origProjCredit }
-				)
-			);
-
-			// ── Post CORRECTION
-			const ctrlAfter = await ctx.db.get(controlAccrual._id);
-			const borrowAfter = await ctx.db.get(borrowerRec._id);
+			const ctrlAfter = await ctx.db.get(orig.debitAccount._id);
+			const borrowAfter = await ctx.db.get(orig.creditAccount._id);
 			if (!(ctrlAfter && borrowAfter)) {
 				throw new Error("Account not found");
 			}
@@ -827,7 +487,7 @@ describe("T-013 — correction chain auditable with causedBy in metadata", () =>
 				amount: corrAmount,
 				idempotencyKey: `audit-correction-corr-${Date.now()}`,
 				source: ADMIN_SOURCE,
-				causedBy: origEntry._id,
+				causedBy: orig.entry._id,
 				reason: "Correcting accrual entry — wrong amount",
 			});
 
@@ -835,10 +495,6 @@ describe("T-013 — correction chain auditable with causedBy in metadata", () =>
 			if (!corrEntry) {
 				throw new Error("Failed to create correction entry");
 			}
-
-			expect(corrEntry.entryType).toBe("CORRECTION");
-			expect(corrEntry.causedBy as string).toBe(origEntry._id as string);
-			expect(corrEntry.reason).toBe("Correcting accrual entry — wrong amount");
 
 			const corrProjDebit = projectCashAccountBalance(
 				ctrlAfter,
@@ -859,88 +515,40 @@ describe("T-013 — correction chain auditable with causedBy in metadata", () =>
 					{ debit: corrProjDebit, credit: corrProjCredit }
 				)
 			);
+
+			return {
+				corrEntryType: corrEntry.entryType,
+				corrCausedBy: corrEntry.causedBy as string,
+				origEntryId: orig.entry._id as string,
+				corrReason: corrEntry.reason,
+			};
 		});
 
-		expect(true).toBe(true);
+		expect(result.corrEntryType).toBe("CORRECTION");
+		expect(result.corrCausedBy).toBe(result.origEntryId);
+		expect(result.corrReason).toBe("Correcting accrual entry — wrong amount");
 	});
 
 	it("correction entry contains causedBy in metadata field", async () => {
 		const t = makeHarness();
 
-		await t.run(async (ctx) => {
-			const { getOrCreateCashAccount } = await import("../accounts");
+		const result = await t.run(async (ctx) => {
+			const orig = await createEntryAndAudit(ctx, {
+				entryType: "OBLIGATION_ACCRUED",
+				debitFamily: "CONTROL",
+				debitSubaccount: "ACCRUAL",
+				creditFamily: "BORROWER_RECEIVABLE",
+				amount: BigInt(15_000),
+				effectiveDate: "2026-02-01",
+			});
+
 			const { getCashAccountBalance, projectCashAccountBalance } = await import(
 				"../accounts"
 			);
 			const { getNextCashSequenceNumber } = await import("../sequenceCounter");
 
-			const controlAccrual = await getOrCreateCashAccount(ctx, {
-				family: "CONTROL",
-				subaccount: "ACCRUAL",
-			});
-			const borrowerRec = await getOrCreateCashAccount(ctx, {
-				family: "BORROWER_RECEIVABLE",
-			});
-
-			const controlAccount = await ctx.db.get(controlAccrual._id);
-			const borrowerAccount = await ctx.db.get(borrowerRec._id);
-			if (!(controlAccount && borrowerAccount)) {
-				throw new Error("Account not found");
-			}
-
-			const origAmount = BigInt(15_000);
-			const origDebitBalBefore = getCashAccountBalance(controlAccount);
-			const origCreditBalBefore = getCashAccountBalance(borrowerAccount);
-
-			await Promise.all([
-				ctx.db.patch(controlAccount._id, {
-					cumulativeDebits: controlAccount.cumulativeDebits + origAmount,
-				}),
-				ctx.db.patch(borrowerAccount._id, {
-					cumulativeCredits: borrowerAccount.cumulativeCredits + origAmount,
-				}),
-			]);
-
-			const seq1 = await getNextCashSequenceNumber(ctx);
-			const origEid = await ctx.db.insert("cash_ledger_journal_entries", {
-				sequenceNumber: seq1,
-				entryType: "OBLIGATION_ACCRUED",
-				effectiveDate: "2026-02-01",
-				timestamp: Date.now(),
-				debitAccountId: controlAccount._id,
-				creditAccountId: borrowerAccount._id,
-				amount: origAmount,
-				idempotencyKey: `audit-meta-orig-${Date.now()}`,
-				source: SYSTEM_SOURCE,
-			});
-
-			const origEntry = await ctx.db.get(origEid);
-			if (!origEntry) {
-				throw new Error("Failed to create original entry");
-			}
-
-			const origProjDebit = projectCashAccountBalance(
-				controlAccount,
-				"debit",
-				origAmount
-			);
-			const origProjCredit = projectCashAccountBalance(
-				borrowerAccount,
-				"credit",
-				origAmount
-			);
-
-			await auditTrail.insert(
-				ctx,
-				buildCashLedgerAuditArgs(
-					origEntry,
-					{ debit: origDebitBalBefore, credit: origCreditBalBefore },
-					{ debit: origProjDebit, credit: origProjCredit }
-				)
-			);
-
-			const ctrlAfter = await ctx.db.get(controlAccrual._id);
-			const borrowAfter = await ctx.db.get(borrowerRec._id);
+			const ctrlAfter = await ctx.db.get(orig.debitAccount._id);
+			const borrowAfter = await ctx.db.get(orig.creditAccount._id);
 			if (!(ctrlAfter && borrowAfter)) {
 				throw new Error("Account not found");
 			}
@@ -969,7 +577,7 @@ describe("T-013 — correction chain auditable with causedBy in metadata", () =>
 				amount: corrAmount,
 				idempotencyKey: `audit-meta-corr-${Date.now()}`,
 				source: ADMIN_SOURCE,
-				causedBy: origEntry._id,
+				causedBy: orig.entry._id,
 				reason: "Administrative correction",
 			});
 
@@ -977,9 +585,6 @@ describe("T-013 — correction chain auditable with causedBy in metadata", () =>
 			if (!corrEntry) {
 				throw new Error("Failed to create correction entry");
 			}
-
-			// Verify causedBy is stored on the entry
-			expect(corrEntry.causedBy as string).toBe(origEntry._id as string);
 
 			const corrProjDebit = projectCashAccountBalance(
 				ctrlAfter,
@@ -992,17 +597,24 @@ describe("T-013 — correction chain auditable with causedBy in metadata", () =>
 				corrAmount
 			);
 
-			await auditTrail.insert(
-				ctx,
-				buildCashLedgerAuditArgs(
-					corrEntry,
-					{ debit: corrDebitBalBefore, credit: corrCreditBalBefore },
-					{ debit: corrProjDebit, credit: corrProjCredit }
-				)
+			const corrAuditArgs = buildCashLedgerAuditArgs(
+				corrEntry,
+				{ debit: corrDebitBalBefore, credit: corrCreditBalBefore },
+				{ debit: corrProjDebit, credit: corrProjCredit }
 			);
+			await auditTrail.insert(ctx, corrAuditArgs);
+
+			return {
+				causedBy: corrEntry.causedBy as string,
+				origId: orig.entry._id as string,
+				metadataJson: corrAuditArgs.metadata,
+			};
 		});
 
-		expect(true).toBe(true);
+		expect(result.causedBy).toBe(result.origId);
+		const metadata = JSON.parse(result.metadataJson);
+		expect(metadata.causedBy).toBe(result.origId);
+		expect(metadata.reason).toBe("Administrative correction");
 	});
 });
 
@@ -1016,76 +628,15 @@ describe("T-014 — idempotent posting does not duplicate audit records", () => 
 		let firstEntryId = "";
 
 		await t.run(async (ctx) => {
-			const { getOrCreateCashAccount } = await import("../accounts");
-			const { getCashAccountBalance, projectCashAccountBalance } = await import(
-				"../accounts"
-			);
-			const { getNextCashSequenceNumber } = await import("../sequenceCounter");
-
-			const trustCash = await getOrCreateCashAccount(ctx, {
-				family: "TRUST_CASH",
-			});
-			const borrowerRec = await getOrCreateCashAccount(ctx, {
-				family: "BORROWER_RECEIVABLE",
-			});
-
-			const trustAccount = await ctx.db.get(trustCash._id);
-			const borrowerAccount = await ctx.db.get(borrowerRec._id);
-			if (!(trustAccount && borrowerAccount)) {
-				throw new Error("Account not found");
-			}
-
-			const amount = BigInt(5000);
-			const debitBalanceBefore = getCashAccountBalance(trustAccount);
-			const creditBalanceBefore = getCashAccountBalance(borrowerAccount);
-
-			await Promise.all([
-				ctx.db.patch(trustAccount._id, {
-					cumulativeDebits: trustAccount.cumulativeDebits + amount,
-				}),
-				ctx.db.patch(borrowerAccount._id, {
-					cumulativeCredits: borrowerAccount.cumulativeCredits + amount,
-				}),
-			]);
-
-			const sequenceNumber = await getNextCashSequenceNumber(ctx);
-			const eid = await ctx.db.insert("cash_ledger_journal_entries", {
-				sequenceNumber,
+			const r = await createEntryAndAudit(ctx, {
 				entryType: "CASH_RECEIVED",
+				debitFamily: "TRUST_CASH",
+				creditFamily: "BORROWER_RECEIVABLE",
+				amount: BigInt(5000),
 				effectiveDate: "2026-03-15",
-				timestamp: Date.now(),
-				debitAccountId: trustAccount._id,
-				creditAccountId: borrowerAccount._id,
-				amount,
 				idempotencyKey,
-				source: SYSTEM_SOURCE,
 			});
-
-			const entry = await ctx.db.get(eid);
-			if (!entry) {
-				throw new Error("Failed to create entry");
-			}
-			firstEntryId = entry._id as string;
-
-			const projectedDebit = projectCashAccountBalance(
-				trustAccount,
-				"debit",
-				amount
-			);
-			const projectedCredit = projectCashAccountBalance(
-				borrowerAccount,
-				"credit",
-				amount
-			);
-
-			await auditTrail.insert(
-				ctx,
-				buildCashLedgerAuditArgs(
-					entry,
-					{ debit: debitBalanceBefore, credit: creditBalanceBefore },
-					{ debit: projectedDebit, credit: projectedCredit }
-				)
-			);
+			firstEntryId = r.entry._id as string;
 		});
 
 		// Idempotent re-post with same key — returns existing entry, no second nudge
@@ -1112,99 +663,167 @@ describe("T-014 — idempotent posting does not duplicate audit records", () => 
 
 			// Returns the existing entry (idempotent — no second nudge/audit)
 			expect(result.entry._id as string).toBe(firstEntryId);
+			// I2: Idempotent return now includes all fields (0n for unknown balances)
 			expect(result.projectedDebitBalance.toString()).toBe("0");
 			expect(result.projectedCreditBalance.toString()).toBe("0");
+			expect(result.debitBalanceBefore.toString()).toBe("0");
+			expect(result.creditBalanceBefore.toString()).toBe("0");
 		});
 	});
 
 	it("different idempotency keys create separate entries with separate audit records", async () => {
 		const t = makeHarness();
 
-		const entryIds: string[] = [];
+		const result = await t.run(async (ctx) => {
+			const entryIds: string[] = [];
+			const amounts = [3000, 7000];
+
+			for (const amt of amounts) {
+				const r = await createEntryAndAudit(ctx, {
+					entryType: "CASH_RECEIVED",
+					debitFamily: "TRUST_CASH",
+					creditFamily: "BORROWER_RECEIVABLE",
+					amount: BigInt(amt),
+					effectiveDate: "2026-03-20",
+				});
+				entryIds.push(r.entry._id as string);
+			}
+
+			return entryIds;
+		});
+
+		expect(result.length).toBe(2);
+		expect(result[0]).not.toBe(result[1]);
+	});
+});
+
+// ── I3: Test processCashLedgerHashChainStep via Convex internalMutation ──
+
+describe("processHashChainStepHandler — tests DB lookup, BigInt parsing, error handling", () => {
+	it("completes for a valid journal entry", async () => {
+		const t = makeHarness();
 
 		await t.run(async (ctx) => {
-			const { getOrCreateCashAccount } = await import("../accounts");
 			const { getCashAccountBalance, projectCashAccountBalance } = await import(
 				"../accounts"
 			);
 			const { getNextCashSequenceNumber } = await import("../sequenceCounter");
+			const { processHashChainStepHandler } = await import("../hashChain");
 
-			const trustCash = await getOrCreateCashAccount(ctx, {
-				family: "TRUST_CASH",
+			const r = await createEntryAndAudit(ctx, {
+				entryType: "CASH_RECEIVED",
+				debitFamily: "TRUST_CASH",
+				creditFamily: "BORROWER_RECEIVABLE",
+				amount: BigInt(12_000),
+				effectiveDate: "2026-03-01",
 			});
-			const borrowerRec = await getOrCreateCashAccount(ctx, {
-				family: "BORROWER_RECEIVABLE",
+
+			// Now call the extracted handler directly — tests DB lookup + BigInt parsing
+			// Create a second entry so we can verify the handler independently
+			const amount2 = BigInt(8000);
+			const debitBal = getCashAccountBalance(r.debitAccount);
+			const creditBal = getCashAccountBalance(r.creditAccount);
+
+			const seq = await getNextCashSequenceNumber(ctx);
+			const eid2 = await ctx.db.insert("cash_ledger_journal_entries", {
+				sequenceNumber: seq,
+				entryType: "CASH_RECEIVED",
+				effectiveDate: "2026-03-02",
+				timestamp: Date.now(),
+				debitAccountId: r.debitAccount._id,
+				creditAccountId: r.creditAccount._id,
+				amount: amount2,
+				idempotencyKey: `step-handler-test-${Date.now()}`,
+				source: SYSTEM_SOURCE,
 			});
 
-			const trustAccount = await ctx.db.get(trustCash._id);
-			const borrowerAccount = await ctx.db.get(borrowerRec._id);
-			if (!(trustAccount && borrowerAccount)) {
-				throw new Error("Account not found");
-			}
+			const projDebit = projectCashAccountBalance(
+				r.debitAccount,
+				"debit",
+				amount2
+			);
+			const projCredit = projectCashAccountBalance(
+				r.creditAccount,
+				"credit",
+				amount2
+			);
 
-			const amounts = [3000, 7000];
+			// Call the handler directly — exercises DB lookup, BigInt parsing, audit insert
+			await processHashChainStepHandler(ctx, {
+				entryId: eid2,
+				balanceBefore: {
+					debit: debitBal.toString(),
+					credit: creditBal.toString(),
+				},
+				balanceAfter: {
+					debit: projDebit.toString(),
+					credit: projCredit.toString(),
+				},
+			});
+		});
+	});
 
-			for (let i = 0; i < amounts.length; i++) {
-				const amount = BigInt(amounts[i]);
-				const debitBalanceBefore = getCashAccountBalance(trustAccount);
-				const creditBalanceBefore = getCashAccountBalance(borrowerAccount);
+	it("throws when journal entry does not exist (C2)", async () => {
+		const t = makeHarness();
 
-				await Promise.all([
-					ctx.db.patch(trustAccount._id, {
-						cumulativeDebits: trustAccount.cumulativeDebits + amount,
-					}),
-					ctx.db.patch(borrowerAccount._id, {
-						cumulativeCredits: borrowerAccount.cumulativeCredits + amount,
-					}),
-				]);
+		await t.run(async (ctx) => {
+			const { processHashChainStepHandler } = await import("../hashChain");
 
-				const updatedTrust = await ctx.db.get(trustCash._id);
-				const updatedBorrower = await ctx.db.get(borrowerRec._id);
+			// Use a fabricated ID that doesn't exist in the DB
+			const fakeId =
+				"invalid_id_for_testing" as Id<"cash_ledger_journal_entries">;
 
-				const sequenceNumber = await getNextCashSequenceNumber(ctx);
-				const eid = await ctx.db.insert("cash_ledger_journal_entries", {
-					sequenceNumber,
-					entryType: "CASH_RECEIVED",
-					effectiveDate: "2026-03-20",
-					timestamp: Date.now(),
-					debitAccountId: trustAccount._id,
-					creditAccountId: borrowerAccount._id,
-					amount,
-					idempotencyKey: `audit-idempotent-diff-${Date.now()}-${i}`,
-					source: SYSTEM_SOURCE,
-				});
+			await expect(
+				processHashChainStepHandler(ctx, {
+					entryId: fakeId,
+					balanceBefore: { debit: "0", credit: "0" },
+					balanceAfter: { debit: "1000", credit: "1000" },
+				})
+			).rejects.toThrow("Journal entry not found");
+		});
+	});
+});
 
-				const entry = await ctx.db.get(eid);
-				if (!entry) {
-					throw new Error("Failed to create entry");
-				}
+// ── I5: Verify buildCashLedgerAuditArgs output structure ────────────
 
-				entryIds.push(entry._id as string);
+describe("buildCashLedgerAuditArgs — output shape", () => {
+	it("returns correctly structured audit args with parsed JSON fields", async () => {
+		const t = makeHarness();
 
-				const projectedDebit = projectCashAccountBalance(
-					updatedTrust ?? trustAccount,
-					"debit",
-					amount
-				);
-				const projectedCredit = projectCashAccountBalance(
-					updatedBorrower ?? borrowerAccount,
-					"credit",
-					amount
-				);
+		const result = await t.run(async (ctx) => {
+			const r = await createEntryAndAudit(ctx, {
+				entryType: "OBLIGATION_ACCRUED",
+				debitFamily: "BORROWER_RECEIVABLE",
+				creditFamily: "CONTROL",
+				creditSubaccount: "ACCRUAL",
+				amount: BigInt(5000),
+				effectiveDate: "2026-04-01",
+				reason: "monthly accrual",
+			});
 
-				await auditTrail.insert(
-					ctx,
-					buildCashLedgerAuditArgs(
-						entry,
-						{ debit: debitBalanceBefore, credit: creditBalanceBefore },
-						{ debit: projectedDebit, credit: projectedCredit }
-					)
-				);
-			}
+			return {
+				auditArgs: r.auditArgs,
+				entryId: r.entry._id as string,
+				debitId: r.debitAccount._id as string,
+				creditId: r.creditAccount._id as string,
+			};
 		});
 
-		// Two different entries created (different idempotency keys)
-		expect(entryIds.length).toBe(2);
-		expect(entryIds[0]).not.toBe(entryIds[1]);
+		expect(result.auditArgs.entityId).toBe(result.entryId);
+		expect(result.auditArgs.entityType).toBe("cashLedgerEntry");
+		expect(result.auditArgs.eventType).toBe("OBLIGATION_ACCRUED");
+
+		const beforeState = JSON.parse(result.auditArgs.beforeState);
+		expect(beforeState.debitAccountBalance).toBe("0");
+		expect(beforeState.creditAccountBalance).toBe("0");
+
+		const afterState = JSON.parse(result.auditArgs.afterState);
+		expect(afterState.amount).toBe("5000");
+		expect(afterState.debitAccountId).toBe(result.debitId);
+		expect(afterState.creditAccountId).toBe(result.creditId);
+
+		const metadata = JSON.parse(result.auditArgs.metadata);
+		expect(metadata.effectiveDate).toBe("2026-04-01");
+		expect(metadata.reason).toBe("monthly accrual");
 	});
 });

@@ -154,6 +154,21 @@ export const IDEMPOTENCY_KEY_PREFIX = "cash-ledger:" as const;
  * @param segments   One or more source identifiers (e.g. sourceType, sourceId)
  * @returns          `cash-ledger:{entryType}:{segments joined by ":"}`
  */
+// ── Balance Pair Types ─────────────────────────────────────────────
+// Shared shape for debit/credit balance pairs used across hashChain,
+// postEntry, and nudge. SerializedBalancePair for Convex validator boundaries
+// (BigInt cannot cross the Convex wire format).
+
+export interface BalancePair {
+	credit: bigint;
+	debit: bigint;
+}
+
+export interface SerializedBalancePair {
+	credit: string;
+	debit: string;
+}
+
 export function buildIdempotencyKey(
 	entryType: string,
 	...segments: string[]
