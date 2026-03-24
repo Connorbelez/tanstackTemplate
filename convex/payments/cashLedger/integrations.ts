@@ -4,7 +4,11 @@ import type { MutationCtx } from "../../_generated/server";
 import { auditLog } from "../../auditLog";
 import type { CommandSource } from "../../engine/types";
 import type { PaymentFrequency } from "../../mortgages/paymentFrequency";
-import { findCashAccount, getOrCreateCashAccount } from "./accounts";
+import {
+	findCashAccount,
+	getOrCreateCashAccount,
+	safeBigintToNumber,
+} from "./accounts";
 import { postCashEntryInternal } from "./postEntry";
 import { validatePostingGroupAmounts } from "./postingGroups";
 import { buildIdempotencyKey, type CashEntryType } from "./types";
@@ -631,14 +635,17 @@ export async function postCashCorrectionForEntry(
 	const effectiveDate =
 		args.effectiveDate ?? new Date().toISOString().slice(0, 10);
 
-	// 3. Generate posting group ID (reversal row carries canonical id; idempotent replays use it)
+	// 3. Convert original amount once for reuse
+	const originalAmountNumber = safeBigintToNumber(original.amount);
+
+	// 4. Generate posting group ID (reversal row carries canonical id; idempotent replays use it)
 	const postingGroupId = `correction:${original._id}:${Date.now()}`;
 
-	// 4. Post REVERSAL with swapped accounts
+	// 5. Post REVERSAL with swapped accounts
 	const reversalResult = await postCashEntryInternal(ctx, {
 		entryType: "REVERSAL",
 		effectiveDate,
-		amount: Number(original.amount),
+		amount: originalAmountNumber,
 		debitAccountId: original.creditAccountId,
 		creditAccountId: original.debitAccountId,
 		causedBy: original._id,
@@ -659,14 +666,14 @@ export async function postCashCorrectionForEntry(
 	const canonicalPostingGroupId =
 		reversalResult.entry.postingGroupId ?? postingGroupId;
 
-	// 5. Optionally post replacement entry
+	// 6. Optionally post replacement entry
 	let replacementResult: Awaited<
 		ReturnType<typeof postCashEntryInternal>
 	> | null = null;
 	if (args.replacement) {
-		if (args.replacement.amount > Number(original.amount)) {
+		if (args.replacement.amount > originalAmountNumber) {
 			throw new ConvexError(
-				`Replacement amount (${args.replacement.amount}) must not exceed original amount (${Number(original.amount)})`
+				`Replacement amount (${args.replacement.amount}) must not exceed original amount (${originalAmountNumber})`
 			);
 		}
 
@@ -696,7 +703,7 @@ export async function postCashCorrectionForEntry(
 		});
 	}
 
-	// 6. Return results (postingGroupId matches persisted reversal for idempotent retries)
+	// 7. Return results (postingGroupId matches persisted reversal for idempotent retries)
 	return {
 		reversalEntry: reversalResult.entry,
 		replacementEntry: replacementResult?.entry ?? null,
