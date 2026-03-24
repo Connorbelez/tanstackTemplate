@@ -122,6 +122,75 @@ export const dailyReconciliation = internalAction({
 
 **Cursor advancement from action context:** Actions can call `ctx.runMutation()`. Create a `makeFunctionReference` for `advanceReplayCursor` and call it when replay passes.
 
+**Layer 2 implementation (journal replay integrity):**
+```typescript
+// ── Layer 2: BalanceCheck (journal replay integrity) ───────
+try {
+    const replayResult = await ctx.runQuery(runReplayIntegrityCheckRef, {});
+
+    if (replayResult.passed) {
+        console.info(
+            `[REPLAY INTEGRITY] BalanceCheck passed — ${replayResult.entriesReplayed} entries replayed, ` +
+                `${replayResult.accountsChecked} accounts checked in ${replayResult.durationMs}ms.`
+        );
+
+        // Advance cursor so next incremental run starts from here
+        // Guard: do not advance cursor if no entries were processed (toSequence === "0")
+        if (replayResult.toSequence !== "0") {
+            await ctx.runMutation(advanceReplayCursorRef, {
+                lastProcessedSequence: BigInt(replayResult.toSequence),
+            });
+        }
+    } else {
+        // P0 error: log full replay result as JSON for forensic debugging
+        console.error(
+            `[REPLAY INTEGRITY P0] ${replayResult.mismatches.length} mismatches, ` +
+                `${replayResult.missingSequences.length} missing sequences found:`,
+            JSON.stringify(replayResult, null, 2)
+        );
+
+        // Map mismatches to Discrepancy[] records for audit logging
+        const discrepancies: Discrepancy[] = replayResult.mismatches.map(
+            (m) => ({
+                entityType: "cash_ledger_account",
+                entityId: m.accountId,
+                entityStatus: `debits=${m.storedDebits},credits=${m.storedCredits}`,
+                journalNewState: `debits=${m.expectedDebits},credits=${m.expectedCredits}`,
+                journalEntryId: `seq:${m.firstDivergenceSequence}-${m.lastEntrySequence}`,
+            })
+        );
+
+        // Map missing sequences to Discrepancy[] records for audit logging
+        for (const seq of replayResult.missingSequences) {
+            discrepancies.push({
+                entityType: "cash_ledger_sequence_gap",
+                entityId: "gap",
+                entityStatus: "SEQUENCE_MISSING",
+                journalNewState: seq.toString(),
+                journalEntryId: "gap",
+            });
+        }
+
+        await ctx.runMutation(logReconciliationDiscrepanciesRef, {
+            discrepancyCount: discrepancies.length,
+            discrepancies,
+            checkedAt: Date.now(),
+        });
+    }
+} catch (error) {
+    console.error(
+        "[REPLAY INTEGRITY FATAL] BalanceCheck failed entirely:",
+        error instanceof Error ? error.message : String(error)
+    );
+}
+```
+
+**Key implementation details:**
+- **Per-layer try/catch**: Each layer (StatusCheck and BalanceCheck) is independently wrapped in try/catch so a failure in one layer does not prevent the other from running.
+- **Cursor advancement guard**: Cursor is only advanced when `toSequence !== "0"` — prevents advancing to "0" when no entries were processed.
+- **Discrepancy mapping**: Both `mismatches` (account balance drift) and `missingSequences` (gap detection) are mapped to `Discrepancy[]` records for the audit log.
+- **P0 structured error logging**: On failure, the full `replayResult` is serialized to JSON and logged at P0 for forensic debugging.
+
 ## Existing Patterns to Follow
 
 ### cashLedgerQuery (from fluent.ts)
