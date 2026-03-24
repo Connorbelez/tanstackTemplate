@@ -14,6 +14,8 @@ import {
 
 const modules = import.meta.glob("/convex/**/*.ts");
 
+type CashLedgerAccountDoc = Doc<"cash_ledger_accounts">;
+
 const NEGATIVE_BALANCE_PATTERN = /negative/i;
 const REVERSAL_CAUSED_BY_PATTERN = /REVERSAL entries must reference causedBy/;
 
@@ -325,7 +327,7 @@ describe("Invariant 2: non-negative LENDER_PAYABLE", () => {
 			)) as Doc<"cash_ledger_accounts"> | null;
 			expect(account).not.toBeNull();
 			if (account) {
-				const balance = getCashAccountBalance(account);
+				const balance = getCashAccountBalance(account as CashLedgerAccountDoc);
 				expect(balance).toBe(-15_000n);
 			}
 		});
@@ -393,7 +395,9 @@ describe("Invariant 3: point-in-time reconstruction", () => {
 				return;
 			}
 
-			const runningBalance = getCashAccountBalance(account);
+			const runningBalance = getCashAccountBalance(
+				account as CashLedgerAccountDoc
+			);
 
 			// Replay: gather all entries touching this account
 			const debits = await ctx.db
@@ -426,7 +430,9 @@ describe("Invariant 3: point-in-time reconstruction", () => {
 				}
 			}
 
-			const replayBalance = isCreditNormalFamily(account.family)
+			const replayBalance = isCreditNormalFamily(
+				(account as CashLedgerAccountDoc).family
+			)
 				? replayCredits - replayDebits
 				: replayDebits - replayCredits;
 
@@ -640,9 +646,15 @@ describe("Invariant 4: idempotent replay", () => {
 
 			return {
 				entryCount: allEntries.length,
-				controlBalance: controlAcc ? getCashAccountBalance(controlAcc) : null,
-				payableBalance: payableAcc ? getCashAccountBalance(payableAcc) : null,
-				revenueBalance: revenueAcc ? getCashAccountBalance(revenueAcc) : null,
+				controlBalance: controlAcc
+					? getCashAccountBalance(controlAcc as CashLedgerAccountDoc)
+					: null,
+				payableBalance: payableAcc
+					? getCashAccountBalance(payableAcc as CashLedgerAccountDoc)
+					: null,
+				revenueBalance: revenueAcc
+					? getCashAccountBalance(revenueAcc as CashLedgerAccountDoc)
+					: null,
 			};
 		});
 
@@ -668,9 +680,15 @@ describe("Invariant 4: idempotent replay", () => {
 
 			return {
 				entryCount: allEntries.length,
-				controlBalance: controlAcc ? getCashAccountBalance(controlAcc) : null,
-				payableBalance: payableAcc ? getCashAccountBalance(payableAcc) : null,
-				revenueBalance: revenueAcc ? getCashAccountBalance(revenueAcc) : null,
+				controlBalance: controlAcc
+					? getCashAccountBalance(controlAcc as CashLedgerAccountDoc)
+					: null,
+				payableBalance: payableAcc
+					? getCashAccountBalance(payableAcc as CashLedgerAccountDoc)
+					: null,
+				revenueBalance: revenueAcc
+					? getCashAccountBalance(revenueAcc as CashLedgerAccountDoc)
+					: null,
 			};
 		});
 

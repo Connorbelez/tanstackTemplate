@@ -1,12 +1,14 @@
 import { ConvexError } from "convex/values";
-import type { Id } from "../../_generated/dataModel";
+import type { Doc, Id } from "../../_generated/dataModel";
 import type { MutationCtx } from "../../_generated/server";
 import { auditLog } from "../../auditLog";
 import type { CommandSource } from "../../engine/types";
 import type { PaymentFrequency } from "../../mortgages/paymentFrequency";
 import {
 	findCashAccount,
+	getCashAccountBalance,
 	getOrCreateCashAccount,
+	requireCashAccount,
 	safeBigintToNumber,
 } from "./accounts";
 import { postCashEntryInternal } from "./postEntry";
@@ -544,6 +546,86 @@ export async function postObligationWaiver(
 			outstandingAfter: args.outstandingAfter,
 			isFullWaiver: args.isFullWaiver,
 		},
+	});
+}
+
+// ── Write-Off ────────────────────────────────────────────────────────
+
+export async function postObligationWriteOff(
+	ctx: MutationCtx,
+	args: {
+		obligationId: Id<"obligations">;
+		amount: number;
+		reason: string;
+		source: CommandSource;
+		/** Caller-scoped idempotency key (already prefixed via buildIdempotencyKey). */
+		idempotencyKey: string;
+		/** Pre-loaded obligation to avoid a redundant DB round-trip. If omitted the function loads it. */
+		obligation?: Doc<"obligations">;
+	}
+) {
+	const obligation = args.obligation ?? (await ctx.db.get(args.obligationId));
+	if (!obligation) {
+		throw new ConvexError(`Obligation not found: ${args.obligationId}`);
+	}
+
+	// Early idempotency short-circuit — must run before balance validation so
+	// retries succeed even after the first post reduced the receivable balance.
+	const existingEntry = await ctx.db
+		.query("cash_ledger_journal_entries")
+		.withIndex("by_idempotency", (q) =>
+			q.eq("idempotencyKey", args.idempotencyKey)
+		)
+		.first();
+	if (existingEntry) {
+		return {
+			entry: existingEntry,
+			projectedDebitBalance: 0n,
+			projectedCreditBalance: 0n,
+		};
+	}
+
+	// Validate: write-off amount <= outstanding receivable balance
+	if (!Number.isSafeInteger(args.amount) || args.amount <= 0) {
+		throw new ConvexError(
+			"Write-off amount must be a positive safe integer (cents)"
+		);
+	}
+	const receivableAccount = await requireCashAccount(
+		ctx.db,
+		{
+			family: "BORROWER_RECEIVABLE",
+			mortgageId: obligation.mortgageId,
+			obligationId: obligation._id,
+		},
+		"postObligationWriteOff"
+	);
+	const outstandingBalance = getCashAccountBalance(receivableAccount);
+	const writeOffAmount = BigInt(args.amount);
+	if (writeOffAmount > outstandingBalance) {
+		throw new ConvexError(
+			`Write-off amount ${args.amount} exceeds outstanding balance ${outstandingBalance}`
+		);
+	}
+
+	const writeOffAccount = await getOrCreateCashAccount(ctx, {
+		family: "WRITE_OFF",
+		mortgageId: obligation.mortgageId,
+		obligationId: obligation._id,
+	});
+
+	return postCashEntryInternal(ctx, {
+		entryType: "OBLIGATION_WRITTEN_OFF",
+		effectiveDate: unixMsToBusinessDate(Date.now()),
+		amount: args.amount,
+		debitAccountId: writeOffAccount._id,
+		creditAccountId: receivableAccount._id,
+		idempotencyKey: args.idempotencyKey,
+		mortgageId: obligation.mortgageId,
+		obligationId: obligation._id,
+		borrowerId: obligation.borrowerId,
+		source: normalizeSource(args.source),
+		reason: args.reason,
 	});
 }
 

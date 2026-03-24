@@ -9,7 +9,7 @@ import {
 } from "../../../payments/cashLedger/__tests__/testUtils";
 import { accrueObligation } from "../obligationAccrual";
 
-const modules = import.meta.glob("/convex/**/*.ts");
+const _modules = import.meta.glob("/convex/**/*.ts");
 
 interface AccrueObligationHandler {
 	_handler: (
@@ -28,6 +28,8 @@ interface AccrueObligationHandler {
 
 const accrueObligationMutation =
 	accrueObligation as unknown as AccrueObligationHandler;
+
+const modules = import.meta.glob("/convex/**/*.ts");
 
 function buildEffectArgs(obligationId: Id<"obligations">) {
 	return {
