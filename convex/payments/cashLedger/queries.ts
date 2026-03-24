@@ -15,6 +15,7 @@ import {
 	getJournalSettledAmountForObligation,
 	reconcileObligationSettlementProjectionInternal,
 } from "./reconciliation";
+import { replayJournalIntegrity } from "./replayIntegrity";
 
 /** Matches YYYY-MM-DD format strictly. */
 const BUSINESS_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
@@ -480,3 +481,20 @@ export const internalGetMortgageCashState = internalQuery({
 		return state;
 	},
 });
+
+// ── Replay Integrity Check ──────────────────────────────────
+
+export const journalReplayIntegrityCheck = cashLedgerQuery
+	.input({
+		mode: v.union(v.literal("full"), v.literal("incremental")),
+		accountId: v.optional(v.id("cash_ledger_accounts")),
+		mortgageId: v.optional(v.id("mortgages")),
+	})
+	.handler(async (ctx, args) => {
+		return replayJournalIntegrity(ctx, {
+			mode: args.mode,
+			accountId: args.accountId,
+			mortgageId: args.mortgageId,
+		});
+	})
+	.public();

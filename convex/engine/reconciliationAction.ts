@@ -60,6 +60,43 @@ const logReconciliationDiscrepanciesRef = makeInternalFunctionReference<
 	null
 >("engine/reconciliationAction:logReconciliationDiscrepancies");
 
+// ── Replay Integrity Refs ────────────────────────────────────
+
+interface ReplayMismatch {
+	accountId: string;
+	expectedCredits: string;
+	expectedDebits: string;
+	family: string;
+	firstDivergenceSequence: string;
+	lastEntrySequence: string;
+	storedCredits: string;
+	storedDebits: string;
+}
+
+interface ReplayResult {
+	accountsChecked: number;
+	durationMs: number;
+	entriesReplayed: number;
+	fromSequence: string;
+	mismatches: ReplayMismatch[];
+	missingSequences: string[];
+	mode: "full" | "incremental";
+	passed: boolean;
+	toSequence: string;
+}
+
+const runReplayIntegrityCheckRef = makeInternalFunctionReference<
+	"query",
+	Record<string, never>,
+	ReplayResult
+>("payments/cashLedger/reconciliation:runReplayIntegrityCheck");
+
+const advanceReplayCursorRef = makeInternalFunctionReference<
+	"mutation",
+	{ lastProcessedSequence: bigint },
+	null
+>("payments/cashLedger/replayIntegrity:advanceReplayCursor");
+
 async function collectLatestEntries(
 	ctx: ReconciliationCtx,
 	entityType: keyof typeof ENTITY_TABLE_MAP
@@ -218,10 +255,12 @@ export const logReconciliationDiscrepancies = internalMutation({
 
 /**
  * Daily reconciliation cron action.
- * Runs Layer 1 (status vs journal) and logs discrepancies as P0 errors.
+ * Runs Layer 1 (status vs journal) and Layer 2 (journal replay integrity),
+ * logging discrepancies as P0 errors.
  */
 export const dailyReconciliation = internalAction({
 	handler: async (ctx) => {
+		// ── Layer 1: Status vs Journal ─────────────────────────────
 		const result = await ctx.runQuery(reconcileInternalRef, {});
 
 		if (result.isHealthy) {
@@ -236,6 +275,42 @@ export const dailyReconciliation = internalAction({
 				discrepancyCount: result.discrepancies.length,
 				discrepancies: result.discrepancies,
 				checkedAt: result.checkedAt,
+			});
+		}
+
+		// ── Layer 2: Journal Replay Integrity ─────────────────────
+		const replayResult = await ctx.runQuery(runReplayIntegrityCheckRef, {});
+
+		if (replayResult.passed) {
+			console.info(
+				`[REPLAY INTEGRITY] Check passed — ${replayResult.entriesReplayed} entries replayed, ` +
+					`${replayResult.accountsChecked} accounts checked in ${replayResult.durationMs}ms.`
+			);
+
+			// Advance cursor so next incremental run starts from here
+			if (replayResult.toSequence !== "0") {
+				await ctx.runMutation(advanceReplayCursorRef, {
+					lastProcessedSequence: BigInt(replayResult.toSequence),
+				});
+			}
+		} else {
+			console.error(
+				`[REPLAY INTEGRITY P0] ${replayResult.mismatches.length} mismatches, ` +
+					`${replayResult.missingSequences.length} missing sequences found:`,
+				JSON.stringify(replayResult, null, 2)
+			);
+
+			await ctx.runMutation(logReconciliationDiscrepanciesRef, {
+				discrepancyCount:
+					replayResult.mismatches.length + replayResult.missingSequences.length,
+				discrepancies: replayResult.mismatches.map((m) => ({
+					entityType: "cash_ledger_account",
+					entityId: m.accountId,
+					entityStatus: `debits=${m.storedDebits},credits=${m.storedCredits}`,
+					journalNewState: `debits=${m.expectedDebits},credits=${m.expectedCredits}`,
+					journalEntryId: `seq:${m.firstDivergenceSequence}-${m.lastEntrySequence}`,
+				})),
+				checkedAt: Date.now(),
 			});
 		}
 

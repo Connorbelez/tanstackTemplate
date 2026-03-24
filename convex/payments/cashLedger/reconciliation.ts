@@ -7,6 +7,7 @@ import {
 	getControlAccountsBySubaccount,
 	safeBigintToNumber,
 } from "./accounts";
+import { replayJournalIntegrity } from "./replayIntegrity";
 import type { ControlSubaccount } from "./types";
 import { TRANSIENT_SUBACCOUNTS } from "./types";
 
@@ -244,3 +245,17 @@ export async function getControlBalanceBySubaccount(
 	}
 	return { totalBalance, accountCount: accounts.length };
 }
+
+// ── Replay Integrity Internal Query ─────────────────────────
+
+/**
+ * Internal query wrapper for journal replay integrity checks.
+ * Always runs in full mode (no auth required). Called from the
+ * daily reconciliation action via `ctx.runQuery`.
+ */
+export const runReplayIntegrityCheck = internalQuery({
+	args: {},
+	handler: async (ctx) => {
+		return replayJournalIntegrity(ctx, { mode: "full" });
+	},
+});
