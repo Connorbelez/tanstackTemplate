@@ -149,9 +149,10 @@ export async function checkUnappliedCash(
 /**
  * Finds LENDER_PAYABLE accounts with a negative balance.
  * LENDER_PAYABLE is credit-normal, so negative = debits > credits.
- * Active reversals are excluded: a negative balance caused by an in-flight
- * reversal is expected. We detect this by checking for REVERSAL journal
- * entries on the debit side of the account.
+ *
+ * TODO: Add time-windowed or net-based reversal exclusion once reversal
+ * state tracking is available. A blanket exclusion based on any historical
+ * REVERSAL entry would permanently hide legitimate negative payables.
  */
 export async function checkNegativePayables(
 	ctx: QueryCtx,
@@ -172,22 +173,6 @@ export async function checkNegativePayables(
 			continue;
 		}
 
-		// Exclude accounts with active reversals: check if there are REVERSAL
-		// entries debiting this account (which would reduce the credit-normal balance).
-		const reversalEntries = await ctx.db
-			.query("cash_ledger_journal_entries")
-			.withIndex("by_debit_account_and_timestamp", (q) =>
-				q.eq("debitAccountId", account._id)
-			)
-			.collect();
-
-		const hasActiveReversal = reversalEntries.some(
-			(e) => e.entryType === "REVERSAL"
-		);
-		if (hasActiveReversal) {
-			continue;
-		}
-
 		const balanceCents = safeBigintToNumber(balance);
 		items.push({
 			accountId: account._id,
@@ -195,7 +180,7 @@ export async function checkNegativePayables(
 			mortgageId: account.mortgageId ?? undefined,
 			balance: balanceCents,
 		});
-		totalAmountCents += balanceCents;
+		totalAmountCents += Math.abs(balanceCents);
 	}
 
 	return buildResult("negativePayables", items, totalAmountCents, checkedAt);
@@ -501,8 +486,8 @@ export interface FullReconciliationResult {
  * Per settled obligation, verifies that:
  *   SUM(dispersalEntries.amount) + SUM(servicingFeeEntries.amount) == obligation.amount
  *
- * Obligations without any dispersal entries are skipped — they haven't
- * been dispersed yet. Only flags when dispersals exist but totals don't match.
+ * Settled obligations with no dispersal entries are flagged as violations
+ * (0 dispersal + 0 fees != obligation.amount).
  */
 export async function checkObligationConservation(
 	ctx: QueryCtx,
@@ -523,8 +508,19 @@ export async function checkObligationConservation(
 			.withIndex("by_obligation", (q) => q.eq("obligationId", obligation._id))
 			.collect();
 
-		// Skip obligations that haven't been dispersed yet
+		// Settled obligations with no dispersals are a conservation violation:
+		// 0 dispersal + 0 fees != obligation.amount
 		if (dispersals.length === 0) {
+			const difference = -obligation.amount;
+			items.push({
+				obligationId: obligation._id,
+				dueDate: obligation.dueDate,
+				obligationAmount: obligation.amount,
+				dispersalTotal: 0,
+				servicingFeeTotal: 0,
+				differenceCents: difference,
+			});
+			totalAmountCents += Math.abs(difference);
 			continue;
 		}
 
@@ -606,6 +602,44 @@ export async function checkMortgageMonthConservation(
 		}
 	}
 
+	// Prefetch all dispersal and fee entries for all relevant obligations
+	// to avoid O(n) per-obligation DB queries in the loop below.
+	const allObligationIds = new Set<string>();
+	for (const group of groups.values()) {
+		for (const obligationId of group.obligationIds) {
+			allObligationIds.add(obligationId as string);
+		}
+	}
+
+	const dispersalsByObligation = new Map<string, number>();
+	const feesByObligation = new Map<string, number>();
+
+	for (const obligationId of allObligationIds) {
+		const [dispersals, feeEntries] = await Promise.all([
+			ctx.db
+				.query("dispersalEntries")
+				.withIndex("by_obligation", (q) =>
+					q.eq("obligationId", obligationId as Id<"obligations">)
+				)
+				.collect(),
+			ctx.db
+				.query("servicingFeeEntries")
+				.withIndex("by_obligation", (q) =>
+					q.eq("obligationId", obligationId as Id<"obligations">)
+				)
+				.collect(),
+		]);
+
+		dispersalsByObligation.set(
+			obligationId,
+			dispersals.reduce((sum, d) => sum + d.amount, 0)
+		);
+		feesByObligation.set(
+			obligationId,
+			feeEntries.reduce((sum, f) => sum + f.amount, 0)
+		);
+	}
+
 	const items: MortgageMonthConservationViolation[] = [];
 	let totalAmountCents = 0;
 
@@ -614,18 +648,8 @@ export async function checkMortgageMonthConservation(
 		let feeTotal = 0;
 
 		for (const obligationId of group.obligationIds) {
-			const dispersals = await ctx.db
-				.query("dispersalEntries")
-				.withIndex("by_obligation", (q) => q.eq("obligationId", obligationId))
-				.collect();
-
-			const feeEntries = await ctx.db
-				.query("servicingFeeEntries")
-				.withIndex("by_obligation", (q) => q.eq("obligationId", obligationId))
-				.collect();
-
-			dispersalTotal += dispersals.reduce((sum, d) => sum + d.amount, 0);
-			feeTotal += feeEntries.reduce((sum, f) => sum + f.amount, 0);
+			dispersalTotal += dispersalsByObligation.get(obligationId as string) ?? 0;
+			feeTotal += feesByObligation.get(obligationId as string) ?? 0;
 		}
 
 		const difference = group.settledTotal - (dispersalTotal + feeTotal);
@@ -654,41 +678,49 @@ export async function checkMortgageMonthConservation(
 // ── T-012: Full Reconciliation Suite ─────────────────────────
 
 /**
- * Runs all 8 check functions and 2 conservation checks, returning
- * an aggregated result with health status and gap counts.
+ * Runs all 8 check functions and 2 conservation checks in parallel,
+ * returning an aggregated result with health status and gap counts.
+ * All checks use the same `nowMs` timestamp for snapshot consistency.
  */
 export async function runFullReconciliationSuite(
 	ctx: QueryCtx,
 	options?: ReconciliationSuiteOptions
 ): Promise<FullReconciliationResult> {
-	const checkResults: ReconciliationCheckResult<unknown>[] = [
-		await checkUnappliedCash(ctx, options),
-		await checkNegativePayables(ctx, options),
-		await checkObligationBalanceDrift(ctx, options),
-		await checkControlNetZero(ctx, options),
-		await checkSuspenseItems(ctx, options),
-		await checkOrphanedObligations(ctx, options),
-		await checkStuckCollections(ctx, options),
-		await checkOrphanedUnappliedCash(ctx, options),
-	];
+	const checkedAt = options?.nowMs ?? Date.now();
+	const opts: ReconciliationSuiteOptions = { ...options, nowMs: checkedAt };
 
-	const conservationResults: ReconciliationCheckResult<unknown>[] = [
-		await checkObligationConservation(ctx, options),
-		await checkMortgageMonthConservation(ctx, options),
-	];
+	// Run all independent checks in parallel
+	const [checkResults, conservationResults] = await Promise.all([
+		Promise.all([
+			checkUnappliedCash(ctx, opts),
+			checkNegativePayables(ctx, opts),
+			checkObligationBalanceDrift(ctx, opts),
+			checkControlNetZero(ctx, opts),
+			checkSuspenseItems(ctx, opts),
+			checkOrphanedObligations(ctx, opts),
+			checkStuckCollections(ctx, opts),
+			checkOrphanedUnappliedCash(ctx, opts),
+		]),
+		Promise.all([
+			checkObligationConservation(ctx, opts),
+			checkMortgageMonthConservation(ctx, opts),
+		]),
+	]);
 
-	const allResults = [...checkResults, ...conservationResults];
+	const allResults = [
+		...checkResults,
+		...conservationResults,
+	] as ReconciliationCheckResult<unknown>[];
 	const unhealthyCheckNames = allResults
 		.filter((r) => !r.isHealthy)
 		.map((r) => r.checkName);
 
-	const checkedAt = options?.nowMs ?? Date.now();
-
 	return {
 		isHealthy: unhealthyCheckNames.length === 0,
 		checkedAt,
-		checkResults,
-		conservationResults,
+		checkResults: checkResults as ReconciliationCheckResult<unknown>[],
+		conservationResults:
+			conservationResults as ReconciliationCheckResult<unknown>[],
 		unhealthyCheckNames,
 		totalGapCount: allResults.reduce((sum, r) => sum + r.count, 0),
 	};
