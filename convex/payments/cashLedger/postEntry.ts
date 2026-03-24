@@ -1,11 +1,15 @@
 import { ConvexError } from "convex/values";
+import { components } from "../../_generated/api";
 import type { Doc, Id } from "../../_generated/dataModel";
 import { internalMutation, type MutationCtx } from "../../_generated/server";
+import { AuditTrail } from "../../auditTrailClient";
 import type { CommandSource } from "../../engine/types";
 import {
 	assertNonNegativeBalance,
+	getCashAccountBalance,
 	projectCashAccountBalance,
 } from "./accounts";
+import { startCashLedgerHashChain } from "./hashChain";
 import { getNextCashSequenceNumber } from "./sequenceCounter";
 import {
 	CASH_ENTRY_TYPE_FAMILY_MAP,
@@ -14,6 +18,8 @@ import {
 	NEGATIVE_BALANCE_EXEMPT_FAMILIES,
 } from "./types";
 import { postCashEntryArgsValidator } from "./validators";
+
+const auditTrail = new AuditTrail(components.auditTrail);
 
 const BUSINESS_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -152,11 +158,28 @@ function constraintCheck(args: PostCashEntryInput) {
 	}
 }
 
-// Step 9: NUDGE — notify cursor consumers.
-// No-op in Phase 1; wired to cursor advancement in Phase 4.
-async function nudge(_ctx: MutationCtx): Promise<void> {
-	// Intentionally empty — Phase 4 will wire cursor consumer notifications here.
-	void _ctx;
+// Step 9: NUDGE — trigger Layer 2 hash-chain audit + notify cursor consumers.
+async function nudge(
+	ctx: MutationCtx,
+	args: {
+		entry: Doc<"cash_ledger_journal_entries">;
+		debitBalanceBefore: bigint;
+		creditBalanceBefore: bigint;
+		projectedDebitBalance: bigint;
+		projectedCreditBalance: bigint;
+	}
+): Promise<void> {
+	await startCashLedgerHashChain(ctx, {
+		entryId: args.entry._id,
+		balanceBefore: {
+			debit: args.debitBalanceBefore,
+			credit: args.creditBalanceBefore,
+		},
+		balanceAfter: {
+			debit: args.projectedDebitBalance,
+			credit: args.projectedCreditBalance,
+		},
+	});
 }
 
 async function persistEntry(
@@ -168,6 +191,10 @@ async function persistEntry(
 	const amount = BigInt(args.amount);
 	const sequenceNumber = await getNextCashSequenceNumber(ctx);
 	const timestamp = Date.now();
+
+	// T-006: Capture balances BEFORE the update for audit trail
+	const debitBalanceBefore = getCashAccountBalance(debitAccount);
+	const creditBalanceBefore = getCashAccountBalance(creditAccount);
 
 	await Promise.all([
 		ctx.db.patch(debitAccount._id, {
@@ -220,6 +247,8 @@ async function persistEntry(
 
 	return {
 		entry,
+		debitBalanceBefore,
+		creditBalanceBefore,
 		projectedDebitBalance: projectedDebit,
 		projectedCreditBalance: projectedCredit,
 	};
@@ -247,20 +276,63 @@ export async function postCashEntryInternal(
 		};
 	}
 
-	// 3. RESOLVE_ACCOUNTS
-	const { debitAccount, creditAccount } = await resolveAccounts(ctx, args);
-	// 4. FAMILY_CHECK
-	familyCheck(args, debitAccount, creditAccount);
-	// 5. BALANCE_CHECK
-	balanceCheck(args, debitAccount, creditAccount);
-	// 6. CONSTRAINT_CHECK
-	constraintCheck(args);
-	// 7+8. SEQUENCE + PERSIST
-	const result = await persistEntry(ctx, args, debitAccount, creditAccount);
-	// 9. NUDGE
-	await nudge(ctx);
+	// 3–8. RESOLVE, VALIDATE, PERSIST (wrapped for rejection auditing)
+	try {
+		// 3. RESOLVE_ACCOUNTS
+		const { debitAccount, creditAccount } = await resolveAccounts(ctx, args);
+		// 4. FAMILY_CHECK
+		familyCheck(args, debitAccount, creditAccount);
+		// 5. BALANCE_CHECK
+		balanceCheck(args, debitAccount, creditAccount);
+		// 6. CONSTRAINT_CHECK
+		constraintCheck(args);
+		// 7+8. SEQUENCE + PERSIST
+		const result = await persistEntry(ctx, args, debitAccount, creditAccount);
+		// 9. NUDGE — trigger Layer 2 hash-chain audit
+		await nudge(ctx, {
+			entry: result.entry,
+			debitBalanceBefore: result.debitBalanceBefore,
+			creditBalanceBefore: result.creditBalanceBefore,
+			projectedDebitBalance: result.projectedDebitBalance,
+			projectedCreditBalance: result.projectedCreditBalance,
+		});
 
-	return result;
+		return result;
+	} catch (error) {
+		// T-007: Rejection auditing — insert audit record for failed postings
+		try {
+			let rejectionReason = "Unknown error";
+			if (error instanceof ConvexError) {
+				rejectionReason = String(error.data);
+			} else if (error instanceof Error) {
+				rejectionReason = error.message;
+			}
+
+			await auditTrail.insert(ctx, {
+				entityId: `rejected:${args.idempotencyKey}`,
+				entityType: "cashLedgerEntry",
+				eventType: `${args.entryType}:REJECTED`,
+				actorId: args.source.actorId ?? "system",
+				afterState: JSON.stringify({
+					entryType: args.entryType,
+					amount: args.amount,
+					rejectionReason,
+				}),
+				metadata: JSON.stringify({
+					effectiveDate: args.effectiveDate,
+					channel: args.source.channel,
+				}),
+				timestamp: Date.now(),
+			});
+		} catch (auditError) {
+			console.warn(
+				"[CashLedger] Failed to insert rejection audit record:",
+				auditError
+			);
+		}
+
+		throw error;
+	}
 }
 
 export const postCashEntry = internalMutation({
