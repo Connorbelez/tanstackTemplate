@@ -27,6 +27,14 @@ export const advanceReplayCursor = internalMutation({
       .withIndex("by_name", (q) => q.eq("name", "replay_integrity"))
       .first();
 
+    if (existing && args.lastProcessedSequence < existing.lastProcessedSequence) {
+      console.error(
+        `[advanceReplayCursor] Attempted cursor regression: current=${existing.lastProcessedSequence}, ` +
+        `attempted=${args.lastProcessedSequence}. Ignoring.`
+      );
+      return;
+    }
+
     if (existing) {
       await ctx.db.patch(existing._id, {
         lastProcessedSequence: args.lastProcessedSequence,
