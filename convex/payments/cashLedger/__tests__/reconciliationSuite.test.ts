@@ -592,9 +592,9 @@ describe("ENG-164 conservation checks and query filters", () => {
 		// Non-existent mortgage should return no matches
 		const wrong = await asCashLedgerUser(t).query(
 			api.payments.cashLedger.reconciliationQueries.reconciliationUnappliedCash,
-			{ mortgageId: seeded.mortgageId }
+			{ mortgageId: "non-existent-mortgage" as Id<"mortgages"> }
 		);
-		expect(wrong.count).toBe(1);
+		expect(wrong.count).toBe(0);
 	});
 
 	it("reconciliationUnappliedCash filters by date range", async () => {

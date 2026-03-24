@@ -42,7 +42,7 @@ interface PostCashEntryInput {
   entryType: CashEntryType;
   debitAccountId: Id<"cash_ledger_accounts">;
   creditAccountId: Id<"cash_ledger_accounts">;
-  amount: bigint;
+  amount: number; // cents (stored as v.int64() internally; bigint used for cumulative balances)
   effectiveDate: string; // YYYY-MM-DD
   idempotencyKey: string;
   source: { actorType: string; actorId: string; channel: string };
