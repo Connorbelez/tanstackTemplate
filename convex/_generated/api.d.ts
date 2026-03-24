@@ -145,6 +145,7 @@ import type * as payments_cashLedger_reconciliationSuite from "../payments/cashL
 import type * as payments_cashLedger_sequenceCounter from "../payments/cashLedger/sequenceCounter.js";
 import type * as payments_cashLedger_types from "../payments/cashLedger/types.js";
 import type * as payments_cashLedger_validators from "../payments/cashLedger/validators.js";
+import type * as payments_cashLedger_waiveObligationBalanceHandler from "../payments/cashLedger/waiveObligationBalanceHandler.js";
 import type * as payments_collectionPlan_engine from "../payments/collectionPlan/engine.js";
 import type * as payments_collectionPlan_mutations from "../payments/collectionPlan/mutations.js";
 import type * as payments_collectionPlan_queries from "../payments/collectionPlan/queries.js";
@@ -323,6 +324,7 @@ declare const fullApi: ApiFromModules<{
   "payments/cashLedger/sequenceCounter": typeof payments_cashLedger_sequenceCounter;
   "payments/cashLedger/types": typeof payments_cashLedger_types;
   "payments/cashLedger/validators": typeof payments_cashLedger_validators;
+  "payments/cashLedger/waiveObligationBalanceHandler": typeof payments_cashLedger_waiveObligationBalanceHandler;
   "payments/collectionPlan/engine": typeof payments_collectionPlan_engine;
   "payments/collectionPlan/mutations": typeof payments_collectionPlan_mutations;
   "payments/collectionPlan/queries": typeof payments_collectionPlan_queries;

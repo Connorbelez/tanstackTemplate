@@ -135,6 +135,9 @@ describe("postObligationWaiver (integration function)", () => {
 				reason: "Hardship waiver",
 				idempotencyKey: waiverKey(obligationId, "families"),
 				source: ADMIN_SOURCE,
+				outstandingBefore: 100_000,
+				outstandingAfter: 50_000,
+				isFullWaiver: false,
 			});
 
 			expect(result.entry.entryType).toBe("OBLIGATION_WAIVED");
@@ -184,6 +187,9 @@ describe("postObligationWaiver (integration function)", () => {
 					reason: "Test waiver",
 					idempotencyKey: waiverKey(obligationId, "no-receivable"),
 					source: ADMIN_SOURCE,
+					outstandingBefore: 0,
+					outstandingAfter: 0,
+					isFullWaiver: false,
 				})
 			).rejects.toThrow(NO_RECEIVABLE_RE);
 		});
@@ -208,6 +214,9 @@ describe("postObligationWaiver — cash ledger behaviour (direct integration)", 
 				reason: "Partial hardship waiver",
 				idempotencyKey: waiverKey(obligationId, "ac1"),
 				source: ADMIN_SOURCE,
+				outstandingBefore: 100_000,
+				outstandingAfter: 60_000,
+				isFullWaiver: false,
 			});
 		});
 
@@ -241,6 +250,9 @@ describe("postObligationWaiver — cash ledger behaviour (direct integration)", 
 				reason: "Waiver test",
 				idempotencyKey: waiverKey(obligationId, "ac2"),
 				source: ADMIN_SOURCE,
+				outstandingBefore: 100_000,
+				outstandingAfter: 70_000,
+				isFullWaiver: false,
 			});
 		});
 
@@ -281,6 +293,9 @@ describe("postObligationWaiver — cash ledger behaviour (direct integration)", 
 				reason: "Full forgiveness: borrower hardship case #42",
 				idempotencyKey: waiverKey(obligationId, "ac3"),
 				source: ADMIN_SOURCE,
+				outstandingBefore: 80_000,
+				outstandingAfter: 0,
+				isFullWaiver: true,
 			});
 
 			const entry = result.entry;
@@ -314,6 +329,9 @@ describe("postObligationWaiver — cash ledger behaviour (direct integration)", 
 				reason: "Partial waiver step 1",
 				idempotencyKey: waiverKey(obligationId, "ac4-first"),
 				source: ADMIN_SOURCE,
+				outstandingBefore: 100_000,
+				outstandingAfter: 60_000,
+				isFullWaiver: false,
 			});
 		});
 
@@ -325,6 +343,9 @@ describe("postObligationWaiver — cash ledger behaviour (direct integration)", 
 				reason: "Partial waiver step 2 — full forgiveness",
 				idempotencyKey: waiverKey(obligationId, "ac4-second"),
 				source: ADMIN_SOURCE,
+				outstandingBefore: 60_000,
+				outstandingAfter: 0,
+				isFullWaiver: true,
 			});
 		});
 
@@ -384,6 +405,9 @@ describe("postObligationWaiver — cash ledger behaviour (direct integration)", 
 				reason: "Over-waiver (normally blocked by admin mutation)",
 				idempotencyKey: waiverKey(obligationId, "over-waiver"),
 				source: ADMIN_SOURCE,
+				outstandingBefore: 50_000,
+				outstandingAfter: -25_000,
+				isFullWaiver: false,
 			});
 			expect(result.entry.amount).toBe(75_000n);
 		});
@@ -424,6 +448,9 @@ describe("postObligationWaiver — cash ledger behaviour (direct integration)", 
 					reason: "Invalid amount test",
 					idempotencyKey: waiverKey(obligationId, `invalid-${amount}`),
 					source: ADMIN_SOURCE,
+					outstandingBefore: 100_000,
+					outstandingAfter: 100_000 - amount,
+					isFullWaiver: false,
 				})
 			).rejects.toThrow();
 		});
@@ -461,6 +488,9 @@ describe("postObligationWaiver — cash ledger behaviour (direct integration)", 
 				reason: "First waiver creates account",
 				idempotencyKey: waiverKey(obligationId, "auto-create"),
 				source: ADMIN_SOURCE,
+				outstandingBefore: 50_000,
+				outstandingAfter: 40_000,
+				isFullWaiver: false,
 			});
 		});
 
@@ -501,6 +531,9 @@ describe("postObligationWaiver — cash ledger behaviour (direct integration)", 
 				reason: "Idempotency key test",
 				idempotencyKey: key,
 				source: ADMIN_SOURCE,
+				outstandingBefore: 50_000,
+				outstandingAfter: 25_000,
+				isFullWaiver: false,
 			});
 
 			expect(result.entry.idempotencyKey).toBe(key);
@@ -528,6 +561,9 @@ describe("postObligationWaiver — cash ledger behaviour (direct integration)", 
 				reason: "Metadata check",
 				idempotencyKey: waiverKey(obligationId, "metadata"),
 				source: ADMIN_SOURCE,
+				outstandingBefore: 60_000,
+				outstandingAfter: 30_000,
+				isFullWaiver: false,
 			});
 
 			const metadata = result.entry.metadata as Record<string, unknown>;
