@@ -15,7 +15,14 @@
  *   bun run scripts/lint-security.ts --quiet   # violations only, no summary
  */
 import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { basename as getBasename, join, relative, resolve } from "node:path";
+import {
+	dirname,
+	basename as getBasename,
+	join,
+	relative,
+	resolve,
+} from "node:path";
+import { fileURLToPath } from "node:url";
 
 // ── Types ───────────────────────────────────────────────────────────────
 interface Violation {
@@ -28,7 +35,7 @@ interface Violation {
 
 // ── Configuration ───────────────────────────────────────────────────────
 
-const ROOT = resolve((import.meta as unknown as { dir: string }).dir, "..");
+const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const CONVEX_DIR = join(ROOT, "convex");
 const ROUTES_DIR = join(ROOT, "src", "routes");
 

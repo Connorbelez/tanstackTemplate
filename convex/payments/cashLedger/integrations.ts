@@ -6,7 +6,9 @@ import type { CommandSource } from "../../engine/types";
 import type { PaymentFrequency } from "../../mortgages/paymentFrequency";
 import {
 	findCashAccount,
+	getCashAccountBalance,
 	getOrCreateCashAccount,
+	requireCashAccount,
 	safeBigintToNumber,
 } from "./accounts";
 import { postCashEntryInternal } from "./postEntry";
@@ -544,6 +546,65 @@ export async function postObligationWaiver(
 			outstandingAfter: args.outstandingAfter,
 			isFullWaiver: args.isFullWaiver,
 		},
+	});
+}
+
+// ── Write-Off ────────────────────────────────────────────────────────
+
+export async function postObligationWriteOff(
+	ctx: MutationCtx,
+	args: {
+		obligationId: Id<"obligations">;
+		amount: number;
+		reason: string;
+		source: CommandSource;
+	}
+) {
+	const obligation = await ctx.db.get(args.obligationId);
+	if (!obligation) {
+		throw new ConvexError(`Obligation not found: ${args.obligationId}`);
+	}
+
+	// Validate: write-off amount <= outstanding receivable balance
+	const receivableAccount = await requireCashAccount(
+		ctx.db,
+		{
+			family: "BORROWER_RECEIVABLE",
+			mortgageId: obligation.mortgageId,
+			obligationId: obligation._id,
+		},
+		"postObligationWriteOff"
+	);
+	const outstandingBalance = getCashAccountBalance(receivableAccount);
+	if (BigInt(args.amount) > outstandingBalance) {
+		throw new ConvexError(
+			`Write-off amount ${args.amount} exceeds outstanding balance ${outstandingBalance}`
+		);
+	}
+
+	const writeOffAccount = await getOrCreateCashAccount(ctx, {
+		family: "WRITE_OFF",
+		mortgageId: obligation.mortgageId,
+		obligationId: obligation._id,
+	});
+
+	return postCashEntryInternal(ctx, {
+		entryType: "OBLIGATION_WRITTEN_OFF",
+		effectiveDate: unixMsToBusinessDate(Date.now()),
+		amount: args.amount,
+		debitAccountId: writeOffAccount._id,
+		creditAccountId: receivableAccount._id,
+		idempotencyKey: buildIdempotencyKey(
+			"write-off",
+			args.obligationId,
+			String(Date.now()),
+			crypto.randomUUID()
+		),
+		mortgageId: obligation.mortgageId,
+		obligationId: obligation._id,
+		borrowerId: obligation.borrowerId,
+		source: normalizeSource(args.source),
+		reason: args.reason,
 	});
 }
 

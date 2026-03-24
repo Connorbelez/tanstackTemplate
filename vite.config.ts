@@ -76,7 +76,7 @@ const config = defineConfig({
 				// which fail under Node strict ESM resolution in convex-test.
 				// @convex-dev/aggregate exports src/test.ts with import.meta.glob
 				// that needs Vite transformation.
-				inline: ["fluent-convex"],
+				inline: ["fluent-convex", "@convex-dev/aggregate"],
 			},
 		},
 	},
