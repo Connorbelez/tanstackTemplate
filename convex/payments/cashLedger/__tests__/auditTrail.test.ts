@@ -307,33 +307,49 @@ describe("T-010 — balance state transitions recorded in beforeState/afterState
 // ── T-011: Hash chain integrity ────────────────────────────────────
 
 describe("T-011 — hash chain integrity", () => {
-	it("single entry inserts into audit trail without errors", async () => {
+	it("single entry produces a valid hash chain", async () => {
 		const t = makeHarness();
 
 		await t.run(async (ctx) => {
-			await createEntryAndAudit(ctx, {
+			const r = await createEntryAndAudit(ctx, {
 				entryType: "CASH_RECEIVED",
 				debitFamily: "TRUST_CASH",
 				creditFamily: "BORROWER_RECEIVABLE",
 				amount: BigInt(30_000),
 				effectiveDate: "2026-03-10",
 			});
+
+			const verification = await auditTrail.verifyChain(ctx, {
+				entityId: r.entry._id as string,
+			});
+			expect(verification.valid).toBe(true);
+			expect(verification.eventCount).toBe(1);
 		});
 	});
 
-	it("multiple sequential entries insert without errors", async () => {
+	it("multiple sequential entries maintain valid hash chains", async () => {
 		const t = makeHarness();
 
 		await t.run(async (ctx) => {
 			const amounts = [10_000, 20_000, 35_000];
+			const entityIds: string[] = [];
+
 			for (const amt of amounts) {
-				await createEntryAndAudit(ctx, {
+				const r = await createEntryAndAudit(ctx, {
 					entryType: "CASH_RECEIVED",
 					debitFamily: "TRUST_CASH",
 					creditFamily: "BORROWER_RECEIVABLE",
 					amount: BigInt(amt),
 					effectiveDate: "2026-03-10",
 				});
+				entityIds.push(r.entry._id as string);
+			}
+
+			for (const entityId of entityIds) {
+				const verification = await auditTrail.verifyChain(ctx, {
+					entityId,
+				});
+				expect(verification.valid).toBe(true);
 			}
 		});
 	});
@@ -668,6 +684,12 @@ describe("T-014 — idempotent posting does not duplicate audit records", () => 
 			expect(result.projectedCreditBalance.toString()).toBe("0");
 			expect(result.debitBalanceBefore.toString()).toBe("0");
 			expect(result.creditBalanceBefore.toString()).toBe("0");
+
+			// Ensure idempotent posting did not create additional audit records
+			const auditEvents = await auditTrail.queryByEntity(ctx, {
+				entityId: firstEntryId,
+			});
+			expect(auditEvents.length).toBe(1);
 		});
 	});
 
