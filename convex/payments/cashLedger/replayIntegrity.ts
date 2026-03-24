@@ -81,8 +81,8 @@ export async function getReplayCursor(ctx: QueryCtx): Promise<bigint | null> {
  * given accountId or mortgageId constraints. If neither is specified,
  * all entries pass through.
  *
- * NOTE: When both accountId and mortgageId are provided, accountId takes
- * precedence and mortgageId is ignored. A runtime guard throws if both are set.
+ * NOTE: When both accountId and mortgageId are provided, a runtime guard
+ * throws to avoid ambiguity — pass only one scope filter.
  */
 export function filterByScope(
 	entries: Doc<"cash_ledger_journal_entries">[],
@@ -140,7 +140,7 @@ export function detectMissingSequences(
 	}
 
 	const missing: string[] = [];
-	let expectedNext = entries[0].sequenceNumber;
+	let expectedNext = 0n;
 
 	for (const entry of entries) {
 		while (expectedNext < entry.sequenceNumber) {
@@ -298,6 +298,7 @@ export async function replayJournalIntegrity(
 	const allEntries = await ctx.db
 		.query("cash_ledger_journal_entries")
 		.withIndex("by_sequence", (q) => q.gt("sequenceNumber", fromSequence))
+		.order("asc")
 		.collect();
 
 	// 3. Filter by scope (account or mortgage)
@@ -310,16 +311,28 @@ export async function replayJournalIntegrity(
 	// 5. Replay — accumulate per-account debits/credits
 	const accumulators = accumulateEntries(entries);
 
-	// 6. Compare against stored state (full mode only — incremental only has deltas)
+	// 6. Compare against stored state
+	//    - full mode without scope filter: verify accumulated totals match stored lifetime totals
+	//    - full mode with scope filter: skip comparison (partial history vs lifetime totals would show false drift)
+	//    - incremental mode: no comparison (only has deltas)
+	const hasScopeFilter = !!(scope.accountId || scope.mortgageId);
 	const mismatches =
-		scope.mode === "full" ? await compareAgainstStored(ctx, accumulators) : [];
+		scope.mode === "full" && !hasScopeFilter
+			? await compareAgainstStored(ctx, accumulators)
+			: [];
+
+	// 6b. In incremental mode, no verification was performed — signal that to the caller
+	const passed =
+		mismatches.length === 0 && missingSequences.length === 0
+			? scope.mode === "full"
+			: false;
 
 	// 7. Determine the actual sequence range
 	const lastEntry = entries.at(-1);
 	const toSequence = lastEntry ? lastEntry.sequenceNumber : fromSequence;
 
 	return {
-		passed: mismatches.length === 0 && missingSequences.length === 0,
+		passed,
 		mode: scope.mode,
 		entriesReplayed: entries.length,
 		accountsChecked: accumulators.size,
@@ -354,7 +367,7 @@ export const advanceReplayCursor = internalMutation({
 		// incremental replay to skip recent entries.
 		if (
 			existing &&
-			args.lastProcessedSequence <= existing.lastProcessedSequence
+			args.lastProcessedSequence < existing.lastProcessedSequence
 		) {
 			console.error(
 				`[advanceReplayCursor] Attempted cursor regression: current=${existing.lastProcessedSequence}, ` +
