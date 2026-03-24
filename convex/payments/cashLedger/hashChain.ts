@@ -50,8 +50,10 @@ export function buildCashLedgerAuditArgs(
 			postingGroupId: entry.postingGroupId,
 			reason: entry.reason,
 			channel: entry.source.channel,
+			actorType: entry.source.actorType,
 			mortgageId: entry.mortgageId,
 			obligationId: entry.obligationId,
+			entryMetadata: entry.metadata ?? null,
 		}),
 		timestamp: entry.timestamp,
 	};
