@@ -142,6 +142,7 @@ import type * as payments_cashLedger_reconciliation from "../payments/cashLedger
 import type * as payments_cashLedger_reconciliationCron from "../payments/cashLedger/reconciliationCron.js";
 import type * as payments_cashLedger_reconciliationQueries from "../payments/cashLedger/reconciliationQueries.js";
 import type * as payments_cashLedger_reconciliationSuite from "../payments/cashLedger/reconciliationSuite.js";
+import type * as payments_cashLedger_replayIntegrity from "../payments/cashLedger/replayIntegrity.js";
 import type * as payments_cashLedger_sequenceCounter from "../payments/cashLedger/sequenceCounter.js";
 import type * as payments_cashLedger_types from "../payments/cashLedger/types.js";
 import type * as payments_cashLedger_validators from "../payments/cashLedger/validators.js";
@@ -321,6 +322,7 @@ declare const fullApi: ApiFromModules<{
   "payments/cashLedger/reconciliationCron": typeof payments_cashLedger_reconciliationCron;
   "payments/cashLedger/reconciliationQueries": typeof payments_cashLedger_reconciliationQueries;
   "payments/cashLedger/reconciliationSuite": typeof payments_cashLedger_reconciliationSuite;
+  "payments/cashLedger/replayIntegrity": typeof payments_cashLedger_replayIntegrity;
   "payments/cashLedger/sequenceCounter": typeof payments_cashLedger_sequenceCounter;
   "payments/cashLedger/types": typeof payments_cashLedger_types;
   "payments/cashLedger/validators": typeof payments_cashLedger_validators;

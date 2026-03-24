@@ -244,7 +244,27 @@ describe("postCashReceiptForObligation", () => {
 		// Verify an audit event was written for the missing receivable.
 		// The auditLog component has its own isolated database, so we must use
 		// runInComponent to query it.
-		await t.runInComponent("auditLog", async (ctx) => {
+		// convex-test@0.0.41 has runInComponent at runtime but its types omit it
+		interface ComponentCtx {
+			db: {
+				query(table: string): {
+					withIndex(
+						name: string,
+						fn: (q: {
+							eq(f: string, v: unknown): { eq(f: string, v: unknown): unknown };
+						}) => unknown
+					): { collect(): Promise<Record<string, unknown>[]> };
+				};
+			};
+		}
+		await (
+			t as TestHarness & {
+				runInComponent(
+					name: string,
+					fn: (ctx: ComponentCtx) => Promise<void>
+				): Promise<void>;
+			}
+		).runInComponent("auditLog", async (ctx) => {
 			const entries = await ctx.db
 				.query("auditLogs")
 				.withIndex("by_resource", (q) =>
