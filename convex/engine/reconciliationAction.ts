@@ -114,10 +114,6 @@ async function lookupStatus(
 	entityId: string
 ): Promise<string | null | undefined> {
 	// Table-driven lookup: entityType → typed getter.
-	// biome-ignore: cognitive complexity is 28 because each entity type requires
-	// a separate db.get call — this is unavoidable for a data-access function
-	// that must handle 14 distinct entity table types.
-	// (，表驱动的查找方式，每个实体类型需要单独的数据库查询调用——这是处理14种不同实体表类型的数据访问函数的必经之路)
 	switch (entityType) {
 		case "onboardingRequest":
 			return (
@@ -339,17 +335,31 @@ export const dailyReconciliation = internalAction({
 					JSON.stringify(replayResult, null, 2)
 				);
 
-				await ctx.runMutation(logReconciliationDiscrepanciesRef, {
-					discrepancyCount:
-						replayResult.mismatches.length +
-						replayResult.missingSequences.length,
-					discrepancies: replayResult.mismatches.map((m) => ({
+				const discrepancies: Discrepancy[] = replayResult.mismatches.map(
+					(m) => ({
 						entityType: "cash_ledger_account",
 						entityId: m.accountId,
 						entityStatus: `debits=${m.storedDebits},credits=${m.storedCredits}`,
 						journalNewState: `debits=${m.expectedDebits},credits=${m.expectedCredits}`,
 						journalEntryId: `seq:${m.firstDivergenceSequence}-${m.lastEntrySequence}`,
-					})),
+					})
+				);
+
+				// Gap-only failures persist an empty discrepancy list with a non-zero count
+				// without this entry — build a proper Discrepancy for missing sequences
+				for (const seq of replayResult.missingSequences) {
+					discrepancies.push({
+						entityType: "cash_ledger_sequence_gap",
+						entityId: "gap",
+						entityStatus: "SEQUENCE_MISSING",
+						journalNewState: seq.toString(),
+						journalEntryId: "gap",
+					});
+				}
+
+				await ctx.runMutation(logReconciliationDiscrepanciesRef, {
+					discrepancyCount: discrepancies.length,
+					discrepancies,
 					checkedAt: Date.now(),
 				});
 			}
