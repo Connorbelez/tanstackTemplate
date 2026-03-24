@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { Doc } from "../../../_generated/dataModel";
 import { getCashAccountBalance, isCreditNormalFamily } from "../accounts";
 import { type PostCashEntryInput, postCashEntryInternal } from "../postEntry";
 import {
@@ -319,7 +320,9 @@ describe("Invariant 2: non-negative LENDER_PAYABLE", () => {
 
 		// Verify the LENDER_PAYABLE balance is now negative
 		await t.run(async (ctx) => {
-			const account = await ctx.db.get(lenderPayable._id);
+			const account = (await ctx.db.get(
+				lenderPayable._id
+			)) as Doc<"cash_ledger_accounts"> | null;
 			expect(account).not.toBeNull();
 			if (account) {
 				const balance = getCashAccountBalance(account);
@@ -382,7 +385,9 @@ describe("Invariant 3: point-in-time reconstruction", () => {
 
 		await t.run(async (ctx) => {
 			// Read the current running balance from the account
-			const account = await ctx.db.get(controlAccount._id);
+			const account = (await ctx.db.get(
+				controlAccount._id
+			)) as Doc<"cash_ledger_accounts"> | null;
 			expect(account).not.toBeNull();
 			if (!account) {
 				return;
@@ -623,9 +628,15 @@ describe("Invariant 4: idempotent replay", () => {
 			const allEntries = await ctx.db
 				.query("cash_ledger_journal_entries")
 				.collect();
-			const controlAcc = await ctx.db.get(controlAccount._id);
-			const payableAcc = await ctx.db.get(lenderPayable._id);
-			const revenueAcc = await ctx.db.get(servicingRevenue._id);
+			const controlAcc = (await ctx.db.get(
+				controlAccount._id
+			)) as Doc<"cash_ledger_accounts"> | null;
+			const payableAcc = (await ctx.db.get(
+				lenderPayable._id
+			)) as Doc<"cash_ledger_accounts"> | null;
+			const revenueAcc = (await ctx.db.get(
+				servicingRevenue._id
+			)) as Doc<"cash_ledger_accounts"> | null;
 
 			return {
 				entryCount: allEntries.length,
@@ -645,9 +656,15 @@ describe("Invariant 4: idempotent replay", () => {
 			const allEntries = await ctx.db
 				.query("cash_ledger_journal_entries")
 				.collect();
-			const controlAcc = await ctx.db.get(controlAccount._id);
-			const payableAcc = await ctx.db.get(lenderPayable._id);
-			const revenueAcc = await ctx.db.get(servicingRevenue._id);
+			const controlAcc = (await ctx.db.get(
+				controlAccount._id
+			)) as Doc<"cash_ledger_accounts"> | null;
+			const payableAcc = (await ctx.db.get(
+				lenderPayable._id
+			)) as Doc<"cash_ledger_accounts"> | null;
+			const revenueAcc = (await ctx.db.get(
+				servicingRevenue._id
+			)) as Doc<"cash_ledger_accounts"> | null;
 
 			return {
 				entryCount: allEntries.length,
