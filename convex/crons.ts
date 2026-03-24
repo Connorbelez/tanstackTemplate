@@ -33,4 +33,14 @@ crons.interval(
 	internal.dispersal.selfHealing.dispersalSelfHealingCron
 );
 
+// Cash ledger reconciliation: verify ledger invariants (unapplied cash,
+// negative payables, obligation drift, conservation, etc.).
+// Runs at 07:15 UTC — 15 minutes after entity reconciliation — to avoid
+// overlapping with the 07:00 entity status check.
+crons.daily(
+	"cash ledger reconciliation",
+	{ hourUTC: 7, minuteUTC: 15 },
+	internal.payments.cashLedger.reconciliationCron.cashLedgerReconciliation
+);
+
 export default crons;
