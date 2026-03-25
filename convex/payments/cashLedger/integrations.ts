@@ -1313,14 +1313,46 @@ async function findPayoutEntryForClawback(
 	}
 
 	// Tier 4: broadest fallback — match by lenderId + mortgageId in
-	// lender-scoped entries to catch legacy payouts with no dispersalEntryId
+	// lender-scoped entries to catch legacy payouts with no dispersalEntryId.
+	// Fail closed: if multiple payouts match, return null to surface ambiguity
+	// for manual handling instead of risking a wrong clawback attachment.
 	const lenderEntries = await ctx.db
 		.query("cash_ledger_journal_entries")
 		.withIndex("by_lender_and_sequence", (q) => q.eq("lenderId", lenderId))
 		.collect();
-	return lenderEntries.find(
+	const candidates = lenderEntries.filter(
 		(e) => e.entryType === "LENDER_PAYOUT_SENT" && e.mortgageId === mortgageId
 	);
+	return candidates.length === 1 ? candidates[0] : undefined;
+}
+
+/**
+ * Validates that exactly one reversal identifier (attemptId or transferRequestId)
+ * is provided. Throws on missing or ambiguous identifiers.
+ */
+function assertExactlyOneReversalIdentifier(args: {
+	attemptId?: Id<"collectionAttempts">;
+	transferRequestId?: Id<"transferRequests">;
+}):
+	| { hasAttemptId: true; hasTransferRequestId: false }
+	| { hasAttemptId: false; hasTransferRequestId: true } {
+	const hasAttemptId = args.attemptId !== undefined;
+	const hasTransferRequestId = args.transferRequestId !== undefined;
+	if (!(hasAttemptId || hasTransferRequestId)) {
+		throw new ConvexError(
+			"postPaymentReversalCascade requires at least one of attemptId or transferRequestId"
+		);
+	}
+	if (hasAttemptId && hasTransferRequestId) {
+		throw new ConvexError({
+			code: "AMBIGUOUS_REVERSAL_IDENTIFIER" as const,
+			attemptId: args.attemptId,
+			transferRequestId: args.transferRequestId,
+		});
+	}
+	return { hasAttemptId, hasTransferRequestId: !hasAttemptId } as
+		| { hasAttemptId: true; hasTransferRequestId: false }
+		| { hasAttemptId: false; hasTransferRequestId: true };
 }
 
 /**
@@ -1351,15 +1383,11 @@ export async function postPaymentReversalCascade(
 	postingGroupId: string;
 	clawbackRequired: boolean;
 }> {
-	// 1. Resolve identifier — require at least one
-	if (!(args.attemptId || args.transferRequestId)) {
-		throw new ConvexError(
-			"postPaymentReversalCascade requires at least one of attemptId or transferRequestId"
-		);
-	}
+	// 1. Resolve identifier — require exactly one
+	const { hasAttemptId } = assertExactlyOneReversalIdentifier(args);
 
-	// 2. Generate postingGroupId (prefer attemptId if both provided)
-	const postingGroupId = args.attemptId
+	// 2. Generate postingGroupId from the single provided identifier
+	const postingGroupId = hasAttemptId
 		? `reversal-group:${args.attemptId}`
 		: `reversal-group:transfer:${args.transferRequestId}`;
 
@@ -1416,7 +1444,7 @@ export async function postPaymentReversalCascade(
 	});
 
 	// 6. Identifier string for idempotency keys
-	// At least one of attemptId/transferRequestId is guaranteed by step 1 validation
+	// Exactly one of attemptId/transferRequestId is guaranteed by step 1 validation
 	const identifier = args.attemptId ?? (args.transferRequestId as string);
 
 	// 7. Validate reversal amount is a safe integer (renumbered after dimension check)
