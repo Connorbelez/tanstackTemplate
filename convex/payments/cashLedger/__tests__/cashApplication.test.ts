@@ -13,6 +13,7 @@ import {
 	ADMIN_SOURCE,
 	createHarness,
 	createTestAccount,
+	postTestEntry,
 	seedMinimalEntities,
 	type TestHarness,
 } from "./testUtils";
@@ -305,20 +306,22 @@ describe("postCashApplication", () => {
 			initialCreditBalance: 50_000n,
 		});
 
-		// Create a dummy journal entry to serve as causedBy reference
-		const dummyEntryId = await t.run(async (ctx) => {
-			return ctx.db.insert("cash_ledger_journal_entries", {
-				entryType: "CASH_RECEIVED",
-				effectiveDate: "2026-03-01",
-				amount: 50_000n,
-				debitAccountId: unappliedAccount._id,
-				creditAccountId: unappliedAccount._id, // dummy — not meaningful for this test
-				idempotencyKey: buildIdempotencyKey("test", "dummy-caused-by"),
-				mortgageId: seeded.mortgageId,
-				source: ADMIN_SOURCE,
-				sequenceNumber: 999n,
-				timestamp: Date.now(),
-			});
+		const trustCashAccount = await createTestAccount(t, {
+			family: "TRUST_CASH",
+			mortgageId: seeded.mortgageId,
+			initialDebitBalance: 50_000n,
+		});
+
+		const priorReceipt = await postTestEntry(t, {
+			entryType: "CASH_RECEIVED",
+			effectiveDate: "2026-03-01",
+			amount: 50_000,
+			debitAccountId: trustCashAccount._id,
+			creditAccountId: unappliedAccount._id,
+			idempotencyKey: buildIdempotencyKey("test", "seed-caused-by"),
+			mortgageId: seeded.mortgageId,
+			source: ADMIN_SOURCE,
+			reason: "Seed receipt for causedBy linkage",
 		});
 
 		await t.run(async (ctx) => {
@@ -327,12 +330,12 @@ describe("postCashApplication", () => {
 				targetObligationId: obligationId,
 				amount: 50_000,
 				reason: "Apply with causedBy",
-				sourceEntryId: dummyEntryId,
+				sourceEntryId: priorReceipt.entry._id,
 				source: ADMIN_SOURCE,
 				idempotencyKey: "test-caused-by",
 			});
 
-			expect(result.entry.causedBy).toBe(dummyEntryId);
+			expect(result.entry.causedBy).toBe(priorReceipt.entry._id);
 		});
 	});
 

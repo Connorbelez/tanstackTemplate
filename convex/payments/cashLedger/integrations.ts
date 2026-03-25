@@ -793,7 +793,30 @@ export async function postCashApplication(
 		);
 	}
 
-	// 2. Validate sufficient balance
+	const idempotencyKey = buildIdempotencyKey(
+		"cash-application",
+		args.sourceAccountId,
+		args.targetObligationId,
+		args.idempotencyKey
+	);
+
+	// 2. Idempotent replay — return the existing entry before balance/status checks
+	// so retries after a successful post do not fail on depleted source balance.
+	const existingApplication = await ctx.db
+		.query("cash_ledger_journal_entries")
+		.withIndex("by_idempotency", (q) => q.eq("idempotencyKey", idempotencyKey))
+		.first();
+	if (existingApplication) {
+		return {
+			entry: existingApplication,
+			debitBalanceBefore: 0n,
+			creditBalanceBefore: 0n,
+			projectedDebitBalance: 0n,
+			projectedCreditBalance: 0n,
+		};
+	}
+
+	// 3. Validate sufficient balance
 	const balance = getCashAccountBalance(sourceAccount);
 	if (balance < BigInt(args.amount)) {
 		throw new ConvexError(
@@ -801,7 +824,7 @@ export async function postCashApplication(
 		);
 	}
 
-	// 3. Load target obligation and validate status
+	// 4. Load target obligation and validate status
 	const obligation = await ctx.db.get(args.targetObligationId);
 	if (!obligation) {
 		throw new ConvexError(
@@ -814,7 +837,22 @@ export async function postCashApplication(
 		);
 	}
 
-	// 4. Find or create BORROWER_RECEIVABLE account for the obligation
+	// 5. Enforce mortgage scope — source and obligation must belong to the same loan
+	if (
+		sourceAccount.mortgageId !== undefined &&
+		sourceAccount.mortgageId !== obligation.mortgageId
+	) {
+		throw new ConvexError(
+			`Source account mortgage ${sourceAccount.mortgageId} does not match obligation mortgage ${obligation.mortgageId}`
+		);
+	}
+	if (sourceAccount.mortgageId === undefined) {
+		throw new ConvexError(
+			"Source account must be scoped to a mortgage for cash application"
+		);
+	}
+
+	// 6. Find or create BORROWER_RECEIVABLE account for the obligation
 	const receivableAccount = await getOrCreateCashAccount(ctx, {
 		family: "BORROWER_RECEIVABLE",
 		mortgageId: obligation.mortgageId,
@@ -822,11 +860,16 @@ export async function postCashApplication(
 		borrowerId: obligation.borrowerId,
 	});
 
-	// 5. Choose entry type based on source family
+	// 7. Choose entry type based on source family
+	// SUSPENSE_ESCALATED is Dr SUSPENSE / Cr BORROWER_RECEIVABLE (same mechanical
+	// shape as dispersal escalation in selfHealing). Both accounts are debit-normal;
+	// crediting receivable reduces the obligation balance. A single two-sided entry
+	// cannot credit both suspense and receivable — clearing suspense against AR may
+	// require an additional leg or entry type if ledger-level suspense consumption is required.
 	const entryType: CashEntryType =
 		sourceAccount.family === "SUSPENSE" ? "SUSPENSE_ESCALATED" : "CASH_APPLIED";
 
-	// 6. Post journal entry
+	// 8. Post journal entry
 	return postCashEntryInternal(ctx, {
 		entryType,
 		effectiveDate: unixMsToBusinessDate(Date.now()),
@@ -834,12 +877,7 @@ export async function postCashApplication(
 		debitAccountId: args.sourceAccountId,
 		creditAccountId: receivableAccount._id,
 		causedBy: args.sourceEntryId,
-		idempotencyKey: buildIdempotencyKey(
-			"cash-application",
-			args.sourceAccountId,
-			args.targetObligationId,
-			args.idempotencyKey
-		),
+		idempotencyKey,
 		mortgageId: obligation.mortgageId,
 		obligationId: obligation._id,
 		borrowerId: obligation.borrowerId,
@@ -860,8 +898,8 @@ export async function postSuspenseResolution(
 		suspenseAccountId: Id<"cash_ledger_accounts">;
 		resolution:
 			| { type: "match"; obligationId: Id<"obligations">; amount: number }
-			| { type: "refund"; amount: number; reason: string }
-			| { type: "write_off"; amount: number; reason: string };
+			| { type: "refund"; amount: number }
+			| { type: "write_off"; amount: number };
 		sourceEntryId?: Id<"cash_ledger_journal_entries">;
 		source: CommandSource;
 		reason: string;

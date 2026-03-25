@@ -337,11 +337,11 @@ export const resolveSuspenseItem = adminMutation
 			channel: "admin_dashboard",
 		};
 
-		// 4. Build the resolution union object from flat args
+		// 4. Build the resolution union object from flat args (reason lives only on args.reason)
 		let resolution:
 			| { type: "match"; obligationId: Id<"obligations">; amount: number }
-			| { type: "refund"; amount: number; reason: string }
-			| { type: "write_off"; amount: number; reason: string };
+			| { type: "refund"; amount: number }
+			| { type: "write_off"; amount: number };
 
 		if (args.resolutionType === "match") {
 			if (!args.obligationId) {
@@ -358,13 +358,11 @@ export const resolveSuspenseItem = adminMutation
 			resolution = {
 				type: "refund",
 				amount: args.amount,
-				reason,
 			};
 		} else {
 			resolution = {
 				type: "write_off",
 				amount: args.amount,
-				reason,
 			};
 		}
 

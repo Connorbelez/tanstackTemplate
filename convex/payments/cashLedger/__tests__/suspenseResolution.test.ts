@@ -125,15 +125,14 @@ describe("postSuspenseResolution", () => {
 		});
 	});
 
-	it("write-off → SUSPENSE zeroed, WRITE_OFF debited", async () => {
+	it("write-off → SUSPENSE zeroed after routed inflow, WRITE_OFF debited", async () => {
 		const t = createHarness(modules);
 		const seeded = await seedMinimalEntities(t);
 
-		// Create SUSPENSE account with debit balance
+		// Start SUSPENSE at zero; establish the 30_000 balance only via SUSPENSE_ROUTED
 		const suspenseAccount = await createTestAccount(t, {
 			family: "SUSPENSE",
 			mortgageId: seeded.mortgageId,
-			initialDebitBalance: 30_000n,
 		});
 
 		// Create a CASH_CLEARING account for the SUSPENSE_ROUTED entry
@@ -166,7 +165,6 @@ describe("postSuspenseResolution", () => {
 				resolution: {
 					type: "write_off",
 					amount: 30_000,
-					reason: "Write off suspense balance",
 				},
 				sourceEntryId: suspenseEntry.entry._id,
 				source: ADMIN_SOURCE,
@@ -178,17 +176,14 @@ describe("postSuspenseResolution", () => {
 			expect("entry" in result && result.entry.entryType).toBe("CORRECTION");
 		});
 
-		// Verify SUSPENSE balance after write-off:
-		// Initial: debits=30_000 (from createTestAccount patch), credits=0
-		// SUSPENSE_ROUTED: +30_000 debit → debits=60_000, credits=0
-		// CORRECTION: +30_000 credit → debits=60_000, credits=30_000
-		// Balance (debit-normal) = debits - credits = 60_000 - 30_000 = 30_000
+		// SUSPENSE_ROUTED: debits=30_000, credits=0 → balance 30_000
+		// CORRECTION credits SUSPENSE 30_000 → debits=30_000, credits=30_000 → balance 0
 		await t.run(async (ctx) => {
 			const account = await ctx.db.get(suspenseAccount._id);
 			if (!account) {
 				throw new Error("SUSPENSE account not found");
 			}
-			expect(getCashAccountBalance(account)).toBe(30_000n);
+			expect(getCashAccountBalance(account)).toBe(0n);
 		});
 
 		// Verify WRITE_OFF account created with debit balance
@@ -207,8 +202,8 @@ describe("postSuspenseResolution", () => {
 	});
 
 	it("refund → audit log records refund intent, no journal entries", async () => {
-		// Refund path calls auditLog.log directly, so we need the full test harness
-		// with registered components (createTestConvex), not the lightweight createHarness.
+		// Refund path returns a refund intent; audit logging is handled by the mutation layer.
+		// We still use the full test harness (createTestConvex) so the mutation stack is wired correctly.
 		const t = createTestConvex();
 		await ensureSeededIdentity(t, FAIRLEND_ADMIN);
 		const seeded = await seedMinimalEntities(t);
@@ -225,7 +220,6 @@ describe("postSuspenseResolution", () => {
 				resolution: {
 					type: "refund",
 					amount: 50_000,
-					reason: "Customer refund",
 				},
 				source: ADMIN_SOURCE,
 				reason: "Customer refund",
