@@ -257,6 +257,62 @@ export async function getControlBalanceBySubaccount(
 	return { totalBalance, accountCount: accounts.length };
 }
 
+// ── Reversal Indicator Reconciliation ────────────────────────
+
+export interface ReversalIndicator {
+	journalSettledAmount: bigint;
+	obligationAmount: number;
+	obligationId: Id<"obligations">;
+	/** obligationAmount - journalSettledAmount — non-zero means reversal happened */
+	outstandingBalance: bigint;
+}
+
+/**
+ * Detects settled obligations where the journal-derived receivable balance
+ * is non-zero — the reversal indicator.
+ */
+export async function findSettledObligationsWithNonZeroBalance(
+	ctx: QueryCtx
+): Promise<ReversalIndicator[]> {
+	const settledObligations = await ctx.db
+		.query("obligations")
+		.withIndex("by_status", (q) => q.eq("status", "settled"))
+		.collect();
+
+	const results: ReversalIndicator[] = [];
+
+	for (const obligation of settledObligations) {
+		const journalSettledAmount = await getJournalSettledAmountForObligation(
+			ctx,
+			obligation._id
+		);
+		const outstandingBalance = BigInt(obligation.amount) - journalSettledAmount;
+
+		if (outstandingBalance !== 0n) {
+			results.push({
+				obligationId: obligation._id,
+				journalSettledAmount,
+				obligationAmount: obligation.amount,
+				outstandingBalance,
+			});
+		}
+	}
+
+	return results;
+}
+
+export const findSettledObligationsWithNonZeroBalanceInternal = internalQuery({
+	args: {},
+	handler: async (ctx) => {
+		const result = await findSettledObligationsWithNonZeroBalance(ctx);
+		return result.map((r) => ({
+			...r,
+			journalSettledAmount: safeBigintToNumber(r.journalSettledAmount),
+			outstandingBalance: safeBigintToNumber(r.outstandingBalance),
+		}));
+	},
+});
+
 // ── Replay Integrity Internal Query ─────────────────────────
 
 /**
