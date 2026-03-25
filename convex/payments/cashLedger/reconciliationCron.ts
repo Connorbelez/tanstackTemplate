@@ -45,6 +45,12 @@ const logCashLedgerReconciliationAlertsRef = makeInternalRef<
 	null
 >("payments/cashLedger/reconciliationCron:logCashLedgerReconciliationAlerts");
 
+const logCashLedgerReconciliationFatalRef = makeInternalRef<
+	"mutation",
+	{ errorMessage: string },
+	null
+>("payments/cashLedger/reconciliationCron:logCashLedgerReconciliationFatal");
+
 // ── Internal Query: run the full reconciliation suite ────────
 
 export const reconcileCashLedgerInternal = internalQuery({
@@ -90,6 +96,26 @@ export const logCashLedgerReconciliationAlerts = internalMutation({
 	},
 });
 
+// ── Internal Mutation: log fatal reconciliation failure ──────
+
+export const logCashLedgerReconciliationFatal = internalMutation({
+	args: {
+		errorMessage: v.string(),
+	},
+	handler: async (ctx, args) => {
+		await auditLog.log(ctx, {
+			action: "cash_ledger_reconciliation.fatal_error",
+			actorId: "system",
+			resourceType: "reconciliation",
+			resourceId: "cash-ledger-daily",
+			severity: "error",
+			metadata: {
+				errorMessage: args.errorMessage,
+			},
+		});
+	},
+});
+
 // ── Internal Action: cron entry point ────────────────────────
 
 export const cashLedgerReconciliation = internalAction({
@@ -98,10 +124,15 @@ export const cashLedgerReconciliation = internalAction({
 		try {
 			result = await ctx.runQuery(reconcileCashLedgerInternalRef, {});
 		} catch (error) {
+			const errorMessage =
+				error instanceof Error ? error.message : String(error);
 			console.error(
 				"[CASH LEDGER RECONCILIATION FATAL] Suite query failed entirely:",
-				error instanceof Error ? error.message : String(error)
+				errorMessage
 			);
+			await ctx.runMutation(logCashLedgerReconciliationFatalRef, {
+				errorMessage,
+			});
 			return null;
 		}
 
