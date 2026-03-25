@@ -113,7 +113,13 @@ export async function findOrphanedConfirmedTransferCandidates(
 
 	const candidates: OrphanedConfirmedCandidate[] = [];
 	for (const transfer of transfers) {
-		if (!transfer.confirmedAt || transfer.confirmedAt >= threshold) {
+		const effectiveConfirmedAt = transfer.confirmedAt ?? transfer._creationTime;
+		if (!transfer.confirmedAt) {
+			console.warn(
+				`[TRANSFER-RECONCILIATION] transfer=${transfer._id} has confirmed status but missing confirmedAt; falling back to _creationTime for age calculation`
+			);
+		}
+		if (effectiveConfirmedAt >= threshold) {
 			continue;
 		}
 		if (!transfer.direction || transfer.amount == null) {
@@ -301,10 +307,11 @@ export async function checkStaleOutboundTransfers(
 		if (dispersalEntry.status === "pending") {
 			if (transfer.amount == null) {
 				console.warn(
-					`[TRANSFER-RECONCILIATION] transfer=${transfer._id} has null amount, using 0 fallback in stale outbound check`
+					`[TRANSFER-RECONCILIATION] transfer=${transfer._id} has null amount in stale outbound check; excluding from totals`
 				);
+				continue;
 			}
-			const amount = transfer.amount ?? 0;
+			const amount = transfer.amount;
 			items.push({
 				transferRequestId: transfer._id,
 				dispersalEntryId: transfer.dispersalEntryId,
