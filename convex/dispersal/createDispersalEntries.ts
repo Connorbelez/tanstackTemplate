@@ -67,20 +67,31 @@ async function resolvePaymentMethodFromCollection(
 	ctx: MutationCtx,
 	obligationId: Id<"obligations">
 ): Promise<string | undefined> {
-	// Walk: collectionPlanEntries (obligationIds contains this obligation)
-	//     → collectionAttempts (by_plan_entry, confirmed status)
+	// Walk: collectionPlanEntries (by_status, obligationIds contains this obligation)
+	//     → collectionAttempts (by_plan_entry, confirmed + method, most recent)
 	//     → method
-	const planEntries = await ctx.db.query("collectionPlanEntries").collect();
+	const planEntryBatches = await Promise.all(
+		(["planned", "executing", "completed"] as const).map((status) =>
+			ctx.db
+				.query("collectionPlanEntries")
+				.withIndex("by_status", (q) => q.eq("status", status))
+				.collect()
+		)
+	);
+	const planEntries = planEntryBatches.flat();
 	for (const entry of planEntries) {
 		if (!entry.obligationIds.includes(obligationId)) {
 			continue;
 		}
-		const attempt = await ctx.db
+		const attempts = await ctx.db
 			.query("collectionAttempts")
 			.withIndex("by_plan_entry", (q) => q.eq("planEntryId", entry._id))
-			.first();
-		if (attempt?.method) {
-			return attempt.method;
+			.collect();
+		const confirmedWithMethod = attempts
+			.filter((a) => a.status === "confirmed" && a.method)
+			.sort((a, b) => b._creationTime - a._creationTime)[0];
+		if (confirmedWithMethod) {
+			return confirmedWithMethod.method;
 		}
 		if (entry.method) {
 			return entry.method;

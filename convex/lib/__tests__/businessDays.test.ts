@@ -25,9 +25,9 @@ describe("addBusinessDays", () => {
 		expect(addBusinessDays("2026-03-25", 0)).toBe("2026-03-25");
 	});
 
-	it("returns same date for 0 days even on weekend", () => {
-		expect(addBusinessDays("2026-03-28", 0)).toBe("2026-03-28"); // Saturday
-		expect(addBusinessDays("2026-03-29", 0)).toBe("2026-03-29"); // Sunday
+	it("normalizes weekend to next Monday when adding 0 business days", () => {
+		expect(addBusinessDays("2026-03-28", 0)).toBe("2026-03-30"); // Saturday → Monday
+		expect(addBusinessDays("2026-03-29", 0)).toBe("2026-03-30"); // Sunday → Monday
 	});
 
 	it("Monday + 1 = Tuesday", () => {

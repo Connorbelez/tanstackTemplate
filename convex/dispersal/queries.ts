@@ -3,6 +3,7 @@ import type { Doc, Id } from "../_generated/dataModel";
 import type { QueryCtx } from "../_generated/server";
 import { canAccessDispersal } from "../auth/resourceChecks";
 import { authedQuery, requirePermission, type Viewer } from "../fluent";
+import { businessDateToUnixMs } from "../lib/businessDates";
 
 const dispersalQuery = authedQuery.use(requirePermission("dispersal:view"));
 
@@ -101,6 +102,15 @@ function assertAdminScopedDispersalAccess(viewer: Viewer) {
 
 function sumAmounts(entries: Array<{ amount: number }>) {
 	return roundCurrency(entries.reduce((sum, entry) => sum + entry.amount, 0));
+}
+
+function assertStrictBusinessDate(label: string, date: string) {
+	try {
+		businessDateToUnixMs(date);
+	} catch (e) {
+		const message = e instanceof Error ? e.message : String(e);
+		throw new ConvexError(`Invalid ${label}: ${message}`);
+	}
 }
 
 function summarizeByLender(
@@ -318,35 +328,56 @@ export const getPayoutEligibleEntries = dispersalQuery
 	})
 	.handler(async (ctx, args) => {
 		assertAdminScopedDispersalAccess(ctx.viewer);
+		assertStrictBusinessDate("asOfDate", args.asOfDate);
 
 		const effectiveLimit = args.limit ?? 100;
 
-		// Query pending entries that have passed their hold period
-		const pendingEntries = await ctx.db
+		// Pending entries whose hold date has passed (indexed on status + payoutEligibleAfter)
+		const pendingPastHold = await ctx.db
+			.query("dispersalEntries")
+			.withIndex("by_eligibility", (q) =>
+				q.eq("status", "pending").lte("payoutEligibleAfter", args.asOfDate)
+			)
+			.collect();
+
+		const eligibleWithHold = pendingPastHold.filter((entry) => {
+			if (args.lenderId && entry.lenderId !== args.lenderId) {
+				return false;
+			}
+			return (
+				entry.payoutEligibleAfter !== undefined &&
+				entry.payoutEligibleAfter !== ""
+			);
+		});
+
+		// Legacy: pending with no payoutEligibleAfter (not keyed the same in the index)
+		const pendingAll = await ctx.db
 			.query("dispersalEntries")
 			.withIndex("by_eligibility", (q) => q.eq("status", "pending"))
 			.collect();
 
-		// Filter: eligible if payoutEligibleAfter <= asOfDate OR undefined (legacy)
-		const eligible = pendingEntries.filter((entry) => {
+		const eligibleLegacy = pendingAll.filter((entry) => {
 			if (args.lenderId && entry.lenderId !== args.lenderId) {
 				return false;
 			}
-			if (!entry.payoutEligibleAfter) {
-				return true; // Legacy entries without hold period are immediately eligible
-			}
-			return entry.payoutEligibleAfter <= args.asOfDate;
+			return !entry.payoutEligibleAfter;
 		});
 
+		const eligible = [...eligibleWithHold, ...eligibleLegacy];
 		eligible.sort(compareDispersalEntriesByDate);
 		const limited = eligible.slice(0, effectiveLimit);
+		const pageTotal = sumAmounts(limited);
+		const pageByLender = summarizeByLender(limited);
 
 		return {
 			asOfDate: args.asOfDate,
 			entryCount: eligible.length,
+			pageEntryCount: limited.length,
 			entries: limited,
 			total: sumAmounts(eligible),
+			pageTotal,
 			byLender: summarizeByLender(eligible),
+			pageByLender,
 		};
 	})
 	.public();

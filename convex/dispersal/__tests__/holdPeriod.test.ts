@@ -35,6 +35,13 @@ describe("calculatePayoutEligibleDate", () => {
 		);
 	});
 
+	it("manual: weekend dispersal normalizes to next business day", () => {
+		// March 28 2026 is Saturday → Monday March 30
+		expect(calculatePayoutEligibleDate("2026-03-28", "manual")).toBe(
+			"2026-03-30"
+		);
+	});
+
 	it("rotessa_pad: Friday + 5 bd = next Friday", () => {
 		// March 20 2026 is a Friday
 		expect(calculatePayoutEligibleDate("2026-03-20", "rotessa_pad")).toBe(

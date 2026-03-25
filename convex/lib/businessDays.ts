@@ -30,7 +30,8 @@ export function isBusinessDay(date: string): boolean {
 
 /**
  * Add N business days to a YYYY-MM-DD date, skipping weekends.
- * If days === 0, returns the same date regardless of whether it's a weekend.
+ * If days === 0, returns the same calendar day normalized to a business day
+ * (Saturday/Sunday advance to the following Monday).
  * If the start date is a weekend and days > 0, counting begins from the next Monday.
  */
 export function addBusinessDays(startDate: string, days: number): string {
@@ -40,7 +41,14 @@ export function addBusinessDays(startDate: string, days: number): string {
 		);
 	}
 	if (days === 0) {
-		return startDate;
+		const d = parseUTCDate(startDate);
+		const startDay = d.getUTCDay();
+		if (startDay === 0) {
+			d.setUTCDate(d.getUTCDate() + 1);
+		} else if (startDay === 6) {
+			d.setUTCDate(d.getUTCDate() + 2);
+		}
+		return formatUTCDate(d);
 	}
 
 	const d = parseUTCDate(startDate);
