@@ -310,6 +310,47 @@ export const getDispersalsByObligation = dispersalQuery
 	})
 	.public();
 
+export const getPayoutEligibleEntries = dispersalQuery
+	.input({
+		asOfDate: v.string(),
+		lenderId: v.optional(v.id("lenders")),
+		limit: v.optional(v.number()),
+	})
+	.handler(async (ctx, args) => {
+		assertAdminScopedDispersalAccess(ctx.viewer);
+
+		const effectiveLimit = args.limit ?? 100;
+
+		// Query pending entries that have passed their hold period
+		const pendingEntries = await ctx.db
+			.query("dispersalEntries")
+			.withIndex("by_eligibility", (q) => q.eq("status", "pending"))
+			.collect();
+
+		// Filter: eligible if payoutEligibleAfter <= asOfDate OR undefined (legacy)
+		const eligible = pendingEntries.filter((entry) => {
+			if (args.lenderId && entry.lenderId !== args.lenderId) {
+				return false;
+			}
+			if (!entry.payoutEligibleAfter) {
+				return true; // Legacy entries without hold period are immediately eligible
+			}
+			return entry.payoutEligibleAfter <= args.asOfDate;
+		});
+
+		eligible.sort(compareDispersalEntriesByDate);
+		const limited = eligible.slice(0, effectiveLimit);
+
+		return {
+			asOfDate: args.asOfDate,
+			entryCount: eligible.length,
+			entries: limited,
+			total: sumAmounts(eligible),
+			byLender: summarizeByLender(eligible),
+		};
+	})
+	.public();
+
 export const getServicingFeeHistory = dispersalQuery
 	.input({
 		mortgageId: v.id("mortgages"),

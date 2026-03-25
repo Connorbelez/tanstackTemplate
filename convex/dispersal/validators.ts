@@ -2,8 +2,14 @@ import { v } from "convex/values";
 import { feeCodeValidator } from "../fees/validators";
 
 // ── Dispersal entry status ──────────────────────────────────────
-// Phase 1: always "pending". Phase 2 will add "disbursed" | "failed".
-export const dispersalStatusValidator = v.literal("pending");
+// pending: awaiting hold period | eligible: hold passed, ready for payout
+// disbursed: payout sent | failed: payout failed
+export const dispersalStatusValidator = v.union(
+	v.literal("pending"),
+	v.literal("eligible"),
+	v.literal("disbursed"),
+	v.literal("failed")
+);
 
 // ── Calculation audit trail ─────────────────────────────────────
 // Every input to the pro-rata computation is preserved for

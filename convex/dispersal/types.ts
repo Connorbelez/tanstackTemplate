@@ -33,10 +33,12 @@ export interface DispersalEntry {
 	mortgageFeeId?: Id<"mortgageFees">;
 	mortgageId: Id<"mortgages">;
 	obligationId: Id<"obligations">;
+	paymentMethod?: string;
+	payoutEligibleAfter?: string;
 	// Compatibility field only. Canonical servicing fee totals live on
 	// servicingFeeEntries and calculationDetails.servicingFee.
 	servicingFeeDeducted: number;
-	status: "pending";
+	status: "pending" | "eligible" | "disbursed" | "failed";
 }
 
 // ── Servicing fee entry (FairLend revenue per payment) ──────────

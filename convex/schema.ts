@@ -971,13 +971,16 @@ export default defineSchema({
 		calculationDetails: calculationDetailsValidator,
 		mortgageFeeId: v.optional(v.id("mortgageFees")),
 		feeCode: v.optional(feeCodeValidator),
+		payoutEligibleAfter: v.optional(v.string()), // YYYY-MM-DD: earliest payout date (hold period)
+		paymentMethod: v.optional(v.string()), // resolved from collection attempt chain
 		createdAt: v.number(), // system timestamp: Unix ms
 	})
 		.index("by_lender", ["lenderId", "dispersalDate"])
 		.index("by_mortgage", ["mortgageId", "dispersalDate"])
 		.index("by_obligation", ["obligationId"])
 		.index("by_status", ["status", "lenderId"])
-		.index("by_idempotency", ["idempotencyKey"]),
+		.index("by_idempotency", ["idempotencyKey"])
+		.index("by_eligibility", ["status", "payoutEligibleAfter"]),
 
 	servicingFeeEntries: defineTable({
 		mortgageId: v.id("mortgages"),

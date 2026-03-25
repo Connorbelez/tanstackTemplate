@@ -11,6 +11,7 @@ import {
 	postSettlementAllocation,
 	type ServicingFeeMetadata,
 } from "../payments/cashLedger/integrations";
+import { calculatePayoutEligibleDate } from "./holdPeriod";
 import { requireLenderIdForAuthId } from "./lenderIdentity";
 import { calculateServicingFee } from "./servicingFee";
 
@@ -60,6 +61,32 @@ async function resolveLenderIdFromAuthId(
 		lenderAuthId,
 		"createDispersalEntries"
 	);
+}
+
+async function resolvePaymentMethodFromCollection(
+	ctx: MutationCtx,
+	obligationId: Id<"obligations">
+): Promise<string | undefined> {
+	// Walk: collectionPlanEntries (obligationIds contains this obligation)
+	//     → collectionAttempts (by_plan_entry, confirmed status)
+	//     → method
+	const planEntries = await ctx.db.query("collectionPlanEntries").collect();
+	for (const entry of planEntries) {
+		if (!entry.obligationIds.includes(obligationId)) {
+			continue;
+		}
+		const attempt = await ctx.db
+			.query("collectionAttempts")
+			.withIndex("by_plan_entry", (q) => q.eq("planEntryId", entry._id))
+			.first();
+		if (attempt?.method) {
+			return attempt.method;
+		}
+		if (entry.method) {
+			return entry.method;
+		}
+	}
+	return undefined;
 }
 
 function validateIntegerCents(value: number, label: string) {
@@ -321,6 +348,7 @@ export const createDispersalEntries = internalMutation({
 		settledDate: v.string(),
 		idempotencyKey: v.string(),
 		source: sourceValidator,
+		paymentMethod: v.optional(v.string()),
 	},
 	handler: async (ctx, args): Promise<DispersalCreationResult> => {
 		validateIntegerCents(args.settledAmount, "settledAmount");
@@ -392,6 +420,16 @@ export const createDispersalEntries = internalMutation({
 			return buildReplayResult(existingEntries, existingFee);
 		}
 
+		// Resolve payment method for hold period calculation
+		const resolvedMethod =
+			args.paymentMethod ??
+			(await resolvePaymentMethodFromCollection(ctx, args.obligationId)) ??
+			"manual";
+		const payoutEligibleAfter = calculatePayoutEligibleDate(
+			args.settledDate,
+			resolvedMethod
+		);
+
 		const entries: DispersalCreationResult["entries"] = [];
 		const createdAt = Date.now();
 		for (const share of shares) {
@@ -405,6 +443,8 @@ export const createDispersalEntries = internalMutation({
 				servicingFeeDeducted: feeCashApplied,
 				status: "pending",
 				idempotencyKey: `${args.idempotencyKey}:${share.lenderId}`,
+				paymentMethod: resolvedMethod,
+				payoutEligibleAfter,
 				calculationDetails: {
 					settledAmount: args.settledAmount,
 					servicingFee: feeCashApplied,
