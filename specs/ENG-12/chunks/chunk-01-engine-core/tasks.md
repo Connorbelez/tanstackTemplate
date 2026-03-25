@@ -1,0 +1,5 @@
+# Chunk 01: Engine Core
+
+- [ ] T-001: Create `convex/engine/serialization.ts` with `serializeStatus(stateValue)` and `deserializeStatus(status)`. Simple string states stored as-is; parallel/compound states serialized as JSON. Deserialization: JSON.parse when starts with `{`, raw string otherwise.
+- [ ] T-002: Rewrite `convex/engine/transition.ts` — rename `transitionEntity` → `executeTransition`. Use `ENTITY_TABLE_MAP` from `types.ts` for generic entity loading (remove hardcoded `onboardingRequests`). Use `GovernedEntityType` type for machine registry lookup. Replace `Error` with `ConvexError` (codes: `UNKNOWN_ENTITY_TYPE`, `ENTITY_NOT_FOUND`). Use `serializeStatus`/`deserializeStatus` for state values. Keep `appendAuditJournalEntry` + `auditLog.log` dual-write. Keep same-state-with-effects path. Keep `extractScheduledEffects` from machine config. Accept command as a single object argument instead of positional params.
+- [ ] T-003: Update `convex/engine/transitionMutation.ts` to call `executeTransition(ctx, { ... })` instead of `transitionEntity(ctx, ...)`.

@@ -1,0 +1,224 @@
+import { makeFunctionReference } from "convex/server";
+import type { Id } from "../_generated/dataModel";
+import { adminAction } from "../fluent";
+
+interface LedgerBootstrapResult {
+	sequenceCounterId: Id<"ledger_sequence_counters">;
+	worldAccountId: Id<"ledger_accounts">;
+}
+
+interface SeedBrokerResult {
+	brokerIds: Id<"brokers">[];
+	created: { brokers: number; organizations: number; users: number };
+	reused: { brokers: number; organizations: number; users: number };
+}
+
+interface SeedBorrowerResult {
+	borrowerIds: Id<"borrowers">[];
+	created: { borrowers: number; users: number };
+	reused: { borrowers: number; users: number };
+}
+
+interface SeedLenderResult {
+	created: { lenders: number };
+	lenderIds: Id<"lenders">[];
+	reused: { lenders: number };
+}
+
+interface SeedMortgageBorrowerLink {
+	borrowerId: Id<"borrowers">;
+	mortgageId: Id<"mortgages">;
+}
+
+interface SeedMortgageResult {
+	created: { mortgages: number; properties: number };
+	mortgageBorrowers: SeedMortgageBorrowerLink[];
+	mortgageIds: Id<"mortgages">[];
+	reused: { mortgages: number; properties: number };
+}
+
+interface SeedDealResult {
+	created: { deals: number };
+	dealIds: Id<"deals">[];
+	reused: { deals: number };
+}
+
+interface SeedObligationResult {
+	created: { obligations: number };
+	obligationIds: Id<"obligations">[];
+	reused: { obligations: number };
+}
+
+interface SeedOnboardingRequestResult {
+	created: { onboardingRequests: number };
+	requestIds: Id<"onboardingRequests">[];
+	reused: { onboardingRequests: number };
+}
+
+interface SeedPaymentDataResult {
+	generated: { obligations: number; planEntries: number };
+	obligationIds: Id<"obligations">[];
+	planEntryIds: Id<"collectionPlanEntries">[];
+	reused: { obligations: number; planEntries: number };
+}
+
+const bootstrapLedgerRef = makeFunctionReference<
+	"mutation",
+	Record<string, never>,
+	LedgerBootstrapResult
+>("ledger/bootstrap:bootstrapLedger");
+
+const seedBrokerRef = makeFunctionReference<
+	"mutation",
+	Record<string, never>,
+	SeedBrokerResult
+>("seed/seedBroker:seedBroker");
+
+const seedBorrowerRef = makeFunctionReference<
+	"mutation",
+	Record<string, never>,
+	SeedBorrowerResult
+>("seed/seedBorrower:seedBorrower");
+
+const seedLenderRef = makeFunctionReference<
+	"mutation",
+	{ brokerIds?: Id<"brokers">[] },
+	SeedLenderResult
+>("seed/seedLender:seedLender");
+
+const seedMortgageRef = makeFunctionReference<
+	"mutation",
+	{ borrowerIds?: Id<"borrowers">[]; brokerIds?: Id<"brokers">[] },
+	SeedMortgageResult
+>("seed/seedMortgage:seedMortgage");
+
+const seedDealRef = makeFunctionReference<
+	"mutation",
+	{ mortgageIds?: Id<"mortgages">[]; lenderAuthIds?: string[] },
+	SeedDealResult
+>("seed/seedDeal:seedDeal");
+
+const seedObligationRef = makeFunctionReference<
+	"mutation",
+	{
+		borrowerIds?: Id<"borrowers">[];
+		mortgageBorrowers?: SeedMortgageBorrowerLink[];
+	},
+	SeedObligationResult
+>("seed/seedObligation:seedObligation");
+
+const seedOnboardingRequestRef = makeFunctionReference<
+	"mutation",
+	{ reviewerId?: string },
+	SeedOnboardingRequestResult
+>("seed/seedOnboardingRequest:seedOnboardingRequest");
+
+const seedPaymentDataRef = makeFunctionReference<
+	"mutation",
+	{ mortgageId: Id<"mortgages"> },
+	SeedPaymentDataResult
+>("seed/seedPaymentData:seedPaymentDataInternal");
+
+export const seedAll = adminAction
+	.input({})
+	.handler(async (ctx) => {
+		// Bootstrap ledger singletons (WORLD account + sequence counter) before anything else
+		const ledgerBootstrap = await ctx.runMutation(bootstrapLedgerRef, {});
+
+		const brokers = await ctx.runMutation(seedBrokerRef, {});
+		const borrowers = await ctx.runMutation(seedBorrowerRef, {});
+		const lenders = await ctx.runMutation(seedLenderRef, {
+			brokerIds: brokers.brokerIds,
+		});
+		const mortgages = await ctx.runMutation(seedMortgageRef, {
+			borrowerIds: borrowers.borrowerIds,
+			brokerIds: brokers.brokerIds,
+		});
+		const deals = await ctx.runMutation(seedDealRef, {
+			mortgageIds: mortgages.mortgageIds,
+		});
+		const obligations = await ctx.runMutation(seedObligationRef, {
+			borrowerIds: borrowers.borrowerIds,
+			mortgageBorrowers: mortgages.mortgageBorrowers,
+		});
+		const onboardingRequests = await ctx.runMutation(
+			seedOnboardingRequestRef,
+			{}
+		);
+
+		// Seed payment data (obligations + plan entries) for each mortgage
+		const paymentDataResults: SeedPaymentDataResult[] = [];
+		for (const mortgageId of mortgages.mortgageIds) {
+			const result = await ctx.runMutation(seedPaymentDataRef, {
+				mortgageId,
+			});
+			paymentDataResults.push(result);
+		}
+
+		const paymentData = {
+			results: paymentDataResults,
+			generated: {
+				obligations: paymentDataResults.reduce(
+					(sum, r) => sum + r.generated.obligations,
+					0
+				),
+				planEntries: paymentDataResults.reduce(
+					(sum, r) => sum + r.generated.planEntries,
+					0
+				),
+			},
+			reused: {
+				obligations: paymentDataResults.reduce(
+					(sum, r) => sum + r.reused.obligations,
+					0
+				),
+				planEntries: paymentDataResults.reduce(
+					(sum, r) => sum + r.reused.planEntries,
+					0
+				),
+			},
+		};
+
+		return {
+			ledgerBootstrap,
+			brokers,
+			borrowers,
+			lenders,
+			mortgages,
+			deals,
+			obligations,
+			onboardingRequests,
+			paymentData,
+			summary: {
+				ledgerBootstrap: {
+					worldAccountId: ledgerBootstrap.worldAccountId,
+					sequenceCounterId: ledgerBootstrap.sequenceCounterId,
+				},
+				created: {
+					brokers: brokers.created.brokers,
+					borrowers: borrowers.created.borrowers,
+					lenders: lenders.created.lenders,
+					properties: mortgages.created.properties,
+					mortgages: mortgages.created.mortgages,
+					deals: deals.created.deals,
+					obligations: obligations.created.obligations,
+					onboardingRequests: onboardingRequests.created.onboardingRequests,
+					paymentDataObligations: paymentData.generated.obligations,
+					paymentDataPlanEntries: paymentData.generated.planEntries,
+				},
+				reused: {
+					brokers: brokers.reused.brokers,
+					borrowers: borrowers.reused.borrowers,
+					lenders: lenders.reused.lenders,
+					properties: mortgages.reused.properties,
+					mortgages: mortgages.reused.mortgages,
+					deals: deals.reused.deals,
+					obligations: obligations.reused.obligations,
+					onboardingRequests: onboardingRequests.reused.onboardingRequests,
+					paymentDataObligations: paymentData.reused.obligations,
+					paymentDataPlanEntries: paymentData.reused.planEntries,
+				},
+			},
+		};
+	})
+	.public();

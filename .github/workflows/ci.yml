@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+    branches: [main, "03-*"]
+  pull_request:
+    branches: [main, "03-*"]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+
+    env:
+      WORKOS_CLIENT_ID: ${{ secrets.WORKOS_CLIENT_ID }}
+      WORKOS_API_KEY: ${{ secrets.WORKOS_API_KEY }}
+      WORKOS_COOKIE_PASSWORD: ${{ secrets.WORKOS_COOKIE_PASSWORD }}
+      WORKOS_REDIRECT_URI: "http://127.0.0.1:3100/callback"
+      VITE_WORKOS_CLIENT_ID: ${{ secrets.VITE_WORKOS_CLIENT_ID }}
+      VITE_CONVEX_URL: ${{ secrets.VITE_CONVEX_URL }}
+      CONVEX_DEPLOYMENT: ${{ secrets.CONVEX_DEPLOYMENT }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Generate route tree
+        run: bunx tanstack-router generate
+
+      - name: Generate Convex types
+        run: bunx convex codegen
+
+      - name: Lint and format
+        run: bun check
+
+      - name: Type check
+        run: bun typecheck
+
+      - name: Run unit tests with governed-path coverage
+        run: bun run test:coverage

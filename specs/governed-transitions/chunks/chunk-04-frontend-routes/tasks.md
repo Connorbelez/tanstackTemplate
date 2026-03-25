@@ -1,0 +1,8 @@
+# Chunk 04 — Frontend Routes & Components
+
+- [ ] T-030: Create route layout at `src/routes/demo/governed-transitions/route.tsx`. Follow the exact pattern from the audit-traceability route layout. Layout includes title "Governed Transitions", description, and nav tabs for Command Center (index), Journal, and Machine Inspector. Use `useMatches()` for active tab detection.
+- [ ] T-031: Create Command Center page at `src/routes/demo/governed-transitions/index.tsx`. Layout: left column — create entity form (label + loanAmount inputs, applicantName optional) + seed button + reset button + "Run Full Lifecycle" button. Right column — entity list as cards showing label, status (as Badge), loan amount. When entity selected, show available transitions as buttons, source channel dropdown, and "Send All Events" section showing ALL event types with invalid ones grayed out.
+- [ ] T-032: Create Journal Viewer page at `src/routes/demo/governed-transitions/journal.tsx`. Shows reverse-chronological list of journal entries. Each entry displays: event type, previousState → newState with arrow, outcome Badge, source channel + actor, timestamp. Filter controls: entity dropdown, outcome toggle. Stats bar at top showing total/transitioned/rejected counts.
+- [ ] T-033: Create Machine Inspector page at `src/routes/demo/governed-transitions/machine.tsx`. Two sections: (1) State Diagram — render states as styled div nodes arranged in a flow layout with connections, (2) Transition Table — columns [From State, Event, Guard, To State, Actions].
+- [ ] T-034: Add `{ to: "/demo/governed-transitions", label: "Governed Transitions" }` to the Platform section of `demoSections` in `src/components/header.tsx`.
+- [ ] T-035: Run `bun check` and `bun typecheck`. Fix any issues.
