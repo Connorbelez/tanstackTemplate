@@ -1397,10 +1397,12 @@ export default defineSchema({
 
 	// ══════════════════════════════════════════════════════════
 	// TRANSFER REQUESTS (stub — populated by ENG-190)
-	// Field guarantees by status:
-	//   confirmed: direction, amount, confirmedAt are guaranteed non-null
-	//   reversed: direction, amount, reversedAt are guaranteed non-null
-	//   pending/processing: direction and amount may be null (legacy stubs)
+	// Field expectations by status for non-legacy (new) records:
+	//   confirmed: direction, amount, confirmedAt are expected to be non-null
+	//   reversed: direction, amount, reversedAt are expected to be non-null
+	//   pending/processing: legacy stub records may have null direction/amount;
+	//     new writes should populate these when known
+	// Note: the schema keeps these fields optional for backward compatibility.
 	// ══════════════════════════════════════════════════════════
 
 	transferRequests: defineTable({
