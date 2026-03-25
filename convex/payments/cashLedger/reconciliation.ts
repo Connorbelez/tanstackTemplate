@@ -270,6 +270,10 @@ export interface ReversalIndicator {
 /**
  * Detects settled obligations where the journal-derived receivable balance
  * is non-zero — the reversal indicator.
+ *
+ * NOTE: This collects all settled obligations without pagination. Acceptable
+ * for Phase 1 reconciliation (batch, not real-time). Phase 2+ should add
+ * pagination or a cursor-based approach as settled obligation count grows.
  */
 export async function findSettledObligationsWithNonZeroBalance(
 	ctx: QueryCtx

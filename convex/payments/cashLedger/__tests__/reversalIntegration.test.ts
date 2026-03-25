@@ -1,3 +1,4 @@
+import auditLogTest from "convex-audit-log/test";
 import { describe, expect, it } from "vitest";
 import type { Doc, Id } from "../../../_generated/dataModel";
 import {
@@ -230,6 +231,7 @@ describe("E2E: Reversal after full settlement pipeline", () => {
 	// ── T-017: Full pipeline test ───────────────────────────────
 	it("T-017: executes the full settlement → reversal pipeline", async () => {
 		const t = createHarness(modules);
+		auditLogTest.register(t, "auditLog");
 		const state = await runFullSettlementPipeline(t);
 
 		// 8. postPaymentReversalCascade → REVERSAL entries
@@ -260,6 +262,7 @@ describe("E2E: Reversal after full settlement pipeline", () => {
 	// ── T-018: Account balance verification ─────────────────────
 	it("T-018: all account balances correct after reversal", async () => {
 		const t = createHarness(modules);
+		auditLogTest.register(t, "auditLog");
 		const state = await runFullSettlementPipeline(t);
 
 		// Execute reversal
@@ -367,6 +370,7 @@ describe("E2E: Reversal after full settlement pipeline", () => {
 	// ── T-019: Posting group nets to zero ───────────────────────
 	it("T-019: reversal posting group CONTROL:ALLOCATION nets to zero", async () => {
 		const t = createHarness(modules);
+		auditLogTest.register(t, "auditLog");
 		const state = await runFullSettlementPipeline(t);
 
 		// Execute reversal
@@ -417,6 +421,7 @@ describe("E2E: Reversal after full settlement pipeline", () => {
 	// ── T-020: Reconciliation detects reversal ──────────────────
 	it("T-020: findSettledObligationsWithNonZeroBalance detects reversed obligation", async () => {
 		const t = createHarness(modules);
+		auditLogTest.register(t, "auditLog");
 		const state = await runFullSettlementPipeline(t);
 
 		// Execute reversal

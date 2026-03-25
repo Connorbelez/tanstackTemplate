@@ -68,6 +68,13 @@ function assertReversalAmountValid(
 	originalAmount: bigint,
 	context: string
 ): void {
+	if (!Number.isSafeInteger(reversalAmount) || reversalAmount <= 0) {
+		throw new ConvexError({
+			code: "INVALID_REVERSAL_AMOUNT" as const,
+			reversalAmount,
+			context,
+		});
+	}
 	const originalNumber = safeBigintToNumber(originalAmount);
 	if (reversalAmount > originalNumber) {
 		throw new ConvexError({
@@ -1306,7 +1313,7 @@ export async function postPaymentReversalCascade(
 		"CASH_RECEIVED"
 	);
 
-	// Step 1 — Reverse CASH_RECEIVED
+	// 7. Reverse CASH_RECEIVED
 	await postCashEntryInternal(ctx, {
 		entryType: "REVERSAL",
 		effectiveDate: args.effectiveDate,
@@ -1329,7 +1336,7 @@ export async function postPaymentReversalCascade(
 		reason: args.reason,
 	});
 
-	// 8. Find original allocation entries
+	// 8. Find original allocation entries from the settlement posting group
 	const allocationGroupId = `allocation:${args.obligationId}`;
 	const allocationEntries = await ctx.db
 		.query("cash_ledger_journal_entries")
@@ -1345,7 +1352,7 @@ export async function postPaymentReversalCascade(
 		(e) => e.entryType === "SERVICING_FEE_RECOGNIZED"
 	);
 
-	// Step 2 — Reverse each LENDER_PAYABLE_CREATED
+	// 9. Reverse each LENDER_PAYABLE_CREATED
 	for (const entry of lenderPayableEntries) {
 		await postCashEntryInternal(ctx, {
 			entryType: "REVERSAL",
@@ -1370,7 +1377,7 @@ export async function postPaymentReversalCascade(
 		});
 	}
 
-	// Step 3 — Reverse SERVICING_FEE_RECOGNIZED (if exists)
+	// 10. Reverse SERVICING_FEE_RECOGNIZED (if exists)
 	if (servicingFeeEntry) {
 		await postCashEntryInternal(ctx, {
 			entryType: "REVERSAL",
@@ -1393,7 +1400,7 @@ export async function postPaymentReversalCascade(
 		});
 	}
 
-	// Step 4 (conditional) — Check for and reverse LENDER_PAYOUT_SENT
+	// 11. Check for and reverse LENDER_PAYOUT_SENT (conditional clawback)
 	let clawbackRequired = false;
 
 	for (const lenderEntry of lenderPayableEntries) {
@@ -1462,13 +1469,30 @@ export async function postPaymentReversalCascade(
 		}
 	}
 
-	// 12. Collect all reversal entries by postingGroupId
+	// 12. Collect all reversal entries and emit audit log
 	const reversalEntries = await ctx.db
 		.query("cash_ledger_journal_entries")
 		.withIndex("by_posting_group", (q) =>
 			q.eq("postingGroupId", postingGroupId)
 		)
 		.collect();
+
+	// 13. Audit log for the cascade operation (compliance: O.Reg 189/08)
+	await auditLog.log(ctx, {
+		action: "cashLedger.reversal_cascade",
+		actorId: args.source.actorId ?? "system",
+		resourceType: "obligation",
+		resourceId: args.obligationId,
+		severity: "warning",
+		metadata: {
+			postingGroupId,
+			clawbackRequired,
+			entryCount: reversalEntries.length,
+			attemptId: args.attemptId ?? null,
+			transferRequestId: args.transferRequestId ?? null,
+			reason: args.reason,
+		},
+	});
 
 	return { reversalEntries, postingGroupId, clawbackRequired };
 }
@@ -1496,10 +1520,22 @@ export async function postTransferReversal(
 		throw new ConvexError(`Original entry not found: ${args.originalEntryId}`);
 	}
 
-	// 2. Validate reversal amount
+	// 2. Validate transferRequestId consistency
+	if (
+		original.transferRequestId &&
+		original.transferRequestId !== args.transferRequestId
+	) {
+		throw new ConvexError({
+			code: "TRANSFER_REQUEST_MISMATCH" as const,
+			originalTransferRequestId: original.transferRequestId,
+			providedTransferRequestId: args.transferRequestId,
+		});
+	}
+
+	// 3. Validate reversal amount
 	assertReversalAmountValid(args.amount, original.amount, "transfer reversal");
 
-	// 3. Post REVERSAL with swapped accounts
+	// 4. Post REVERSAL with swapped accounts
 	const result = await postCashEntryInternal(ctx, {
 		entryType: "REVERSAL",
 		effectiveDate: args.effectiveDate,
