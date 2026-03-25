@@ -1436,7 +1436,8 @@ export default defineSchema({
 		.index("by_status_and_direction", ["status", "direction"])
 		.index("by_mortgage", ["mortgageId", "status"])
 		.index("by_obligation", ["obligationId"])
-		.index("by_dispersal_entry", ["dispersalEntryId"]),
+		.index("by_dispersal_entry", ["dispersalEntryId"])
+		.index("by_lender_and_status", ["lenderId", "status"]),
 
 	// ══════════════════════════════════════════════════════════
 	// DEMO TABLES
