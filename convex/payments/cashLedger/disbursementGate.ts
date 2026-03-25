@@ -17,6 +17,8 @@ export interface DisbursementAllowed extends DisbursementResultBase {
 
 export interface DisbursementRejected extends DisbursementResultBase {
 	allowed: false;
+	/** Present when gross payable balance is over-committed by in-flight transfers. */
+	overCommittedBy?: number;
 	reason: string;
 }
 
@@ -42,11 +44,18 @@ export async function validateDisbursementAmount(
 		requestedAmount: number;
 	}
 ): Promise<DisbursementValidationResult> {
-	if (!Number.isFinite(args.requestedAmount) || args.requestedAmount <= 0) {
+	if (
+		!Number.isFinite(args.requestedAmount) ||
+		args.requestedAmount <= 0 ||
+		!Number.isSafeInteger(args.requestedAmount)
+	) {
 		throw new ConvexError({
 			code: "INVALID_DISBURSEMENT_AMOUNT" as const,
 			requestedAmount: args.requestedAmount,
 			lenderId: args.lenderId,
+			message: Number.isSafeInteger(args.requestedAmount)
+				? "Disbursement amount must be a positive finite number"
+				: "Disbursement amount must be a safe integer (cents)",
 		});
 	}
 
@@ -54,14 +63,18 @@ export async function validateDisbursementAmount(
 	const availableBalance = safeBigintToNumber(result.availableBalance);
 
 	if (args.requestedAmount > availableBalance) {
+		const isOverCommitted = availableBalance < 0;
+		const clampedBalance = Math.max(0, availableBalance);
 		return {
 			allowed: false,
-			availableBalance,
+			availableBalance: clampedBalance,
 			requestedAmount: args.requestedAmount,
-			reason:
-				availableBalance < 0
-					? `Disbursement blocked: in-flight transfers exceed gross payable balance (available: 0, over-committed by ${Math.abs(availableBalance)})`
-					: `Disbursement of ${args.requestedAmount} exceeds available payable balance of ${availableBalance}`,
+			reason: isOverCommitted
+				? `Disbursement blocked: in-flight transfers exceed gross payable balance (available: 0, over-committed by ${Math.abs(availableBalance)})`
+				: `Disbursement of ${args.requestedAmount} exceeds available payable balance of ${clampedBalance}`,
+			...(isOverCommitted && {
+				overCommittedBy: Math.abs(availableBalance),
+			}),
 		};
 	}
 
@@ -91,7 +104,8 @@ export async function assertDisbursementAllowed(
 			throw e;
 		}
 		throw new Error(
-			`Disbursement gate failed for lender ${args.lenderId}: ${e instanceof Error ? e.message : String(e)}`
+			`Disbursement gate failed for lender ${args.lenderId}: ${e instanceof Error ? e.message : String(e)}`,
+			{ cause: e }
 		);
 	}
 	if (!result.allowed) {

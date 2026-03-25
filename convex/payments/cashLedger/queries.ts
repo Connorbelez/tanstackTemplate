@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import type { Id } from "../../_generated/dataModel";
+import type { Doc, Id } from "../../_generated/dataModel";
 import { internalQuery, type QueryCtx } from "../../_generated/server";
 import { cashLedgerQuery } from "../../fluent";
 import {
@@ -111,15 +111,8 @@ async function computeGrossLenderPayableBalance(
 
 // ── Available Lender Payable Balance (gross minus in-flight) ────────
 
-type TransferRequestStatus =
-	| "pending"
-	| "approved"
-	| "processing"
-	| "completed"
-	| "confirmed"
-	| "reversed"
-	| "failed"
-	| "cancelled";
+/** Derived from the schema — stays in sync automatically. */
+type TransferRequestStatus = Doc<"transferRequests">["status"];
 
 // In-flight statuses: transfers initiated but not yet confirmed/completed
 const IN_FLIGHT_STATUSES = [
@@ -151,14 +144,16 @@ export async function getAvailableLenderPayableBalanceImpl(
 			.collect();
 
 		for (const t of transfers) {
-			if (
-				t.direction === "outbound" &&
-				t.amount != null &&
-				Number.isFinite(t.amount) &&
-				t.amount >= 0
-			) {
-				inFlightAmount += BigInt(Math.round(t.amount));
+			if (t.direction !== "outbound" || t.amount == null) {
+				continue;
 			}
+			if (!Number.isSafeInteger(t.amount) || t.amount < 0) {
+				console.warn(
+					`Skipping transferRequest ${t._id}: amount ${t.amount} is not a non-negative safe integer`
+				);
+				continue;
+			}
+			inFlightAmount += BigInt(t.amount);
 		}
 	}
 
