@@ -207,7 +207,9 @@ export const retriggerTransferConfirmation = internalMutation({
 
 			// For inbound transfers, credit BORROWER_RECEIVABLE; for outbound, credit LENDER_PAYABLE
 			const creditFamily =
-				args.direction === "inbound" ? "BORROWER_RECEIVABLE" : "LENDER_PAYABLE";
+				args.direction === "inbound"
+					? ("BORROWER_RECEIVABLE" as const)
+					: ("LENDER_PAYABLE" as const);
 
 			// Cannot resolve LENDER_PAYABLE account without a lenderId
 			if (creditFamily === "LENDER_PAYABLE" && !args.lenderId) {

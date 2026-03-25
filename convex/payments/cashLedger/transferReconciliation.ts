@@ -145,7 +145,7 @@ export async function findOrphanedConfirmedTransferCandidates(
 				transferRequestId: transfer._id,
 				direction: transfer.direction,
 				amount: transfer.amount,
-				confirmedAt: transfer.confirmedAt,
+				confirmedAt: effectiveConfirmedAt,
 				mortgageId: transfer.mortgageId ?? undefined,
 				obligationId: transfer.obligationId ?? undefined,
 				lenderId: transfer.lenderId ?? undefined,
