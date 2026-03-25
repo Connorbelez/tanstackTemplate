@@ -280,6 +280,40 @@ export async function createSettledObligation(
 	});
 }
 
+// ── createDueObligation ──────────────────────────────────────────────
+// Creates a due obligation WITHOUT pre-created accounts. Unlike
+// createSettledObligation, this represents an obligation awaiting payment:
+// status is "due", amountSettled is 0, and no accounts are pre-seeded.
+
+export async function createDueObligation(
+	t: TestHarness,
+	args: {
+		mortgageId: Id<"mortgages">;
+		borrowerId: Id<"borrowers">;
+		amount: number;
+		paymentNumber?: number;
+	}
+) {
+	return t.run(async (ctx) => {
+		const obligationId = await ctx.db.insert("obligations", {
+			status: "due",
+			machineContext: {},
+			lastTransitionAt: Date.now(),
+			mortgageId: args.mortgageId,
+			borrowerId: args.borrowerId,
+			paymentNumber: args.paymentNumber ?? 1,
+			type: "regular_interest",
+			amount: args.amount,
+			amountSettled: 0,
+			dueDate: Date.parse("2026-03-01T00:00:00Z"),
+			gracePeriodEnd: Date.parse("2026-03-16T00:00:00Z"),
+			createdAt: Date.now(),
+		});
+
+		return obligationId;
+	});
+}
+
 // ── createConfirmedTransfer ───────────────────────────────────────────
 // Creates a transferRequests record with status: "confirmed".
 
