@@ -35,12 +35,23 @@ All share postingGroupId: reversal-group:{attemptId}
 
 ## T-001: assertReversalAmountValid()
 
+Two-phase validation: first rejects non-positive or unsafe integers with `INVALID_REVERSAL_AMOUNT`, then rejects over-limit amounts with `REVERSAL_EXCEEDS_ORIGINAL`.
+
 ```typescript
 function assertReversalAmountValid(
   reversalAmount: number,
   originalAmount: bigint,
   context: string
 ): void {
+  // Phase 1: guard against non-positive / non-safe-integer values
+  if (!Number.isSafeInteger(reversalAmount) || reversalAmount <= 0) {
+    throw new ConvexError({
+      code: "INVALID_REVERSAL_AMOUNT" as const,
+      reversalAmount,
+      context,
+    });
+  }
+  // Phase 2: guard against reversal exceeding the original amount
   const originalNumber = safeBigintToNumber(originalAmount);
   if (reversalAmount > originalNumber) {
     throw new ConvexError({
@@ -106,7 +117,7 @@ export async function postPaymentReversalCascade(
     - `creditAccountId: original.debitAccountId` (CONTROL:ALLOCATION)
     - `causedBy: original._id`
     - `idempotencyKey: buildIdempotencyKey("reversal", "servicing-fee", args.obligationId)`
-11. **Find LENDER_PAYOUT_SENT entries** — query by lenderId + entryType for each lender from step 8.
+11. **Find LENDER_PAYOUT_SENT entries** — for each lender from step 8, call `findPayoutEntryForClawback()` which uses a tiered lookup via `by_lender_and_sequence` and `by_posting_group` indexes.
 12. **Step 4 (conditional) — Reverse LENDER_PAYOUT_SENT (clawback):**
     - Only if payout entries exist
     - `debitAccountId: original.creditAccountId` (LENDER_PAYABLE — goes negative = clawback)
@@ -159,19 +170,26 @@ const servicingFeeEntry = allocationEntries.find(
 );
 ```
 
-### Important: Finding payout entries per lender
+### Important: Finding payout entries per lender (`findPayoutEntryForClawback`)
 
-For each lender whose payable was reversed, check if a payout was sent:
+Payout detection uses a tiered strategy implemented in `findPayoutEntryForClawback()`. The function accepts a lender payable entry and progressively broadens its search until a matching `LENDER_PAYOUT_SENT` entry is found:
+
+1. **Tier 1 — `dispersalEntryId` in obligation-scoped entries:** Scan `allObligationEntries` (already loaded) for a `LENDER_PAYOUT_SENT` with matching `dispersalEntryId`.
+2. **Tier 2 — `dispersalEntryId` via `by_lender_and_sequence` index:** Query lender-scoped entries using `by_lender_and_sequence` (handles legacy payouts that lack `obligationId`).
+3. **Tier 3 — `postingGroupId` via `by_posting_group` index:** Query entries sharing the allocation group's `postingGroupId`, filtered to `LENDER_PAYOUT_SENT` for the target lender.
+4. **Tier 4 — `lenderId` + `mortgageId` fallback:** Broadest search via `by_lender_and_sequence`, matching by `mortgageId` to catch legacy payouts with no `dispersalEntryId`.
+
 ```typescript
-const payoutEntries = await ctx.db
-  .query("cash_ledger_journal_entries")
-  .withIndex("by_lender_and_entry_type", (q) =>
-    q.eq("lenderId", lenderId).eq("entryType", "LENDER_PAYOUT_SENT")
-  )
-  .collect();
+const payoutEntry = await findPayoutEntryForClawback(
+  ctx,
+  lenderEntry,        // the LENDER_PAYABLE_CREATED being reversed
+  currentLenderId,
+  args.mortgageId,
+  allObligationEntries // pre-loaded obligation entries from step 4
+);
 ```
 
-**CHECK INDEX AVAILABILITY:** Verify `by_lender_and_entry_type` exists in the schema. If not, use a different query strategy — e.g., filter from the obligation's entries or use `by_obligation_and_sequence` with a filter.
+**Note:** The `by_lender_and_entry_type` index does **not** exist in the current schema. All payout lookups use `by_lender_and_sequence` and `by_posting_group` instead.
 
 ## T-003: postTransferReversal()
 
