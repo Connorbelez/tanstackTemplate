@@ -86,6 +86,39 @@ function assertReversalAmountValid(
 	}
 }
 
+/**
+ * Validates that caller-supplied dimension IDs match the original entry's
+ * dimensions. Throws DIMENSION_MISMATCH if a non-null original dimension
+ * differs from the supplied value.
+ */
+function assertDimensionMatch(
+	original: Doc<"cash_ledger_journal_entries">,
+	dimensions: {
+		mortgageId?: Id<"mortgages">;
+		obligationId?: Id<"obligations">;
+	}
+): void {
+	if (original.mortgageId && original.mortgageId !== dimensions.mortgageId) {
+		throw new ConvexError({
+			code: "DIMENSION_MISMATCH" as const,
+			dimension: "mortgageId",
+			expected: original.mortgageId,
+			received: dimensions.mortgageId,
+		});
+	}
+	if (
+		original.obligationId &&
+		original.obligationId !== dimensions.obligationId
+	) {
+		throw new ConvexError({
+			code: "DIMENSION_MISMATCH" as const,
+			dimension: "obligationId",
+			expected: original.obligationId,
+			received: dimensions.obligationId,
+		});
+	}
+}
+
 export async function postObligationAccrued(
 	ctx: MutationCtx,
 	args: {
@@ -1217,6 +1250,80 @@ export async function postCashCorrectionForEntry(
 // ── Reversal ──────────────────────────────────────────────────────────
 
 /**
+ * Tiered payout detection for clawback logic.
+ *
+ * Searches for a LENDER_PAYOUT_SENT entry linked to a given lender payable
+ * entry using progressively broader strategies:
+ *   1. dispersalEntryId in obligation-scoped entries
+ *   2. dispersalEntryId in lender-scoped entries (legacy payouts without obligationId)
+ *   3. postingGroupId from the allocation group
+ *   4. lenderId + mortgageId fallback
+ */
+async function findPayoutEntryForClawback(
+	ctx: MutationCtx,
+	lenderEntry: Doc<"cash_ledger_journal_entries">,
+	lenderId: Id<"lenders">,
+	mortgageId: Id<"mortgages">,
+	allObligationEntries: Doc<"cash_ledger_journal_entries">[]
+): Promise<Doc<"cash_ledger_journal_entries"> | undefined> {
+	// Tier 1: match by dispersalEntryId in obligation-scoped entries
+	if (lenderEntry.dispersalEntryId) {
+		const match = allObligationEntries.find(
+			(e) =>
+				e.entryType === "LENDER_PAYOUT_SENT" &&
+				e.dispersalEntryId === lenderEntry.dispersalEntryId
+		);
+		if (match) {
+			return match;
+		}
+	}
+
+	// Tier 2: match by dispersalEntryId in lender-scoped entries (payout may
+	// not carry obligationId for legacy entries)
+	if (lenderEntry.dispersalEntryId) {
+		const lenderEntries = await ctx.db
+			.query("cash_ledger_journal_entries")
+			.withIndex("by_lender_and_sequence", (q) => q.eq("lenderId", lenderId))
+			.collect();
+		const match = lenderEntries.find(
+			(e) =>
+				e.entryType === "LENDER_PAYOUT_SENT" &&
+				e.dispersalEntryId === lenderEntry.dispersalEntryId
+		);
+		if (match) {
+			return match;
+		}
+	}
+
+	// Tier 3: match by postingGroupId from the allocation group (if payout
+	// was posted with the same group id as the settlement)
+	if (lenderEntry.postingGroupId) {
+		const groupEntries = await ctx.db
+			.query("cash_ledger_journal_entries")
+			.withIndex("by_posting_group", (q) =>
+				q.eq("postingGroupId", lenderEntry.postingGroupId as string)
+			)
+			.collect();
+		const match = groupEntries.find(
+			(e) => e.entryType === "LENDER_PAYOUT_SENT" && e.lenderId === lenderId
+		);
+		if (match) {
+			return match;
+		}
+	}
+
+	// Tier 4: broadest fallback — match by lenderId + mortgageId in
+	// lender-scoped entries to catch legacy payouts with no dispersalEntryId
+	const lenderEntries = await ctx.db
+		.query("cash_ledger_journal_entries")
+		.withIndex("by_lender_and_sequence", (q) => q.eq("lenderId", lenderId))
+		.collect();
+	return lenderEntries.find(
+		(e) => e.entryType === "LENDER_PAYOUT_SENT" && e.mortgageId === mortgageId
+	);
+}
+
+/**
  * Reverses an entire settlement's posting group atomically.
  *
  * Given an attempt or transfer request, this function:
@@ -1301,11 +1408,18 @@ export async function postPaymentReversalCascade(
 		});
 	}
 
-	// 5. Identifier string for idempotency keys
+	// 5. Validate dimension consistency — args dimensions must match the
+	// original entry to prevent mis-attributed reversals in queries/indexes.
+	assertDimensionMatch(cashReceivedEntry, {
+		mortgageId: args.mortgageId,
+		obligationId: args.obligationId,
+	});
+
+	// 6. Identifier string for idempotency keys
 	// At least one of attemptId/transferRequestId is guaranteed by step 1 validation
 	const identifier = args.attemptId ?? (args.transferRequestId as string);
 
-	// 6. Validate reversal amount is a safe integer
+	// 7. Validate reversal amount is a safe integer (renumbered after dimension check)
 	const cashReceivedAmount = safeBigintToNumber(cashReceivedEntry.amount);
 	assertReversalAmountValid(
 		cashReceivedAmount,
@@ -1313,7 +1427,7 @@ export async function postPaymentReversalCascade(
 		"CASH_RECEIVED"
 	);
 
-	// 7. Reverse CASH_RECEIVED
+	// 8. Reverse CASH_RECEIVED
 	await postCashEntryInternal(ctx, {
 		entryType: "REVERSAL",
 		effectiveDate: args.effectiveDate,
@@ -1336,7 +1450,7 @@ export async function postPaymentReversalCascade(
 		reason: args.reason,
 	});
 
-	// 8. Find original allocation entries from the settlement posting group
+	// 9. Find original allocation entries from the settlement posting group
 	const allocationGroupId = `allocation:${args.obligationId}`;
 	const allocationEntries = await ctx.db
 		.query("cash_ledger_journal_entries")
@@ -1352,7 +1466,7 @@ export async function postPaymentReversalCascade(
 		(e) => e.entryType === "SERVICING_FEE_RECOGNIZED"
 	);
 
-	// 9. Reverse each LENDER_PAYABLE_CREATED
+	// 10. Reverse each LENDER_PAYABLE_CREATED
 	for (const entry of lenderPayableEntries) {
 		await postCashEntryInternal(ctx, {
 			entryType: "REVERSAL",
@@ -1377,7 +1491,7 @@ export async function postPaymentReversalCascade(
 		});
 	}
 
-	// 10. Reverse SERVICING_FEE_RECOGNIZED (if exists)
+	// 11. Reverse SERVICING_FEE_RECOGNIZED (if exists)
 	if (servicingFeeEntry) {
 		await postCashEntryInternal(ctx, {
 			entryType: "REVERSAL",
@@ -1400,7 +1514,7 @@ export async function postPaymentReversalCascade(
 		});
 	}
 
-	// 11. Check for and reverse LENDER_PAYOUT_SENT (conditional clawback)
+	// 12. Check for and reverse LENDER_PAYOUT_SENT (conditional clawback)
 	let clawbackRequired = false;
 
 	for (const lenderEntry of lenderPayableEntries) {
@@ -1409,40 +1523,13 @@ export async function postPaymentReversalCascade(
 			continue;
 		}
 
-		// No by_dispersal_entry index exists — filter from allObligationEntries
-		// and also check lender-scoped entries for payouts that may not carry obligationId
-		let payoutEntry: Doc<"cash_ledger_journal_entries"> | undefined;
-
-		if (lenderEntry.dispersalEntryId) {
-			// First check obligation-scoped entries for a matching dispersalEntryId payout
-			payoutEntry = allObligationEntries.find(
-				(e) =>
-					e.entryType === "LENDER_PAYOUT_SENT" &&
-					e.dispersalEntryId === lenderEntry.dispersalEntryId
-			);
-
-			// If not found in obligation entries, check lender-scoped entries
-			if (!payoutEntry) {
-				const lenderEntries = await ctx.db
-					.query("cash_ledger_journal_entries")
-					.withIndex("by_lender_and_sequence", (q) =>
-						q.eq("lenderId", currentLenderId)
-					)
-					.collect();
-				payoutEntry = lenderEntries.find(
-					(e) =>
-						e.entryType === "LENDER_PAYOUT_SENT" &&
-						e.dispersalEntryId === lenderEntry.dispersalEntryId
-				);
-			}
-		} else {
-			// Fallback: find payout by lenderId in obligation entries
-			payoutEntry = allObligationEntries.find(
-				(e) =>
-					e.entryType === "LENDER_PAYOUT_SENT" &&
-					e.lenderId === lenderEntry.lenderId
-			);
-		}
+		const payoutEntry = await findPayoutEntryForClawback(
+			ctx,
+			lenderEntry,
+			currentLenderId,
+			args.mortgageId,
+			allObligationEntries
+		);
 
 		if (payoutEntry) {
 			clawbackRequired = true;
@@ -1469,7 +1556,7 @@ export async function postPaymentReversalCascade(
 		}
 	}
 
-	// 12. Collect all reversal entries and emit audit log
+	// 13. Collect all reversal entries and emit audit log
 	const reversalEntries = await ctx.db
 		.query("cash_ledger_journal_entries")
 		.withIndex("by_posting_group", (q) =>
@@ -1477,7 +1564,7 @@ export async function postPaymentReversalCascade(
 		)
 		.collect();
 
-	// 13. Audit log for the cascade operation (compliance: O.Reg 189/08)
+	// 14. Audit log for the cascade operation (compliance: O.Reg 189/08)
 	await auditLog.log(ctx, {
 		action: "cashLedger.reversal_cascade",
 		actorId: args.source.actorId ?? "system",
@@ -1520,11 +1607,19 @@ export async function postTransferReversal(
 		throw new ConvexError(`Original entry not found: ${args.originalEntryId}`);
 	}
 
-	// 2. Validate transferRequestId consistency
-	if (
-		original.transferRequestId &&
-		original.transferRequestId !== args.transferRequestId
-	) {
+	// 2. Validate transferRequestId consistency — the original entry must be
+	// a transfer-backed entry (i.e. it must carry a transferRequestId) and
+	// that id must match the one supplied by the caller.
+	if (!original.transferRequestId) {
+		throw new ConvexError({
+			code: "NOT_A_TRANSFER_ENTRY" as const,
+			message:
+				"Cannot create a transfer-scoped reversal for a non-transfer entry",
+			originalEntryId: args.originalEntryId,
+			originalEntryType: original.entryType,
+		});
+	}
+	if (original.transferRequestId !== args.transferRequestId) {
 		throw new ConvexError({
 			code: "TRANSFER_REQUEST_MISMATCH" as const,
 			originalTransferRequestId: original.transferRequestId,

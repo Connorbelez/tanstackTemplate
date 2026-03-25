@@ -27,6 +27,8 @@ export const postLenderPayout = internalMutation({
 		source: sourceValidator,
 		reason: v.optional(v.string()),
 		postingGroupId: v.optional(v.string()),
+		dispersalEntryId: v.optional(v.id("dispersalEntries")),
+		obligationId: v.optional(v.id("obligations")),
 	},
 	handler: async (ctx, args) => {
 		if (!Number.isSafeInteger(args.amount) || args.amount <= 0) {
@@ -63,6 +65,8 @@ export const postLenderPayout = internalMutation({
 			source: args.source,
 			reason: args.reason,
 			postingGroupId: args.postingGroupId,
+			dispersalEntryId: args.dispersalEntryId,
+			obligationId: args.obligationId,
 		});
 	},
 });
