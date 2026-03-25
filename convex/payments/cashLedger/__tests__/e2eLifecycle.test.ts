@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Id } from "../../../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../../../_generated/server";
+import { calculateProRataShares } from "../../../accrual/interestMath";
 import { createDispersalEntries } from "../../../dispersal/createDispersalEntries";
 import { findCashAccount, getCashAccountBalance } from "../accounts";
 import {
@@ -169,7 +170,8 @@ describe("E2E lifecycle tests", () => {
 		});
 
 		// 5. Create dispersal entries (computes 60/40 split + servicing fee)
-		const { dispersal, servicingFee } = await runDispersal(t, {
+		// Settlement allocation is posted internally by createDispersalEntries.
+		const { dispersal } = await runDispersal(t, {
 			obligationId,
 			mortgageId,
 			settledAmount: 100_000,
@@ -177,23 +179,7 @@ describe("E2E lifecycle tests", () => {
 			idempotencyKey: "e2e-happy-dispersal",
 		});
 
-		// 6. Post settlement allocation
-		await t.run(async (ctx) => {
-			await postSettlementAllocation(ctx, {
-				obligationId,
-				mortgageId,
-				settledDate: "2026-03-01",
-				servicingFee,
-				entries: dispersal.entries.map((e) => ({
-					dispersalEntryId: e.id,
-					lenderId: e.lenderId,
-					amount: e.amount,
-				})),
-				source: SYSTEM_SOURCE,
-			});
-		});
-
-		// 7. Post lender payouts
+		// 6. Post lender payouts
 		await t.run(async (ctx) => {
 			for (const entry of dispersal.entries) {
 				await postLenderPayoutMutation._handler(ctx, {
@@ -230,7 +216,7 @@ describe("E2E lifecycle tests", () => {
 				.collect();
 
 			for (const payable of payables) {
-				const balance = payable.cumulativeCredits - payable.cumulativeDebits;
+				const balance = getCashAccountBalance(payable);
 				expect(
 					balance,
 					`Lender payable for lender=${payable.lenderId} should be zero after payout`
@@ -320,8 +306,7 @@ describe("E2E lifecycle tests", () => {
 			}
 
 			// Debits from accrual = 100,000; Credits from two receipts = 60,000 + 40,000 = 100,000
-			const balance =
-				receivable.cumulativeDebits - receivable.cumulativeCredits;
+			const balance = getCashAccountBalance(receivable);
 			expect(
 				balance,
 				"BORROWER_RECEIVABLE should be zero after full payment"
@@ -396,33 +381,35 @@ describe("E2E lifecycle tests", () => {
 		const lenderAAmount = lenderAEntry.amount;
 		const lenderBAmount = lenderBEntry.amount;
 
-		// Verify exact 60/40 split: ownership is 6000/4000 units out of 10,000 total.
-		// The dispersal engine computes: lenderAmount = Math.round(netAmount * units / totalUnits)
-		// with rounding remainder assigned to last lender. Assert exact values.
+		// Verify exact 60/40 split using the same largest-remainder algorithm
+		// as the production dispersal engine (calculateProRataShares).
 		const netAmount = 100_000 - servicingFee;
-		const expectedLenderA = Math.round((netAmount * 6000) / 10_000);
-		const expectedLenderB = netAmount - expectedLenderA;
+		const expectedShares = calculateProRataShares(
+			[
+				{
+					lenderId: lenderAId,
+					lenderAccountId: lenderAEntry.lenderAccountId,
+					units: 6000,
+				},
+				{
+					lenderId: lenderBId,
+					lenderAccountId: lenderBEntry.lenderAccountId,
+					units: 4000,
+				},
+			],
+			netAmount
+		);
+		const expectedLenderA =
+			expectedShares.find((s) => s.lenderId === lenderAId)?.amount ?? 0;
+		const expectedLenderB =
+			expectedShares.find((s) => s.lenderId === lenderBId)?.amount ?? 0;
 		expect(lenderAAmount).toBe(expectedLenderA);
 		expect(lenderBAmount).toBe(expectedLenderB);
 
 		// Conservation: lender amounts + fee = obligation amount
 		expect(lenderAAmount + lenderBAmount + servicingFee).toBe(100_000);
 
-		// 5. Post settlement allocation
-		await t.run(async (ctx) => {
-			await postSettlementAllocation(ctx, {
-				obligationId,
-				mortgageId,
-				settledDate: "2026-03-01",
-				servicingFee,
-				entries: dispersal.entries.map((e) => ({
-					dispersalEntryId: e.id,
-					lenderId: e.lenderId,
-					amount: e.amount,
-				})),
-				source: SYSTEM_SOURCE,
-			});
-		});
+		// 5. Settlement allocation already posted by createDispersalEntries (inside runDispersal)
 
 		// 6. Verify each lender's LENDER_PAYABLE balance matches their amount
 		await t.run(async (ctx) => {
@@ -450,10 +437,8 @@ describe("E2E lifecycle tests", () => {
 				throw new Error("LENDER_PAYABLE accounts not found for both lenders");
 			}
 
-			const balanceA =
-				lenderAPayable.cumulativeCredits - lenderAPayable.cumulativeDebits;
-			const balanceB =
-				lenderBPayable.cumulativeCredits - lenderBPayable.cumulativeDebits;
+			const balanceA = getCashAccountBalance(lenderAPayable);
+			const balanceB = getCashAccountBalance(lenderBPayable);
 
 			expect(balanceA).toBe(BigInt(lenderAAmount));
 			expect(balanceB).toBe(BigInt(lenderBAmount));
@@ -488,7 +473,7 @@ describe("E2E lifecycle tests", () => {
 
 			expect(payables).toHaveLength(2);
 			for (const payable of payables) {
-				const balance = payable.cumulativeCredits - payable.cumulativeDebits;
+				const balance = getCashAccountBalance(payable);
 				expect(
 					balance,
 					`Lender payable for lender=${payable.lenderId} should be zero after payout`
@@ -868,21 +853,7 @@ describe("E2E lifecycle tests", () => {
 				idempotencyKey: "conservation-dispersal",
 			});
 
-			// Settlement allocation
-			await t.run(async (ctx) => {
-				await postSettlementAllocation(ctx, {
-					obligationId,
-					mortgageId,
-					settledDate: "2026-03-01",
-					servicingFee,
-					entries: dispersal.entries.map((e) => ({
-						dispersalEntryId: e.id,
-						lenderId: e.lenderId,
-						amount: e.amount,
-					})),
-					source: SYSTEM_SOURCE,
-				});
-			});
+			// Settlement allocation already posted by createDispersalEntries (inside runDispersal)
 
 			// Lender payouts
 			await t.run(async (ctx) => {
