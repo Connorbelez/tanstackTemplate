@@ -11,6 +11,7 @@ import {
 	postSettlementAllocation,
 	type ServicingFeeMetadata,
 } from "../payments/cashLedger/integrations";
+import { calculatePayoutEligibleDate } from "./holdPeriod";
 import { requireLenderIdForAuthId } from "./lenderIdentity";
 import { calculateServicingFee } from "./servicingFee";
 
@@ -60,6 +61,60 @@ async function resolveLenderIdFromAuthId(
 		lenderAuthId,
 		"createDispersalEntries"
 	);
+}
+
+async function resolvePaymentMethodFromCollection(
+	ctx: MutationCtx,
+	obligationId: Id<"obligations">
+): Promise<string | undefined> {
+	// Walk: collectionPlanEntries (by_status, obligationIds contains this obligation)
+	//     → collectionAttempts (by_plan_entry, confirmed + method, most recent)
+	//     → method
+	const planEntryBatches = await Promise.all(
+		(["planned", "executing", "completed"] as const).map((status) =>
+			ctx.db
+				.query("collectionPlanEntries")
+				.withIndex("by_status", (q) => q.eq("status", status))
+				.collect()
+		)
+	);
+	const planEntries = planEntryBatches
+		.flat()
+		.filter((e) => e.obligationIds.includes(obligationId));
+
+	let bestConfirmed: { method: string; creationTime: number } | undefined;
+	for (const entry of planEntries) {
+		const attempts = await ctx.db
+			.query("collectionAttempts")
+			.withIndex("by_plan_entry", (q) => q.eq("planEntryId", entry._id))
+			.collect();
+		for (const a of attempts) {
+			if (
+				a.status === "confirmed" &&
+				a.method &&
+				(!bestConfirmed || a._creationTime > bestConfirmed.creationTime)
+			) {
+				bestConfirmed = { method: a.method, creationTime: a._creationTime };
+			}
+		}
+	}
+	if (bestConfirmed) {
+		return bestConfirmed.method;
+	}
+
+	let bestPlanMethod: { method: string; creationTime: number } | undefined;
+	for (const entry of planEntries) {
+		if (
+			entry.method &&
+			(!bestPlanMethod || entry._creationTime > bestPlanMethod.creationTime)
+		) {
+			bestPlanMethod = {
+				method: entry.method,
+				creationTime: entry._creationTime,
+			};
+		}
+	}
+	return bestPlanMethod?.method;
 }
 
 function validateIntegerCents(value: number, label: string) {
@@ -321,6 +376,7 @@ export const createDispersalEntries = internalMutation({
 		settledDate: v.string(),
 		idempotencyKey: v.string(),
 		source: sourceValidator,
+		paymentMethod: v.optional(v.string()),
 	},
 	handler: async (ctx, args): Promise<DispersalCreationResult> => {
 		validateIntegerCents(args.settledAmount, "settledAmount");
@@ -392,6 +448,16 @@ export const createDispersalEntries = internalMutation({
 			return buildReplayResult(existingEntries, existingFee);
 		}
 
+		// Resolve payment method for hold period calculation
+		const resolvedMethod =
+			args.paymentMethod ??
+			(await resolvePaymentMethodFromCollection(ctx, args.obligationId)) ??
+			"manual";
+		const payoutEligibleAfter = calculatePayoutEligibleDate(
+			args.settledDate,
+			resolvedMethod
+		);
+
 		const entries: DispersalCreationResult["entries"] = [];
 		const createdAt = Date.now();
 		for (const share of shares) {
@@ -405,6 +471,8 @@ export const createDispersalEntries = internalMutation({
 				servicingFeeDeducted: feeCashApplied,
 				status: "pending",
 				idempotencyKey: `${args.idempotencyKey}:${share.lenderId}`,
+				paymentMethod: resolvedMethod,
+				payoutEligibleAfter,
 				calculationDetails: {
 					settledAmount: args.settledAmount,
 					servicingFee: feeCashApplied,

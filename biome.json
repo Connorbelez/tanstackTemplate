@@ -9,6 +9,7 @@
   "files": {
     "includes": [
       "!!**/convex/_generated",
+      "!!.context/*",
       "!!**/convex/components",
       "!!**/src/routeTree.gen.ts",
       "!!**/src/styles.css",

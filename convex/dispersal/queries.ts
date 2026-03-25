@@ -3,6 +3,7 @@ import type { Doc, Id } from "../_generated/dataModel";
 import type { QueryCtx } from "../_generated/server";
 import { canAccessDispersal } from "../auth/resourceChecks";
 import { authedQuery, requirePermission, type Viewer } from "../fluent";
+import { businessDateToUnixMs } from "../lib/businessDates";
 
 const dispersalQuery = authedQuery.use(requirePermission("dispersal:view"));
 
@@ -101,6 +102,15 @@ function assertAdminScopedDispersalAccess(viewer: Viewer) {
 
 function sumAmounts(entries: Array<{ amount: number }>) {
 	return roundCurrency(entries.reduce((sum, entry) => sum + entry.amount, 0));
+}
+
+function assertStrictBusinessDate(label: string, date: string) {
+	try {
+		businessDateToUnixMs(date);
+	} catch (e) {
+		const message = e instanceof Error ? e.message : String(e);
+		throw new ConvexError(`Invalid ${label}: ${message}`);
+	}
 }
 
 function summarizeByLender(
@@ -306,6 +316,68 @@ export const getDispersalsByObligation = dispersalQuery
 			entries,
 			total: sumAmounts(entries),
 			byLender: summarizeByLender(entries),
+		};
+	})
+	.public();
+
+export const getPayoutEligibleEntries = dispersalQuery
+	.input({
+		asOfDate: v.string(),
+		lenderId: v.optional(v.id("lenders")),
+		limit: v.optional(v.number()),
+	})
+	.handler(async (ctx, args) => {
+		assertAdminScopedDispersalAccess(ctx.viewer);
+		assertStrictBusinessDate("asOfDate", args.asOfDate);
+
+		const effectiveLimit = args.limit ?? 100;
+
+		// Pending entries whose hold date has passed (indexed on status + payoutEligibleAfter)
+		const pendingPastHold = await ctx.db
+			.query("dispersalEntries")
+			.withIndex("by_eligibility", (q) =>
+				q.eq("status", "pending").lte("payoutEligibleAfter", args.asOfDate)
+			)
+			.collect();
+
+		const eligibleWithHold = pendingPastHold.filter((entry) => {
+			if (args.lenderId && entry.lenderId !== args.lenderId) {
+				return false;
+			}
+			return (
+				entry.payoutEligibleAfter !== undefined &&
+				entry.payoutEligibleAfter !== ""
+			);
+		});
+
+		// Legacy: pending with no payoutEligibleAfter (not keyed the same in the index)
+		const pendingAll = await ctx.db
+			.query("dispersalEntries")
+			.withIndex("by_eligibility", (q) => q.eq("status", "pending"))
+			.collect();
+
+		const eligibleLegacy = pendingAll.filter((entry) => {
+			if (args.lenderId && entry.lenderId !== args.lenderId) {
+				return false;
+			}
+			return !entry.payoutEligibleAfter;
+		});
+
+		const eligible = [...eligibleWithHold, ...eligibleLegacy];
+		eligible.sort(compareDispersalEntriesByDate);
+		const limited = eligible.slice(0, effectiveLimit);
+		const pageTotal = sumAmounts(limited);
+		const pageByLender = summarizeByLender(limited);
+
+		return {
+			asOfDate: args.asOfDate,
+			entryCount: eligible.length,
+			pageEntryCount: limited.length,
+			entries: limited,
+			total: sumAmounts(eligible),
+			pageTotal,
+			byLender: summarizeByLender(eligible),
+			pageByLender,
 		};
 	})
 	.public();
