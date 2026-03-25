@@ -685,8 +685,9 @@ export async function checkMortgageMonthConservation(
 // ── T-012: Full Reconciliation Suite ─────────────────────────
 
 /**
- * Runs all 8 check functions, 2 conservation checks, and 4 transfer checks
- * in parallel, returning an aggregated result with health status and gap counts.
+ * Runs all check, conservation, and transfer checks in parallel,
+ * returning an aggregated result with health status and gap counts.
+ * Uses Promise.allSettled so one failing check does not kill the suite.
  * All checks use the same `nowMs` timestamp for snapshot consistency.
  */
 export async function runFullReconciliationSuite(
@@ -696,10 +697,27 @@ export async function runFullReconciliationSuite(
 	const checkedAt = options?.nowMs ?? Date.now();
 	const opts: ReconciliationSuiteOptions = { ...options, nowMs: checkedAt };
 
-	// Run all independent checks in parallel
-	const [checkResults, conservationResults, transferResults] =
+	function extractSettledResults(
+		settled: PromiseSettledResult<ReconciliationCheckResult<unknown>>[]
+	): ReconciliationCheckResult<unknown>[] {
+		const results: ReconciliationCheckResult<unknown>[] = [];
+		for (const s of settled) {
+			if (s.status === "fulfilled") {
+				results.push(s.value);
+			} else {
+				console.error(
+					"[RECONCILIATION] Check failed:",
+					s.reason instanceof Error ? s.reason.message : String(s.reason)
+				);
+			}
+		}
+		return results;
+	}
+
+	// Run all independent checks in parallel (allSettled prevents cascade failure)
+	const [checkSettled, conservationSettled, transferSettled] =
 		await Promise.all([
-			Promise.all([
+			Promise.allSettled([
 				checkUnappliedCash(ctx, opts),
 				checkNegativePayables(ctx, opts),
 				checkObligationBalanceDrift(ctx, opts),
@@ -709,11 +727,11 @@ export async function runFullReconciliationSuite(
 				checkStuckCollections(ctx, opts),
 				checkOrphanedUnappliedCash(ctx, opts),
 			]),
-			Promise.all([
+			Promise.allSettled([
 				checkObligationConservation(ctx, opts),
 				checkMortgageMonthConservation(ctx, opts),
 			]),
-			Promise.all([
+			Promise.allSettled([
 				checkOrphanedConfirmedTransfers(ctx, opts),
 				checkOrphanedReversedTransfers(ctx, opts),
 				checkStaleOutboundTransfers(ctx, opts),
@@ -721,11 +739,15 @@ export async function runFullReconciliationSuite(
 			]),
 		]);
 
+	const checkResults = extractSettledResults(checkSettled);
+	const conservationResults = extractSettledResults(conservationSettled);
+	const transferResults = extractSettledResults(transferSettled);
+
 	const allResults = [
 		...checkResults,
 		...conservationResults,
 		...transferResults,
-	] as ReconciliationCheckResult<unknown>[];
+	];
 	const unhealthyCheckNames = allResults
 		.filter((r) => !r.isHealthy)
 		.map((r) => r.checkName);
@@ -733,10 +755,9 @@ export async function runFullReconciliationSuite(
 	return {
 		isHealthy: unhealthyCheckNames.length === 0,
 		checkedAt,
-		checkResults: checkResults as ReconciliationCheckResult<unknown>[],
-		conservationResults:
-			conservationResults as ReconciliationCheckResult<unknown>[],
-		transferResults: transferResults as ReconciliationCheckResult<unknown>[],
+		checkResults,
+		conservationResults,
+		transferResults,
 		unhealthyCheckNames,
 		totalGapCount: allResults.reduce((sum, r) => sum + r.count, 0),
 	};

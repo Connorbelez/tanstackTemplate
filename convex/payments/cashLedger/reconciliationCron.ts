@@ -71,12 +71,15 @@ export const logCashLedgerReconciliationAlerts = internalMutation({
 		unhealthyCheckNames: v.array(v.string()),
 	},
 	handler: async (ctx, args) => {
+		const isHealthy = args.totalGapCount === 0;
 		await auditLog.log(ctx, {
-			action: "cash_ledger_reconciliation.gaps_found",
+			action: isHealthy
+				? "cash_ledger_reconciliation.healthy"
+				: "cash_ledger_reconciliation.gaps_found",
 			actorId: "system",
 			resourceType: "reconciliation",
 			resourceId: "cash-ledger-daily",
-			severity: "error",
+			severity: isHealthy ? "info" : "error",
 			metadata: {
 				checkedAt: args.checkedAt,
 				checkSummaries: args.checkSummaries,
@@ -91,10 +94,25 @@ export const logCashLedgerReconciliationAlerts = internalMutation({
 
 export const cashLedgerReconciliation = internalAction({
 	handler: async (ctx) => {
-		const result = await ctx.runQuery(reconcileCashLedgerInternalRef, {});
+		let result: FullReconciliationResult;
+		try {
+			result = await ctx.runQuery(reconcileCashLedgerInternalRef, {});
+		} catch (error) {
+			console.error(
+				"[CASH LEDGER RECONCILIATION FATAL] Suite query failed entirely:",
+				error instanceof Error ? error.message : String(error)
+			);
+			return null;
+		}
 
 		if (result.isHealthy) {
 			console.info("[CASH LEDGER RECONCILIATION] Daily check passed.");
+			await ctx.runMutation(logCashLedgerReconciliationAlertsRef, {
+				checkedAt: result.checkedAt,
+				unhealthyCheckNames: [],
+				totalGapCount: 0,
+				checkSummaries: [],
+			});
 		} else {
 			console.error(
 				`[CASH LEDGER RECONCILIATION P0] ${result.totalGapCount} gaps in: ${result.unhealthyCheckNames.join(", ")}`
@@ -115,6 +133,9 @@ export const cashLedgerReconciliation = internalAction({
 							item.obligationId ??
 							item.attemptId ??
 							item.postingGroupId ??
+							item.transferRequestId ??
+							item.journalEntryId ??
+							item.dispersalEntryId ??
 							item.mortgageId;
 						return String(id ?? "unknown");
 					});

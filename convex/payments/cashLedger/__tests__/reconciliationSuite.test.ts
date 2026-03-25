@@ -1,8 +1,12 @@
 import { ConvexError } from "convex/values";
+import auditLogTest from "convex-audit-log/test";
+import { convexTest } from "convex-test";
 import { describe, expect, it } from "vitest";
 import { api, internal } from "../../../_generated/api";
 import type { Id } from "../../../_generated/dataModel";
+import auditTrailSchema from "../../../components/auditTrail/schema";
 import { FAIRLEND_STAFF_ORG_ID } from "../../../constants";
+import schema from "../../../schema";
 import { getOrCreateCashAccount } from "../accounts";
 import { postCashEntryInternal } from "../postEntry";
 import {
@@ -30,6 +34,17 @@ import {
 } from "./testUtils";
 
 const modules = import.meta.glob("/convex/**/*.ts");
+const auditTrailModules = import.meta.glob(
+	"/convex/components/auditTrail/**/*.ts"
+);
+
+function createComponentHarness(): TestHarness {
+	process.env.DISABLE_CASH_LEDGER_HASHCHAIN = "true";
+	const t = convexTest(schema, modules);
+	auditLogTest.register(t, "auditLog");
+	t.registerComponent("auditTrail", auditTrailSchema, auditTrailModules);
+	return t;
+}
 
 const MS_PER_DAY = 86_400_000;
 
@@ -831,13 +846,14 @@ describe("ENG-164 full suite aggregation and cron wiring", () => {
 	});
 
 	it("cashLedgerReconciliation internalAction runs without error", async () => {
-		const t = createHarness(modules);
+		const t = createComponentHarness();
 		await seedMinimalEntities(t);
 
 		const out = await t.action(
 			internal.payments.cashLedger.reconciliationCron.cashLedgerReconciliation,
 			{}
 		);
-		expect(out.isHealthy).toBe(true);
+		expect(out).not.toBeNull();
+		expect(out?.isHealthy).toBe(true);
 	});
 });

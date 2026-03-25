@@ -1397,6 +1397,10 @@ export default defineSchema({
 
 	// ══════════════════════════════════════════════════════════
 	// TRANSFER REQUESTS (stub — populated by ENG-190)
+	// Field guarantees by status:
+	//   confirmed: direction, amount, confirmedAt are guaranteed non-null
+	//   reversed: direction, amount, reversedAt are guaranteed non-null
+	//   pending/processing: direction and amount may be null (legacy stubs)
 	// ══════════════════════════════════════════════════════════
 
 	transferRequests: defineTable({

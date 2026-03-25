@@ -17,7 +17,7 @@ import type {
 	TransferHealingResult,
 } from "./transferHealingTypes";
 import { MAX_TRANSFER_HEALING_ATTEMPTS } from "./transferHealingTypes";
-import { ORPHAN_THRESHOLD_MS } from "./transferReconciliation";
+import { findOrphanedConfirmedTransferCandidates } from "./transferReconciliation";
 import { buildIdempotencyKey } from "./types";
 
 // ── Typed function references to break circular type inference ────────
@@ -44,7 +44,7 @@ const retriggerTransferConfirmationRef = makeInternalRef<
 	"mutation",
 	{
 		transferRequestId: Id<"transferRequests">;
-		direction: string;
+		direction: "inbound" | "outbound";
 		amount: number;
 		mortgageId?: Id<"mortgages">;
 		obligationId?: Id<"obligations">;
@@ -60,51 +60,25 @@ const HEALING_SOURCE: CommandSource = {
 	channel: "scheduler",
 };
 
-// ── T-011: findOrphanedConfirmedTransfersForHealing ──────────────────
+// ── TR-011: findOrphanedConfirmedTransfersForHealing ─────────────────
 
 /**
- * Find confirmed transfers older than 5 minutes that have no journal entry,
- * filtering out those already escalated.
+ * Find confirmed transfers older than 5 minutes that have no matching
+ * journal entry of the expected type, filtering out those already escalated.
+ * Delegates orphan detection to the shared filter in transferReconciliation.ts.
  */
 export const findOrphanedConfirmedTransfersForHealing = internalQuery({
 	args: {},
 	handler: async (ctx): Promise<TransferHealingCandidate[]> => {
-		const now = Date.now();
-		const threshold = now - ORPHAN_THRESHOLD_MS;
-
-		const transfers = await ctx.db
-			.query("transferRequests")
-			.withIndex("by_status", (q) => q.eq("status", "confirmed"))
-			.collect();
+		const orphans = await findOrphanedConfirmedTransferCandidates(ctx);
 
 		const candidates: TransferHealingCandidate[] = [];
-		for (const transfer of transfers) {
-			// Skip recent transfers still being processed
-			if (!transfer.confirmedAt || transfer.confirmedAt >= threshold) {
-				continue;
-			}
-			// Skip legacy stubs missing direction or amount
-			if (!transfer.direction || transfer.amount == null) {
-				continue;
-			}
-
-			// Check if a journal entry exists for this transfer
-			const journalEntry = await ctx.db
-				.query("cash_ledger_journal_entries")
-				.withIndex("by_transfer_request", (q) =>
-					q.eq("transferRequestId", transfer._id)
-				)
-				.first();
-
-			if (journalEntry) {
-				continue;
-			}
-
-			// Filter out already-escalated transfers
+		for (const orphan of orphans) {
+			// Filter out already-escalated transfers (healing-specific)
 			const healingAttempt = await ctx.db
 				.query("transferHealingAttempts")
 				.withIndex("by_transfer_request", (q) =>
-					q.eq("transferRequestId", transfer._id)
+					q.eq("transferRequestId", orphan.transferRequestId)
 				)
 				.first();
 
@@ -113,12 +87,13 @@ export const findOrphanedConfirmedTransfersForHealing = internalQuery({
 			}
 
 			candidates.push({
-				transferRequestId: transfer._id,
-				direction: transfer.direction,
-				amount: transfer.amount,
-				confirmedAt: transfer.confirmedAt,
-				mortgageId: transfer.mortgageId ?? undefined,
-				obligationId: transfer.obligationId ?? undefined,
+				transferRequestId: orphan.transferRequestId,
+				direction: orphan.direction,
+				amount: orphan.amount,
+				confirmedAt: orphan.confirmedAt,
+				lenderId: orphan.lenderId,
+				mortgageId: orphan.mortgageId,
+				obligationId: orphan.obligationId,
 			});
 		}
 
@@ -126,35 +101,38 @@ export const findOrphanedConfirmedTransfersForHealing = internalQuery({
 	},
 });
 
-// ── T-012: retriggerTransferConfirmation ─────────────────────────────
+// ── TR-012: retriggerTransferConfirmation ────────────────────────────
 
 /**
  * Placeholder effect for retrying transfer confirmation.
- * The actual `publishTransferConfirmed` does not exist yet.
+ * TODO: Replace with actual publishTransferConfirmed call when implemented.
+ * WARNING: This is a no-op — the cron counts the result as "retriggered"
+ * but no actual retry occurs. The healing attempt record tracks state.
  */
 export const retryTransferConfirmationEffect = internalMutation({
 	args: {
 		transferRequestId: v.id("transferRequests"),
-		direction: v.string(),
+		direction: v.union(v.literal("inbound"), v.literal("outbound")),
 		amount: v.number(),
 	},
 	handler: async (_ctx, args) => {
-		console.warn(
-			"[TRANSFER-HEALING] retryTransferConfirmationEffect called for " +
-				`transfer=${args.transferRequestId}, direction=${args.direction}, ` +
-				`amount=${args.amount}. publishTransferConfirmed not yet implemented.`
+		console.error(
+			"[TRANSFER-HEALING] retryTransferConfirmationEffect is a PLACEHOLDER — " +
+				`transfer=${args.transferRequestId} was NOT actually retried. ` +
+				`direction=${args.direction}, amount=${args.amount}.`
 		);
 	},
 });
 
 /**
  * Attempt to retrigger confirmation journal entry for an orphaned transfer.
- * Three code paths: retry, escalate, or skip (already escalated).
+ * Four code paths: skip (already escalated), escalate with SUSPENSE entry,
+ * escalate without entry (no mortgageId), or retry.
  */
 export const retriggerTransferConfirmation = internalMutation({
 	args: {
 		transferRequestId: v.id("transferRequests"),
-		direction: v.string(),
+		direction: v.union(v.literal("inbound"), v.literal("outbound")),
 		amount: v.number(),
 		mortgageId: v.optional(v.id("mortgages")),
 		obligationId: v.optional(v.id("obligations")),
@@ -295,7 +273,7 @@ export const retriggerTransferConfirmation = internalMutation({
 				"mutation",
 				{
 					transferRequestId: Id<"transferRequests">;
-					direction: string;
+					direction: "inbound" | "outbound";
 					amount: number;
 				},
 				void
@@ -313,10 +291,11 @@ export const retriggerTransferConfirmation = internalMutation({
 	},
 });
 
-// ── T-013: transferReconciliationCron ────────────────────────────────
+// ── TR-013: transferReconciliationCron ───────────────────────────────
 
 /**
  * Cron handler: find confirmed transfers missing journal entries and retrigger them.
+ * Per-candidate error handling ensures one failure does not abort the batch.
  */
 export const transferReconciliationCron = internalAction({
 	handler: async (ctx): Promise<TransferHealingResult> => {
@@ -332,6 +311,7 @@ export const transferReconciliationCron = internalAction({
 				candidatesFound: 0,
 				retriggered: 0,
 				escalated: 0,
+				skipped: 0,
 			};
 		}
 
@@ -341,20 +321,30 @@ export const transferReconciliationCron = internalAction({
 
 		let retriggered = 0;
 		let escalated = 0;
+		let skipped = 0;
 		for (const candidate of candidates) {
-			const result = await ctx.runMutation(retriggerTransferConfirmationRef, {
-				transferRequestId: candidate.transferRequestId,
-				direction: candidate.direction,
-				amount: candidate.amount,
-				mortgageId: candidate.mortgageId,
-				obligationId: candidate.obligationId,
-			});
+			try {
+				const result = await ctx.runMutation(retriggerTransferConfirmationRef, {
+					transferRequestId: candidate.transferRequestId,
+					direction: candidate.direction,
+					amount: candidate.amount,
+					mortgageId: candidate.mortgageId,
+					obligationId: candidate.obligationId,
+					lenderId: candidate.lenderId,
+				});
 
-			if (result.action === "retriggered") {
-				retriggered++;
-			}
-			if (result.action === "escalated") {
-				escalated++;
+				if (result.action === "retriggered") {
+					retriggered++;
+				} else if (result.action === "escalated") {
+					escalated++;
+				} else if (result.action === "skipped") {
+					skipped++;
+				}
+			} catch (error) {
+				console.error(
+					`[TRANSFER-HEALING] Failed to retrigger transfer=${candidate.transferRequestId}:`,
+					error instanceof Error ? error.message : String(error)
+				);
 			}
 		}
 
@@ -364,7 +354,8 @@ export const transferReconciliationCron = internalAction({
 			);
 		}
 		console.info(
-			`[TRANSFER-HEALING] Complete: ${candidates.length} found, ${retriggered} retriggered, ${escalated} escalated`
+			`[TRANSFER-HEALING] Complete: ${candidates.length} found, ` +
+				`${retriggered} retriggered, ${escalated} escalated, ${skipped} skipped`
 		);
 
 		return {
@@ -372,6 +363,7 @@ export const transferReconciliationCron = internalAction({
 			candidatesFound: candidates.length,
 			retriggered,
 			escalated,
+			skipped,
 		};
 	},
 });

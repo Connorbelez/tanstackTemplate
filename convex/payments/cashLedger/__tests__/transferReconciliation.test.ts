@@ -9,6 +9,7 @@ import {
 	checkOrphanedReversedTransfers,
 	checkStaleOutboundTransfers,
 	checkTransferAmountMismatches,
+	findOrphanedConfirmedTransferCandidates,
 } from "../transferReconciliation";
 import { buildIdempotencyKey } from "../types";
 import {
@@ -522,5 +523,256 @@ describe("retriggerTransferConfirmation self-healing", () => {
 
 		expect(result.action).toBe("skipped");
 		expect(result.attemptCount).toBe(4);
+	});
+
+	it("escalates without journal entry when mortgageId is missing", async () => {
+		const t = createComponentHarness();
+		await seedMinimalEntities(t);
+
+		const transferId = await createConfirmedTransfer(t, {
+			direction: "inbound",
+			amount: 50_000,
+		});
+
+		// Pre-insert healing attempt at max retries
+		await t.run(async (ctx) => {
+			await ctx.db.insert("transferHealingAttempts", {
+				transferRequestId: transferId,
+				attemptCount: 3,
+				lastAttemptAt: Date.now() - 60_000,
+				status: "retrying",
+				createdAt: Date.now() - 120_000,
+			});
+		});
+
+		const result = await t.mutation(
+			internal.payments.cashLedger.transferReconciliationCron
+				.retriggerTransferConfirmation,
+			{
+				transferRequestId: transferId,
+				direction: "inbound",
+				amount: 50_000,
+				// No mortgageId — should escalate without journal entry
+			}
+		);
+
+		expect(result.action).toBe("escalated");
+		expect(result.attemptCount).toBe(4);
+
+		// Verify NO SUSPENSE_ESCALATED journal entry was created
+		const suspenseEntry = await t.run(async (ctx) => {
+			return ctx.db
+				.query("cash_ledger_journal_entries")
+				.filter((q) => q.eq(q.field("entryType"), "SUSPENSE_ESCALATED"))
+				.first();
+		});
+		expect(suspenseEntry).toBeNull();
+
+		// Verify healing record was still updated to escalated
+		const healingRecord = await t.run(async (ctx) => {
+			const all = await ctx.db.query("transferHealingAttempts").collect();
+			return all.find((a) => a.transferRequestId === transferId) ?? null;
+		});
+		expect(healingRecord?.status).toBe("escalated");
+	});
+
+	it("escalates outbound transfer to SUSPENSE with LENDER_PAYABLE credit", async () => {
+		const t = createComponentHarness();
+		const seeded = await seedMinimalEntities(t);
+
+		const transferId = await createConfirmedTransfer(t, {
+			direction: "outbound",
+			amount: 50_000,
+			mortgageId: seeded.mortgageId,
+			lenderId: seeded.lenderAId,
+		});
+
+		// Pre-create LENDER_PAYABLE account required for outbound escalation
+		await createTestAccount(t, {
+			family: "LENDER_PAYABLE",
+			mortgageId: seeded.mortgageId,
+			lenderId: seeded.lenderAId,
+		});
+
+		// Pre-insert healing attempt at max retries
+		await t.run(async (ctx) => {
+			await ctx.db.insert("transferHealingAttempts", {
+				transferRequestId: transferId,
+				attemptCount: 3,
+				lastAttemptAt: Date.now() - 60_000,
+				status: "retrying",
+				createdAt: Date.now() - 120_000,
+			});
+		});
+
+		const result = await t.mutation(
+			internal.payments.cashLedger.transferReconciliationCron
+				.retriggerTransferConfirmation,
+			{
+				transferRequestId: transferId,
+				direction: "outbound",
+				amount: 50_000,
+				mortgageId: seeded.mortgageId,
+				lenderId: seeded.lenderAId,
+			}
+		);
+
+		expect(result.action).toBe("escalated");
+
+		// Verify SUSPENSE_ESCALATED journal entry credits LENDER_PAYABLE account
+		const suspenseEntry = await t.run(async (ctx) => {
+			return ctx.db
+				.query("cash_ledger_journal_entries")
+				.filter((q) => q.eq(q.field("entryType"), "SUSPENSE_ESCALATED"))
+				.first();
+		});
+		expect(suspenseEntry).not.toBeNull();
+		expect(Number(suspenseEntry?.amount)).toBe(50_000);
+
+		// Verify credit account is LENDER_PAYABLE
+		const creditAccount = await t.run(async (ctx) => {
+			if (!suspenseEntry) {
+				return null;
+			}
+			return ctx.db.get(suspenseEntry.creditAccountId);
+		});
+		expect(creditAccount?.family).toBe("LENDER_PAYABLE");
+	});
+});
+
+// ── Outbound orphan detection ───────────────────────────────
+
+describe("checkOrphanedConfirmedTransfers — outbound", () => {
+	it("detects orphaned outbound transfer (no LENDER_PAYOUT_SENT entry)", async () => {
+		const t = createHarness(modules);
+		const seeded = await seedMinimalEntities(t);
+
+		await createConfirmedTransfer(t, {
+			direction: "outbound",
+			amount: 50_000,
+			mortgageId: seeded.mortgageId,
+		});
+
+		const result = await t.run(async (ctx) =>
+			checkOrphanedConfirmedTransfers(ctx)
+		);
+		expect(result.isHealthy).toBe(false);
+		expect(result.count).toBe(1);
+		expect(result.items[0]?.direction).toBe("outbound");
+	});
+
+	it("flags outbound transfer when only CASH_RECEIVED exists (wrong type)", async () => {
+		const t = createHarness(modules);
+		const seeded = await seedMinimalEntities(t);
+
+		const transferId = await createConfirmedTransfer(t, {
+			direction: "outbound",
+			amount: 50_000,
+			mortgageId: seeded.mortgageId,
+		});
+
+		// Create CASH_RECEIVED entry — wrong type for outbound (needs LENDER_PAYOUT_SENT)
+		const trustCash = await createTestAccount(t, {
+			family: "TRUST_CASH",
+		});
+		const borrowerReceivable = await createTestAccount(t, {
+			family: "BORROWER_RECEIVABLE",
+			mortgageId: seeded.mortgageId,
+			borrowerId: seeded.borrowerId,
+			initialDebitBalance: 100_000n,
+		});
+
+		await postTestEntry(t, {
+			entryType: "CASH_RECEIVED",
+			effectiveDate: "2026-03-01",
+			amount: 50_000,
+			debitAccountId: trustCash._id,
+			creditAccountId: borrowerReceivable._id,
+			idempotencyKey: buildIdempotencyKey(
+				"cash-received",
+				"wrong-type-test",
+				transferId
+			),
+			transferRequestId: transferId,
+			mortgageId: seeded.mortgageId,
+			source: SYSTEM_SOURCE,
+		});
+
+		const result = await t.run(async (ctx) =>
+			checkOrphanedConfirmedTransfers(ctx)
+		);
+		// Should still be flagged — CASH_RECEIVED is wrong type for outbound
+		expect(result.isHealthy).toBe(false);
+		expect(result.count).toBe(1);
+	});
+});
+
+// ── Shared filter specificity ───────────────────────────────
+
+describe("findOrphanedConfirmedTransferCandidates", () => {
+	it("returns candidates including lenderId", async () => {
+		const t = createHarness(modules);
+		const seeded = await seedMinimalEntities(t);
+
+		await createConfirmedTransfer(t, {
+			direction: "outbound",
+			amount: 50_000,
+			mortgageId: seeded.mortgageId,
+			lenderId: seeded.lenderAId,
+		});
+
+		const candidates = await t.run(async (ctx) =>
+			findOrphanedConfirmedTransferCandidates(ctx)
+		);
+		expect(candidates).toHaveLength(1);
+		expect(candidates[0]?.lenderId).toBe(seeded.lenderAId);
+		expect(candidates[0]?.direction).toBe("outbound");
+	});
+
+	it("only matches correct entry type (inbound needs CASH_RECEIVED, not LENDER_PAYOUT_SENT)", async () => {
+		const t = createHarness(modules);
+		const seeded = await seedMinimalEntities(t);
+
+		const transferId = await createConfirmedTransfer(t, {
+			direction: "inbound",
+			amount: 50_000,
+			mortgageId: seeded.mortgageId,
+		});
+
+		// Create LENDER_PAYOUT_SENT entry — wrong type for inbound
+		// LENDER_PAYABLE is credit-normal: needs credit balance for debit posting
+		const lenderPayable = await createTestAccount(t, {
+			family: "LENDER_PAYABLE",
+			mortgageId: seeded.mortgageId,
+			lenderId: seeded.lenderAId,
+			initialCreditBalance: 100_000n,
+		});
+		const trustCash = await createTestAccount(t, {
+			family: "TRUST_CASH",
+			initialDebitBalance: 100_000n,
+		});
+
+		await postTestEntry(t, {
+			entryType: "LENDER_PAYOUT_SENT",
+			effectiveDate: "2026-03-01",
+			amount: 50_000,
+			debitAccountId: lenderPayable._id,
+			creditAccountId: trustCash._id,
+			idempotencyKey: buildIdempotencyKey(
+				"lender-payout-sent",
+				"wrong-type-filter",
+				transferId
+			),
+			transferRequestId: transferId,
+			mortgageId: seeded.mortgageId,
+			source: SYSTEM_SOURCE,
+		});
+
+		// Should still be flagged — LENDER_PAYOUT_SENT is wrong type for inbound
+		const candidates = await t.run(async (ctx) =>
+			findOrphanedConfirmedTransferCandidates(ctx)
+		);
+		expect(candidates).toHaveLength(1);
+		expect(candidates[0]?.transferRequestId).toBe(transferId);
 	});
 });

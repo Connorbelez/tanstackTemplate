@@ -81,18 +81,28 @@ export function ageDays(creationTime: number, now: number): number {
 	return Math.floor((now - creationTime) / MS_PER_DAY);
 }
 
-// ── T-006: Orphaned Confirmed Transfers ──────────────────────
+// ── Shared: Orphaned Confirmed Transfer Candidates ──────────
+
+/** Raw candidate returned by the shared orphan filter. */
+export interface OrphanedConfirmedCandidate {
+	amount: number;
+	confirmedAt: number;
+	direction: "inbound" | "outbound";
+	lenderId?: Id<"lenders">;
+	mortgageId?: Id<"mortgages">;
+	obligationId?: Id<"obligations">;
+	transferRequestId: Id<"transferRequests">;
+}
 
 /**
- * Finds confirmed transfers that have no matching journal entry
- * (CASH_RECEIVED for inbound, LENDER_PAYOUT_SENT for outbound).
- * Only checks transfers confirmed longer than ORPHAN_THRESHOLD_MS ago
- * to avoid flagging transfers still being processed.
+ * Shared filter: finds confirmed transfers older than threshold
+ * with no matching journal entry of the expected type.
+ * Used by both the reconciliation check and the healing query.
  */
-export async function checkOrphanedConfirmedTransfers(
+export async function findOrphanedConfirmedTransferCandidates(
 	ctx: QueryCtx,
-	options?: ReconciliationSuiteOptions
-): Promise<ReconciliationCheckResult<OrphanedConfirmedTransferItem>> {
+	options?: { nowMs?: number }
+): Promise<OrphanedConfirmedCandidate[]> {
 	const now = options?.nowMs ?? Date.now();
 	const threshold = now - ORPHAN_THRESHOLD_MS;
 
@@ -101,16 +111,15 @@ export async function checkOrphanedConfirmedTransfers(
 		.withIndex("by_status", (q) => q.eq("status", "confirmed"))
 		.collect();
 
-	const items: OrphanedConfirmedTransferItem[] = [];
-	let totalAmountCents = 0;
-
+	const candidates: OrphanedConfirmedCandidate[] = [];
 	for (const transfer of transfers) {
-		// Skip recent transfers still being processed
 		if (!transfer.confirmedAt || transfer.confirmedAt >= threshold) {
 			continue;
 		}
-		// Skip legacy stubs missing direction or amount
 		if (!transfer.direction || transfer.amount == null) {
+			console.warn(
+				`[TRANSFER-RECONCILIATION] Skipping legacy stub transfer=${transfer._id}: missing direction or amount`
+			);
 			continue;
 		}
 
@@ -123,30 +132,61 @@ export async function checkOrphanedConfirmedTransfers(
 
 		const expectedType =
 			transfer.direction === "inbound" ? "CASH_RECEIVED" : "LENDER_PAYOUT_SENT";
-
 		const hasMatch = entries.some((e) => e.entryType === expectedType);
 
 		if (!hasMatch) {
-			const keyType =
-				transfer.direction === "inbound"
-					? "cash-received"
-					: "lender-payout-sent";
-			const expectedIdempotencyKey = buildIdempotencyKey(
-				keyType,
-				"transfer",
-				transfer._id
-			);
-			items.push({
+			candidates.push({
 				transferRequestId: transfer._id,
 				direction: transfer.direction,
 				amount: transfer.amount,
 				confirmedAt: transfer.confirmedAt,
-				ageDays: ageDays(transfer.confirmedAt, now),
 				mortgageId: transfer.mortgageId ?? undefined,
-				expectedIdempotencyKey,
+				obligationId: transfer.obligationId ?? undefined,
+				lenderId: transfer.lenderId ?? undefined,
 			});
-			totalAmountCents += transfer.amount;
 		}
+	}
+	return candidates;
+}
+
+// ── TR-001: Orphaned Confirmed Transfers ─────────────────────
+
+/**
+ * Finds confirmed transfers that have no matching journal entry
+ * (CASH_RECEIVED for inbound, LENDER_PAYOUT_SENT for outbound).
+ * Only checks transfers confirmed longer than ORPHAN_THRESHOLD_MS ago
+ * to avoid flagging transfers still being processed.
+ */
+export async function checkOrphanedConfirmedTransfers(
+	ctx: QueryCtx,
+	options?: ReconciliationSuiteOptions
+): Promise<ReconciliationCheckResult<OrphanedConfirmedTransferItem>> {
+	const now = options?.nowMs ?? Date.now();
+	const candidates = await findOrphanedConfirmedTransferCandidates(ctx, {
+		nowMs: now,
+	});
+
+	const items: OrphanedConfirmedTransferItem[] = [];
+	let totalAmountCents = 0;
+
+	for (const c of candidates) {
+		const keyType =
+			c.direction === "inbound" ? "cash-received" : "lender-payout-sent";
+		const expectedIdempotencyKey = buildIdempotencyKey(
+			keyType,
+			"transfer",
+			c.transferRequestId
+		);
+		items.push({
+			transferRequestId: c.transferRequestId,
+			direction: c.direction,
+			amount: c.amount,
+			confirmedAt: c.confirmedAt,
+			ageDays: ageDays(c.confirmedAt, now),
+			mortgageId: c.mortgageId,
+			expectedIdempotencyKey,
+		});
+		totalAmountCents += c.amount;
 	}
 
 	return buildResult(
@@ -157,7 +197,7 @@ export async function checkOrphanedConfirmedTransfers(
 	);
 }
 
-// ── T-007: Orphaned Reversed Transfers ───────────────────────
+// ── TR-002: Orphaned Reversed Transfers ──────────────────────
 
 /**
  * Finds reversed transfers that have no REVERSAL journal entry.
@@ -185,6 +225,9 @@ export async function checkOrphanedReversedTransfers(
 		}
 		// Skip legacy stubs missing direction or amount
 		if (!transfer.direction || transfer.amount == null) {
+			console.warn(
+				`[TRANSFER-RECONCILIATION] Skipping legacy stub reversed transfer=${transfer._id}: missing direction or amount`
+			);
 			continue;
 		}
 
@@ -219,7 +262,7 @@ export async function checkOrphanedReversedTransfers(
 	return buildResult("orphanedReversedTransfers", items, totalAmountCents, now);
 }
 
-// ── T-008: Stale Outbound Transfers ──────────────────────────
+// ── TR-003: Stale Outbound Transfers ─────────────────────────
 
 /**
  * Finds confirmed outbound transfers whose linked dispersalEntry
@@ -247,28 +290,37 @@ export async function checkStaleOutboundTransfers(
 		}
 
 		const dispersalEntry = await ctx.db.get(transfer.dispersalEntryId);
-		// Skip if the dispersal entry was deleted or is missing
 		if (!dispersalEntry) {
+			console.warn(
+				`[TRANSFER-RECONCILIATION] dispersalEntry missing for outbound transfer=${transfer._id}, ` +
+					`dispersalEntryId=${transfer.dispersalEntryId}`
+			);
 			continue;
 		}
 
 		if (dispersalEntry.status === "pending") {
+			if (transfer.amount == null) {
+				console.warn(
+					`[TRANSFER-RECONCILIATION] transfer=${transfer._id} has null amount, using 0 fallback in stale outbound check`
+				);
+			}
+			const amount = transfer.amount ?? 0;
 			items.push({
 				transferRequestId: transfer._id,
 				dispersalEntryId: transfer.dispersalEntryId,
 				dispersalStatus: dispersalEntry.status,
-				amount: transfer.amount ?? 0,
+				amount,
 				confirmedAt: transfer.confirmedAt ?? transfer.createdAt,
 				ageDays: ageDays(transfer.confirmedAt ?? transfer.createdAt, now),
 			});
-			totalAmountCents += transfer.amount ?? 0;
+			totalAmountCents += amount;
 		}
 	}
 
 	return buildResult("staleOutboundTransfers", items, totalAmountCents, now);
 }
 
-// ── T-009: Transfer Amount Mismatches ────────────────────────
+// ── TR-004: Transfer Amount Mismatches ───────────────────────
 
 /**
  * Compares the amount on confirmed transfers against the amount
@@ -292,6 +344,9 @@ export async function checkTransferAmountMismatches(
 	for (const transfer of transfers) {
 		// Skip transfers without amount or direction
 		if (transfer.amount == null || !transfer.direction) {
+			console.warn(
+				`[TRANSFER-RECONCILIATION] Skipping legacy stub transfer=${transfer._id} in amount mismatch check: missing direction or amount`
+			);
 			continue;
 		}
 
