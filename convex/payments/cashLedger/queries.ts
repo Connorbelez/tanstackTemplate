@@ -1,6 +1,6 @@
 import { v } from "convex/values";
-import type { Id } from "../../_generated/dataModel";
-import { internalQuery } from "../../_generated/server";
+import type { Doc, Id } from "../../_generated/dataModel";
+import { internalQuery, type QueryCtx } from "../../_generated/server";
 import { cashLedgerQuery } from "../../fluent";
 import {
 	findCashAccount,
@@ -89,14 +89,85 @@ export const getMortgageCashState = cashLedgerQuery
 export const getLenderPayableBalance = cashLedgerQuery
 	.input({ lenderId: v.id("lenders") })
 	.handler(async (ctx, args) => {
-		const accounts = await ctx.db
-			.query("cash_ledger_accounts")
-			.withIndex("by_lender", (q) => q.eq("lenderId", args.lenderId))
+		return computeGrossLenderPayableBalance(ctx.db, args.lenderId);
+	})
+	.public();
+
+// ── Shared: Gross Lender Payable Balance ────────────────────────────
+
+async function computeGrossLenderPayableBalance(
+	db: QueryCtx["db"],
+	lenderId: Id<"lenders">
+): Promise<bigint> {
+	const accounts = await db
+		.query("cash_ledger_accounts")
+		.withIndex("by_lender", (q) => q.eq("lenderId", lenderId))
+		.collect();
+
+	return accounts
+		.filter((a) => a.family === "LENDER_PAYABLE")
+		.reduce((sum, a) => sum + getCashAccountBalance(a), 0n);
+}
+
+// ── Available Lender Payable Balance (gross minus in-flight) ────────
+
+/** Derived from the schema — stays in sync automatically. */
+type TransferRequestStatus = Doc<"transferRequests">["status"];
+
+// In-flight statuses: transfers initiated but not yet confirmed/completed
+const IN_FLIGHT_STATUSES = [
+	"pending",
+	"approved",
+	"processing",
+] as const satisfies readonly TransferRequestStatus[];
+
+export interface AvailableBalanceBreakdown {
+	availableBalance: bigint;
+	grossBalance: bigint;
+	inFlightAmount: bigint;
+}
+
+export async function getAvailableLenderPayableBalanceImpl(
+	ctx: { db: QueryCtx["db"] },
+	lenderId: Id<"lenders">
+): Promise<AvailableBalanceBreakdown> {
+	const grossBalance = await computeGrossLenderPayableBalance(ctx.db, lenderId);
+
+	// In-flight outbound transfers
+	let inFlightAmount = 0n;
+	for (const status of IN_FLIGHT_STATUSES) {
+		const transfers = await ctx.db
+			.query("transferRequests")
+			.withIndex("by_lender_and_status", (q) =>
+				q.eq("lenderId", lenderId).eq("status", status)
+			)
 			.collect();
 
-		return accounts
-			.filter((account) => account.family === "LENDER_PAYABLE")
-			.reduce((sum, account) => sum + getCashAccountBalance(account), 0n);
+		for (const t of transfers) {
+			if (t.direction !== "outbound" || t.amount == null) {
+				continue;
+			}
+			if (!Number.isSafeInteger(t.amount) || t.amount < 0) {
+				console.warn(
+					`Skipping transferRequest ${t._id}: amount ${t.amount} is not a non-negative safe integer`
+				);
+				continue;
+			}
+			inFlightAmount += BigInt(t.amount);
+		}
+	}
+
+	return {
+		grossBalance,
+		inFlightAmount,
+		availableBalance: grossBalance - inFlightAmount,
+	};
+}
+
+export const getAvailableLenderPayableBalance = cashLedgerQuery
+	.input({ lenderId: v.id("lenders") })
+	.handler(async (ctx, args) => {
+		return getAvailableLenderPayableBalanceImpl(ctx, args.lenderId);
 	})
 	.public();
 
@@ -451,16 +522,23 @@ export const internalGetObligationBalance = internalQuery({
 export const internalGetLenderPayableBalance = internalQuery({
 	args: { lenderId: v.id("lenders") },
 	handler: async (ctx, args) => {
-		const accounts = await ctx.db
-			.query("cash_ledger_accounts")
-			.withIndex("by_lender", (q) => q.eq("lenderId", args.lenderId))
-			.collect();
-
-		const total = accounts
-			.filter((a) => a.family === "LENDER_PAYABLE")
-			.reduce((sum, a) => sum + getCashAccountBalance(a), 0n);
-
+		const total = await computeGrossLenderPayableBalance(ctx.db, args.lenderId);
 		return safeBigintToNumber(total);
+	},
+});
+
+export const internalGetAvailableLenderPayableBalance = internalQuery({
+	args: { lenderId: v.id("lenders") },
+	handler: async (ctx, args) => {
+		const result = await getAvailableLenderPayableBalanceImpl(
+			ctx,
+			args.lenderId
+		);
+		return {
+			grossBalance: safeBigintToNumber(result.grossBalance),
+			inFlightAmount: safeBigintToNumber(result.inFlightAmount),
+			availableBalance: safeBigintToNumber(result.availableBalance),
+		};
 	},
 });
 
