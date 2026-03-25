@@ -302,11 +302,15 @@ export async function createConfirmedTransfer(
 			direction: args.direction,
 			amount: args.amount,
 			currency: "CAD",
-			mortgageId: args.mortgageId,
-			obligationId: args.obligationId,
-			lenderId: args.lenderId,
-			borrowerId: args.borrowerId,
-			dispersalEntryId: args.dispersalEntryId,
+			...(args.mortgageId !== undefined && { mortgageId: args.mortgageId }),
+			...(args.obligationId !== undefined && {
+				obligationId: args.obligationId,
+			}),
+			...(args.lenderId !== undefined && { lenderId: args.lenderId }),
+			...(args.borrowerId !== undefined && { borrowerId: args.borrowerId }),
+			...(args.dispersalEntryId !== undefined && {
+				dispersalEntryId: args.dispersalEntryId,
+			}),
 			confirmedAt: args.confirmedAt ?? Date.now() - 10 * 60_000, // 10 min ago
 			createdAt: Date.now(),
 		});
@@ -331,7 +335,7 @@ export async function createReversedTransfer(
 			direction: args.direction,
 			amount: args.amount,
 			currency: "CAD",
-			mortgageId: args.mortgageId,
+			...(args.mortgageId !== undefined && { mortgageId: args.mortgageId }),
 			reversedAt: args.reversedAt ?? Date.now() - 10 * 60_000,
 			createdAt: Date.now(),
 		});
