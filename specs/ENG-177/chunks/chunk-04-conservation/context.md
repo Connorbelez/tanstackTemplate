@@ -45,23 +45,58 @@ await t.run(async (ctx) => {
 });
 ```
 
-## T-017: CONTROL:ALLOCATION Nets to Zero
+## T-017: CONTROL:ALLOCATION Balance After Settlement Allocation
 
-After a complete allocation:
+### Phase 1 behavior: non-zero balance is expected
+
+In Phase 1, `postSettlementAllocation` only **debits** CONTROL:ALLOCATION (via
+LENDER_PAYABLE_CREATED and SERVICING_FEE_RECOGNIZED entries). There is no
+corresponding **credit** entry posted back to CONTROL:ALLOCATION during this
+phase. As a result, after allocation:
+
+- `controlAllocationBalance` equals the full obligation amount (sum of all debits).
+- `isPostingGroupComplete(summary)` returns **false** (balance is non-zero).
+- `findNonZeroPostingGroups` will surface alerts for each allocated obligation.
+
+This is by design. The conservation invariant verified in Phase 1 is:
+**SUM(LENDER_PAYABLE_CREATED) + SERVICING_FEE_RECOGNIZED === obligation.amount**.
+
 ```typescript
+await t.run(async (ctx) => {
+  const result = await findNonZeroPostingGroups(ctx);
+
+  // Non-zero alerts are EXPECTED — one per allocated obligation
+  const ourAlerts = result.alerts.filter((a) => a.obligationId === obligationId);
+  expect(ourAlerts.length).toBeGreaterThan(0);
+  for (const alert of ourAlerts) {
+    expect(alert.controlAllocationBalance).toBeGreaterThan(0n);
+  }
+
+  // No orphaned CONTROL:ALLOCATION accounts
+  expect(result.orphaned).toHaveLength(0);
+});
+```
+
+### Path to net-zero (Phase 2+)
+
+For `isPostingGroupComplete` to return `true`, a balancing **credit** to
+CONTROL:ALLOCATION is needed. This would come from a CASH_APPLIED entry that
+credits CONTROL:ALLOCATION when cash is moved from the trust/pooled account into
+the allocation control account — e.g., when the borrower's payment is applied to
+the obligation. The full lifecycle for a net-zero posting group is:
+
+1. **CASH_APPLIED** — credits CONTROL:ALLOCATION (money in from trust).
+2. **LENDER_PAYABLE_CREATED** — debits CONTROL:ALLOCATION (money out to lender payable).
+3. **SERVICING_FEE_RECOGNIZED** — debits CONTROL:ALLOCATION (money out to servicing revenue).
+
+When credits (step 1) equal debits (steps 2 + 3), the posting group is complete:
+
+```typescript
+// Phase 2+ expectation (once CASH_APPLIED is posted):
 await t.run(async (ctx) => {
   const summary = await getPostingGroupSummary(ctx, `allocation:${obligationId}`);
   expect(isPostingGroupComplete(summary)).toBe(true);
   expect(summary.controlAllocationBalance).toBe(0n);
-});
-```
-
-Also verify via `findNonZeroPostingGroups`:
-```typescript
-await t.run(async (ctx) => {
-  const result = await findNonZeroPostingGroups(ctx);
-  expect(result.alerts).toHaveLength(0);
-  expect(result.orphaned).toHaveLength(0);
 });
 ```
 
