@@ -573,11 +573,46 @@ describe("T-010: Amount validation via assertReversalAmountValid", () => {
 			});
 		});
 
+		// Post a transfer-backed CASH_RECEIVED entry (with transferRequestId)
+		// so postTransferReversal doesn't reject with NOT_A_TRANSFER_ENTRY
+		const transferBackedEntry = await t.run(async (ctx) => {
+			const trustCash = await getOrCreateCashAccount(ctx, {
+				family: "TRUST_CASH",
+				mortgageId: state.mortgageId,
+			});
+			const borrowerReceivable = await findCashAccount(ctx.db, {
+				family: "BORROWER_RECEIVABLE",
+				mortgageId: state.mortgageId,
+				obligationId: state.obligationId,
+			});
+			if (!borrowerReceivable) {
+				throw new Error("BORROWER_RECEIVABLE not found");
+			}
+
+			return postCashEntryInternal(ctx, {
+				entryType: "CASH_RECEIVED",
+				effectiveDate: "2026-03-01",
+				amount: TOTAL_AMOUNT,
+				debitAccountId: trustCash._id,
+				creditAccountId: borrowerReceivable._id,
+				idempotencyKey: buildIdempotencyKey(
+					"cash-received",
+					"transfer",
+					transferRequestId as string
+				),
+				mortgageId: state.mortgageId,
+				obligationId: state.obligationId,
+				transferRequestId,
+				borrowerId: state.borrowerId,
+				source: SYSTEM_SOURCE,
+			});
+		});
+
 		await expect(
 			t.run(async (ctx) => {
 				return postTransferReversal(ctx, {
 					transferRequestId,
-					originalEntryId: state.cashReceivedEntry._id,
+					originalEntryId: transferBackedEntry.entry._id,
 					amount: TOTAL_AMOUNT + 1, // exceeds original
 					effectiveDate: "2026-03-10",
 					source: SYSTEM_SOURCE,
@@ -712,10 +747,45 @@ describe("T-013: postTransferReversal single-entry", () => {
 			});
 		});
 
+		// Post a transfer-backed CASH_RECEIVED entry (with transferRequestId)
+		// so postTransferReversal doesn't reject with NOT_A_TRANSFER_ENTRY
+		const transferBackedEntry = await t.run(async (ctx) => {
+			const trustCash = await getOrCreateCashAccount(ctx, {
+				family: "TRUST_CASH",
+				mortgageId: state.mortgageId,
+			});
+			const borrowerReceivable = await findCashAccount(ctx.db, {
+				family: "BORROWER_RECEIVABLE",
+				mortgageId: state.mortgageId,
+				obligationId: state.obligationId,
+			});
+			if (!borrowerReceivable) {
+				throw new Error("BORROWER_RECEIVABLE not found");
+			}
+
+			return postCashEntryInternal(ctx, {
+				entryType: "CASH_RECEIVED",
+				effectiveDate: "2026-03-01",
+				amount: TOTAL_AMOUNT,
+				debitAccountId: trustCash._id,
+				creditAccountId: borrowerReceivable._id,
+				idempotencyKey: buildIdempotencyKey(
+					"cash-received",
+					"transfer",
+					transferRequestId as string
+				),
+				mortgageId: state.mortgageId,
+				obligationId: state.obligationId,
+				transferRequestId,
+				borrowerId: state.borrowerId,
+				source: SYSTEM_SOURCE,
+			});
+		});
+
 		const result = await t.run(async (ctx) => {
 			return postTransferReversal(ctx, {
 				transferRequestId,
-				originalEntryId: state.cashReceivedEntry._id,
+				originalEntryId: transferBackedEntry.entry._id,
 				amount: TOTAL_AMOUNT,
 				effectiveDate: "2026-03-10",
 				source: SYSTEM_SOURCE,
@@ -728,14 +798,14 @@ describe("T-013: postTransferReversal single-entry", () => {
 
 		// Verify accounts are swapped from original
 		expect(result.entry.debitAccountId).toBe(
-			state.cashReceivedEntry.creditAccountId
+			transferBackedEntry.entry.creditAccountId
 		);
 		expect(result.entry.creditAccountId).toBe(
-			state.cashReceivedEntry.debitAccountId
+			transferBackedEntry.entry.debitAccountId
 		);
 
 		// Verify causedBy points to original
-		expect(result.entry.causedBy).toBe(state.cashReceivedEntry._id);
+		expect(result.entry.causedBy).toBe(transferBackedEntry.entry._id);
 
 		// Verify transferRequestId is set
 		expect(result.entry.transferRequestId).toBe(transferRequestId);
