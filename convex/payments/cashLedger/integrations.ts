@@ -63,6 +63,62 @@ function unixMsToBusinessDate(ms: number) {
 	return new Date(ms).toISOString().slice(0, 10);
 }
 
+function assertReversalAmountValid(
+	reversalAmount: number,
+	originalAmount: bigint,
+	context: string
+): void {
+	if (!Number.isSafeInteger(reversalAmount) || reversalAmount <= 0) {
+		throw new ConvexError({
+			code: "INVALID_REVERSAL_AMOUNT" as const,
+			reversalAmount,
+			context,
+		});
+	}
+	const originalNumber = safeBigintToNumber(originalAmount);
+	if (reversalAmount > originalNumber) {
+		throw new ConvexError({
+			code: "REVERSAL_EXCEEDS_ORIGINAL" as const,
+			reversalAmount,
+			originalAmount: originalNumber,
+			context,
+		});
+	}
+}
+
+/**
+ * Validates that caller-supplied dimension IDs match the original entry's
+ * dimensions. Throws DIMENSION_MISMATCH if a non-null original dimension
+ * differs from the supplied value.
+ */
+function assertDimensionMatch(
+	original: Doc<"cash_ledger_journal_entries">,
+	dimensions: {
+		mortgageId?: Id<"mortgages">;
+		obligationId?: Id<"obligations">;
+	}
+): void {
+	if (original.mortgageId && original.mortgageId !== dimensions.mortgageId) {
+		throw new ConvexError({
+			code: "DIMENSION_MISMATCH" as const,
+			dimension: "mortgageId",
+			expected: original.mortgageId,
+			received: dimensions.mortgageId,
+		});
+	}
+	if (
+		original.obligationId &&
+		original.obligationId !== dimensions.obligationId
+	) {
+		throw new ConvexError({
+			code: "DIMENSION_MISMATCH" as const,
+			dimension: "obligationId",
+			expected: original.obligationId,
+			received: dimensions.obligationId,
+		});
+	}
+}
+
 export async function postObligationAccrued(
 	ctx: MutationCtx,
 	args: {
@@ -1189,4 +1245,441 @@ export async function postCashCorrectionForEntry(
 		replacementEntry: replacementResult?.entry ?? null,
 		postingGroupId: canonicalPostingGroupId,
 	};
+}
+
+// ── Reversal ──────────────────────────────────────────────────────────
+
+/**
+ * Tiered payout detection for clawback logic.
+ *
+ * Searches for a LENDER_PAYOUT_SENT entry linked to a given lender payable
+ * entry using progressively broader strategies:
+ *   1. dispersalEntryId in obligation-scoped entries
+ *   2. dispersalEntryId in lender-scoped entries (legacy payouts without obligationId)
+ *   3. postingGroupId from the allocation group
+ *   4. lenderId + mortgageId fallback
+ */
+async function findPayoutEntryForClawback(
+	ctx: MutationCtx,
+	lenderEntry: Doc<"cash_ledger_journal_entries">,
+	lenderId: Id<"lenders">,
+	mortgageId: Id<"mortgages">,
+	allObligationEntries: Doc<"cash_ledger_journal_entries">[]
+): Promise<Doc<"cash_ledger_journal_entries"> | undefined> {
+	// Tier 1: match by dispersalEntryId in obligation-scoped entries
+	if (lenderEntry.dispersalEntryId) {
+		const match = allObligationEntries.find(
+			(e) =>
+				e.entryType === "LENDER_PAYOUT_SENT" &&
+				e.dispersalEntryId === lenderEntry.dispersalEntryId
+		);
+		if (match) {
+			return match;
+		}
+	}
+
+	// Tier 2: match by dispersalEntryId in lender-scoped entries (payout may
+	// not carry obligationId for legacy entries)
+	if (lenderEntry.dispersalEntryId) {
+		const lenderEntries = await ctx.db
+			.query("cash_ledger_journal_entries")
+			.withIndex("by_lender_and_sequence", (q) => q.eq("lenderId", lenderId))
+			.collect();
+		const match = lenderEntries.find(
+			(e) =>
+				e.entryType === "LENDER_PAYOUT_SENT" &&
+				e.dispersalEntryId === lenderEntry.dispersalEntryId
+		);
+		if (match) {
+			return match;
+		}
+	}
+
+	// Tier 3: match by postingGroupId from the allocation group (if payout
+	// was posted with the same group id as the settlement)
+	if (lenderEntry.postingGroupId) {
+		const groupEntries = await ctx.db
+			.query("cash_ledger_journal_entries")
+			.withIndex("by_posting_group", (q) =>
+				q.eq("postingGroupId", lenderEntry.postingGroupId as string)
+			)
+			.collect();
+		const match = groupEntries.find(
+			(e) => e.entryType === "LENDER_PAYOUT_SENT" && e.lenderId === lenderId
+		);
+		if (match) {
+			return match;
+		}
+	}
+
+	// Tier 4: broadest fallback — match by lenderId + mortgageId in
+	// lender-scoped entries to catch legacy payouts with no dispersalEntryId.
+	// Fail closed: if multiple payouts match, return null to surface ambiguity
+	// for manual handling instead of risking a wrong clawback attachment.
+	const lenderEntries = await ctx.db
+		.query("cash_ledger_journal_entries")
+		.withIndex("by_lender_and_sequence", (q) => q.eq("lenderId", lenderId))
+		.collect();
+	const candidates = lenderEntries.filter(
+		(e) => e.entryType === "LENDER_PAYOUT_SENT" && e.mortgageId === mortgageId
+	);
+	return candidates.length === 1 ? candidates[0] : undefined;
+}
+
+/**
+ * Validates that exactly one reversal identifier (attemptId or transferRequestId)
+ * is provided. Throws on missing or ambiguous identifiers.
+ */
+function assertExactlyOneReversalIdentifier(args: {
+	attemptId?: Id<"collectionAttempts">;
+	transferRequestId?: Id<"transferRequests">;
+}):
+	| { hasAttemptId: true; hasTransferRequestId: false }
+	| { hasAttemptId: false; hasTransferRequestId: true } {
+	const hasAttemptId = args.attemptId !== undefined;
+	const hasTransferRequestId = args.transferRequestId !== undefined;
+	if (!(hasAttemptId || hasTransferRequestId)) {
+		throw new ConvexError(
+			"postPaymentReversalCascade requires at least one of attemptId or transferRequestId"
+		);
+	}
+	if (hasAttemptId && hasTransferRequestId) {
+		throw new ConvexError({
+			code: "AMBIGUOUS_REVERSAL_IDENTIFIER" as const,
+			attemptId: args.attemptId,
+			transferRequestId: args.transferRequestId,
+		});
+	}
+	return { hasAttemptId, hasTransferRequestId: !hasAttemptId } as
+		| { hasAttemptId: true; hasTransferRequestId: false }
+		| { hasAttemptId: false; hasTransferRequestId: true };
+}
+
+/**
+ * Reverses an entire settlement's posting group atomically.
+ *
+ * Given an attempt or transfer request, this function:
+ * 1. Reverses the CASH_RECEIVED entry
+ * 2. Reverses all LENDER_PAYABLE_CREATED entries from the allocation group
+ * 3. Reverses the SERVICING_FEE_RECOGNIZED entry (if any)
+ * 4. Reverses LENDER_PAYOUT_SENT entries (if payouts already sent, flagging clawback)
+ *
+ * All reversal entries share a single postingGroupId for atomicity.
+ * Idempotent: re-calling with the same identifiers returns the existing entries.
+ */
+export async function postPaymentReversalCascade(
+	ctx: MutationCtx,
+	args: {
+		attemptId?: Id<"collectionAttempts">;
+		transferRequestId?: Id<"transferRequests">;
+		obligationId: Id<"obligations">;
+		mortgageId: Id<"mortgages">;
+		effectiveDate: string;
+		source: CommandSource;
+		reason: string;
+	}
+): Promise<{
+	reversalEntries: Doc<"cash_ledger_journal_entries">[];
+	postingGroupId: string;
+	clawbackRequired: boolean;
+}> {
+	// 1. Resolve identifier — require exactly one
+	const { hasAttemptId } = assertExactlyOneReversalIdentifier(args);
+
+	// 2. Generate postingGroupId from the single provided identifier
+	const postingGroupId = hasAttemptId
+		? `reversal-group:${args.attemptId}`
+		: `reversal-group:transfer:${args.transferRequestId}`;
+
+	// 3. Idempotency check — return existing entries if already posted
+	const existingEntries = await ctx.db
+		.query("cash_ledger_journal_entries")
+		.withIndex("by_posting_group", (q) =>
+			q.eq("postingGroupId", postingGroupId)
+		)
+		.collect();
+
+	if (existingEntries.length > 0) {
+		const clawbackRequired = existingEntries.some((e) =>
+			e.idempotencyKey.includes("payout-clawback")
+		);
+		return {
+			reversalEntries: existingEntries,
+			postingGroupId,
+			clawbackRequired,
+		};
+	}
+
+	// 4. Find original CASH_RECEIVED entry
+	const allObligationEntries = await ctx.db
+		.query("cash_ledger_journal_entries")
+		.withIndex("by_obligation_and_sequence", (q) =>
+			q.eq("obligationId", args.obligationId)
+		)
+		.collect();
+
+	const cashReceivedEntry = allObligationEntries.find(
+		(e) =>
+			e.entryType === "CASH_RECEIVED" &&
+			(args.attemptId
+				? e.attemptId === args.attemptId
+				: e.transferRequestId === args.transferRequestId)
+	);
+
+	if (!cashReceivedEntry) {
+		throw new ConvexError({
+			code: "ORIGINAL_ENTRY_NOT_FOUND" as const,
+			message: "No CASH_RECEIVED entry found for the given identifiers",
+			attemptId: args.attemptId ?? null,
+			transferRequestId: args.transferRequestId ?? null,
+			obligationId: args.obligationId,
+		});
+	}
+
+	// 5. Validate dimension consistency — args dimensions must match the
+	// original entry to prevent mis-attributed reversals in queries/indexes.
+	assertDimensionMatch(cashReceivedEntry, {
+		mortgageId: args.mortgageId,
+		obligationId: args.obligationId,
+	});
+
+	// 6. Identifier string for idempotency keys
+	// Exactly one of attemptId/transferRequestId is guaranteed by step 1 validation
+	const identifier = args.attemptId ?? (args.transferRequestId as string);
+
+	// 7. Validate reversal amount is a safe integer (renumbered after dimension check)
+	const cashReceivedAmount = safeBigintToNumber(cashReceivedEntry.amount);
+	assertReversalAmountValid(
+		cashReceivedAmount,
+		cashReceivedEntry.amount,
+		"CASH_RECEIVED"
+	);
+
+	// 8. Reverse CASH_RECEIVED
+	await postCashEntryInternal(ctx, {
+		entryType: "REVERSAL",
+		effectiveDate: args.effectiveDate,
+		amount: cashReceivedAmount,
+		debitAccountId: cashReceivedEntry.creditAccountId,
+		creditAccountId: cashReceivedEntry.debitAccountId,
+		causedBy: cashReceivedEntry._id,
+		postingGroupId,
+		idempotencyKey: buildIdempotencyKey(
+			"reversal",
+			"cash-received",
+			identifier
+		),
+		mortgageId: args.mortgageId,
+		obligationId: args.obligationId,
+		attemptId: args.attemptId,
+		transferRequestId: args.transferRequestId,
+		borrowerId: cashReceivedEntry.borrowerId,
+		source: normalizeSource(args.source),
+		reason: args.reason,
+	});
+
+	// 9. Find original allocation entries from the settlement posting group
+	const allocationGroupId = `allocation:${args.obligationId}`;
+	const allocationEntries = await ctx.db
+		.query("cash_ledger_journal_entries")
+		.withIndex("by_posting_group", (q) =>
+			q.eq("postingGroupId", allocationGroupId)
+		)
+		.collect();
+
+	const lenderPayableEntries = allocationEntries.filter(
+		(e) => e.entryType === "LENDER_PAYABLE_CREATED"
+	);
+	const servicingFeeEntry = allocationEntries.find(
+		(e) => e.entryType === "SERVICING_FEE_RECOGNIZED"
+	);
+
+	// 10. Reverse each LENDER_PAYABLE_CREATED
+	for (const entry of lenderPayableEntries) {
+		await postCashEntryInternal(ctx, {
+			entryType: "REVERSAL",
+			effectiveDate: args.effectiveDate,
+			amount: safeBigintToNumber(entry.amount),
+			debitAccountId: entry.creditAccountId,
+			creditAccountId: entry.debitAccountId,
+			causedBy: entry._id,
+			postingGroupId,
+			idempotencyKey: buildIdempotencyKey(
+				"reversal",
+				"lender-payable",
+				entry.dispersalEntryId ?? entry._id
+			),
+			mortgageId: args.mortgageId,
+			obligationId: args.obligationId,
+			lenderId: entry.lenderId,
+			borrowerId: entry.borrowerId,
+			dispersalEntryId: entry.dispersalEntryId,
+			source: normalizeSource(args.source),
+			reason: args.reason,
+		});
+	}
+
+	// 11. Reverse SERVICING_FEE_RECOGNIZED (if exists)
+	if (servicingFeeEntry) {
+		await postCashEntryInternal(ctx, {
+			entryType: "REVERSAL",
+			effectiveDate: args.effectiveDate,
+			amount: safeBigintToNumber(servicingFeeEntry.amount),
+			debitAccountId: servicingFeeEntry.creditAccountId,
+			creditAccountId: servicingFeeEntry.debitAccountId,
+			causedBy: servicingFeeEntry._id,
+			postingGroupId,
+			idempotencyKey: buildIdempotencyKey(
+				"reversal",
+				"servicing-fee",
+				args.obligationId
+			),
+			mortgageId: args.mortgageId,
+			obligationId: args.obligationId,
+			borrowerId: servicingFeeEntry.borrowerId,
+			source: normalizeSource(args.source),
+			reason: args.reason,
+		});
+	}
+
+	// 12. Check for and reverse LENDER_PAYOUT_SENT (conditional clawback)
+	let clawbackRequired = false;
+
+	for (const lenderEntry of lenderPayableEntries) {
+		const currentLenderId = lenderEntry.lenderId;
+		if (!currentLenderId) {
+			continue;
+		}
+
+		const payoutEntry = await findPayoutEntryForClawback(
+			ctx,
+			lenderEntry,
+			currentLenderId,
+			args.mortgageId,
+			allObligationEntries
+		);
+
+		if (payoutEntry) {
+			clawbackRequired = true;
+			await postCashEntryInternal(ctx, {
+				entryType: "REVERSAL",
+				effectiveDate: args.effectiveDate,
+				amount: safeBigintToNumber(payoutEntry.amount),
+				debitAccountId: payoutEntry.creditAccountId,
+				creditAccountId: payoutEntry.debitAccountId,
+				causedBy: payoutEntry._id,
+				postingGroupId,
+				idempotencyKey: buildIdempotencyKey(
+					"reversal",
+					"payout-clawback",
+					currentLenderId,
+					identifier
+				),
+				mortgageId: args.mortgageId,
+				obligationId: args.obligationId,
+				lenderId: currentLenderId,
+				source: normalizeSource(args.source),
+				reason: args.reason,
+			});
+		}
+	}
+
+	// 13. Collect all reversal entries and emit audit log
+	const reversalEntries = await ctx.db
+		.query("cash_ledger_journal_entries")
+		.withIndex("by_posting_group", (q) =>
+			q.eq("postingGroupId", postingGroupId)
+		)
+		.collect();
+
+	// 14. Audit log for the cascade operation (compliance: O.Reg 189/08)
+	await auditLog.log(ctx, {
+		action: "cashLedger.reversal_cascade",
+		actorId: args.source.actorId ?? "system",
+		resourceType: "obligation",
+		resourceId: args.obligationId,
+		severity: "warning",
+		metadata: {
+			postingGroupId,
+			clawbackRequired,
+			entryCount: reversalEntries.length,
+			attemptId: args.attemptId ?? null,
+			transferRequestId: args.transferRequestId ?? null,
+			reason: args.reason,
+		},
+	});
+
+	return { reversalEntries, postingGroupId, clawbackRequired };
+}
+
+/**
+ * Single-entry reversal for transfer-backed payments.
+ *
+ * Loads the original journal entry, validates the reversal amount does not
+ * exceed the original, and posts a REVERSAL with swapped debit/credit accounts.
+ */
+export async function postTransferReversal(
+	ctx: MutationCtx,
+	args: {
+		transferRequestId: Id<"transferRequests">;
+		originalEntryId: Id<"cash_ledger_journal_entries">;
+		amount: number;
+		effectiveDate: string;
+		source: CommandSource;
+		reason: string;
+	}
+): Promise<{ entry: Doc<"cash_ledger_journal_entries"> }> {
+	// 1. Load original entry
+	const original = await ctx.db.get(args.originalEntryId);
+	if (!original) {
+		throw new ConvexError(`Original entry not found: ${args.originalEntryId}`);
+	}
+
+	// 2. Validate transferRequestId consistency — the original entry must be
+	// a transfer-backed entry (i.e. it must carry a transferRequestId) and
+	// that id must match the one supplied by the caller.
+	if (!original.transferRequestId) {
+		throw new ConvexError({
+			code: "NOT_A_TRANSFER_ENTRY" as const,
+			message:
+				"Cannot create a transfer-scoped reversal for a non-transfer entry",
+			originalEntryId: args.originalEntryId,
+			originalEntryType: original.entryType,
+		});
+	}
+	if (original.transferRequestId !== args.transferRequestId) {
+		throw new ConvexError({
+			code: "TRANSFER_REQUEST_MISMATCH" as const,
+			originalTransferRequestId: original.transferRequestId,
+			providedTransferRequestId: args.transferRequestId,
+		});
+	}
+
+	// 3. Validate reversal amount
+	assertReversalAmountValid(args.amount, original.amount, "transfer reversal");
+
+	// 4. Post REVERSAL with swapped accounts
+	const result = await postCashEntryInternal(ctx, {
+		entryType: "REVERSAL",
+		effectiveDate: args.effectiveDate,
+		amount: args.amount,
+		debitAccountId: original.creditAccountId,
+		creditAccountId: original.debitAccountId,
+		causedBy: original._id,
+		idempotencyKey: buildIdempotencyKey(
+			"reversal",
+			"transfer",
+			args.transferRequestId
+		),
+		mortgageId: original.mortgageId,
+		obligationId: original.obligationId,
+		transferRequestId: args.transferRequestId,
+		lenderId: original.lenderId,
+		borrowerId: original.borrowerId,
+		dispersalEntryId: original.dispersalEntryId,
+		source: normalizeSource(args.source),
+		reason: args.reason,
+	});
+
+	return { entry: result.entry };
 }
