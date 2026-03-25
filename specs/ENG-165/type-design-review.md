@@ -41,7 +41,7 @@
 - **Invariant Enforcement**: 3/10 -- No validation that counts are consistent.
 
 ### Recommended Improvement
-Add a `skipped` count to make the invariant `candidatesFound === retriggered + escalated + skipped` expressible and verifiable via an assertion in the cron handler.
+~~Add a `skipped` count to make the invariant `candidatesFound === retriggered + escalated + skipped` expressible and verifiable via an assertion in the cron handler.~~ **DONE** -- `skipped` is already present in `TransferHealingResult` (`convex/payments/cashLedger/transferHealingTypes.ts`).
 
 ---
 
@@ -262,4 +262,4 @@ Throughout the codebase, amounts are plain `number` types. In a financial ledger
 2. **`direction` arg validator** -- Change `v.string()` to `v.union(v.literal("inbound"), v.literal("outbound"))` in `retriggerTransferConfirmation` and `retryTransferConfirmationEffect`.
 3. **Extract duplicate `buildResult`/`ageDays`** into a shared module to prevent divergence.
 4. **Create application-layer discriminated union** for `TransferRequest` status variants to eliminate defensive null checks.
-5. **Add `skipped` count** to `TransferHealingResult` to make the count invariant explicit.
+5. ~~**Add `skipped` count** to `TransferHealingResult` to make the count invariant explicit.~~ **DONE** -- Already implemented in `transferHealingTypes.ts`.
