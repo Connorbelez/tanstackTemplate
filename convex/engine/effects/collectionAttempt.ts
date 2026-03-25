@@ -202,8 +202,16 @@ export const notifyAdmin = internalMutation({
 /**
  * Cross-entity effect: triggers cash ledger reversal cascade.
  * Triggered when a collection attempt transitions to `reversed` via PAYMENT_REVERSED.
- * Calls postPaymentReversalCascade() for each obligation in the plan entry,
- * matching the emitPaymentReceived pattern of iterating obligationIds.
+ *
+ * Iterates all obligationIds in the plan entry, delegating reversal of each
+ * obligation's ledger entries to postPaymentReversalCascade(). Unlike
+ * emitPaymentReceived (which tracks partial amounts and breaks early), this
+ * unconditionally reverses every obligation — partial reversal would leave
+ * the cash ledger inconsistent.
+ *
+ * Each call is idempotent via posting-group deduplication in the cash ledger.
+ * Return value (including clawbackRequired) is currently discarded —
+ * payout clawback handling is deferred to ENG-175+.
  */
 export const emitPaymentReversed = internalMutation({
 	args: collectionAttemptEffectValidator,
@@ -214,21 +222,36 @@ export const emitPaymentReversed = internalMutation({
 			"emitPaymentReversed"
 		);
 
-		const reason =
-			typeof args.payload?.reason === "string"
-				? args.payload.reason
-				: "payment_reversed";
+		let reason: string;
+		if (typeof args.payload?.reason === "string") {
+			reason = args.payload.reason;
+		} else {
+			reason = "payment_reversed";
+			console.warn(
+				`[emitPaymentReversed] No valid reason in payload for attempt=${args.entityId}. Defaulting to "${reason}".`
+			);
+		}
 
-		const effectiveDate = new Date().toISOString().slice(0, 10);
+		// Prefer effectiveDate from event payload (set at event-receive time);
+		// fall back to current date if not provided.
+		const effectiveDate =
+			typeof args.payload?.effectiveDate === "string"
+				? args.payload.effectiveDate
+				: new Date().toISOString().slice(0, 10);
 
 		for (const obligationId of planEntry.obligationIds) {
 			const obligation = await ctx.db.get(obligationId);
 			if (!obligation) {
-				console.warn(
-					`[emitPaymentReversed] Obligation not found: ${obligationId}. Skipping.`
+				throw new Error(
+					`[emitPaymentReversed] Obligation not found: ${obligationId} ` +
+						`(attempt=${args.entityId}). Cannot complete reversal — ` +
+						"the cash ledger would be left in an inconsistent state."
 				);
-				continue;
 			}
+
+			console.info(
+				`[emitPaymentReversed] Starting reversal cascade for attempt=${args.entityId}, obligation=${obligationId}`
+			);
 
 			await postPaymentReversalCascade(ctx, {
 				attemptId: args.entityId,
