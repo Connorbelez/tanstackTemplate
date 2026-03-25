@@ -217,13 +217,14 @@ Add to the existing `runFullReconciliationSuite` function. The function currentl
 
 ```typescript
 // Current pattern (line ~693):
-const [checkResults, conservationResults] = await Promise.all([
-    Promise.all([
+// Uses Promise.allSettled so one broken check does not abort the rest of the suite.
+const [checkSettled, conservationSettled] = await Promise.all([
+    Promise.allSettled([
         checkUnappliedCash(ctx, opts),
         checkNegativePayables(ctx, opts),
         // ... 6 more checks
     ]),
-    Promise.all([
+    Promise.allSettled([
         checkObligationConservation(ctx, opts),
         checkMortgageMonthConservation(ctx, opts),
     ]),
@@ -233,10 +234,10 @@ const [checkResults, conservationResults] = await Promise.all([
 Add a new parallel group for transfer checks:
 
 ```typescript
-const [checkResults, conservationResults, transferResults] = await Promise.all([
-    Promise.all([/* existing 8 checks */]),
-    Promise.all([/* existing 2 conservation checks */]),
-    Promise.all([
+const [checkSettled, conservationSettled, transferSettled] = await Promise.all([
+    Promise.allSettled([/* existing 8 checks */]),
+    Promise.allSettled([/* existing 2 conservation checks */]),
+    Promise.allSettled([
         checkOrphanedConfirmedTransfers(ctx, opts),
         checkOrphanedReversedTransfers(ctx, opts),
         checkStaleOutboundTransfers(ctx, opts),
