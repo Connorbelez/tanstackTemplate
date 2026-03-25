@@ -379,6 +379,66 @@ describe("disbursementGate", () => {
 		});
 	});
 
+	it("throws INVALID_DISBURSEMENT_AMOUNT for fractional amount 0.5", async () => {
+		const t = createHarness(modules);
+		const seeded = await seedMinimalEntities(t);
+
+		await t.run(async (ctx) => {
+			try {
+				await validateDisbursementAmount(ctx, {
+					lenderId: seeded.lenderAId,
+					requestedAmount: 0.5,
+				});
+				throw new Error("Should have thrown");
+			} catch (e) {
+				expect(e).toBeInstanceOf(ConvexError);
+				expect((e as ConvexError<{ code: string }>).data.code).toBe(
+					"INVALID_DISBURSEMENT_AMOUNT"
+				);
+			}
+		});
+	});
+
+	it("throws INVALID_DISBURSEMENT_AMOUNT for fractional amount 100.1", async () => {
+		const t = createHarness(modules);
+		const seeded = await seedMinimalEntities(t);
+
+		await t.run(async (ctx) => {
+			try {
+				await validateDisbursementAmount(ctx, {
+					lenderId: seeded.lenderAId,
+					requestedAmount: 100.1,
+				});
+				throw new Error("Should have thrown");
+			} catch (e) {
+				expect(e).toBeInstanceOf(ConvexError);
+				expect((e as ConvexError<{ code: string }>).data.code).toBe(
+					"INVALID_DISBURSEMENT_AMOUNT"
+				);
+			}
+		});
+	});
+
+	it("throws INVALID_DISBURSEMENT_AMOUNT for unsafe integer (MAX_SAFE_INTEGER + 1)", async () => {
+		const t = createHarness(modules);
+		const seeded = await seedMinimalEntities(t);
+
+		await t.run(async (ctx) => {
+			try {
+				await validateDisbursementAmount(ctx, {
+					lenderId: seeded.lenderAId,
+					requestedAmount: Number.MAX_SAFE_INTEGER + 1,
+				});
+				throw new Error("Should have thrown");
+			} catch (e) {
+				expect(e).toBeInstanceOf(ConvexError);
+				expect((e as ConvexError<{ code: string }>).data.code).toBe(
+					"INVALID_DISBURSEMENT_AMOUNT"
+				);
+			}
+		});
+	});
+
 	// ── In-flight transfer edge cases (#5, #6, #9, #10) ─────────────
 
 	it("in-flight outbound transfers reduce available balance", async () => {
