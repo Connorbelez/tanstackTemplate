@@ -205,14 +205,21 @@ export const retriggerTransferConfirmation = internalMutation({
 			// For inbound transfers, credit BORROWER_RECEIVABLE; for outbound, credit LENDER_PAYABLE
 			const creditFamily =
 				args.direction === "inbound" ? "BORROWER_RECEIVABLE" : "LENDER_PAYABLE";
+			const creditAccountSpec =
+				creditFamily === "LENDER_PAYABLE"
+					? {
+							family: creditFamily,
+							mortgageId: args.mortgageId,
+							lenderId: args.lenderId,
+						}
+					: {
+							family: creditFamily,
+							mortgageId: args.mortgageId,
+							obligationId: args.obligationId,
+						};
 			const creditAccount = await requireCashAccount(
 				ctx.db,
-				{
-					family: creditFamily,
-					mortgageId: args.mortgageId,
-					obligationId: args.obligationId,
-					lenderId: args.lenderId,
-				},
+				creditAccountSpec,
 				"transferSelfHealing:escalation"
 			);
 
@@ -232,6 +239,8 @@ export const retriggerTransferConfirmation = internalMutation({
 				source: HEALING_SOURCE,
 				reason: `Transfer confirmation retrigger failed after ${MAX_TRANSFER_HEALING_ATTEMPTS} attempts`,
 				metadata: { attemptCount },
+				transferRequestId: args.transferRequestId,
+				lenderId: args.direction === "outbound" ? args.lenderId : undefined,
 			});
 
 			await auditLog.log(ctx, {
