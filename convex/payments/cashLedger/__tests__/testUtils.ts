@@ -280,6 +280,68 @@ export async function createSettledObligation(
 	});
 }
 
+// ── createConfirmedTransfer ───────────────────────────────────────────
+// Creates a transferRequests record with status: "confirmed".
+
+export async function createConfirmedTransfer(
+	t: TestHarness,
+	args: {
+		direction: "inbound" | "outbound";
+		amount: number;
+		mortgageId?: Id<"mortgages">;
+		obligationId?: Id<"obligations">;
+		lenderId?: Id<"lenders">;
+		borrowerId?: Id<"borrowers">;
+		dispersalEntryId?: Id<"dispersalEntries">;
+		confirmedAt?: number;
+	}
+): Promise<Id<"transferRequests">> {
+	return t.run(async (ctx) => {
+		return ctx.db.insert("transferRequests", {
+			status: "confirmed",
+			direction: args.direction,
+			amount: args.amount,
+			currency: "CAD",
+			...(args.mortgageId !== undefined && { mortgageId: args.mortgageId }),
+			...(args.obligationId !== undefined && {
+				obligationId: args.obligationId,
+			}),
+			...(args.lenderId !== undefined && { lenderId: args.lenderId }),
+			...(args.borrowerId !== undefined && { borrowerId: args.borrowerId }),
+			...(args.dispersalEntryId !== undefined && {
+				dispersalEntryId: args.dispersalEntryId,
+			}),
+			confirmedAt: args.confirmedAt ?? Date.now() - 10 * 60_000, // 10 min ago
+			createdAt: Date.now(),
+		});
+	});
+}
+
+// ── createReversedTransfer ───────────────────────────────────────────
+// Creates a transferRequests record with status: "reversed".
+
+export async function createReversedTransfer(
+	t: TestHarness,
+	args: {
+		direction: "inbound" | "outbound";
+		amount: number;
+		mortgageId?: Id<"mortgages">;
+		reversedAt?: number;
+	}
+): Promise<Id<"transferRequests">> {
+	return t.run(async (ctx) => {
+		return ctx.db.insert("transferRequests", {
+			status: "reversed",
+			direction: args.direction,
+			amount: args.amount,
+			currency: "CAD",
+			...(args.mortgageId !== undefined && { mortgageId: args.mortgageId }),
+			reversedAt: args.reversedAt ?? Date.now() - 10 * 60_000,
+			createdAt: Date.now(),
+		});
+	});
+}
+
 // ── postTestEntry ────────────────────────────────────────────────────
 // Convenience wrapper around postCashEntryInternal for tests.
 

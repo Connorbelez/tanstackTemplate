@@ -13,6 +13,12 @@ import {
 	checkUnappliedCash,
 	runFullReconciliationSuite,
 } from "./reconciliationSuite";
+import {
+	checkOrphanedConfirmedTransfers,
+	checkOrphanedReversedTransfers,
+	checkStaleOutboundTransfers,
+	checkTransferAmountMismatches,
+} from "./transferReconciliation";
 
 // ── Date filter helpers (YYYY-MM-DD, UTC day boundaries) ───────
 
@@ -340,5 +346,67 @@ export const reconciliationMortgageMonthConservation = cashLedgerQuery
 export const reconciliationFullSuite = cashLedgerQuery
 	.handler(async (ctx) => {
 		return runFullReconciliationSuite(ctx);
+	})
+	.public();
+
+// ── 12. Orphaned Confirmed Transfers ──────────────────────────
+
+export const reconciliationOrphanedConfirmedTransfers = cashLedgerQuery
+	.input({ mortgageId: v.optional(v.id("mortgages")) })
+	.handler(async (ctx, args) => {
+		const result = await checkOrphanedConfirmedTransfers(ctx);
+		if (!args.mortgageId) {
+			return result;
+		}
+		const items = result.items.filter((i) => i.mortgageId === args.mortgageId);
+		return recomputeResult(result, items, (i) => i.amount);
+	})
+	.public();
+
+// ── 13. Orphaned Reversed Transfers ───────────────────────────
+
+export const reconciliationOrphanedReversedTransfers = cashLedgerQuery
+	.input({ mortgageId: v.optional(v.id("mortgages")) })
+	.handler(async (ctx, args) => {
+		const result = await checkOrphanedReversedTransfers(ctx);
+		if (!args.mortgageId) {
+			return result;
+		}
+		const items = result.items.filter((i) => i.mortgageId === args.mortgageId);
+		return recomputeResult(result, items, (i) => i.amount);
+	})
+	.public();
+
+// ── 14. Stale Outbound Transfers ──────────────────────────────
+
+export const reconciliationStaleOutboundTransfers = cashLedgerQuery
+	.handler(async (ctx) => {
+		return checkStaleOutboundTransfers(ctx);
+	})
+	.public();
+
+// ── 15. Transfer Amount Mismatches ────────────────────────────
+
+export const reconciliationTransferAmountMismatches = cashLedgerQuery
+	.input({ mortgageId: v.optional(v.id("mortgages")) })
+	.handler(async (ctx, args) => {
+		const result = await checkTransferAmountMismatches(ctx);
+		if (!args.mortgageId) {
+			return result;
+		}
+		// Join through transfer to filter by mortgage
+		const mortgageId = args.mortgageId;
+		const mortgageTransferIds = new Set<string>();
+		const transfers = await ctx.db
+			.query("transferRequests")
+			.withIndex("by_mortgage", (q) => q.eq("mortgageId", mortgageId))
+			.collect();
+		for (const t of transfers) {
+			mortgageTransferIds.add(t._id as string);
+		}
+		const items = result.items.filter((i) =>
+			mortgageTransferIds.has(i.transferRequestId as string)
+		);
+		return recomputeResult(result, items, (i) => Math.abs(i.differenceCents));
 	})
 	.public();

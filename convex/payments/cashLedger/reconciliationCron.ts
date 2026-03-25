@@ -45,6 +45,12 @@ const logCashLedgerReconciliationAlertsRef = makeInternalRef<
 	null
 >("payments/cashLedger/reconciliationCron:logCashLedgerReconciliationAlerts");
 
+const logCashLedgerReconciliationFatalRef = makeInternalRef<
+	"mutation",
+	{ errorMessage: string },
+	null
+>("payments/cashLedger/reconciliationCron:logCashLedgerReconciliationFatal");
+
 // ── Internal Query: run the full reconciliation suite ────────
 
 export const reconcileCashLedgerInternal = internalQuery({
@@ -71,12 +77,15 @@ export const logCashLedgerReconciliationAlerts = internalMutation({
 		unhealthyCheckNames: v.array(v.string()),
 	},
 	handler: async (ctx, args) => {
+		const isHealthy = args.totalGapCount === 0;
 		await auditLog.log(ctx, {
-			action: "cash_ledger_reconciliation.gaps_found",
+			action: isHealthy
+				? "cash_ledger_reconciliation.healthy"
+				: "cash_ledger_reconciliation.gaps_found",
 			actorId: "system",
 			resourceType: "reconciliation",
 			resourceId: "cash-ledger-daily",
-			severity: "error",
+			severity: isHealthy ? "info" : "error",
 			metadata: {
 				checkedAt: args.checkedAt,
 				checkSummaries: args.checkSummaries,
@@ -87,20 +96,64 @@ export const logCashLedgerReconciliationAlerts = internalMutation({
 	},
 });
 
+// ── Internal Mutation: log fatal reconciliation failure ──────
+
+export const logCashLedgerReconciliationFatal = internalMutation({
+	args: {
+		errorMessage: v.string(),
+	},
+	handler: async (ctx, args) => {
+		await auditLog.log(ctx, {
+			action: "cash_ledger_reconciliation.fatal_error",
+			actorId: "system",
+			resourceType: "reconciliation",
+			resourceId: "cash-ledger-daily",
+			severity: "error",
+			metadata: {
+				errorMessage: args.errorMessage,
+			},
+		});
+	},
+});
+
 // ── Internal Action: cron entry point ────────────────────────
 
 export const cashLedgerReconciliation = internalAction({
 	handler: async (ctx) => {
-		const result = await ctx.runQuery(reconcileCashLedgerInternalRef, {});
+		let result: FullReconciliationResult;
+		try {
+			result = await ctx.runQuery(reconcileCashLedgerInternalRef, {});
+		} catch (error) {
+			const errorMessage =
+				error instanceof Error ? error.message : String(error);
+			console.error(
+				"[CASH LEDGER RECONCILIATION FATAL] Suite query failed entirely:",
+				errorMessage
+			);
+			await ctx.runMutation(logCashLedgerReconciliationFatalRef, {
+				errorMessage,
+			});
+			return null;
+		}
 
 		if (result.isHealthy) {
 			console.info("[CASH LEDGER RECONCILIATION] Daily check passed.");
+			await ctx.runMutation(logCashLedgerReconciliationAlertsRef, {
+				checkedAt: result.checkedAt,
+				unhealthyCheckNames: [],
+				totalGapCount: 0,
+				checkSummaries: [],
+			});
 		} else {
 			console.error(
 				`[CASH LEDGER RECONCILIATION P0] ${result.totalGapCount} gaps in: ${result.unhealthyCheckNames.join(", ")}`
 			);
 
-			const allChecks = [...result.checkResults, ...result.conservationResults];
+			const allChecks = [
+				...result.checkResults,
+				...result.conservationResults,
+				...result.transferResults,
+			];
 			const checkSummaries = allChecks.map((cr) => {
 				// Extract up to 3 sample IDs from items for investigability
 				const sampleIds = (cr.items as Record<string, unknown>[])
@@ -111,6 +164,9 @@ export const cashLedgerReconciliation = internalAction({
 							item.obligationId ??
 							item.attemptId ??
 							item.postingGroupId ??
+							item.transferRequestId ??
+							item.journalEntryId ??
+							item.dispersalEntryId ??
 							item.mortgageId;
 						return String(id ?? "unknown");
 					});

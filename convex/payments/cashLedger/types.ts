@@ -94,7 +94,7 @@ export const CASH_ENTRY_TYPE_FAMILY_MAP: Record<
 	},
 	SUSPENSE_ESCALATED: {
 		debit: ["SUSPENSE"],
-		credit: ["BORROWER_RECEIVABLE"],
+		credit: ["BORROWER_RECEIVABLE", "LENDER_PAYABLE"],
 	},
 	SUSPENSE_ROUTED: {
 		debit: ["SUSPENSE"],
