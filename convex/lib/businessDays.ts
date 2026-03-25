@@ -78,12 +78,11 @@ export function addBusinessDays(startDate: string, days: number): string {
  * Returns 0 if start >= end.
  */
 export function countBusinessDaysBetween(start: string, end: string): number {
-	if (start >= end) {
-		return 0;
-	}
-
 	const d = parseUTCDate(start);
 	const endMs = parseUTCDate(end).getTime();
+	if (d.getTime() >= endMs) {
+		return 0;
+	}
 	let count = 0;
 
 	while (d.getTime() < endMs) {

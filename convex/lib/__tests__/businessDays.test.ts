@@ -77,6 +77,15 @@ describe("countBusinessDaysBetween", () => {
 		expect(countBusinessDaysBetween("2026-03-26", "2026-03-25")).toBe(0);
 	});
 
+	it("parses and validates both dates before the start >= end short-circuit", () => {
+		expect(() => countBusinessDaysBetween("not-a-date", "2026-03-25")).toThrow(
+			"strict YYYY-MM-DD"
+		);
+		expect(() => countBusinessDaysBetween("2026-03-30", "not-a-date")).toThrow(
+			"strict YYYY-MM-DD"
+		);
+	});
+
 	it("counts Monday and Tuesday from Monday to Wednesday", () => {
 		// Monday (inclusive) to Wednesday (exclusive) = Mon, Tue = 2
 		expect(countBusinessDaysBetween("2026-03-23", "2026-03-25")).toBe(2);

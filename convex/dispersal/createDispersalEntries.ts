@@ -78,26 +78,43 @@ async function resolvePaymentMethodFromCollection(
 				.collect()
 		)
 	);
-	const planEntries = planEntryBatches.flat();
+	const planEntries = planEntryBatches
+		.flat()
+		.filter((e) => e.obligationIds.includes(obligationId));
+
+	let bestConfirmed: { method: string; creationTime: number } | undefined;
 	for (const entry of planEntries) {
-		if (!entry.obligationIds.includes(obligationId)) {
-			continue;
-		}
 		const attempts = await ctx.db
 			.query("collectionAttempts")
 			.withIndex("by_plan_entry", (q) => q.eq("planEntryId", entry._id))
 			.collect();
-		const confirmedWithMethod = attempts
-			.filter((a) => a.status === "confirmed" && a.method)
-			.sort((a, b) => b._creationTime - a._creationTime)[0];
-		if (confirmedWithMethod) {
-			return confirmedWithMethod.method;
-		}
-		if (entry.method) {
-			return entry.method;
+		for (const a of attempts) {
+			if (
+				a.status === "confirmed" &&
+				a.method &&
+				(!bestConfirmed || a._creationTime > bestConfirmed.creationTime)
+			) {
+				bestConfirmed = { method: a.method, creationTime: a._creationTime };
+			}
 		}
 	}
-	return undefined;
+	if (bestConfirmed) {
+		return bestConfirmed.method;
+	}
+
+	let bestPlanMethod: { method: string; creationTime: number } | undefined;
+	for (const entry of planEntries) {
+		if (
+			entry.method &&
+			(!bestPlanMethod || entry._creationTime > bestPlanMethod.creationTime)
+		) {
+			bestPlanMethod = {
+				method: entry.method,
+				creationTime: entry._creationTime,
+			};
+		}
+	}
+	return bestPlanMethod?.method;
 }
 
 function validateIntegerCents(value: number, label: string) {
