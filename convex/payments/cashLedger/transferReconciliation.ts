@@ -301,6 +301,16 @@ export async function checkStaleOutboundTransfers(
 				`[TRANSFER-RECONCILIATION] dispersalEntry missing for outbound transfer=${transfer._id}, ` +
 					`dispersalEntryId=${transfer.dispersalEntryId}`
 			);
+			const amount = transfer.amount ?? 0;
+			items.push({
+				transferRequestId: transfer._id,
+				dispersalEntryId: transfer.dispersalEntryId,
+				dispersalStatus: "missing",
+				amount,
+				confirmedAt: transfer.confirmedAt ?? transfer.createdAt,
+				ageDays: ageDays(transfer.confirmedAt ?? transfer.createdAt, now),
+			});
+			totalAmountCents += amount;
 			continue;
 		}
 
