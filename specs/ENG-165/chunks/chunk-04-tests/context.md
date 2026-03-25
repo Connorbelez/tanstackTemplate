@@ -28,6 +28,8 @@ const modules = import.meta.glob("/convex/**/*.ts");
 ### createHarness
 Creates a `convex-test` instance with the full schema. Sets `DISABLE_CASH_LEDGER_HASHCHAIN=true` to avoid needing workflow components.
 
+> **Component-harness exception:** Tests that exercise internal actions depending on `auditLog` or `auditTrail` components (e.g., `reconciliationSuite.test.ts`) **cannot** use the plain `createHarness(modules)` helper. They must instead create a component-aware harness that registers those components so the runtime can resolve `ctx.components.auditLog` / `ctx.components.auditTrail`. See `reconciliationSuite.test.ts` for the reference setup.
+
 ### seedMinimalEntities
 Seeds broker, borrower, 2 lenders, property, mortgage, and ownership ledger accounts. Returns `{ borrowerId, lenderAId, lenderBId, mortgageId }`.
 
@@ -265,7 +267,7 @@ Run:
 - `convex/dispersal/__tests__/` — self-healing test patterns (if they exist)
 
 ## Key Testing Rules
-- Always use `createHarness(modules)` with `import.meta.glob("/convex/**/*.ts")`
+- Always use `createHarness(modules)` with `import.meta.glob("/convex/**/*.ts")` — **except** when the test exercises internal actions that depend on audit components (`auditLog`, `auditTrail`). In that case, use a component harness that registers those components (see `reconciliationSuite.test.ts`).
 - Use `seedMinimalEntities(t)` for base test data
 - Use `SYSTEM_SOURCE` for source attribution in test entries
 - Journal entry amounts are bigint (`v.int64`) — pass as `number` to `postTestEntry` (it handles conversion)
