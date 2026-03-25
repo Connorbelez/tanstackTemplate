@@ -195,19 +195,22 @@ import type { Id } from "../../_generated/dataModel";
 export const MAX_TRANSFER_HEALING_ATTEMPTS = 3;
 
 export interface TransferHealingCandidate {
-    transferRequestId: Id<"transferRequests">;
-    direction: "inbound" | "outbound";
     amount: number;
+    confirmedAt: number;
+    direction: "inbound" | "outbound";
+    lenderId?: Id<"lenders">;
     mortgageId?: Id<"mortgages">;
     obligationId?: Id<"obligations">;
-    confirmedAt: number;
+    transferRequestId: Id<"transferRequests">;
 }
 
 export interface TransferHealingResult {
     candidatesFound: number;
     checkedAt: number;
     escalated: number;
+    pendingNoEffect: number;
     retriggered: number;
+    skipped: number;
 }
 ```
 
