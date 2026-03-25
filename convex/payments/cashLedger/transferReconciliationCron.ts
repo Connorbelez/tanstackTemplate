@@ -50,7 +50,10 @@ const retriggerTransferConfirmationRef = makeInternalRef<
 		obligationId?: Id<"obligations">;
 		lenderId?: Id<"lenders">;
 	},
-	{ action: "skipped" | "retriggered" | "escalated"; attemptCount: number }
+	{
+		action: "skipped" | "retriggered" | "escalated" | "pending_no_effect";
+		attemptCount: number;
+	}
 >(
 	"payments/cashLedger/transferReconciliationCron:retriggerTransferConfirmation"
 );
@@ -205,6 +208,28 @@ export const retriggerTransferConfirmation = internalMutation({
 			// For inbound transfers, credit BORROWER_RECEIVABLE; for outbound, credit LENDER_PAYABLE
 			const creditFamily =
 				args.direction === "inbound" ? "BORROWER_RECEIVABLE" : "LENDER_PAYABLE";
+
+			// Cannot resolve LENDER_PAYABLE account without a lenderId
+			if (creditFamily === "LENDER_PAYABLE" && !args.lenderId) {
+				console.error(
+					`[TRANSFER-HEALING] Cannot escalate transfer=${args.transferRequestId} ` +
+						"to SUSPENSE: missing lenderId. Skipping journal entry."
+				);
+				await auditLog.log(ctx, {
+					action: "transfer.self_healing_escalated_no_lender",
+					actorId: "system",
+					resourceType: "transferRequest",
+					resourceId: args.transferRequestId,
+					severity: "error",
+					metadata: {
+						attemptCount,
+						mortgageId: args.mortgageId,
+						direction: args.direction,
+						amount: args.amount,
+					},
+				});
+				return { action: "escalated" as const, attemptCount };
+			}
 			const creditAccountSpec =
 				creditFamily === "LENDER_PAYABLE"
 					? {
@@ -296,7 +321,10 @@ export const retriggerTransferConfirmation = internalMutation({
 			}
 		);
 
-		return { action: "retriggered" as const, attemptCount };
+		// NOTE: retryTransferConfirmationEffect is currently a no-op placeholder.
+		// Return "pending_no_effect" so the batch summary distinguishes real retries
+		// from placeholder no-ops. Change to "retriggered" once a real publish hook exists.
+		return { action: "pending_no_effect" as const, attemptCount };
 	},
 });
 
@@ -319,6 +347,7 @@ export const transferReconciliationCron = internalAction({
 				checkedAt: Date.now(),
 				candidatesFound: 0,
 				retriggered: 0,
+				pendingNoEffect: 0,
 				escalated: 0,
 				skipped: 0,
 			};
@@ -329,6 +358,7 @@ export const transferReconciliationCron = internalAction({
 		);
 
 		let retriggered = 0;
+		let pendingNoEffect = 0;
 		let escalated = 0;
 		let skipped = 0;
 		for (const candidate of candidates) {
@@ -344,6 +374,8 @@ export const transferReconciliationCron = internalAction({
 
 				if (result.action === "retriggered") {
 					retriggered++;
+				} else if (result.action === "pending_no_effect") {
+					pendingNoEffect++;
 				} else if (result.action === "escalated") {
 					escalated++;
 				} else if (result.action === "skipped") {
@@ -362,15 +394,22 @@ export const transferReconciliationCron = internalAction({
 				`[TRANSFER-HEALING P0] ${escalated} transfers escalated to SUSPENSE`
 			);
 		}
+		if (pendingNoEffect > 0) {
+			console.warn(
+				`[TRANSFER-HEALING] ${pendingNoEffect} transfers scheduled placeholder retry (no real effect)`
+			);
+		}
 		console.info(
 			`[TRANSFER-HEALING] Complete: ${candidates.length} found, ` +
-				`${retriggered} retriggered, ${escalated} escalated, ${skipped} skipped`
+				`${retriggered} retriggered, ${pendingNoEffect} pending (no effect), ` +
+				`${escalated} escalated, ${skipped} skipped`
 		);
 
 		return {
 			checkedAt: Date.now(),
 			candidatesFound: candidates.length,
 			retriggered,
+			pendingNoEffect,
 			escalated,
 			skipped,
 		};

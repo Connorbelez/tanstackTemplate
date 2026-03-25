@@ -16,6 +16,7 @@ export interface TransferHealingResult {
 	candidatesFound: number;
 	checkedAt: number;
 	escalated: number;
+	pendingNoEffect: number;
 	retriggered: number;
 	skipped: number;
 }
