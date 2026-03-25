@@ -17,7 +17,10 @@ import type { Id } from "../../../_generated/dataModel";
 // All arithmetic in BigInt.
 export async function assertObligationConservation(
   t: TestHarness,
-  obligationId: Id<"obligations">
+  args: {
+    obligationId: Id<"obligations">;
+    postingGroupId: string;
+  }
 ): Promise<void>
 
 // T-002: Assert CONTROL:ALLOCATION balance is zero
