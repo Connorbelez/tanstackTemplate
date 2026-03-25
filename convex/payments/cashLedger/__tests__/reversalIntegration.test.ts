@@ -182,7 +182,7 @@ async function runFullSettlementPipeline(
 		return postCashReceiptForObligation(ctx, {
 			obligationId,
 			amount: TOTAL_AMOUNT,
-			idempotencyKey: `cash-receipt-integration-${attemptId}`,
+			idempotencyKey: `cash-ledger:cash-receipt-integration-${attemptId}`,
 			attemptId,
 			source: SYSTEM_SOURCE,
 		});
