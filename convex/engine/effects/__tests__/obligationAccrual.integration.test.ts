@@ -9,7 +9,7 @@ import {
 } from "../../../payments/cashLedger/__tests__/testUtils";
 import { accrueObligation } from "../obligationAccrual";
 
-const _modules = import.meta.glob("/convex/**/*.ts");
+// const _modules = import.meta.glob("/convex/**/*.ts");
 
 interface AccrueObligationHandler {
 	_handler: (
