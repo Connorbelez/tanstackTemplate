@@ -642,7 +642,7 @@ describe("T-011: causedBy linkage", () => {
 // ═══════════════════════════════════════════════════════════════════
 
 describe("T-012: Posting group integrity", () => {
-	it("reversal posting group has zero CONTROL:ALLOCATION balance", async () => {
+	it("allocation + reversal posting groups net to zero CONTROL:ALLOCATION balance", async () => {
 		const t = createHarness(modules);
 		auditLogTest.register(t, "auditLog");
 		const state = await setupFullSettlementState(t);
