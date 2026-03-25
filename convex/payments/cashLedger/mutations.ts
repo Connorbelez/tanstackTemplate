@@ -7,8 +7,10 @@ import { sourceValidator } from "../../engine/validators";
 import { adminMutation } from "../../fluent";
 import { requireCashAccount } from "./accounts";
 import {
+	postCashApplication,
 	postCashCorrectionForEntry,
 	postObligationWriteOff,
+	postSuspenseResolution,
 } from "./integrations";
 import { postCashEntryInternal } from "./postEntry";
 import { buildIdempotencyKey } from "./types";
@@ -231,5 +233,168 @@ export const writeOffObligationBalance = adminMutation
 			writtenOffAmount: args.amount,
 			hasActiveCollectionWarning,
 		};
+	})
+	.public();
+
+// ── Cash Application ─────────────────────────────────────────────────
+
+export const applyCashToObligation = adminMutation
+	.input({
+		sourceAccountId: v.id("cash_ledger_accounts"),
+		targetObligationId: v.id("obligations"),
+		amount: v.number(),
+		reason: v.string(),
+		sourceEntryId: v.optional(v.id("cash_ledger_journal_entries")),
+		/** Caller-generated UUID that uniquely identifies this cash application intent. */
+		idempotencyKey: v.string(),
+	})
+	.handler(async (ctx, args) => {
+		// 1. Validate amount
+		if (!Number.isSafeInteger(args.amount) || args.amount <= 0) {
+			throw new ConvexError(
+				"Cash application amount must be a positive safe integer (cents)"
+			);
+		}
+
+		// 2. Validate reason
+		const reason = args.reason.trim();
+		if (reason.length === 0) {
+			throw new ConvexError("Cash application reason cannot be blank");
+		}
+
+		// 3. Build source from viewer context
+		const source: CommandSource = {
+			actorType: "admin",
+			actorId: ctx.viewer.authId,
+			channel: "admin_dashboard",
+		};
+
+		// 4. Post the cash application entry
+		const result = await postCashApplication(ctx, {
+			sourceAccountId: args.sourceAccountId,
+			targetObligationId: args.targetObligationId,
+			amount: args.amount,
+			reason,
+			sourceEntryId: args.sourceEntryId,
+			source,
+			idempotencyKey: args.idempotencyKey,
+		});
+
+		// 5. Audit log
+		await auditLog.log(ctx, {
+			action: "cashLedger.cash_applied",
+			actorId: ctx.viewer.authId,
+			resourceType: "obligation",
+			resourceId: args.targetObligationId,
+			severity: "info",
+			metadata: {
+				amount: args.amount,
+				reason,
+				sourceAccountId: args.sourceAccountId,
+				entryId: result.entry._id,
+			},
+		});
+
+		return { entry: result.entry, appliedAmount: args.amount };
+	})
+	.public();
+
+// ── Suspense Resolution ──────────────────────────────────────────────
+
+export const resolveSuspenseItem = adminMutation
+	.input({
+		suspenseAccountId: v.id("cash_ledger_accounts"),
+		resolutionType: v.union(
+			v.literal("match"),
+			v.literal("refund"),
+			v.literal("write_off")
+		),
+		amount: v.number(),
+		obligationId: v.optional(v.id("obligations")),
+		reason: v.string(),
+		sourceEntryId: v.optional(v.id("cash_ledger_journal_entries")),
+		/** Caller-generated UUID that uniquely identifies this resolution intent. */
+		idempotencyKey: v.string(),
+	})
+	.handler(async (ctx, args) => {
+		// 1. Validate amount
+		if (!Number.isSafeInteger(args.amount) || args.amount <= 0) {
+			throw new ConvexError(
+				"Suspense resolution amount must be a positive safe integer (cents)"
+			);
+		}
+
+		// 2. Validate reason
+		const reason = args.reason.trim();
+		if (reason.length === 0) {
+			throw new ConvexError("Suspense resolution reason cannot be blank");
+		}
+
+		// 3. Build source from viewer context
+		const source: CommandSource = {
+			actorType: "admin",
+			actorId: ctx.viewer.authId,
+			channel: "admin_dashboard",
+		};
+
+		// 4. Build the resolution union object from flat args
+		let resolution:
+			| { type: "match"; obligationId: Id<"obligations">; amount: number }
+			| { type: "refund"; amount: number; reason: string }
+			| { type: "write_off"; amount: number; reason: string };
+
+		if (args.resolutionType === "match") {
+			if (!args.obligationId) {
+				throw new ConvexError(
+					'Resolution type "match" requires an obligationId'
+				);
+			}
+			resolution = {
+				type: "match",
+				obligationId: args.obligationId,
+				amount: args.amount,
+			};
+		} else if (args.resolutionType === "refund") {
+			resolution = {
+				type: "refund",
+				amount: args.amount,
+				reason,
+			};
+		} else {
+			resolution = {
+				type: "write_off",
+				amount: args.amount,
+				reason,
+			};
+		}
+
+		// 5. Call postSuspenseResolution
+		const result = await postSuspenseResolution(ctx, {
+			suspenseAccountId: args.suspenseAccountId,
+			resolution,
+			sourceEntryId: args.sourceEntryId,
+			source,
+			reason,
+			idempotencyKey: args.idempotencyKey,
+		});
+
+		// 6. Audit log — severity based on resolution type
+		const severity = args.resolutionType === "match" ? "info" : "warning";
+
+		await auditLog.log(ctx, {
+			action: "cashLedger.suspense_resolved",
+			actorId: ctx.viewer.authId,
+			resourceType: "cash_ledger_account",
+			resourceId: args.suspenseAccountId,
+			severity,
+			metadata: {
+				resolutionType: args.resolutionType,
+				amount: args.amount,
+				reason,
+				obligationId: args.obligationId ?? null,
+			},
+		});
+
+		return { resolutionType: args.resolutionType, ...result };
 	})
 	.public();

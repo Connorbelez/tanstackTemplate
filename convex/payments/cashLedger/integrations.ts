@@ -764,6 +764,214 @@ export async function postCashReceiptWithSuspenseFallback(
 	});
 }
 
+// ── Cash Application ─────────────────────────────────────────────────
+
+export async function postCashApplication(
+	ctx: MutationCtx,
+	args: {
+		sourceAccountId: Id<"cash_ledger_accounts">;
+		targetObligationId: Id<"obligations">;
+		amount: number;
+		reason: string;
+		sourceEntryId?: Id<"cash_ledger_journal_entries">;
+		source: CommandSource;
+		/** Caller-supplied idempotency key — must be stable across retries. */
+		idempotencyKey: string;
+	}
+) {
+	// 1. Validate source account exists and is UNAPPLIED_CASH or SUSPENSE
+	const sourceAccount = await ctx.db.get(args.sourceAccountId);
+	if (!sourceAccount) {
+		throw new ConvexError(`Source account not found: ${args.sourceAccountId}`);
+	}
+	if (
+		sourceAccount.family !== "UNAPPLIED_CASH" &&
+		sourceAccount.family !== "SUSPENSE"
+	) {
+		throw new ConvexError(
+			`Source account must be UNAPPLIED_CASH or SUSPENSE family, got ${sourceAccount.family}`
+		);
+	}
+
+	// 2. Validate sufficient balance
+	const balance = getCashAccountBalance(sourceAccount);
+	if (balance < BigInt(args.amount)) {
+		throw new ConvexError(
+			`Insufficient balance in source account: balance=${balance}, requested=${args.amount}`
+		);
+	}
+
+	// 3. Load target obligation and validate status
+	const obligation = await ctx.db.get(args.targetObligationId);
+	if (!obligation) {
+		throw new ConvexError(
+			`Target obligation not found: ${args.targetObligationId}`
+		);
+	}
+	if (obligation.status === "settled" || obligation.status === "waived") {
+		throw new ConvexError(
+			`Cannot apply cash to obligation in "${obligation.status}" status`
+		);
+	}
+
+	// 4. Find or create BORROWER_RECEIVABLE account for the obligation
+	const receivableAccount = await getOrCreateCashAccount(ctx, {
+		family: "BORROWER_RECEIVABLE",
+		mortgageId: obligation.mortgageId,
+		obligationId: obligation._id,
+		borrowerId: obligation.borrowerId,
+	});
+
+	// 5. Choose entry type based on source family
+	const entryType: CashEntryType =
+		sourceAccount.family === "SUSPENSE" ? "SUSPENSE_ESCALATED" : "CASH_APPLIED";
+
+	// 6. Post journal entry
+	return postCashEntryInternal(ctx, {
+		entryType,
+		effectiveDate: unixMsToBusinessDate(Date.now()),
+		amount: args.amount,
+		debitAccountId: args.sourceAccountId,
+		creditAccountId: receivableAccount._id,
+		causedBy: args.sourceEntryId,
+		idempotencyKey: buildIdempotencyKey(
+			"cash-application",
+			args.sourceAccountId,
+			args.targetObligationId,
+			args.idempotencyKey
+		),
+		mortgageId: obligation.mortgageId,
+		obligationId: obligation._id,
+		borrowerId: obligation.borrowerId,
+		source: normalizeSource(args.source),
+		reason: args.reason,
+		metadata: {
+			applicationType: "cash_application",
+			sourceFamily: sourceAccount.family,
+		},
+	});
+}
+
+// ── Suspense Resolution ──────────────────────────────────────────────
+
+export async function postSuspenseResolution(
+	ctx: MutationCtx,
+	args: {
+		suspenseAccountId: Id<"cash_ledger_accounts">;
+		resolution:
+			| { type: "match"; obligationId: Id<"obligations">; amount: number }
+			| { type: "refund"; amount: number; reason: string }
+			| { type: "write_off"; amount: number; reason: string };
+		sourceEntryId?: Id<"cash_ledger_journal_entries">;
+		source: CommandSource;
+		reason: string;
+		/** Caller-supplied idempotency key — must be stable across retries. */
+		idempotencyKey: string;
+	}
+): Promise<
+	| Awaited<ReturnType<typeof postCashEntryInternal>>
+	| { type: "refund_requested"; auditLogged: false }
+> {
+	// 1. Validate suspense account exists and is SUSPENSE family
+	const suspenseAccount = await ctx.db.get(args.suspenseAccountId);
+	if (!suspenseAccount) {
+		throw new ConvexError(
+			`Suspense account not found: ${args.suspenseAccountId}`
+		);
+	}
+	if (suspenseAccount.family !== "SUSPENSE") {
+		throw new ConvexError(
+			`Account must be SUSPENSE family, got ${suspenseAccount.family}`
+		);
+	}
+
+	// 2. Validate sufficient balance
+	const balance = getCashAccountBalance(suspenseAccount);
+	if (balance < BigInt(args.resolution.amount)) {
+		throw new ConvexError(
+			`Insufficient suspense balance: balance=${balance}, requested=${args.resolution.amount}`
+		);
+	}
+
+	const normalizedSource = normalizeSource(args.source);
+
+	// 3. Handle resolution by type
+	if (args.resolution.type === "match") {
+		// Suspense match is an admin correction — enforce source
+		assertAdminCorrectionSource(normalizedSource);
+		// Delegate to postCashApplication — it handles SUSPENSE → BORROWER_RECEIVABLE
+		// via SUSPENSE_ESCALATED entry type
+		return postCashApplication(ctx, {
+			sourceAccountId: args.suspenseAccountId,
+			targetObligationId: args.resolution.obligationId,
+			amount: args.resolution.amount,
+			reason: args.reason,
+			sourceEntryId: args.sourceEntryId,
+			source: args.source,
+			idempotencyKey: args.idempotencyKey,
+		});
+	}
+
+	if (args.resolution.type === "write_off") {
+		// Use CORRECTION entry type (ALL_FAMILIES) to debit WRITE_OFF, credit SUSPENSE
+		assertAdminCorrectionSource(normalizedSource);
+
+		// Find or create WRITE_OFF account scoped to the mortgage
+		const writeOffAccount = await getOrCreateCashAccount(ctx, {
+			family: "WRITE_OFF",
+			mortgageId: suspenseAccount.mortgageId,
+		});
+
+		// Determine causedBy: use provided sourceEntryId, or find most recent SUSPENSE_ROUTED entry
+		let causedBy = args.sourceEntryId;
+		if (!causedBy) {
+			const recentSuspenseEntry = await ctx.db
+				.query("cash_ledger_journal_entries")
+				.withIndex("by_debit_account_and_timestamp", (q) =>
+					q.eq("debitAccountId", args.suspenseAccountId)
+				)
+				.order("desc")
+				.filter((q) => q.eq(q.field("entryType"), "SUSPENSE_ROUTED"))
+				.first();
+			if (recentSuspenseEntry) {
+				causedBy = recentSuspenseEntry._id;
+			}
+		}
+
+		if (!causedBy) {
+			throw new ConvexError(
+				"CORRECTION entries must reference causedBy — no sourceEntryId provided and no SUSPENSE_ROUTED entry found"
+			);
+		}
+
+		return postCashEntryInternal(ctx, {
+			entryType: "CORRECTION",
+			effectiveDate: unixMsToBusinessDate(Date.now()),
+			amount: args.resolution.amount,
+			debitAccountId: writeOffAccount._id,
+			creditAccountId: args.suspenseAccountId,
+			causedBy,
+			idempotencyKey: buildIdempotencyKey(
+				"suspense-write-off",
+				args.suspenseAccountId,
+				args.idempotencyKey
+			),
+			mortgageId: suspenseAccount.mortgageId,
+			source: normalizedSource,
+			reason: args.reason,
+			metadata: {
+				resolutionType: "write_off",
+				suspenseAccountId: args.suspenseAccountId,
+			},
+		});
+	}
+
+	// refund resolution — intent signal only, no journal entry posted.
+	// Audit logging is handled by the mutation layer (resolveSuspenseItem) for consistency
+	// with match and write_off paths. A separate process must execute the actual refund.
+	return { type: "refund_requested" as const, auditLogged: false as const };
+}
+
 // ── Cash Correction ──────────────────────────────────────────────────
 
 const CORRECTION_REQUIRES_ADMIN =
