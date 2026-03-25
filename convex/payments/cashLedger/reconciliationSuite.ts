@@ -698,17 +698,31 @@ export async function runFullReconciliationSuite(
 	const opts: ReconciliationSuiteOptions = { ...options, nowMs: checkedAt };
 
 	function extractSettledResults(
-		settled: PromiseSettledResult<ReconciliationCheckResult<unknown>>[]
+		settled: PromiseSettledResult<ReconciliationCheckResult<unknown>>[],
+		checkNames: string[]
 	): ReconciliationCheckResult<unknown>[] {
 		const results: ReconciliationCheckResult<unknown>[] = [];
-		for (const s of settled) {
+		for (let i = 0; i < settled.length; i++) {
+			const s = settled[i];
 			if (s.status === "fulfilled") {
 				results.push(s.value);
 			} else {
+				const errorMessage =
+					s.reason instanceof Error ? s.reason.message : String(s.reason);
 				console.error(
-					"[RECONCILIATION] Check failed:",
-					s.reason instanceof Error ? s.reason.message : String(s.reason)
+					`[RECONCILIATION] Check "${checkNames[i]}" rejected:`,
+					errorMessage
 				);
+				// Treat rejected checks as unhealthy rather than dropping them,
+				// so downstream cron/auditing cannot report a false "healthy" run.
+				results.push({
+					checkedAt,
+					checkName: checkNames[i],
+					count: 1,
+					isHealthy: false,
+					items: [{ error: errorMessage, rejected: true }],
+					totalAmountCents: 0,
+				});
 			}
 		}
 		return results;
@@ -739,9 +753,26 @@ export async function runFullReconciliationSuite(
 			]),
 		]);
 
-	const checkResults = extractSettledResults(checkSettled);
-	const conservationResults = extractSettledResults(conservationSettled);
-	const transferResults = extractSettledResults(transferSettled);
+	const checkResults = extractSettledResults(checkSettled, [
+		"unappliedCash",
+		"negativePayables",
+		"obligationBalanceDrift",
+		"controlNetZero",
+		"suspenseItems",
+		"orphanedObligations",
+		"stuckCollections",
+		"orphanedUnappliedCash",
+	]);
+	const conservationResults = extractSettledResults(conservationSettled, [
+		"obligationConservation",
+		"mortgageMonthConservation",
+	]);
+	const transferResults = extractSettledResults(transferSettled, [
+		"orphanedConfirmedTransfers",
+		"orphanedReversedTransfers",
+		"staleOutboundTransfers",
+		"transferAmountMismatches",
+	]);
 
 	const allResults = [
 		...checkResults,
