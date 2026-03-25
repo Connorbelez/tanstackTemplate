@@ -56,6 +56,10 @@ const ATTEMPT_CANCELLED = {
 	type: "ATTEMPT_CANCELLED" as const,
 	reason: "user-request",
 };
+const PAYMENT_REVERSED = {
+	type: "PAYMENT_REVERSED" as const,
+	reason: "NSF",
+};
 
 const ALL_EVENTS = [
 	DRAW_INITIATED,
@@ -66,6 +70,7 @@ const ALL_EVENTS = [
 	MAX_RETRIES_EXCEEDED,
 	RETRY_INITIATED,
 	ATTEMPT_CANCELLED,
+	PAYMENT_REVERSED,
 ] as const;
 
 // ── Tests ───────────────────────────────────────────────────────────
@@ -81,13 +86,19 @@ describe("collectionAttempt machine", () => {
 		expect(collectionAttemptMachine.id).toBe("collectionAttempt");
 	});
 
-	it("has version 1.0.0", () => {
-		expect(collectionAttemptMachine.version).toBe("1.0.0");
-		expect(COLLECTION_ATTEMPT_MACHINE_VERSION).toBe("1.0.0");
+	it("has version 1.1.0", () => {
+		expect(collectionAttemptMachine.version).toBe("1.1.0");
+		expect(COLLECTION_ATTEMPT_MACHINE_VERSION).toBe("1.1.0");
 	});
 
-	it("confirmed is marked as a final state", () => {
-		expect(collectionAttemptMachine.config.states?.confirmed?.type).toBe(
+	it("confirmed is NOT a final state (has outbound PAYMENT_REVERSED transition)", () => {
+		expect(collectionAttemptMachine.config.states?.confirmed?.type).not.toBe(
+			"final"
+		);
+	});
+
+	it("reversed is marked as a final state", () => {
+		expect(collectionAttemptMachine.config.states?.reversed?.type).toBe(
 			"final"
 		);
 	});
@@ -436,8 +447,20 @@ describe("collectionAttempt machine", () => {
 		});
 	});
 
-	describe("confirmed (terminal)", () => {
-		for (const event of ALL_EVENTS) {
+	describe("confirmed state", () => {
+		it("confirmed -> reversed on PAYMENT_REVERSED fires emitPaymentReversed", () => {
+			const [next, actions] = transition(
+				collectionAttemptMachine,
+				snapshotAt("confirmed"),
+				PAYMENT_REVERSED
+			);
+			expect(next.value).toBe("reversed");
+			expect(actions.map((a) => a.type)).toContain("emitPaymentReversed");
+		});
+
+		for (const event of ALL_EVENTS.filter(
+			(e) => e.type !== "PAYMENT_REVERSED"
+		)) {
 			it(`confirmed ignores ${event.type}`, () => {
 				const [next, actions] = transition(
 					collectionAttemptMachine,
@@ -445,6 +468,20 @@ describe("collectionAttempt machine", () => {
 					event
 				);
 				expect(next.value).toBe("confirmed");
+				expect(actions).toHaveLength(0);
+			});
+		}
+	});
+
+	describe("reversed (terminal)", () => {
+		for (const event of ALL_EVENTS) {
+			it(`reversed ignores ${event.type}`, () => {
+				const [next, actions] = transition(
+					collectionAttemptMachine,
+					snapshotAt("reversed"),
+					event
+				);
+				expect(next.value).toBe("reversed");
 				expect(actions).toHaveLength(0);
 			});
 		}
@@ -616,6 +653,47 @@ describe("collectionAttempt machine", () => {
 			);
 			expect(next.value).toBe("cancelled");
 			expect(actions).toHaveLength(0);
+		});
+
+		it("reversal path: initiated -> pending -> confirmed -> reversed", () => {
+			const [step1] = transition(
+				collectionAttemptMachine,
+				snapshotAt("initiated"),
+				DRAW_INITIATED
+			);
+			expect(step1.value).toBe("pending");
+
+			const [step2] = transition(
+				collectionAttemptMachine,
+				step1,
+				FUNDS_SETTLED
+			);
+			expect(step2.value).toBe("confirmed");
+
+			const [step3, actions3] = transition(
+				collectionAttemptMachine,
+				step2,
+				PAYMENT_REVERSED
+			);
+			expect(step3.value).toBe("reversed");
+			expect(actions3.map((a) => a.type)).toContain("emitPaymentReversed");
+		});
+
+		it("manual payment reversal path: initiated -> confirmed -> reversed", () => {
+			const [step1] = transition(
+				collectionAttemptMachine,
+				snapshotAt("initiated"),
+				FUNDS_SETTLED
+			);
+			expect(step1.value).toBe("confirmed");
+
+			const [step2, actions2] = transition(
+				collectionAttemptMachine,
+				step1,
+				PAYMENT_REVERSED
+			);
+			expect(step2.value).toBe("reversed");
+			expect(actions2.map((a) => a.type)).toContain("emitPaymentReversed");
 		});
 	});
 });

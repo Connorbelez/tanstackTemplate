@@ -58,4 +58,7 @@ export const effectRegistry: Record<
 	recordProviderRef:
 		internal.engine.effects.collectionAttempt.recordProviderRef,
 	notifyAdmin: internal.engine.effects.collectionAttempt.notifyAdmin,
+	// Collection Attempt reversal effect (ENG-173)
+	emitPaymentReversed:
+		internal.engine.effects.collectionAttempt.emitPaymentReversed,
 };

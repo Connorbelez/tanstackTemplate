@@ -3,7 +3,10 @@ import { internal } from "../../_generated/api";
 import type { Id } from "../../_generated/dataModel";
 import type { MutationCtx } from "../../_generated/server";
 import { internalMutation } from "../../_generated/server";
-import { postOverpaymentToUnappliedCash } from "../../payments/cashLedger/integrations";
+import {
+	postOverpaymentToUnappliedCash,
+	postPaymentReversalCascade,
+} from "../../payments/cashLedger/integrations";
 import { executeTransition } from "../transition";
 import type { CommandSource } from "../types";
 import { effectPayloadValidator } from "../validators";
@@ -193,5 +196,52 @@ export const notifyAdmin = internalMutation({
 		console.info(
 			`[notifyAdmin] stub — permanent failure on attempt=${args.entityId}`
 		);
+	},
+});
+
+/**
+ * Cross-entity effect: triggers cash ledger reversal cascade.
+ * Triggered when a collection attempt transitions to `reversed` via PAYMENT_REVERSED.
+ * Calls postPaymentReversalCascade() for each obligation in the plan entry,
+ * matching the emitPaymentReceived pattern of iterating obligationIds.
+ */
+export const emitPaymentReversed = internalMutation({
+	args: collectionAttemptEffectValidator,
+	handler: async (ctx, args) => {
+		const { planEntry } = await loadAttemptAndPlanEntry(
+			ctx,
+			args,
+			"emitPaymentReversed"
+		);
+
+		const reason =
+			typeof args.payload?.reason === "string"
+				? args.payload.reason
+				: "payment_reversed";
+
+		const effectiveDate = new Date().toISOString().slice(0, 10);
+
+		for (const obligationId of planEntry.obligationIds) {
+			const obligation = await ctx.db.get(obligationId);
+			if (!obligation) {
+				console.warn(
+					`[emitPaymentReversed] Obligation not found: ${obligationId}. Skipping.`
+				);
+				continue;
+			}
+
+			await postPaymentReversalCascade(ctx, {
+				attemptId: args.entityId,
+				obligationId,
+				mortgageId: obligation.mortgageId,
+				effectiveDate,
+				source: args.source,
+				reason,
+			});
+
+			console.info(
+				`[emitPaymentReversed] Reversal cascade complete for attempt=${args.entityId}, obligation=${obligationId}`
+			);
+		}
 	},
 });
