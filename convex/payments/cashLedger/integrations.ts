@@ -764,6 +764,461 @@ export async function postCashReceiptWithSuspenseFallback(
 	});
 }
 
+// ── Payment Reversal Cascade ─────────────────────────────────────────
+
+/**
+ * Multi-leg reversal orchestrator for payment reversals.
+ *
+ * Reverses the full settlement allocation cascade:
+ *   1. CASH_RECEIVED reversal (debit BORROWER_RECEIVABLE, credit TRUST_CASH)
+ *   2. N x LENDER_PAYABLE_CREATED reversals
+ *   3. SERVICING_FEE_RECOGNIZED reversal
+ *   4. Conditional LENDER_PAYOUT_SENT clawback(s)
+ *
+ * Fully idempotent on `postingGroupId`. Re-invoking with the same attempt
+ * returns the previously-persisted entries.
+ */
+export async function postPaymentReversalCascade(
+	ctx: MutationCtx,
+	args: {
+		attemptId?: Id<"collectionAttempts">;
+		transferRequestId?: Id<"transferRequests">;
+		obligationId: Id<"obligations">;
+		mortgageId: Id<"mortgages">;
+		effectiveDate: string;
+		source: CommandSource;
+		reason: string;
+	}
+): Promise<{
+	reversalEntries: Doc<"cash_ledger_journal_entries">[];
+	postingGroupId: string;
+	clawbackRequired: boolean;
+}> {
+	// Prep 1: Resolve the original attempt identifier
+	if (!(args.attemptId || args.transferRequestId)) {
+		throw new ConvexError(
+			"postPaymentReversalCascade: must provide either attemptId or transferRequestId"
+		);
+	}
+
+	const sourceId = args.attemptId
+		? String(args.attemptId)
+		: `transfer:${String(args.transferRequestId)}`;
+
+	// Prep 2: Generate postingGroupId
+	const postingGroupId = args.attemptId
+		? `reversal-group:${args.attemptId}`
+		: `reversal-group:transfer:${args.transferRequestId}`;
+
+	// Prep 3: Find original CASH_RECEIVED entry (needed for subsequent checks)
+	const obligationEntries = await ctx.db
+		.query("cash_ledger_journal_entries")
+		.withIndex("by_obligation_and_sequence", (q) =>
+			q.eq("obligationId", args.obligationId)
+		)
+		.collect();
+
+	const originalCashReceived = obligationEntries.find(
+		(e) =>
+			e.entryType === "CASH_RECEIVED" &&
+			(args.attemptId
+				? e.attemptId === args.attemptId
+				: e.transferRequestId === args.transferRequestId)
+	);
+
+	if (!originalCashReceived) {
+		throw new ConvexError(
+			`postPaymentReversalCascade: no CASH_RECEIVED entry found for ${sourceId}`
+		);
+	}
+
+	// Check idempotency FIRST — return existing entries if cascade already posted
+	const existingEntries = await ctx.db
+		.query("cash_ledger_journal_entries")
+		.withIndex("by_posting_group", (q) =>
+			q.eq("postingGroupId", postingGroupId)
+		)
+		.collect();
+
+	if (existingEntries.length > 0) {
+		const clawbackRequired = existingEntries.some((e) =>
+			e.idempotencyKey.includes("payout-clawback")
+		);
+		return {
+			reversalEntries: existingEntries,
+			postingGroupId,
+			clawbackRequired,
+		};
+	}
+
+	// Prep 4: Double-reversal guard — prevent re-reversing a previously-reversed cascade
+	const existingReversal = await findExistingReversal(
+		ctx,
+		originalCashReceived._id
+	);
+	if (existingReversal) {
+		throw new ConvexError({
+			code: "DOUBLE_REVERSAL",
+			message: `postPaymentReversalCascade: CASH_RECEIVED entry ${originalCashReceived._id} already reversed by ${existingReversal._id}`,
+			originalEntryId: originalCashReceived._id,
+			existingReversalId: existingReversal._id,
+		});
+	}
+
+	const normalizedSource = normalizeSource(args.source);
+	const reversalEntries: Doc<"cash_ledger_journal_entries">[] = [];
+
+	// Step 1 — Reverse CASH_RECEIVED: swap debit/credit from original
+	const cashReceivedReversal = await postCashEntryInternal(ctx, {
+		entryType: "REVERSAL",
+		effectiveDate: args.effectiveDate,
+		amount: safeBigintToNumber(originalCashReceived.amount),
+		debitAccountId: originalCashReceived.creditAccountId,
+		creditAccountId: originalCashReceived.debitAccountId,
+		causedBy: originalCashReceived._id,
+		idempotencyKey: buildIdempotencyKey("reversal", "cash-received", sourceId),
+		postingGroupId,
+		mortgageId: args.mortgageId,
+		obligationId: args.obligationId,
+		borrowerId: originalCashReceived.borrowerId,
+		attemptId: args.attemptId,
+		transferRequestId: args.transferRequestId,
+		source: normalizedSource,
+		reason: args.reason,
+	});
+	reversalEntries.push(cashReceivedReversal.entry);
+
+	// Prep 6: Find original LENDER_PAYABLE_CREATED entries (from allocation posting group)
+	const allocationGroupId = `allocation:${args.obligationId}`;
+	const allocationEntries = await ctx.db
+		.query("cash_ledger_journal_entries")
+		.withIndex("by_posting_group", (q) =>
+			q.eq("postingGroupId", allocationGroupId)
+		)
+		.collect();
+
+	const lenderPayableEntries = allocationEntries.filter(
+		(e) => e.entryType === "LENDER_PAYABLE_CREATED"
+	);
+
+	if (lenderPayableEntries.length === 0 && allocationEntries.length > 0) {
+		console.warn(
+			`[postPaymentReversalCascade] No LENDER_PAYABLE_CREATED entries in allocation group ${allocationGroupId} ` +
+				`for obligation ${args.obligationId}. Only CASH_RECEIVED will be reversed — lender payables may be orphaned.`
+		);
+	}
+
+	// Step 2 — Reverse each LENDER_PAYABLE_CREATED
+	for (const original of lenderPayableEntries) {
+		const result = await postCashEntryInternal(ctx, {
+			entryType: "REVERSAL",
+			effectiveDate: args.effectiveDate,
+			amount: safeBigintToNumber(original.amount),
+			debitAccountId: original.creditAccountId,
+			creditAccountId: original.debitAccountId,
+			causedBy: original._id,
+			idempotencyKey: buildIdempotencyKey(
+				"reversal",
+				"lender-payable",
+				original.dispersalEntryId
+					? String(original.dispersalEntryId)
+					: String(original._id)
+			),
+			postingGroupId,
+			mortgageId: args.mortgageId,
+			obligationId: args.obligationId,
+			dispersalEntryId: original.dispersalEntryId,
+			lenderId: original.lenderId,
+			borrowerId: original.borrowerId,
+			source: normalizedSource,
+			reason: args.reason,
+		});
+		reversalEntries.push(result.entry);
+	}
+
+	// Prep 7: Find original SERVICING_FEE_RECOGNIZED entry
+	const servicingFeeEntry = allocationEntries.find(
+		(e) => e.entryType === "SERVICING_FEE_RECOGNIZED"
+	);
+
+	// Step 3 — Reverse SERVICING_FEE_RECOGNIZED (if present)
+	if (servicingFeeEntry) {
+		const result = await postCashEntryInternal(ctx, {
+			entryType: "REVERSAL",
+			effectiveDate: args.effectiveDate,
+			amount: safeBigintToNumber(servicingFeeEntry.amount),
+			debitAccountId: servicingFeeEntry.creditAccountId,
+			creditAccountId: servicingFeeEntry.debitAccountId,
+			causedBy: servicingFeeEntry._id,
+			idempotencyKey: buildIdempotencyKey(
+				"reversal",
+				"servicing-fee",
+				String(args.obligationId)
+			),
+			postingGroupId,
+			mortgageId: args.mortgageId,
+			obligationId: args.obligationId,
+			borrowerId: servicingFeeEntry.borrowerId,
+			source: normalizedSource,
+			reason: args.reason,
+		});
+		reversalEntries.push(result.entry);
+	}
+
+	// 11. Check for LENDER_PAYOUT_SENT entries per lender
+	// Query by mortgageId + lenderId for each lender that had a payable entry
+	let clawbackRequired = false;
+
+	const uniqueLenderIds = [
+		...new Set(
+			lenderPayableEntries
+				.map((e) => e.lenderId)
+				.filter((id): id is Id<"lenders"> => id !== undefined)
+		),
+	];
+
+	for (const lenderId of uniqueLenderIds) {
+		// Query entries by lender to find LENDER_PAYOUT_SENT entries for this mortgage
+		const lenderEntries = await ctx.db
+			.query("cash_ledger_journal_entries")
+			.withIndex("by_lender_and_sequence", (q) => q.eq("lenderId", lenderId))
+			.collect();
+
+		const payoutEntries = lenderEntries.filter(
+			(e) =>
+				e.entryType === "LENDER_PAYOUT_SENT" &&
+				e.mortgageId === args.mortgageId &&
+				e.obligationId === args.obligationId
+		);
+
+		// Step 4 (conditional) — Reverse LENDER_PAYOUT_SENT (clawback)
+		for (const payoutEntry of payoutEntries) {
+			clawbackRequired = true;
+			const result = await postCashEntryInternal(ctx, {
+				entryType: "REVERSAL",
+				effectiveDate: args.effectiveDate,
+				amount: safeBigintToNumber(payoutEntry.amount),
+				debitAccountId: payoutEntry.creditAccountId,
+				creditAccountId: payoutEntry.debitAccountId,
+				causedBy: payoutEntry._id,
+				idempotencyKey: buildIdempotencyKey(
+					"reversal",
+					"payout-clawback",
+					String(lenderId),
+					sourceId
+				),
+				postingGroupId,
+				mortgageId: args.mortgageId,
+				obligationId: args.obligationId,
+				lenderId,
+				source: normalizedSource,
+				reason: args.reason,
+			});
+			reversalEntries.push(result.entry);
+		}
+	}
+
+	return { reversalEntries, postingGroupId, clawbackRequired };
+}
+
+// ── Transfer Reversal ────────────────────────────────────────────────
+
+/**
+ * Single-entry reversal for transfer-based flows.
+ * Loads the original entry, validates the amount, swaps debit/credit,
+ * and posts a REVERSAL entry via `postCashEntryInternal()`.
+ */
+export async function postTransferReversal(
+	ctx: MutationCtx,
+	args: {
+		transferRequestId: Id<"transferRequests">;
+		originalEntryId: Id<"cash_ledger_journal_entries">;
+		amount: number;
+		effectiveDate: string;
+		source: CommandSource;
+		reason: string;
+	}
+): Promise<{
+	entry: Doc<"cash_ledger_journal_entries">;
+	postingGroupId: string;
+}> {
+	// 1. Load original entry
+	const original = await ctx.db.get(args.originalEntryId);
+	if (!original) {
+		throw new ConvexError(
+			`postTransferReversal: original entry not found: ${args.originalEntryId}`
+		);
+	}
+
+	// 2. Validate reversal amount <= original amount
+	assertReversalAmountValid(
+		args.amount,
+		original.amount,
+		"postTransferReversal"
+	);
+
+	// 3. Double-reversal guard
+	const reversalIdempotencyKey = buildIdempotencyKey(
+		"reversal",
+		"transfer",
+		String(args.transferRequestId),
+		String(args.originalEntryId)
+	);
+	const existingByIdem = await ctx.db
+		.query("cash_ledger_journal_entries")
+		.withIndex("by_idempotency", (q) =>
+			q.eq("idempotencyKey", reversalIdempotencyKey)
+		)
+		.first();
+	if (existingByIdem) {
+		return {
+			entry: existingByIdem,
+			postingGroupId: `reversal:transfer:${args.transferRequestId}`,
+		};
+	}
+	// Check for existing reversal by causedBy (handles different transferRequestId retries)
+	const existingByCausedBy = await findExistingReversal(
+		ctx,
+		args.originalEntryId
+	);
+	if (existingByCausedBy) {
+		throw new ConvexError({
+			code: "DOUBLE_REVERSAL",
+			message: `postTransferReversal: entry ${args.originalEntryId} already reversed by ${existingByCausedBy._id}`,
+			originalEntryId: args.originalEntryId,
+			existingReversalId: existingByCausedBy._id,
+		});
+	}
+
+	const normalizedSource = normalizeSource(args.source);
+
+	// 4. Post REVERSAL with swapped debit/credit
+	const result = await postCashEntryInternal(ctx, {
+		entryType: "REVERSAL",
+		effectiveDate: args.effectiveDate,
+		amount: args.amount,
+		debitAccountId: original.creditAccountId,
+		creditAccountId: original.debitAccountId,
+		causedBy: original._id,
+		idempotencyKey: buildIdempotencyKey(
+			"reversal",
+			"transfer",
+			String(args.transferRequestId),
+			String(args.originalEntryId)
+		),
+		postingGroupId: `reversal:transfer:${args.transferRequestId}`,
+		mortgageId: original.mortgageId,
+		obligationId: original.obligationId,
+		transferRequestId: args.transferRequestId,
+		borrowerId: original.borrowerId,
+		lenderId: original.lenderId,
+		source: normalizedSource,
+		reason: args.reason,
+	});
+
+	return {
+		entry: result.entry,
+		postingGroupId: `reversal:transfer:${args.transferRequestId}`,
+	};
+}
+
+// ── Reversal Helpers ─────────────────────────────────────────────────
+
+/**
+ * Checks whether the given original entry has already been reversed.
+ * Returns the existing REVERSAL entry if found, or null otherwise.
+ * Prevents double-reversal of the same original entry via different
+ * attemptIds/transferRequestIds.
+ */
+async function findExistingReversal(
+	ctx: MutationCtx,
+	originalEntryId: Id<"cash_ledger_journal_entries">
+): Promise<Doc<"cash_ledger_journal_entries"> | null> {
+	const original = await ctx.db.get(originalEntryId);
+	if (!original) {
+		return null;
+	}
+
+	// Query by obligationId (covers cascade flow and entries with obligationId)
+	if (original.obligationId) {
+		const entries = await ctx.db
+			.query("cash_ledger_journal_entries")
+			.withIndex("by_obligation_and_sequence", (q) =>
+				q.eq("obligationId", original.obligationId)
+			)
+			.collect();
+		const found = entries.find(
+			(e) => e.entryType === "REVERSAL" && e.causedBy === originalEntryId
+		);
+		if (found) {
+			return found;
+		}
+	}
+
+	// Query by postingGroupId (covers transfer reversals without obligationId).
+	// postingGroupId pattern: reversal:transfer:{transferRequestId}
+	// We scan the posting group entries and filter for REVERSAL + matching causedBy.
+	if (original.transferRequestId) {
+		const postingGroupId = `reversal:transfer:${original.transferRequestId}`;
+		const entries = await ctx.db
+			.query("cash_ledger_journal_entries")
+			.withIndex("by_posting_group", (q) =>
+				q.eq("postingGroupId", postingGroupId)
+			)
+			.collect();
+		const found = entries.find(
+			(e) => e.entryType === "REVERSAL" && e.causedBy === originalEntryId
+		);
+		if (found) {
+			return found;
+		}
+	}
+
+	// Fallback: scan ALL journal entries for a REVERSAL with matching causedBy.
+	// This is O(n) but bounded — a production system would add a causedBy index.
+	// Safe for Phase 1 volumes where each obligation has <50 entries.
+	const all = await ctx.db
+		.query("cash_ledger_journal_entries")
+		.withIndex("by_obligation_and_sequence", (q) =>
+			// Convex requires an index; use the broadest available: by_obligation_and_sequence.
+			// For entries without obligationId, this returns entries with undefined obligationId.
+			original.obligationId ? q.eq("obligationId", original.obligationId) : q
+		)
+		.collect();
+	return (
+		all.find(
+			(e) =>
+				e.entryType === "REVERSAL" &&
+				e.causedBy === originalEntryId &&
+				// Exclude entries with a different obligationId (only relevant when original.obligationId is undefined)
+				(!e.obligationId || e.obligationId === original.obligationId)
+		) ?? null
+	);
+}
+
+export function assertReversalAmountValid(
+	reversalAmount: number,
+	originalAmount: bigint,
+	context: string
+): void {
+	if (reversalAmount <= 0) {
+		throw new ConvexError({
+			code: "INVALID_REVERSAL_AMOUNT",
+			message: `${context}: reversal amount must be positive, got ${reversalAmount}`,
+			reversalAmount,
+		});
+	}
+	const originalAsNumber = safeBigintToNumber(originalAmount);
+	if (reversalAmount > originalAsNumber) {
+		throw new ConvexError({
+			code: "REVERSAL_EXCEEDS_ORIGINAL",
+			message: `${context}: reversal amount ${reversalAmount} exceeds original amount ${originalAsNumber}`,
+			reversalAmount,
+			originalAmount: originalAsNumber,
+		});
+	}
+}
+
 // ── Cash Correction ──────────────────────────────────────────────────
 
 const CORRECTION_REQUIRES_ADMIN =

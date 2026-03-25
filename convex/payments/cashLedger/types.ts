@@ -84,6 +84,10 @@ export const CASH_ENTRY_TYPE_FAMILY_MAP: Record<
 		debit: ["WRITE_OFF"],
 		credit: ["BORROWER_RECEIVABLE"],
 	},
+	// REVERSAL entries use ALL_FAMILIES for both debit and credit because they
+	// must be able to reverse any original entry regardless of account family.
+	// REVERSAL entries skip balance checks in postEntry.ts Step 5 (balanceCheck)
+	// and MUST have a causedBy reference (enforced in Step 6, constraintCheck).
 	REVERSAL: {
 		debit: ALL_FAMILIES,
 		credit: ALL_FAMILIES,

@@ -89,6 +89,54 @@ export const getJournalSettledAmountForObligationInternal = internalQuery({
 	},
 });
 
+// ── Reversal Indicator Detection ─────────────────────────────
+
+export interface ReversalIndicator {
+	expectedBalance: bigint; // obligationAmount - journalSettledAmount
+	journalSettledAmount: bigint;
+	obligationAmount: number;
+	obligationId: Id<"obligations">;
+}
+
+/**
+ * Finds all settled obligations where the journal-derived receivable balance
+ * is non-zero — indicating a reversal has occurred that needs correction.
+ *
+ * For each settled obligation, compares `obligation.amount` against the
+ * journal-derived settled amount (which already accounts for REVERSAL entries).
+ * A non-zero difference means the obligation was marked settled but the journal
+ * disagrees — typically because a payment was reversed after settlement.
+ */
+export async function findSettledObligationsWithNonZeroBalance(
+	ctx: QueryCtx
+): Promise<ReversalIndicator[]> {
+	const settledObligations = await ctx.db
+		.query("obligations")
+		.withIndex("by_status", (q) => q.eq("status", "settled"))
+		.collect();
+
+	const indicators: ReversalIndicator[] = [];
+
+	for (const obligation of settledObligations) {
+		const journalSettledAmount = await getJournalSettledAmountForObligation(
+			ctx,
+			obligation._id
+		);
+		const expectedBalance = BigInt(obligation.amount) - journalSettledAmount;
+
+		if (expectedBalance !== 0n) {
+			indicators.push({
+				obligationId: obligation._id,
+				journalSettledAmount,
+				obligationAmount: obligation.amount,
+				expectedBalance,
+			});
+		}
+	}
+
+	return indicators;
+}
+
 // ── Posting Group Reconciliation ──────────────────────────────
 
 export interface PostingGroupReconciliationAlert {
@@ -165,6 +213,20 @@ export async function findNonZeroPostingGroups(
 
 	return { alerts, orphaned };
 }
+
+export const findSettledObligationsWithNonZeroBalanceInternal = internalQuery({
+	args: {},
+	handler: async (ctx) => {
+		const result = await findSettledObligationsWithNonZeroBalance(ctx);
+		// Convert bigint to number/string for serialization across Convex action/query boundary
+		return result.map((indicator) => ({
+			obligationId: indicator.obligationId,
+			journalSettledAmount: safeBigintToNumber(indicator.journalSettledAmount),
+			obligationAmount: indicator.obligationAmount,
+			expectedBalance: safeBigintToNumber(indicator.expectedBalance),
+		}));
+	},
+});
 
 export const findNonZeroPostingGroupsInternal = internalQuery({
 	args: {},

@@ -10,6 +10,7 @@ import {
 	safeBigintToNumber,
 } from "./accounts";
 import {
+	findSettledObligationsWithNonZeroBalance,
 	getControlBalanceBySubaccount,
 	getControlBalancesByPostingGroup,
 	getJournalSettledAmountForObligation,
@@ -211,6 +212,21 @@ export const getJournalSettledAmount = cashLedgerQuery
 		return getJournalSettledAmountForObligation(ctx, args.obligationId);
 	})
 	.public();
+
+// ── Reversal Indicator Queries ────────────────────────────────
+
+export const getSettledObligationsWithNonZeroBalance = cashLedgerQuery
+	.handler(async (ctx) => {
+		const indicators = await findSettledObligationsWithNonZeroBalance(ctx);
+		// Serialize bigint values to strings for transport
+		return indicators.map((indicator) => ({
+			obligationId: indicator.obligationId,
+			journalSettledAmount: indicator.journalSettledAmount.toString(),
+			obligationAmount: indicator.obligationAmount,
+			expectedBalance: indicator.expectedBalance.toString(),
+		}));
+	})
+	.internal();
 
 // ── CONTROL Subaccount Queries ────────────────────────────────
 
