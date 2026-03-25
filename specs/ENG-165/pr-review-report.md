@@ -1,8 +1,12 @@
+> **ARCHIVED — This report is historical and no longer the source of truth.**
+> The issues documented below (C-1, C-2, C-3, C-4, and related items) have been addressed in PR #271.
+> Kept for reference only; do not use as current guidance.
+
 # PR Review: ENG-165 — Transfer Reconciliation & Self-Healing
 
 **Branch:** `03-24-eng-165` (1 commit, ~2,600 lines, 10 source files)
 **Risk:** CRITICAL
-**Recommendation:** REQUEST CHANGES
+**Recommendation:** ARCHIVED (originally REQUEST CHANGES — resolved in PR #271)
 
 ---
 

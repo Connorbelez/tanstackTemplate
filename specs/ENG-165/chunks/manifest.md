@@ -4,10 +4,10 @@
 
 | # | Chunk | Tasks | Status |
 |---|-------|-------|--------|
-| 1 | chunk-01-schema-and-types | T-001 → T-005 | pending |
-| 2 | chunk-02-check-functions | T-006 → T-010 | pending |
-| 3 | chunk-03-self-healing-cron | T-011 → T-015 | pending |
-| 4 | chunk-04-tests | T-016 → T-022 | pending |
+| 1 | chunk-01-schema-and-types | TR-001 | pending |
+| 2 | chunk-02-check-functions | TR-002 | pending |
+| 3 | chunk-03-self-healing-cron | TR-003 | pending |
+| 4 | chunk-04-tests | TR-004 | pending |
 
 ## Dependencies
 - Chunk 2 depends on Chunk 1 (types + schema must exist)
