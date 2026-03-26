@@ -1,39 +1,18 @@
-import { makeFunctionReference } from "convex/server";
 import { ConvexError, v } from "convex/values";
 import { internal } from "../../_generated/api";
 import type { Doc, Id } from "../../_generated/dataModel";
+import type { CommandSource } from "../../engine/types";
 import { adminAction } from "../../fluent";
 import { MINIMUM_PAYOUT_CENTS } from "./config";
-
-// ── Internal function references ────────────────────────────────────
-// The payout module is new; generated API types won't include it until
-// convex codegen runs. Use makeFunctionReference for payout-internal refs.
-const getEligibleDispersalEntriesRef = makeFunctionReference<
-	"query",
-	{ lenderId: Id<"lenders">; today: string },
-	Doc<"dispersalEntries">[]
->("payments/payout/queries:getEligibleDispersalEntries");
-
-const getLendersWithPayableBalanceRef = makeFunctionReference<
-	"query",
-	Record<string, never>,
-	Doc<"lenders">[]
->("payments/payout/queries:getLendersWithPayableBalance");
-
-const markEntriesDisbursedRef = makeFunctionReference<
-	"mutation",
-	{ entryIds: Id<"dispersalEntries">[]; payoutDate: string },
-	null
->("payments/payout/mutations:markEntriesDisbursed");
-
-const updateLenderPayoutDateRef = makeFunctionReference<
-	"mutation",
-	{ lenderId: Id<"lenders">; payoutDate: string },
-	null
->("payments/payout/mutations:updateLenderPayoutDate");
+import {
+	getEligibleDispersalEntriesRef,
+	getLenderByIdRef,
+	markEntriesDisbursedRef,
+	updateLenderPayoutDateRef,
+} from "./refs";
 
 /**
- * T-008: Admin-triggered immediate payout for a specific lender.
+ * Admin-triggered immediate payout for a specific lender.
  * Bypasses frequency schedule but still respects hold period.
  */
 export const triggerImmediatePayout = adminAction
@@ -44,15 +23,11 @@ export const triggerImmediatePayout = adminAction
 	.handler(async (ctx, args) => {
 		const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
 
-		// 1. Get lender record — verify exists + active
-		const activeLenders = await ctx.runQuery(
-			getLendersWithPayableBalanceRef,
-			{}
-		);
-		const lenderRecord = activeLenders.find(
-			(l: Doc<"lenders">) => l._id === args.lenderId
-		);
-		if (!lenderRecord) {
+		// 1. Get lender record directly — verify exists + active
+		const lender = await ctx.runQuery(getLenderByIdRef, {
+			lenderId: args.lenderId,
+		});
+		if (!lender || lender.status !== "active") {
 			throw new ConvexError(`Lender ${args.lenderId} not found or not active`);
 		}
 
@@ -83,26 +58,27 @@ export const triggerImmediatePayout = adminAction
 			Doc<"dispersalEntries">[]
 		>();
 		for (const entry of filteredEntries) {
-			const key = (entry as Doc<"dispersalEntries">).mortgageId;
+			const key = entry.mortgageId;
 			const group = groupedByMortgage.get(key);
 			if (group) {
-				group.push(entry as Doc<"dispersalEntries">);
+				group.push(entry);
 			} else {
-				groupedByMortgage.set(key, [entry as Doc<"dispersalEntries">]);
+				groupedByMortgage.set(key, [entry]);
 			}
 		}
 
 		// 5. For each mortgage group: sum, threshold check, post payout, mark disbursed
-		const minimumCents =
-			lenderRecord.minimumPayoutCents ?? MINIMUM_PAYOUT_CENTS;
+		const minimumCents = lender.minimumPayoutCents ?? MINIMUM_PAYOUT_CENTS;
 		let payoutCount = 0;
 		let totalAmountCents = 0;
 
-		const source = {
-			actorType: "admin" as const,
+		const source: CommandSource = {
+			actorType: "admin",
 			actorId: ctx.viewer.authId,
-			channel: "admin_dashboard" as const,
+			channel: "admin_dashboard",
 		};
+
+		const failures: Array<{ mortgageId: string; error: string }> = [];
 
 		for (const [mortgageId, entries] of groupedByMortgage) {
 			const sumAmount = entries.reduce(
@@ -110,35 +86,41 @@ export const triggerImmediatePayout = adminAction
 				0
 			);
 
-			// Check minimum threshold
 			if (sumAmount < minimumCents) {
 				continue;
 			}
 
 			const idempotencyKey = `admin-payout:${today}:${args.lenderId}:${mortgageId}`;
 
-			// Post the lender payout via cash ledger
-			await ctx.runMutation(
-				internal.payments.cashLedger.mutations.postLenderPayout,
-				{
-					mortgageId,
-					lenderId: args.lenderId,
-					amount: sumAmount,
-					effectiveDate: today,
-					idempotencyKey,
-					source,
-					reason: "Admin-triggered immediate payout",
-				}
-			);
+			try {
+				await ctx.runMutation(
+					internal.payments.cashLedger.mutations.postLenderPayout,
+					{
+						mortgageId,
+						lenderId: args.lenderId,
+						amount: sumAmount,
+						effectiveDate: today,
+						idempotencyKey,
+						source,
+						reason: "Admin-triggered immediate payout",
+					}
+				);
 
-			// Mark entries as disbursed
-			await ctx.runMutation(markEntriesDisbursedRef, {
-				entryIds: entries.map((e: Doc<"dispersalEntries">) => e._id),
-				payoutDate: today,
-			});
+				// Optimistic concurrency guard in markEntriesDisbursed
+				// prevents double-payout if cron is running concurrently
+				await ctx.runMutation(markEntriesDisbursedRef, {
+					entryIds: entries.map((e: Doc<"dispersalEntries">) => e._id),
+					payoutDate: today,
+				});
 
-			payoutCount++;
-			totalAmountCents += sumAmount;
+				payoutCount++;
+				totalAmountCents += sumAmount;
+			} catch (error) {
+				failures.push({
+					mortgageId: mortgageId as string,
+					error: error instanceof Error ? error.message : String(error),
+				});
+			}
 		}
 
 		// 6. Update lender's last payout date (if any payouts were made)
@@ -149,7 +131,16 @@ export const triggerImmediatePayout = adminAction
 			});
 		}
 
-		// 7. Return summary
+		// 7. If there were failures, report with partial success details
+		if (failures.length > 0) {
+			throw new ConvexError({
+				message: `Admin payout had ${failures.length} failure(s) out of ${payoutCount + failures.length} mortgage groups`,
+				payoutCount,
+				totalAmountCents,
+				failures,
+			});
+		}
+
 		return { payoutCount, totalAmountCents, lenderId: args.lenderId };
 	})
 	.public();

@@ -1,7 +1,9 @@
-export const DEFAULT_PAYOUT_FREQUENCY = "monthly" as const;
-export const MINIMUM_PAYOUT_CENTS = 100; // $1.00 minimum to prevent micro-payouts
+import type { PayoutFrequency } from "./validators";
 
-export type PayoutFrequency = "monthly" | "bi_weekly" | "weekly" | "on_demand";
+export type { PayoutFrequency } from "./validators";
+
+export const DEFAULT_PAYOUT_FREQUENCY: PayoutFrequency = "monthly";
+export const MINIMUM_PAYOUT_CENTS = 100; // $1.00 minimum to prevent micro-payouts
 
 export function isPayoutDue(
 	frequency: PayoutFrequency,

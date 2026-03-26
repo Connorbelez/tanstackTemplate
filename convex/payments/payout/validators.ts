@@ -1,4 +1,4 @@
-import { v } from "convex/values";
+import { type Infer, v } from "convex/values";
 
 // ── Payout frequency (ENG-182) ──────────────────────────────────
 // monthly: every 28 days | bi_weekly: every 14 days
@@ -9,3 +9,6 @@ export const payoutFrequencyValidator = v.union(
 	v.literal("weekly"),
 	v.literal("on_demand")
 );
+
+/** Derived from payoutFrequencyValidator — single source of truth. */
+export type PayoutFrequency = Infer<typeof payoutFrequencyValidator>;

@@ -1,40 +1,19 @@
-import { makeFunctionReference } from "convex/server";
 import { internal } from "../../_generated/api";
 import type { Doc, Id } from "../../_generated/dataModel";
 import { internalAction } from "../../_generated/server";
+import type { CommandSource } from "../../engine/types";
 import {
 	DEFAULT_PAYOUT_FREQUENCY,
 	isPayoutDue,
 	MINIMUM_PAYOUT_CENTS,
-	type PayoutFrequency,
 } from "./config";
-
-// ── Internal function references ────────────────────────────────────
-// Use makeFunctionReference for payout-internal refs to avoid codegen
-// ordering issues. See adminPayout.ts for the same pattern.
-const getEligibleDispersalEntriesRef = makeFunctionReference<
-	"query",
-	{ lenderId: Id<"lenders">; today: string },
-	Doc<"dispersalEntries">[]
->("payments/payout/queries:getEligibleDispersalEntries");
-
-const getLendersWithPayableBalanceRef = makeFunctionReference<
-	"query",
-	Record<string, never>,
-	Doc<"lenders">[]
->("payments/payout/queries:getLendersWithPayableBalance");
-
-const markEntriesDisbursedRef = makeFunctionReference<
-	"mutation",
-	{ entryIds: Id<"dispersalEntries">[]; payoutDate: string },
-	null
->("payments/payout/mutations:markEntriesDisbursed");
-
-const updateLenderPayoutDateRef = makeFunctionReference<
-	"mutation",
-	{ lenderId: Id<"lenders">; payoutDate: string },
-	null
->("payments/payout/mutations:updateLenderPayoutDate");
+import {
+	getEligibleDispersalEntriesRef,
+	getLendersWithPayableBalanceRef,
+	markEntriesDisbursedRef,
+	updateLenderPayoutDateRef,
+} from "./refs";
+import type { PayoutFrequency } from "./validators";
 
 // ── Helpers ─────────────────────────────────────────────────────────
 
@@ -52,9 +31,13 @@ function groupBy<T>(items: T[], keyFn: (item: T) => string): Map<string, T[]> {
 // ── Batch payout action ─────────────────────────────────────────────
 
 /**
- * T-009: Daily cron handler — evaluates which lenders are due for payout,
+ * Daily cron handler — evaluates which lenders are due for payout,
  * checks eligible dispersal entries, and posts lender payouts via the cash
  * ledger. Idempotent per day (key: payout-batch:{date}:{lender}:{mortgage}).
+ *
+ * The optimistic concurrency guard in markEntriesDisbursed (status must be
+ * "pending") prevents double payouts if an admin triggers a payout while
+ * the cron is running.
  */
 export const processPayoutBatch = internalAction({
 	args: {},
@@ -64,30 +47,29 @@ export const processPayoutBatch = internalAction({
 		// 1. Get all active lenders
 		const lenders = await ctx.runQuery(getLendersWithPayableBalanceRef, {});
 
-		const source = {
-			actorType: "system" as const,
-			channel: "scheduler" as const,
+		const source: CommandSource = {
+			actorType: "system",
+			channel: "scheduler",
 		};
 
 		let totalPayouts = 0;
 		let totalAmountCents = 0;
 		let lendersProcessed = 0;
 		let lendersSkipped = 0;
+		const failures: Array<{
+			lenderId: string;
+			mortgageId: string;
+			error: string;
+		}> = [];
 
 		// 2. Evaluate each lender
 		for (const lender of lenders) {
-			const frequency: PayoutFrequency =
+			const frequency =
 				(lender.payoutFrequency as PayoutFrequency | undefined) ??
 				DEFAULT_PAYOUT_FREQUENCY;
 
 			// 2a. Check if payout is due based on frequency
-			if (
-				!isPayoutDue(
-					frequency,
-					lender.lastPayoutDate as string | undefined,
-					today
-				)
-			) {
+			if (!isPayoutDue(frequency, lender.lastPayoutDate, today)) {
 				lendersSkipped++;
 				continue;
 			}
@@ -144,7 +126,8 @@ export const processPayoutBatch = internalAction({
 						}
 					);
 
-					// Mark entries as disbursed
+					// Mark entries as disbursed (optimistic concurrency guard
+					// prevents double-payout from concurrent admin action)
 					await ctx.runMutation(markEntriesDisbursedRef, {
 						entryIds: entries.map((e: Doc<"dispersalEntries">) => e._id),
 						payoutDate: today,
@@ -153,11 +136,11 @@ export const processPayoutBatch = internalAction({
 					lenderPayoutCount++;
 					totalAmountCents += totalAmount;
 				} catch (error) {
-					// Log error and continue with next mortgage/lender
-					console.error(
-						`Payout failed for lender=${lender._id} mortgage=${mortgageId}:`,
-						error
-					);
+					failures.push({
+						lenderId: lender._id as string,
+						mortgageId: mortgageIdStr,
+						error: error instanceof Error ? error.message : String(error),
+					});
 				}
 			}
 
@@ -176,7 +159,18 @@ export const processPayoutBatch = internalAction({
 
 		// 3. Log batch summary
 		console.log(
-			`[payout-batch] date=${today} lenders_processed=${lendersProcessed} lenders_skipped=${lendersSkipped} payouts=${totalPayouts} total_cents=${totalAmountCents}`
+			`[payout-batch] date=${today} lenders_processed=${lendersProcessed} lenders_skipped=${lendersSkipped} payouts=${totalPayouts} total_cents=${totalAmountCents} failures=${failures.length}`
 		);
+
+		// 4. If any failures, throw so the scheduler surfaces the problem
+		if (failures.length > 0) {
+			console.error(
+				`[payout-batch] FAILURES date=${today}`,
+				JSON.stringify(failures)
+			);
+			throw new Error(
+				`Payout batch had ${failures.length} failure(s). ${totalPayouts} payouts succeeded. See logs for details.`
+			);
+		}
 	},
 });

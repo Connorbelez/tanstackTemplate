@@ -979,6 +979,7 @@ export default defineSchema({
 		feeCode: v.optional(feeCodeValidator),
 		payoutEligibleAfter: v.optional(v.string()), // YYYY-MM-DD: earliest payout date (hold period)
 		paymentMethod: v.optional(v.string()), // resolved from collection attempt chain
+		payoutDate: v.optional(v.string()), // YYYY-MM-DD: date payout was executed (ENG-182)
 		createdAt: v.number(), // system timestamp: Unix ms
 	})
 		.index("by_lender", ["lenderId", "dispersalDate"])

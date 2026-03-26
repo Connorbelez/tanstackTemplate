@@ -12,6 +12,7 @@ import {
 } from "../queries";
 
 const modules = import.meta.glob("/convex/**/*.ts");
+const EXPECTED_PENDING_ERROR = /expected "pending"/;
 
 // ── Type wrappers for _handler access ────────────────────────────────
 
@@ -419,14 +420,71 @@ describe("batch payout — query & mutation integration", () => {
 				});
 			});
 
-			// Verify both entries now have status "disbursed"
+			// Verify both entries now have status "disbursed" and payoutDate persisted
 			await t.run(async (ctx) => {
 				for (const id of entryIds) {
 					const entry = await ctx.db.get(id);
 					expect(entry).not.toBeNull();
 					expect(entry?.status).toBe("disbursed");
+					expect(entry?.payoutDate).toBe("2026-03-20");
 				}
 			});
+		});
+
+		it("rejects entries that are not in pending status (concurrency guard)", async () => {
+			const t = createHarness(modules);
+			const seeded = await seedMinimalEntities(t);
+
+			const entryId = await t.run(async (ctx) => {
+				const lenderAccountId = await ctx.db.insert("ledger_accounts", {
+					type: "POSITION",
+					mortgageId: seeded.mortgageId as unknown as string,
+					lenderId: seeded.lenderAId as unknown as string,
+					cumulativeDebits: 0n,
+					cumulativeCredits: 0n,
+					createdAt: Date.now(),
+				});
+
+				const obligationId = await ctx.db.insert("obligations", {
+					status: "settled",
+					machineContext: {},
+					lastTransitionAt: Date.now(),
+					mortgageId: seeded.mortgageId,
+					borrowerId: seeded.borrowerId,
+					paymentNumber: 1,
+					type: "regular_interest",
+					amount: 5000,
+					amountSettled: 5000,
+					dueDate: Date.parse("2026-03-01T00:00:00Z"),
+					gracePeriodEnd: Date.parse("2026-03-16T00:00:00Z"),
+					createdAt: Date.now(),
+				});
+
+				return ctx.db.insert("dispersalEntries", {
+					mortgageId: seeded.mortgageId,
+					lenderId: seeded.lenderAId,
+					lenderAccountId,
+					amount: 5000,
+					dispersalDate: "2026-03-01",
+					obligationId,
+					servicingFeeDeducted: 100,
+					status: "disbursed", // already disbursed
+					idempotencyKey: "test-already-disbursed",
+					calculationDetails: CALC_DETAILS,
+					payoutEligibleAfter: "2026-03-01",
+					createdAt: Date.now(),
+				});
+			});
+
+			// Attempting to mark already-disbursed entry should throw
+			await expect(
+				t.run(async (ctx) => {
+					return markDisbursedMutation._handler(ctx as unknown as MutationCtx, {
+						entryIds: [entryId],
+						payoutDate: "2026-03-20",
+					});
+				})
+			).rejects.toThrow(EXPECTED_PENDING_ERROR);
 		});
 	});
 });

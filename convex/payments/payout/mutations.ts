@@ -1,9 +1,15 @@
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { internalMutation } from "../../_generated/server";
 
 /**
- * T-006: Mark dispersal entries as disbursed after payout is posted.
- * Uses "disbursed" status (not "paid") per dispersalStatusValidator.
+ * Mark dispersal entries as disbursed after payout is posted.
+ *
+ * Enforces an optimistic concurrency guard: each entry MUST have
+ * status === "pending" before being marked "disbursed". This prevents
+ * double-payout if admin and batch cron process the same entries
+ * concurrently (they use different idempotency key prefixes).
+ *
+ * Persists payoutDate for audit traceability.
  */
 export const markEntriesDisbursed = internalMutation({
 	args: {
@@ -12,13 +18,27 @@ export const markEntriesDisbursed = internalMutation({
 	},
 	handler: async (ctx, args) => {
 		for (const id of args.entryIds) {
-			await ctx.db.patch(id, { status: "disbursed" });
+			const entry = await ctx.db.get(id);
+			if (!entry) {
+				throw new ConvexError(
+					`Dispersal entry ${id} not found during disbursement marking`
+				);
+			}
+			if (entry.status !== "pending") {
+				throw new ConvexError(
+					`Dispersal entry ${id} has status "${entry.status}", expected "pending" — possible concurrent payout`
+				);
+			}
+			await ctx.db.patch(id, {
+				status: "disbursed" as const,
+				payoutDate: args.payoutDate,
+			});
 		}
 	},
 });
 
 /**
- * T-007: Update the lender's lastPayoutDate after a payout round completes.
+ * Update the lender's lastPayoutDate after a payout round completes.
  */
 export const updateLenderPayoutDate = internalMutation({
 	args: {
@@ -26,6 +46,12 @@ export const updateLenderPayoutDate = internalMutation({
 		payoutDate: v.string(),
 	},
 	handler: async (ctx, args) => {
+		const lender = await ctx.db.get(args.lenderId);
+		if (!lender) {
+			throw new ConvexError(
+				`Lender ${args.lenderId} not found during payout date update`
+			);
+		}
 		await ctx.db.patch(args.lenderId, {
 			lastPayoutDate: args.payoutDate,
 		});

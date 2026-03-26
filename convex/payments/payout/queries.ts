@@ -18,12 +18,20 @@ export const getEligibleDispersalEntries = internalQuery({
 			)
 			.collect();
 
-		return entries.filter((entry) => {
+		const eligible: typeof entries = [];
+		for (const entry of entries) {
 			if (entry.payoutEligibleAfter === undefined) {
-				return true;
+				// Legacy entry without hold period — treat as immediately eligible
+				// but log so we can track how many bypass hold period checks.
+				console.warn(
+					`[payout] dispersalEntry ${entry._id} has no payoutEligibleAfter — bypassing hold period check`
+				);
+				eligible.push(entry);
+			} else if (entry.payoutEligibleAfter <= args.today) {
+				eligible.push(entry);
 			}
-			return entry.payoutEligibleAfter <= args.today;
-		});
+		}
+		return eligible;
 	},
 });
 
@@ -39,5 +47,18 @@ export const getLendersWithPayableBalance = internalQuery({
 			.query("lenders")
 			.withIndex("by_status", (q) => q.eq("status", "active"))
 			.collect();
+	},
+});
+
+/**
+ * Get a single lender by ID. Used by adminPayout for efficient
+ * single-lender lookup instead of fetching all active lenders.
+ */
+export const getLenderById = internalQuery({
+	args: {
+		lenderId: v.id("lenders"),
+	},
+	handler: async (ctx, args) => {
+		return await ctx.db.get(args.lenderId);
 	},
 });
