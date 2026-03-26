@@ -19,17 +19,19 @@ export const getEligibleDispersalEntries = internalQuery({
 			.collect();
 
 		const eligible: typeof entries = [];
+		let legacyWithoutPayoutEligibleAfter = 0;
 		for (const entry of entries) {
 			if (entry.payoutEligibleAfter === undefined) {
-				// Legacy entry without hold period — treat as immediately eligible
-				// but log so we can track how many bypass hold period checks.
-				console.warn(
-					`[payout] dispersalEntry ${entry._id} has no payoutEligibleAfter — bypassing hold period check`
-				);
+				legacyWithoutPayoutEligibleAfter += 1;
 				eligible.push(entry);
 			} else if (entry.payoutEligibleAfter <= args.today) {
 				eligible.push(entry);
 			}
+		}
+		if (legacyWithoutPayoutEligibleAfter > 0) {
+			console.warn(
+				`[payout] Found ${legacyWithoutPayoutEligibleAfter} legacy dispersalEntries without payoutEligibleAfter for lender ${args.lenderId} on ${args.today} — bypassing hold period check for these entries`
+			);
 		}
 		return eligible;
 	},
@@ -40,7 +42,7 @@ export const getEligibleDispersalEntries = internalQuery({
  * Returns full lender documents so callers can check payoutFrequency,
  * lastPayoutDate, and minimumPayoutCents.
  */
-export const getLendersWithPayableBalance = internalQuery({
+export const getActiveLenders = internalQuery({
 	args: {},
 	handler: async (ctx) => {
 		return await ctx.db

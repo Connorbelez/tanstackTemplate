@@ -1,41 +1,29 @@
-import { makeFunctionReference } from "convex/server";
-import type { Doc, Id } from "../../_generated/dataModel";
+import { internal } from "../../_generated/api";
 
 /**
  * Shared function references for the payout module.
  *
- * Uses makeFunctionReference instead of `internal.*` because
- * convex codegen has a pre-existing issue that prevents
- * regenerating API types for this module. Both adminPayout.ts
- * and batchPayout.ts import from here to avoid duplication.
+ * Re-exports internal.* references so that both adminPayout.ts and
+ * batchPayout.ts can import from a single location, keeping the
+ * dependency surface explicit and DRY.
  */
 
-export const getEligibleDispersalEntriesRef = makeFunctionReference<
-	"query",
-	{ lenderId: Id<"lenders">; today: string },
-	Doc<"dispersalEntries">[]
->("payments/payout/queries:getEligibleDispersalEntries");
+export const getEligibleDispersalEntriesRef =
+	internal.payments.payout.queries.getEligibleDispersalEntries;
 
-export const getLendersWithPayableBalanceRef = makeFunctionReference<
-	"query",
-	Record<string, never>,
-	Doc<"lenders">[]
->("payments/payout/queries:getLendersWithPayableBalance");
+export const getActiveLendersRef =
+	internal.payments.payout.queries.getActiveLenders;
 
-export const markEntriesDisbursedRef = makeFunctionReference<
-	"mutation",
-	{ entryIds: Id<"dispersalEntries">[]; payoutDate: string },
-	null
->("payments/payout/mutations:markEntriesDisbursed");
+export const claimEntriesForPayoutRef =
+	internal.payments.payout.mutations.claimEntriesForPayout;
 
-export const updateLenderPayoutDateRef = makeFunctionReference<
-	"mutation",
-	{ lenderId: Id<"lenders">; payoutDate: string },
-	null
->("payments/payout/mutations:updateLenderPayoutDate");
+export const revertClaimedEntriesRef =
+	internal.payments.payout.mutations.revertClaimedEntries;
 
-export const getLenderByIdRef = makeFunctionReference<
-	"query",
-	{ lenderId: Id<"lenders"> },
-	Doc<"lenders"> | null
->("payments/payout/queries:getLenderById");
+export const markEntriesDisbursedRef =
+	internal.payments.payout.mutations.markEntriesDisbursed;
+
+export const updateLenderPayoutDateRef =
+	internal.payments.payout.mutations.updateLenderPayoutDate;
+
+export const getLenderByIdRef = internal.payments.payout.queries.getLenderById;

@@ -8,8 +8,8 @@ import {
 	MINIMUM_PAYOUT_CENTS,
 } from "./config";
 import {
+	getActiveLendersRef,
 	getEligibleDispersalEntriesRef,
-	getLendersWithPayableBalanceRef,
 	markEntriesDisbursedRef,
 	updateLenderPayoutDateRef,
 } from "./refs";
@@ -33,11 +33,14 @@ function groupBy<T>(items: T[], keyFn: (item: T) => string): Map<string, T[]> {
 /**
  * Daily cron handler — evaluates which lenders are due for payout,
  * checks eligible dispersal entries, and posts lender payouts via the cash
- * ledger. Idempotent per day (key: payout-batch:{date}:{lender}:{mortgage}).
+ * ledger.
  *
- * The optimistic concurrency guard in markEntriesDisbursed (status must be
- * "pending") prevents double payouts if an admin triggers a payout while
- * the cron is running.
+ * Concurrency safety: entries are claimed (pending → disbursed) BEFORE the
+ * cash ledger payout is posted. This prevents double payouts when an admin
+ * triggers a payout while the cron is running — only the first claim wins.
+ * If the ledger post fails, claimed entries are reverted to "pending".
+ *
+ * Idempotency: keys use the standard cash-ledger prefix via buildIdempotencyKey.
  */
 export const processPayoutBatch = internalAction({
 	args: {},
@@ -45,7 +48,7 @@ export const processPayoutBatch = internalAction({
 		const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
 
 		// 1. Get all active lenders
-		const lenders = await ctx.runQuery(getLendersWithPayableBalanceRef, {});
+		const lenders = await ctx.runQuery(getActiveLendersRef, {});
 
 		const source: CommandSource = {
 			actorType: "system",

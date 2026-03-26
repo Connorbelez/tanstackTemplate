@@ -6,10 +6,7 @@ import {
 	seedMinimalEntities,
 } from "../../cashLedger/__tests__/testUtils";
 import { markEntriesDisbursed } from "../mutations";
-import {
-	getEligibleDispersalEntries,
-	getLendersWithPayableBalance,
-} from "../queries";
+import { getActiveLenders, getEligibleDispersalEntries } from "../queries";
 
 const modules = import.meta.glob("/convex/**/*.ts");
 const EXPECTED_PENDING_ERROR = /expected "pending"/;
@@ -36,8 +33,7 @@ interface MarkDisbursedHandler {
 
 const getEligibleQuery =
 	getEligibleDispersalEntries as unknown as GetEligibleHandler;
-const getLendersQuery =
-	getLendersWithPayableBalance as unknown as GetLendersHandler;
+const getLendersQuery = getActiveLenders as unknown as GetLendersHandler;
 const markDisbursedMutation =
 	markEntriesDisbursed as unknown as MarkDisbursedHandler;
 
@@ -280,9 +276,9 @@ describe("batch payout — query & mutation integration", () => {
 		});
 	});
 
-	// ── getLendersWithPayableBalance ─────────────────────────────
+	// ── getActiveLenders ─────────────────────────────
 
-	describe("getLendersWithPayableBalance", () => {
+	describe("getActiveLenders", () => {
 		it("returns only active lenders", async () => {
 			const t = createHarness(modules);
 
