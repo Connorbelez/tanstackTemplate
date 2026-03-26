@@ -1,53 +1,28 @@
-import { makeFunctionReference } from "convex/server";
-import type { Doc, Id } from "../../_generated/dataModel";
+import { internal } from "../../_generated/api";
 
 /**
  * Shared function references for the payout module.
  *
- * Uses makeFunctionReference instead of `internal.*` because
- * convex codegen has a pre-existing issue that prevents
- * regenerating API types for this module. Both adminPayout.ts
- * and batchPayout.ts import from here to avoid duplication.
+ * Re-exports from the generated `internal` API so adminPayout.ts
+ * and batchPayout.ts can import from a single place.
  */
 
-export const getEligibleDispersalEntriesRef = makeFunctionReference<
-	"query",
-	{ lenderId: Id<"lenders">; today: string },
-	Doc<"dispersalEntries">[]
->("payments/payout/queries:getEligibleDispersalEntries");
+export const getEligibleDispersalEntriesRef =
+	internal.payments.payout.queries.getEligibleDispersalEntries;
 
-export const getActiveLendersRef = makeFunctionReference<
-	"query",
-	Record<string, never>,
-	Doc<"lenders">[]
->("payments/payout/queries:getActiveLenders");
+export const getActiveLendersRef =
+	internal.payments.payout.queries.getActiveLenders;
 
-export const claimEntriesForPayoutRef = makeFunctionReference<
-	"mutation",
-	{ entryIds: Id<"dispersalEntries">[]; payoutDate: string },
-	null
->("payments/payout/mutations:claimEntriesForPayout");
+export const claimEntriesForPayoutRef =
+	internal.payments.payout.mutations.claimEntriesForPayout;
 
-export const revertClaimedEntriesRef = makeFunctionReference<
-	"mutation",
-	{ entryIds: Id<"dispersalEntries">[] },
-	null
->("payments/payout/mutations:revertClaimedEntries");
+export const revertClaimedEntriesRef =
+	internal.payments.payout.mutations.revertClaimedEntries;
 
-export const markEntriesDisbursedRef = makeFunctionReference<
-	"mutation",
-	{ entryIds: Id<"dispersalEntries">[]; payoutDate: string },
-	null
->("payments/payout/mutations:markEntriesDisbursed");
+export const markEntriesDisbursedRef =
+	internal.payments.payout.mutations.markEntriesDisbursed;
 
-export const updateLenderPayoutDateRef = makeFunctionReference<
-	"mutation",
-	{ lenderId: Id<"lenders">; payoutDate: string },
-	null
->("payments/payout/mutations:updateLenderPayoutDate");
+export const updateLenderPayoutDateRef =
+	internal.payments.payout.mutations.updateLenderPayoutDate;
 
-export const getLenderByIdRef = makeFunctionReference<
-	"query",
-	{ lenderId: Id<"lenders"> },
-	Doc<"lenders"> | null
->("payments/payout/queries:getLenderById");
+export const getLenderByIdRef = internal.payments.payout.queries.getLenderById;

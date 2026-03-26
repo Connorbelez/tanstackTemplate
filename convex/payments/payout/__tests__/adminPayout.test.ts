@@ -674,7 +674,7 @@ describe("admin payout — integration tests (triggerImmediatePayout)", () => {
 			expect.fail("Should have thrown ConvexError for partial failure");
 		} catch (e) {
 			expect(e).toBeInstanceOf(ConvexError);
-			const rawData = (e as ConvexError<unknown>).data;
+			const rawData = (e as ConvexError<Record<string, string | number>>).data;
 			// In convex-test, ConvexError.data may be a JSON string
 			const data = (
 				typeof rawData === "string" ? JSON.parse(rawData) : rawData
