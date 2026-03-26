@@ -62,7 +62,7 @@ describe("Chaos tests — cash ledger resilience", () => {
 				),
 				source: SYSTEM_SOURCE,
 			});
-			expect(result).toBeDefined();
+			expect(result).not.toBeNull();
 			expect(result).toHaveProperty("entry");
 		});
 
@@ -187,7 +187,7 @@ describe("Chaos tests — cash ledger resilience", () => {
 				source: SYSTEM_SOURCE,
 			});
 		});
-		expect(firstEntry).toBeDefined();
+		expect(firstEntry).not.toBeNull();
 		expect(firstEntry).toHaveProperty("entry");
 
 		// Second cash receipt with SAME idempotencyKey
@@ -199,7 +199,7 @@ describe("Chaos tests — cash ledger resilience", () => {
 				source: SYSTEM_SOURCE,
 			});
 		});
-		expect(secondEntry).toBeDefined();
+		expect(secondEntry).not.toBeNull();
 		expect(secondEntry).toHaveProperty("entry");
 
 		// Both calls should return the same entry ID
@@ -386,7 +386,7 @@ describe("Chaos tests — cash ledger resilience", () => {
 	// Two CASH_RECEIVED entries with different idempotency keys both succeed,
 	// creating an overpayment. The reconciliation layer detects drift between
 	// amountSettled (100k) and journal total (200k).
-	it("Test 4 — concurrent settlement of same obligation (overpayment → UNAPPLIED_CASH detection)", async () => {
+	it("Test 4 — concurrent settlement of same obligation (overpayment → settlement drift detection)", async () => {
 		const t = createHarness(modules);
 		const { borrowerId, mortgageId } = await seedMinimalEntities(t);
 
