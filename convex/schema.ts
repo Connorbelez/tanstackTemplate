@@ -562,7 +562,8 @@ export default defineSchema({
 			"sourceObligationId",
 			"feeCode",
 		])
-		.index("by_borrower", ["borrowerId"]),
+		.index("by_borrower", ["borrowerId"])
+		.index("by_source_obligation", ["sourceObligationId"]),
 
 	obligationCronMonitoring: defineTable({
 		jobName: v.string(),

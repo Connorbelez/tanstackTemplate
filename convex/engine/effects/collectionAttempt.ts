@@ -249,11 +249,16 @@ export const emitPaymentReversed = internalMutation({
 				);
 			}
 
+			// Capture status BEFORE cascade — postPaymentReversalCascade does not
+			// modify obligation status today, but capturing early prevents a latent
+			// bug if the cascade is ever extended to update status.
+			const shouldCreateCorrective = obligation.status === "settled";
+
 			console.info(
 				`[emitPaymentReversed] Starting reversal cascade for attempt=${args.entityId}, obligation=${obligationId}`
 			);
 
-			await postPaymentReversalCascade(ctx, {
+			const cascadeResult = await postPaymentReversalCascade(ctx, {
 				attemptId: args.entityId,
 				obligationId,
 				mortgageId: obligation.mortgageId,
@@ -265,6 +270,28 @@ export const emitPaymentReversed = internalMutation({
 			console.info(
 				`[emitPaymentReversed] Reversal cascade complete for attempt=${args.entityId}, obligation=${obligationId}`
 			);
+
+			// Schedule corrective obligation creation (ENG-180)
+			// Only for settled obligations — non-settled obligations were never fully
+			// paid and don't need a corrective receivable.
+			if (shouldCreateCorrective) {
+				await ctx.scheduler.runAfter(
+					0,
+					internal.payments.obligations.createCorrectiveObligation
+						.createCorrectiveObligation,
+					{
+						originalObligationId: obligationId,
+						reversedAmount: obligation.amount,
+						reason,
+						postingGroupId: cascadeResult.postingGroupId,
+						source: args.source,
+					}
+				);
+
+				console.info(
+					`[emitPaymentReversed] Scheduled corrective obligation for attempt=${args.entityId}, obligation=${obligationId}`
+				);
+			}
 		}
 	},
 });
