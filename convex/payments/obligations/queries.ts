@@ -109,14 +109,13 @@ export const getCorrectiveObligations = internalQuery({
 		sourceObligationId: v.id("obligations"),
 	},
 	handler: async (ctx, { sourceObligationId }) => {
-		const obligations = await ctx.db
+		return await ctx.db
 			.query("obligations")
 			.withIndex("by_source_obligation", (q) =>
 				q.eq("sourceObligationId", sourceObligationId)
 			)
+			.filter((q) => q.neq(q.field("type"), "late_fee"))
 			.collect();
-
-		return obligations.filter((o) => o.type !== "late_fee");
 	},
 });
 
@@ -143,11 +142,12 @@ export const getObligationWithCorrectives = internalQuery({
 			.withIndex("by_source_obligation", (q) =>
 				q.eq("sourceObligationId", obligationId)
 			)
+			.filter((q) => q.neq(q.field("type"), "late_fee"))
 			.collect();
 
 		return {
 			obligation,
-			correctives: correctives.filter((o) => o.type !== "late_fee"),
+			correctives,
 		};
 	},
 });

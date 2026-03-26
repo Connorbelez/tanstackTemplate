@@ -20,7 +20,7 @@ await ctx.scheduler.runAfter(
   internal.payments.obligations.createCorrectiveObligation.createCorrectiveObligation,
   {
     originalObligationId: args.obligationId,
-    reversedAmount: obligation.amount, // full obligation amount
+    reversedAmount: cascadeResult.reversalEntries.reduce((sum, e) => sum + e.amount, 0), // derive from cascade
     reason: args.reason,
     postingGroupId: cascadeResult.postingGroupId,
     source: {
@@ -113,7 +113,7 @@ export const emitPaymentReversed = internalMutation({
 });
 ```
 
-**What to add**: After `postPaymentReversalCascade` returns, schedule `createCorrectiveObligation` via `ctx.scheduler.runAfter(0, ...)`. The cascade returns `{ reversalEntries, postingGroupId, clawbackRequired }`. Use `obligation.amount` as the `reversedAmount` (full obligation amount, since reversal only fires on fully-settled obligations). Only schedule if `obligation.status === "settled"`.
+**What to add**: After `postPaymentReversalCascade` returns, schedule `createCorrectiveObligation` via `ctx.scheduler.runAfter(0, ...)`. The cascade returns `{ reversalEntries, postingGroupId, clawbackRequired }`. Derive `reversedAmount` from the cascade result (e.g., summing `reversalEntries` amounts) rather than hard-coding `obligation.amount`, so that partial reversals only recreate the reversed cash amount. Only schedule if `obligation.status === "settled"`.
 
 ### Important: Import the internal function reference
 
@@ -174,7 +174,7 @@ The new queries should follow the same patterns:
 - **Scheduler for corrective creation**: Use `ctx.scheduler.runAfter(0, ...)` not direct function call, because the corrective obligation is a new entity creation (not part of the reversal transaction). This matches the project pattern where cross-entity side effects use the scheduler.
 - **Only for settled obligations**: The guard `obligation.status === "settled"` prevents creating correctives for non-settled obligations that might appear in multi-obligation plan entries.
 - **Source forwarding**: Pass `args.source` from the emitPaymentReversed args through to the corrective obligation creation, preserving the audit trail back to the webhook/actor that triggered the reversal.
-- **Amount**: Use `obligation.amount` (full obligation amount). The `isFullySettled` guard ensures dispersal/reversal only fires on fully-settled obligations.
+- **Amount**: Derive `reversedAmount` from the cascade result (sum of `reversalEntries` amounts) so that partial reversals produce a corrective obligation for only the reversed cash, not the full obligation amount.
 
 ## File Structure
 
