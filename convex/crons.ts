@@ -1,4 +1,4 @@
-import { cronJobs } from "convex/server";
+import { cronJobs, makeFunctionReference } from "convex/server";
 import { internal } from "./_generated/api";
 
 const crons = cronJobs();
@@ -52,6 +52,21 @@ crons.daily(
 	"cash ledger reconciliation",
 	{ hourUTC: 7, minuteUTC: 15 },
 	internal.payments.cashLedger.reconciliationCron.cashLedgerReconciliation
+);
+
+// Lender payout scheduling: evaluates lender frequency thresholds
+// and batches payout execution for eligible dispersal entries.
+// Runs at 08:00 UTC (after reconciliation completes at 07:15).
+// See Tech Design OQ-8 and ENG-182.
+const processPayoutBatchRef = makeFunctionReference<
+	"action",
+	Record<string, never>,
+	null
+>("payments/payout/batchPayout:processPayoutBatch");
+crons.daily(
+	"lender payout batch",
+	{ hourUTC: 8, minuteUTC: 0 },
+	processPayoutBatchRef
 );
 
 export default crons;
