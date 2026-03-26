@@ -8,6 +8,13 @@ import {
 	isPayoutDue,
 	MINIMUM_PAYOUT_CENTS,
 } from "./config";
+import {
+	claimEntriesForPayoutRef,
+	getActiveLendersRef,
+	getEligibleDispersalEntriesRef,
+	revertClaimedEntriesRef,
+	updateLenderPayoutDateRef,
+} from "./refs";
 import type { PayoutFrequency } from "./validators";
 
 // ── Helpers ─────────────────────────────────────────────────────────
@@ -54,10 +61,10 @@ async function processMortgageGroup(
 
 	// Step 1: Claim entries (pending -> disbursed) BEFORE posting payout.
 	// This is the concurrency lock -- only the first caller wins.
-	await ctx.runMutation(
-		internal.payments.payout.mutations.claimEntriesForPayout,
-		{ entryIds, payoutDate: args.today }
-	);
+	await ctx.runMutation(claimEntriesForPayoutRef, {
+		entryIds,
+		payoutDate: args.today,
+	});
 
 	// Step 2: Post lender payout via cash ledger.
 	// If this fails, revert the claim.
@@ -77,10 +84,7 @@ async function processMortgageGroup(
 		);
 	} catch (postError) {
 		// Revert claimed entries so they can be retried
-		await ctx.runMutation(
-			internal.payments.payout.mutations.revertClaimedEntries,
-			{ entryIds }
-		);
+		await ctx.runMutation(revertClaimedEntriesRef, { entryIds });
 		throw postError;
 	}
 }
@@ -105,10 +109,7 @@ export const processPayoutBatch = internalAction({
 		const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
 
 		// 1. Get all active lenders
-		const lenders = await ctx.runQuery(
-			internal.payments.payout.queries.getActiveLenders,
-			{}
-		);
+		const lenders = await ctx.runQuery(getActiveLendersRef, {});
 
 		const source: CommandSource = {
 			actorType: "system",
@@ -137,7 +138,7 @@ export const processPayoutBatch = internalAction({
 			}
 
 			const eligibleEntries = await ctx.runQuery(
-				internal.payments.payout.queries.getEligibleDispersalEntries,
+				getEligibleDispersalEntriesRef,
 				{ lenderId: lender._id, today }
 			);
 
@@ -188,10 +189,10 @@ export const processPayoutBatch = internalAction({
 			}
 
 			if (lenderPayoutCount > 0) {
-				await ctx.runMutation(
-					internal.payments.payout.mutations.updateLenderPayoutDate,
-					{ lenderId: lender._id, payoutDate: today }
-				);
+				await ctx.runMutation(updateLenderPayoutDateRef, {
+					lenderId: lender._id,
+					payoutDate: today,
+				});
 				totalPayouts += lenderPayoutCount;
 				lendersProcessed++;
 			} else {
