@@ -124,11 +124,12 @@ describe("correctiveObligation", () => {
 			expect(corrective?.borrowerId).toBe(borrowerId);
 			expect(corrective?.paymentNumber).toBe(1);
 			expect(corrective?.amountSettled).toBe(0);
+			expect(corrective?.postingGroupId).toBe("pg-test-001");
 		});
 	});
 
-	// T-021: Idempotency — second call returns existing, does not duplicate
-	it("returns existing corrective without creating a duplicate on second call", async () => {
+	// T-021: Idempotency — second call with same postingGroupId returns existing
+	it("returns existing corrective without creating a duplicate on retry with same postingGroupId", async () => {
 		const t = createTestHarness();
 		const { mortgageId, borrowerId } = await seedMinimalEntities(t);
 		const originalId = await seedSettledObligation(t, {
@@ -155,8 +156,8 @@ describe("correctiveObligation", () => {
 			{
 				originalObligationId: originalId,
 				reversedAmount: 100_000,
-				reason: "NSF reversal duplicate",
-				postingGroupId: "pg-test-003",
+				reason: "NSF reversal retry",
+				postingGroupId: "pg-test-002", // same postingGroupId = same reversal
 				source: SYSTEM_SOURCE,
 			}
 		);
@@ -174,6 +175,56 @@ describe("correctiveObligation", () => {
 				.collect();
 			const correctives = all.filter((o) => o.type !== "late_fee");
 			expect(correctives).toHaveLength(1);
+		});
+	});
+
+	// T-021b: Distinct reversals — different postingGroupId creates separate correctives
+	it("creates separate correctives for different postingGroupIds (distinct reversals)", async () => {
+		const t = createTestHarness();
+		const { mortgageId, borrowerId } = await seedMinimalEntities(t);
+		const originalId = await seedSettledObligation(t, {
+			mortgageId,
+			borrowerId,
+		});
+
+		const first = await t.mutation(
+			internal.payments.obligations.createCorrectiveObligation
+				.createCorrectiveObligation,
+			{
+				originalObligationId: originalId,
+				reversedAmount: 50_000,
+				reason: "NSF reversal payment 1",
+				postingGroupId: "pg-reversal-A",
+				source: SYSTEM_SOURCE,
+			}
+		);
+		expect(first.created).toBe(true);
+
+		const second = await t.mutation(
+			internal.payments.obligations.createCorrectiveObligation
+				.createCorrectiveObligation,
+			{
+				originalObligationId: originalId,
+				reversedAmount: 50_000,
+				reason: "NSF reversal payment 2",
+				postingGroupId: "pg-reversal-B", // different postingGroupId = different reversal
+				source: SYSTEM_SOURCE,
+			}
+		);
+
+		expect(second.created).toBe(true);
+		expect(second.obligationId).not.toBe(first.obligationId);
+
+		// Verify two correctives exist
+		await t.run(async (ctx) => {
+			const all = await ctx.db
+				.query("obligations")
+				.withIndex("by_source_obligation", (q) =>
+					q.eq("sourceObligationId", originalId)
+				)
+				.collect();
+			const correctives = all.filter((o) => o.type !== "late_fee");
+			expect(correctives).toHaveLength(2);
 		});
 	});
 
@@ -257,6 +308,34 @@ describe("correctiveObligation", () => {
 			expect.fail("Should have thrown");
 		} catch (e) {
 			expect(getConvexErrorCode(e)).toBe("INVALID_AMOUNT");
+		}
+	});
+
+	// T-022b: Validation — late_fee source obligation rejected
+	it("throws UNSUPPORTED_SOURCE_TYPE when original is a late_fee obligation", async () => {
+		const t = createTestHarness();
+		const { mortgageId, borrowerId } = await seedMinimalEntities(t);
+		const lateFeeId = await seedSettledObligation(t, {
+			mortgageId,
+			borrowerId,
+			type: "late_fee",
+		});
+
+		try {
+			await t.mutation(
+				internal.payments.obligations.createCorrectiveObligation
+					.createCorrectiveObligation,
+				{
+					originalObligationId: lateFeeId,
+					reversedAmount: 100_000,
+					reason: "should fail for late_fee",
+					postingGroupId: "pg-test-late-fee",
+					source: SYSTEM_SOURCE,
+				}
+			);
+			expect.fail("Should have thrown");
+		} catch (e) {
+			expect(getConvexErrorCode(e)).toBe("UNSUPPORTED_SOURCE_TYPE");
 		}
 	});
 

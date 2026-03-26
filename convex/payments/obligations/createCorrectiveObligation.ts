@@ -41,6 +41,20 @@ export const createCorrectiveObligation = internalMutation({
 			});
 		}
 
+		// 1b. Reject late_fee source obligations — corrective creation for late fees
+		// is not supported. Late-fee obligations require feeCode/mortgageFeeId fields
+		// that cannot be safely copied, and late-fee correctives would be filtered out
+		// by query helpers (getCorrectiveObligations, getObligationWithCorrectives).
+		if (original.type === "late_fee") {
+			throw new ConvexError({
+				code: "UNSUPPORTED_SOURCE_TYPE" as const,
+				message:
+					"Cannot create corrective obligation for a late_fee source obligation",
+				obligationId: args.originalObligationId as string,
+				type: original.type,
+			});
+		}
+
 		// 2. Validate reversedAmount is a positive safe integer (cents)
 		if (
 			!Number.isSafeInteger(args.reversedAmount) ||
@@ -53,25 +67,29 @@ export const createCorrectiveObligation = internalMutation({
 			});
 		}
 
-		// 3. Idempotency check via by_type_and_source index
+		// 3. Idempotency check keyed to the reversal identity (postingGroupId).
+		// Each reversal event has a unique postingGroupId, so we match on
+		// (sourceObligationId, postingGroupId) to allow multiple independent
+		// reversals of the same obligation while preventing duplicate correctives
+		// for the same reversal.
 		const existingCorrectives = await ctx.db
 			.query("obligations")
-			.withIndex("by_type_and_source", (q) =>
-				q
-					.eq("type", original.type)
-					.eq("sourceObligationId", args.originalObligationId)
+			.withIndex("by_source_obligation", (q) =>
+				q.eq("sourceObligationId", args.originalObligationId)
 			)
+			.filter((q) => q.eq(q.field("postingGroupId"), args.postingGroupId))
 			.collect();
 
-		// Filter out the original itself (relevant when original.type is "late_fee")
+		// Filter to same type (excludes late_fee obligations sharing sourceObligationId)
 		const existingCorrective = existingCorrectives.find(
-			(o) => o._id !== args.originalObligationId
+			(o) => o.type === original.type
 		);
 
 		if (existingCorrective) {
 			console.info(
 				"[createCorrectiveObligation] Idempotency: corrective already exists " +
-					`(existing=${existingCorrective._id as string}, original=${args.originalObligationId as string})`
+					`(existing=${existingCorrective._id as string}, original=${args.originalObligationId as string}, ` +
+					`postingGroupId=${args.postingGroupId})`
 			);
 			return {
 				obligationId: existingCorrective._id,
@@ -94,6 +112,7 @@ export const createCorrectiveObligation = internalMutation({
 			dueDate: now,
 			gracePeriodEnd: now + FIFTEEN_DAYS_MS,
 			sourceObligationId: args.originalObligationId,
+			postingGroupId: args.postingGroupId,
 			settledAt: undefined,
 			createdAt: now,
 		});

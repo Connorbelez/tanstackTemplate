@@ -3,10 +3,12 @@ import { internal } from "../../_generated/api";
 import type { Id } from "../../_generated/dataModel";
 import type { MutationCtx } from "../../_generated/server";
 import { internalMutation } from "../../_generated/server";
+import { safeBigintToNumber } from "../../payments/cashLedger/accounts";
 import {
 	postOverpaymentToUnappliedCash,
 	postPaymentReversalCascade,
 } from "../../payments/cashLedger/integrations";
+import { IDEMPOTENCY_KEY_PREFIX } from "../../payments/cashLedger/types";
 import { executeTransition } from "../transition";
 import type { CommandSource } from "../types";
 import { effectPayloadValidator } from "../validators";
@@ -274,14 +276,33 @@ export const emitPaymentReversed = internalMutation({
 			// Schedule corrective obligation creation (ENG-180)
 			// Only for settled obligations — non-settled obligations were never fully
 			// paid and don't need a corrective receivable.
-			if (shouldCreateCorrective) {
+			// Skip late_fee obligations — corrective creation is not supported for
+			// late fees (they require feeCode/mortgageFeeId and are filtered from
+			// corrective queries).
+			if (shouldCreateCorrective && obligation.type !== "late_fee") {
+				// Derive reversedAmount from the cascade's REVERSAL of CASH_RECEIVED
+				// rather than obligation.amount — partial payments mean the attempt
+				// may have settled less than the full obligation amount.
+				const cashReceivedReversalPrefix = `${IDEMPOTENCY_KEY_PREFIX}reversal:cash-received:`;
+				const cashReceivedReversal = cascadeResult.reversalEntries.find((e) =>
+					e.idempotencyKey.startsWith(cashReceivedReversalPrefix)
+				);
+				if (!cashReceivedReversal) {
+					throw new Error(
+						"[emitPaymentReversed] No CASH_RECEIVED reversal entry found in cascade result " +
+							`for attempt=${args.entityId}, obligation=${obligationId}. ` +
+							"Cannot determine reversedAmount for corrective obligation."
+					);
+				}
+				const reversedAmount = safeBigintToNumber(cashReceivedReversal.amount);
+
 				await ctx.scheduler.runAfter(
 					0,
 					internal.payments.obligations.createCorrectiveObligation
 						.createCorrectiveObligation,
 					{
 						originalObligationId: obligationId,
-						reversedAmount: obligation.amount,
+						reversedAmount,
 						reason,
 						postingGroupId: cascadeResult.postingGroupId,
 						source: args.source,

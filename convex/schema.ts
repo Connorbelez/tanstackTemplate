@@ -545,7 +545,8 @@ export default defineSchema({
 		amountSettled: v.number(), // cumulative cents settled
 		dueDate: v.number(), // legacy system timestamp: Unix ms, not a YYYY-MM-DD business date
 		gracePeriodEnd: v.number(), // legacy system timestamp: Unix ms, not a YYYY-MM-DD business date
-		sourceObligationId: v.optional(v.id("obligations")), // for late_fee type
+		sourceObligationId: v.optional(v.id("obligations")), // for late_fee type and correctives
+		postingGroupId: v.optional(v.string()), // reversal identity for corrective obligations
 		feeCode: v.optional(feeCodeValidator),
 		mortgageFeeId: v.optional(v.id("mortgageFees")),
 		settledAt: v.optional(v.number()), // legacy system timestamp: Unix ms, not a YYYY-MM-DD business date
