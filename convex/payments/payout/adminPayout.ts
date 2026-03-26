@@ -3,17 +3,17 @@ import { internal } from "../../_generated/api";
 import type { Doc, Id } from "../../_generated/dataModel";
 import type { CommandSource } from "../../engine/types";
 import { adminAction } from "../../fluent";
+import { buildIdempotencyKey } from "../cashLedger/types";
 import { MINIMUM_PAYOUT_CENTS } from "./config";
-import {
-	getEligibleDispersalEntriesRef,
-	getLenderByIdRef,
-	markEntriesDisbursedRef,
-	updateLenderPayoutDateRef,
-} from "./refs";
 
 /**
  * Admin-triggered immediate payout for a specific lender.
  * Bypasses frequency schedule but still respects hold period.
+ *
+ * Uses a claim-then-post pattern to prevent double payouts:
+ * 1. Claim entries (pending → disbursed) atomically
+ * 2. Post the cash ledger entry
+ * 3. If posting fails, revert the claim (disbursed → pending)
  */
 export const triggerImmediatePayout = adminAction
 	.input({
@@ -24,18 +24,24 @@ export const triggerImmediatePayout = adminAction
 		const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
 
 		// 1. Get lender record directly — verify exists + active
-		const lender = await ctx.runQuery(getLenderByIdRef, {
-			lenderId: args.lenderId,
-		});
+		const lender = await ctx.runQuery(
+			internal.payments.payout.queries.getLenderById,
+			{
+				lenderId: args.lenderId,
+			}
+		);
 		if (!lender || lender.status !== "active") {
 			throw new ConvexError(`Lender ${args.lenderId} not found or not active`);
 		}
 
 		// 2. Get eligible dispersal entries (past hold period)
-		const eligibleEntries = await ctx.runQuery(getEligibleDispersalEntriesRef, {
-			lenderId: args.lenderId,
-			today,
-		});
+		const eligibleEntries = await ctx.runQuery(
+			internal.payments.payout.queries.getEligibleDispersalEntries,
+			{
+				lenderId: args.lenderId,
+				today,
+			}
+		);
 
 		if (eligibleEntries.length === 0) {
 			return { payoutCount: 0, totalAmountCents: 0, lenderId: args.lenderId };
@@ -67,7 +73,7 @@ export const triggerImmediatePayout = adminAction
 			}
 		}
 
-		// 5. For each mortgage group: sum, threshold check, post payout, mark disbursed
+		// 5. For each mortgage group: claim entries, post payout, revert on failure
 		const minimumCents = lender.minimumPayoutCents ?? MINIMUM_PAYOUT_CENTS;
 		let payoutCount = 0;
 		let totalAmountCents = 0;
@@ -90,28 +96,50 @@ export const triggerImmediatePayout = adminAction
 				continue;
 			}
 
-			const idempotencyKey = `admin-payout:${today}:${args.lenderId}:${mortgageId}`;
+			const entryIds = entries.map((e: Doc<"dispersalEntries">) => e._id);
+
+			// Use standardised cash-ledger idempotency key convention
+			const idempotencyKey = buildIdempotencyKey(
+				"lender-payout-sent",
+				"admin",
+				today,
+				args.lenderId,
+				mortgageId
+			);
 
 			try {
+				// Step 1: Claim entries BEFORE posting — prevents concurrent
+				// admin+cron from processing the same entries
 				await ctx.runMutation(
-					internal.payments.cashLedger.mutations.postLenderPayout,
+					internal.payments.payout.mutations.claimEntriesForPayout,
 					{
-						mortgageId,
-						lenderId: args.lenderId,
-						amount: sumAmount,
-						effectiveDate: today,
-						idempotencyKey,
-						source,
-						reason: "Admin-triggered immediate payout",
+						entryIds,
+						payoutDate: today,
 					}
 				);
 
-				// Optimistic concurrency guard in markEntriesDisbursed
-				// prevents double-payout if cron is running concurrently
-				await ctx.runMutation(markEntriesDisbursedRef, {
-					entryIds: entries.map((e: Doc<"dispersalEntries">) => e._id),
-					payoutDate: today,
-				});
+				try {
+					// Step 2: Post the cash ledger entry
+					await ctx.runMutation(
+						internal.payments.cashLedger.mutations.postLenderPayout,
+						{
+							mortgageId,
+							lenderId: args.lenderId,
+							amount: sumAmount,
+							effectiveDate: today,
+							idempotencyKey,
+							source,
+							reason: "Admin-triggered immediate payout",
+						}
+					);
+				} catch (postError) {
+					// Step 3: Revert claim if ledger posting fails
+					await ctx.runMutation(
+						internal.payments.payout.mutations.revertClaimedEntries,
+						{ entryIds }
+					);
+					throw postError;
+				}
 
 				payoutCount++;
 				totalAmountCents += sumAmount;
@@ -125,10 +153,13 @@ export const triggerImmediatePayout = adminAction
 
 		// 6. Update lender's last payout date (if any payouts were made)
 		if (payoutCount > 0) {
-			await ctx.runMutation(updateLenderPayoutDateRef, {
-				lenderId: args.lenderId,
-				payoutDate: today,
-			});
+			await ctx.runMutation(
+				internal.payments.payout.mutations.updateLenderPayoutDate,
+				{
+					lenderId: args.lenderId,
+					payoutDate: today,
+				}
+			);
 		}
 
 		// 7. If there were failures, report with partial success details

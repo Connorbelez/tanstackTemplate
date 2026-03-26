@@ -1,4 +1,4 @@
-import { cronJobs, makeFunctionReference } from "convex/server";
+import { cronJobs } from "convex/server";
 import { internal } from "./_generated/api";
 
 const crons = cronJobs();
@@ -58,15 +58,10 @@ crons.daily(
 // and batches payout execution for eligible dispersal entries.
 // Runs at 08:00 UTC (after reconciliation completes at 07:15).
 // See Tech Design OQ-8 and ENG-182.
-const processPayoutBatchRef = makeFunctionReference<
-	"action",
-	Record<string, never>,
-	null
->("payments/payout/batchPayout:processPayoutBatch");
 crons.daily(
 	"lender payout batch",
 	{ hourUTC: 8, minuteUTC: 0 },
-	processPayoutBatchRef
+	internal.payments.payout.batchPayout.processPayoutBatch
 );
 
 export default crons;
