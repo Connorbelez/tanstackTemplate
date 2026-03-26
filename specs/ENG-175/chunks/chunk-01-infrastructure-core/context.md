@@ -89,18 +89,15 @@ export interface ReversalResult {
 
 **File:** `convex/payments/webhooks/processReversal.ts` (new)
 
-This is an `internalMutation` that:
-1. Posts the cash ledger reversal cascade via `postPaymentReversalCascade()`
-2. Transitions the collection attempt: `confirmed → reversed` via `executeTransition()`
+This is an `internalMutation` that fires the GT transition `confirmed → reversed` for a collection attempt. The cash-ledger reversal cascade is handled entirely by the effect-driven architecture — not by a direct call in this mutation.
 
-**CRITICAL ARCHITECTURE NOTE:** The `emitPaymentReversed` effect (registered in ENG-173) already calls `postPaymentReversalCascade()` when the GT transition fires. Calling the cascade DIRECTLY in this mutation (before the transition) ensures atomicity within the same Convex mutation. The GT-scheduled effect will re-call it, but `postPaymentReversalCascade` is idempotent via `postingGroupId`, so the second call is a no-op.
+**EFFECT-DRIVEN ARCHITECTURE:** The `emitPaymentReversed` effect (registered in ENG-173) handles the per-obligation cash-ledger reversal cascade automatically. When `executeTransition()` fires the `PAYMENT_REVERSED` event, the effect handler iterates `planEntry.obligationIds` and calls `postPaymentReversalCascade()` for each obligation. Each call is idempotent via `postingGroupId`, so retries are safe. This mutation fires the transition exactly ONCE per collection attempt — it should NOT be called per-obligation.
 
 ### Key imports and contracts:
 
 ```typescript
-import { internalMutation, type MutationCtx } from "../../_generated/server";
+import { internalMutation } from "../../_generated/server";
 import { v } from "convex/values";
-import { postPaymentReversalCascade } from "../cashLedger/integrations";
 import { executeTransition } from "../../engine/transition";
 import type { CommandSource } from "../../engine/types";
 ```
@@ -110,32 +107,22 @@ import type { CommandSource } from "../../engine/types";
 export const processReversalCascade = internalMutation({
   args: {
     attemptId: v.id("collectionAttempts"),
-    obligationId: v.id("obligations"),
-    mortgageId: v.id("mortgages"),
     effectiveDate: v.string(),       // YYYY-MM-DD
     reason: v.string(),
     provider: v.union(v.literal("rotessa"), v.literal("stripe")),
     providerEventId: v.string(),
   },
   handler: async (ctx, args) => {
-    // 1. Post cash ledger reversal cascade (direct call for atomicity)
-    const result = await postPaymentReversalCascade(ctx, {
-      attemptId: args.attemptId,
-      obligationId: args.obligationId,
-      mortgageId: args.mortgageId,
-      effectiveDate: args.effectiveDate,
-      source: {
-        actorType: "system",
-        channel: "api_webhook",
-        actorId: `webhook:${args.provider}`,
-      } satisfies CommandSource,
-      reason: args.reason,
-    });
+    const source: CommandSource = {
+      actorType: "system",
+      channel: "api_webhook",
+      actorId: `webhook:${args.provider}`,
+    };
 
-    // 2. Transition collection attempt: confirmed → reversed
-    //    The PAYMENT_REVERSED event payload includes reason + effectiveDate
-    //    so the emitPaymentReversed effect can also reference them.
-    await executeTransition(ctx, {
+    // Fire the GT transition: confirmed → reversed
+    // The emitPaymentReversed effect handles the per-obligation
+    // cash ledger reversal cascade (via postPaymentReversalCascade).
+    const transitionResult = await executeTransition(ctx, {
       entityType: "collectionAttempt",
       entityId: args.attemptId,
       eventType: "PAYMENT_REVERSED",
@@ -143,27 +130,15 @@ export const processReversalCascade = internalMutation({
         reason: args.reason,
         provider: args.provider,
         providerEventId: args.providerEventId,
-        postingGroupId: result.postingGroupId,
-        clawbackRequired: result.clawbackRequired,
         effectiveDate: args.effectiveDate,
       },
-      source: {
-        actorType: "system",
-        channel: "api_webhook",
-        actorId: `webhook:${args.provider}`,
-      },
+      source,
     });
 
-    // 3. Log clawback requirement (ENG-180 scope for corrective obligation)
-    if (result.clawbackRequired) {
-      console.warn(
-        `[processReversalCascade] Clawback required for attempt=${args.attemptId}, ` +
-        `obligation=${args.obligationId}, provider=${args.provider}. ` +
-        `Corrective obligation creation is ENG-180 scope.`
-      );
-    }
-
-    return result;
+    return {
+      success: transitionResult.success,
+      newState: transitionResult.newState,
+    };
   },
 });
 ```
