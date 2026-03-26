@@ -20,5 +20,5 @@
 
 ## Chunk 3: Quality Gate & Verification ✅
 - [x] T-015: Run `bun check` + `bun typecheck` + `bunx convex codegen` — fix any errors
-- [x] T-016: Run `bun run test` — all 13 new tests pass; 13 pre-existing failures unchanged
+- [x] T-016: Run `bun run test` — all tests (existing + 13 new) pass with no failures
 - [x] T-017: Verify `git diff main -- convex/ledger/` shows ZERO changes to ownership ledger
