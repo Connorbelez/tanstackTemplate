@@ -1,6 +1,6 @@
 import { assign, setup } from "xstate";
 
-export const COLLECTION_ATTEMPT_MACHINE_VERSION = "1.0.0";
+export const COLLECTION_ATTEMPT_MACHINE_VERSION = "1.1.0";
 
 export const collectionAttemptMachine = setup({
 	types: {
@@ -17,7 +17,8 @@ export const collectionAttemptMachine = setup({
 			| { type: "RETRY_ELIGIBLE" }
 			| { type: "MAX_RETRIES_EXCEEDED" }
 			| { type: "RETRY_INITIATED"; providerRef: string }
-			| { type: "ATTEMPT_CANCELLED"; reason: string },
+			| { type: "ATTEMPT_CANCELLED"; reason: string }
+			| { type: "PAYMENT_REVERSED"; reason: string },
 	},
 	guards: {
 		canRetry: ({ context }) => context.retryCount < context.maxRetries,
@@ -39,6 +40,9 @@ export const collectionAttemptMachine = setup({
 			/* resolved by GT effect registry */
 		},
 		notifyAdmin: () => {
+			/* resolved by GT effect registry */
+		},
+		emitPaymentReversed: () => {
 			/* resolved by GT effect registry */
 		},
 	},
@@ -100,7 +104,15 @@ export const collectionAttemptMachine = setup({
 				},
 			},
 		},
-		confirmed: { type: "final" },
+		confirmed: {
+			on: {
+				PAYMENT_REVERSED: {
+					target: "reversed",
+					actions: ["emitPaymentReversed"],
+				},
+			},
+		},
+		reversed: { type: "final" },
 		permanent_fail: { type: "final" },
 		cancelled: { type: "final" },
 	},
