@@ -379,6 +379,12 @@ describe("Financial invariant stress tests", () => {
 			initialDebitBalance: 100_000n,
 		});
 
+		// Create CONTROL account for LENDER_PAYABLE_CREATED entries
+		const controlAccount = await createTestAccount(t, {
+			family: "CONTROL",
+			subaccount: "ALLOCATION",
+		});
+
 		// Attempt LENDER_PAYOUT_SENT exceeding balance -> expect rejection
 		await t.run(async (ctx) => {
 			const { postCashEntryInternal } = await import("../postEntry");
@@ -398,27 +404,40 @@ describe("Financial invariant stress tests", () => {
 			).rejects.toThrow(NEGATIVE_BALANCE_PATTERN);
 		});
 
-		// Create a seed entry for REVERSAL reference
+		// Seed: LENDER_PAYABLE_CREATED credits LP (debit CONTROL, credit LP)
+		// After seed: LENDER_PAYABLE balance = 50k + 10k = 60k credits
 		const seedEntry = await postTestEntry(t, {
-			entryType: "LENDER_PAYOUT_SENT",
+			entryType: "LENDER_PAYABLE_CREATED",
 			effectiveDate: "2026-03-01",
 			amount: 10_000,
-			debitAccountId: lenderPayable._id,
-			creditAccountId: trustCash._id,
-			idempotencyKey: buildIdempotencyKey("stress-payout", "seed-for-reversal"),
+			debitAccountId: controlAccount._id,
+			creditAccountId: lenderPayable._id,
+			idempotencyKey: buildIdempotencyKey("stress-alloc", "seed-for-reversal"),
 			source: SYSTEM_SOURCE,
 		});
 
-		// Post REVERSAL entry -> verify it succeeds even making LENDER_PAYABLE negative
-		// After seed: LENDER_PAYABLE balance = 50k - 10k = 40k credits
-		// REVERSAL of 60k debiting LENDER_PAYABLE: 40k - 60k = -20k
+		// Drain LP via LENDER_PAYOUT_SENT: debit LP 55k, credit TC
+		// After drain: LENDER_PAYABLE balance = 60k - 55k = 5k credits
+		await postTestEntry(t, {
+			entryType: "LENDER_PAYOUT_SENT",
+			effectiveDate: "2026-03-01",
+			amount: 55_000,
+			debitAccountId: lenderPayable._id,
+			creditAccountId: trustCash._id,
+			idempotencyKey: buildIdempotencyKey("stress-payout", "drain-lp"),
+			source: SYSTEM_SOURCE,
+		});
+
+		// Post REVERSAL with true reversal shape (flipped debit/credit from seed)
+		// Seed was: debit CONTROL, credit LP → reversal is: debit LP, credit CONTROL
+		// After reversal: LENDER_PAYABLE balance = 5k - 10k = -5k
 		// REVERSAL skips balance check, so this should succeed
 		const reversalResult = await postTestEntry(t, {
 			entryType: "REVERSAL",
 			effectiveDate: "2026-03-01",
-			amount: 60_000,
+			amount: 10_000,
 			debitAccountId: lenderPayable._id,
-			creditAccountId: trustCash._id,
+			creditAccountId: controlAccount._id,
 			idempotencyKey: buildIdempotencyKey("stress-reversal", "negative-ok"),
 			causedBy: seedEntry.entry._id,
 			source: SYSTEM_SOURCE,
