@@ -54,4 +54,14 @@ crons.daily(
 	internal.payments.cashLedger.reconciliationCron.cashLedgerReconciliation
 );
 
+// Lender payout scheduling: evaluates lender frequency thresholds
+// and batches payout execution for eligible dispersal entries.
+// Runs at 08:00 UTC (after reconciliation completes at 07:15).
+// See Tech Design OQ-8 and ENG-182.
+crons.daily(
+	"lender payout batch",
+	{ hourUTC: 8, minuteUTC: 0 },
+	internal.payments.payout.batchPayout.processPayoutBatch
+);
+
 export default crons;

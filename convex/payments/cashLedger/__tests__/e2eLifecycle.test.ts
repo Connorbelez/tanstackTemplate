@@ -24,7 +24,7 @@ import {
 	assertAccountIntegrity,
 	assertObligationConservation,
 	assertSettlementReconciles,
-} from "./e2eHelpers";
+} from "./e2eHelpers.test-utils";
 import {
 	ADMIN_SOURCE,
 	createDueObligation,

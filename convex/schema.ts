@@ -27,6 +27,7 @@ import {
 	feeStatusValidator,
 	feeSurfaceValidator,
 } from "./fees/validators";
+import { payoutFrequencyValidator } from "./payments/payout/validators";
 
 export default defineSchema({
 	// ══════════════════════════════════════════════════════════
@@ -155,6 +156,11 @@ export default defineSchema({
 		status: v.string(),
 		activatedAt: v.optional(v.number()),
 		createdAt: v.number(),
+
+		// ─── Payout configuration (ENG-182) ───
+		payoutFrequency: v.optional(payoutFrequencyValidator), // default: monthly (handled in code)
+		lastPayoutDate: v.optional(v.string()), // YYYY-MM-DD: last payout execution date
+		minimumPayoutCents: v.optional(v.number()), // per-lender override (default: global MINIMUM_PAYOUT_CENTS)
 	})
 		.index("by_user", ["userId"])
 		.index("by_broker", ["brokerId"])
@@ -975,6 +981,7 @@ export default defineSchema({
 		feeCode: v.optional(feeCodeValidator),
 		payoutEligibleAfter: v.optional(v.string()), // YYYY-MM-DD: earliest payout date (hold period)
 		paymentMethod: v.optional(v.string()), // resolved from collection attempt chain
+		payoutDate: v.optional(v.string()), // YYYY-MM-DD: date payout was executed (ENG-182)
 		createdAt: v.number(), // system timestamp: Unix ms
 	})
 		.index("by_lender", ["lenderId", "dispersalDate"])
