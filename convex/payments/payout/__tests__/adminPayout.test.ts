@@ -1,6 +1,8 @@
+import type { convexTest } from "convex-test";
 import { describe, expect, it } from "vitest";
 import type { Id } from "../../../_generated/dataModel";
 import type { QueryCtx } from "../../../_generated/server";
+import { FAIRLEND_STAFF_ORG_ID } from "../../../constants";
 import {
 	createHarness,
 	seedMinimalEntities,
@@ -34,6 +36,132 @@ const CALC_DETAILS = {
 	rawAmount: 5940,
 	roundedAmount: 5940,
 };
+
+// ── Admin identity for integration tests ─────────────────────────────
+
+const _ADMIN_IDENTITY = {
+	subject: "admin-payout-test",
+	issuer: "https://api.workos.com",
+	org_id: FAIRLEND_STAFF_ORG_ID,
+	organization_name: "FairLend Staff",
+	role: "admin",
+	roles: JSON.stringify(["admin"]),
+	permissions: JSON.stringify([]),
+	user_email: "admin-payout@fairlend.test",
+	user_first_name: "Admin",
+	user_last_name: "Payout",
+};
+
+// ── Helpers ──────────────────────────────────────────────────────────
+
+type TestHarness = ReturnType<typeof convexTest>;
+
+/**
+ * Seed a pending dispersal entry for the given lender + mortgage.
+ * Also creates the required ledger account and settled obligation.
+ */
+async function _seedDispersalEntry(
+	t: TestHarness,
+	args: {
+		mortgageId: Id<"mortgages">;
+		lenderId: Id<"lenders">;
+		borrowerId: Id<"borrowers">;
+		amount: number;
+		idempotencyKey: string;
+		payoutEligibleAfter?: string;
+	}
+) {
+	return t.run(async (ctx) => {
+		const lenderAccountId = await ctx.db.insert("ledger_accounts", {
+			type: "POSITION",
+			mortgageId: args.mortgageId as unknown as string,
+			lenderId: args.lenderId as unknown as string,
+			cumulativeDebits: 0n,
+			cumulativeCredits: 0n,
+			createdAt: Date.now(),
+		});
+
+		const obligationId = await ctx.db.insert("obligations", {
+			status: "settled",
+			machineContext: {},
+			lastTransitionAt: Date.now(),
+			mortgageId: args.mortgageId,
+			borrowerId: args.borrowerId,
+			paymentNumber: 1,
+			type: "regular_interest",
+			amount: args.amount,
+			amountSettled: args.amount,
+			dueDate: Date.parse("2026-03-01T00:00:00Z"),
+			gracePeriodEnd: Date.parse("2026-03-16T00:00:00Z"),
+			createdAt: Date.now(),
+		});
+
+		const entryId = await ctx.db.insert("dispersalEntries", {
+			mortgageId: args.mortgageId,
+			lenderId: args.lenderId,
+			lenderAccountId,
+			amount: args.amount,
+			dispersalDate: "2026-03-01",
+			obligationId,
+			servicingFeeDeducted: 100,
+			status: "pending",
+			idempotencyKey: args.idempotencyKey,
+			calculationDetails: CALC_DETAILS,
+			payoutEligibleAfter: args.payoutEligibleAfter ?? "2026-03-01",
+			createdAt: Date.now(),
+		});
+
+		return { entryId, obligationId, lenderAccountId };
+	});
+}
+
+/**
+ * Create a second mortgage linked to the same broker as lender.
+ */
+async function _seedSecondMortgage(
+	t: TestHarness,
+	seeded: Awaited<ReturnType<typeof seedMinimalEntities>>
+) {
+	return t.run(async (ctx) => {
+		const now = Date.now();
+		const lender = await ctx.db.get(seeded.lenderAId);
+		if (!lender) {
+			throw new Error("Lender not found");
+		}
+
+		const propertyId = await ctx.db.insert("properties", {
+			streetAddress: "456 Admin Test Ave",
+			city: "Toronto",
+			province: "ON",
+			postalCode: "M5V 2B2",
+			propertyType: "residential",
+			createdAt: now,
+		});
+
+		const mortgageId = await ctx.db.insert("mortgages", {
+			status: "active",
+			propertyId,
+			principal: 5_000_000,
+			annualServicingRate: 0.01,
+			interestRate: 0.08,
+			rateType: "fixed",
+			termMonths: 12,
+			amortizationMonths: 12,
+			paymentAmount: 50_000,
+			paymentFrequency: "monthly",
+			loanType: "conventional",
+			lienPosition: 1,
+			interestAdjustmentDate: "2026-01-01",
+			termStartDate: "2026-01-01",
+			maturityDate: "2026-12-01",
+			firstPaymentDate: "2026-02-01",
+			brokerOfRecordId: lender.brokerId,
+			createdAt: now,
+		});
+
+		return mortgageId;
+	});
+}
 
 // ── Tests ────────────────────────────────────────────────────────────
 

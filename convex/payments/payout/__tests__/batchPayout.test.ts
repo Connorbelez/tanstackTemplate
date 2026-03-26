@@ -9,6 +9,9 @@ import { markEntriesDisbursed } from "../mutations";
 import { getActiveLenders, getEligibleDispersalEntries } from "../queries";
 
 const modules = import.meta.glob("/convex/**/*.ts");
+const _auditTrailModules = import.meta.glob(
+	"/convex/components/auditTrail/**/*.ts"
+);
 const EXPECTED_PENDING_ERROR = /expected "pending"/;
 
 // ── Type wrappers for _handler access ────────────────────────────────

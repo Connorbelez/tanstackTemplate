@@ -1,6 +1,6 @@
 import { internal } from "../../_generated/api";
 import type { Doc, Id } from "../../_generated/dataModel";
-import { internalAction } from "../../_generated/server";
+import { type ActionCtx, internalAction } from "../../_generated/server";
 import type { CommandSource } from "../../engine/types";
 import { buildIdempotencyKey } from "../cashLedger/types";
 import {
@@ -23,16 +23,78 @@ function groupBy<T>(items: T[], keyFn: (item: T) => string): Map<string, T[]> {
 	return map;
 }
 
+/**
+ * Claim-then-post a single mortgage group's payout.
+ *
+ * 1. Claim entries (pending -> disbursed) -- concurrency lock.
+ * 2. Post lender payout to cash ledger.
+ * 3. If ledger post fails, revert claimed entries to "pending".
+ */
+async function processMortgageGroup(
+	ctx: ActionCtx,
+	args: {
+		mortgageId: Id<"mortgages">;
+		lenderId: Id<"lenders">;
+		entries: Doc<"dispersalEntries">[];
+		totalAmount: number;
+		today: string;
+		source: CommandSource;
+		postingGroupId: string;
+	}
+): Promise<void> {
+	const idempotencyKey = buildIdempotencyKey(
+		"lender-payout-sent",
+		"batch",
+		args.today,
+		args.lenderId,
+		args.mortgageId
+	);
+
+	const entryIds = args.entries.map((e: Doc<"dispersalEntries">) => e._id);
+
+	// Step 1: Claim entries (pending -> disbursed) BEFORE posting payout.
+	// This is the concurrency lock -- only the first caller wins.
+	await ctx.runMutation(
+		internal.payments.payout.mutations.claimEntriesForPayout,
+		{ entryIds, payoutDate: args.today }
+	);
+
+	// Step 2: Post lender payout via cash ledger.
+	// If this fails, revert the claim.
+	try {
+		await ctx.runMutation(
+			internal.payments.cashLedger.mutations.postLenderPayout,
+			{
+				mortgageId: args.mortgageId,
+				lenderId: args.lenderId,
+				amount: args.totalAmount,
+				effectiveDate: args.today,
+				idempotencyKey,
+				source: args.source,
+				reason: "Scheduled batch payout",
+				postingGroupId: args.postingGroupId,
+			}
+		);
+	} catch (postError) {
+		// Revert claimed entries so they can be retried
+		await ctx.runMutation(
+			internal.payments.payout.mutations.revertClaimedEntries,
+			{ entryIds }
+		);
+		throw postError;
+	}
+}
+
 // ── Batch payout action ─────────────────────────────────────────────
 
 /**
- * Daily cron handler — evaluates which lenders are due for payout,
+ * Daily cron handler -- evaluates which lenders are due for payout,
  * checks eligible dispersal entries, and posts lender payouts via the cash
  * ledger.
  *
- * Concurrency safety: entries are claimed (pending → disbursed) BEFORE the
+ * Concurrency safety: entries are claimed (pending -> disbursed) BEFORE the
  * cash ledger payout is posted. This prevents double payouts when an admin
- * triggers a payout while the cron is running — only the first claim wins.
+ * triggers a payout while the cron is running -- only the first claim wins.
  * If the ledger post fails, claimed entries are reverted to "pending".
  *
  * Idempotency: keys use the standard cash-ledger prefix via buildIdempotencyKey.
@@ -69,13 +131,11 @@ export const processPayoutBatch = internalAction({
 				(lender.payoutFrequency as PayoutFrequency | undefined) ??
 				DEFAULT_PAYOUT_FREQUENCY;
 
-			// 2a. Check if payout is due based on frequency
 			if (!isPayoutDue(frequency, lender.lastPayoutDate, today)) {
 				lendersSkipped++;
 				continue;
 			}
 
-			// 2b. Get eligible dispersal entries (past hold period)
 			const eligibleEntries = await ctx.runQuery(
 				internal.payments.payout.queries.getEligibleDispersalEntries,
 				{ lenderId: lender._id, today }
@@ -86,7 +146,6 @@ export const processPayoutBatch = internalAction({
 				continue;
 			}
 
-			// 2c. Group entries by mortgageId
 			const groupedByMortgage = groupBy(
 				eligibleEntries,
 				(e: Doc<"dispersalEntries">) => e.mortgageId as string
@@ -95,7 +154,6 @@ export const processPayoutBatch = internalAction({
 			const postingGroupId = `payout-batch:${today}:${lender._id}`;
 			let lenderPayoutCount = 0;
 
-			// 2d. Process each mortgage group
 			for (const [mortgageIdStr, entries] of groupedByMortgage) {
 				const mortgageId = mortgageIdStr as Id<"mortgages">;
 				const totalAmount = entries.reduce(
@@ -103,60 +161,21 @@ export const processPayoutBatch = internalAction({
 					0
 				);
 
-				// Check minimum threshold
 				const minimumCents = lender.minimumPayoutCents ?? MINIMUM_PAYOUT_CENTS;
 				if (totalAmount < minimumCents) {
 					continue;
 				}
 
-				const idempotencyKey = buildIdempotencyKey(
-					"lender-payout-sent",
-					"batch",
-					today,
-					lender._id,
-					mortgageId
-				);
-
-				const entryIds = entries.map((e: Doc<"dispersalEntries">) => e._id);
-
 				try {
-					// Step 1: Claim entries (pending → disbursed) BEFORE posting payout.
-					// This is the concurrency lock — only the first caller wins.
-					await ctx.runMutation(
-						internal.payments.payout.mutations.claimEntriesForPayout,
-						{
-							entryIds,
-							payoutDate: today,
-						}
-					);
-
-					// Step 2: Post lender payout via cash ledger.
-					// If this fails, we revert the claim in the catch block.
-					try {
-						await ctx.runMutation(
-							internal.payments.cashLedger.mutations.postLenderPayout,
-							{
-								mortgageId,
-								lenderId: lender._id,
-								amount: totalAmount,
-								effectiveDate: today,
-								idempotencyKey,
-								source,
-								reason: "Scheduled batch payout",
-								postingGroupId,
-							}
-						);
-					} catch (postError) {
-						// Revert claimed entries so they can be retried
-						await ctx.runMutation(
-							internal.payments.payout.mutations.revertClaimedEntries,
-							{
-								entryIds,
-							}
-						);
-						throw postError;
-					}
-
+					await processMortgageGroup(ctx, {
+						mortgageId,
+						lenderId: lender._id,
+						entries,
+						totalAmount,
+						today,
+						source,
+						postingGroupId,
+					});
 					lenderPayoutCount++;
 					totalAmountCents += totalAmount;
 				} catch (error) {
@@ -168,14 +187,10 @@ export const processPayoutBatch = internalAction({
 				}
 			}
 
-			// 2e. Update lender's last payout date if any payouts were made
 			if (lenderPayoutCount > 0) {
 				await ctx.runMutation(
 					internal.payments.payout.mutations.updateLenderPayoutDate,
-					{
-						lenderId: lender._id,
-						payoutDate: today,
-					}
+					{ lenderId: lender._id, payoutDate: today }
 				);
 				totalPayouts += lenderPayoutCount;
 				lendersProcessed++;
