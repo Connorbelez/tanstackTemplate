@@ -1,5 +1,6 @@
+import { WorkflowManager } from "@convex-dev/workflow";
 import { v } from "convex/values";
-import { internal } from "../../_generated/api";
+import { components, internal } from "../../_generated/api";
 import type { Id } from "../../_generated/dataModel";
 import type { MutationCtx } from "../../_generated/server";
 import { internalMutation } from "../../_generated/server";
@@ -12,6 +13,8 @@ import { IDEMPOTENCY_KEY_PREFIX } from "../../payments/cashLedger/types";
 import { executeTransition } from "../transition";
 import type { CommandSource } from "../types";
 import { effectPayloadValidator } from "../validators";
+
+const workflow = new WorkflowManager(components.workflow);
 
 const collectionAttemptEffectValidator = {
 	...effectPayloadValidator,
@@ -202,50 +205,38 @@ export const notifyAdmin = internalMutation({
 });
 
 /**
- * Cross-entity effect: triggers cash ledger reversal cascade.
- * Triggered when a collection attempt transitions to `reversed` via PAYMENT_REVERSED.
+ * Mutation step: executes the per-obligation reversal cascade within a
+ * durable workflow. Each obligation's reversal is idempotent via
+ * postingGroupId, so retries are safe.
  *
- * Iterates all obligationIds in the plan entry, delegating reversal of each
- * obligation's ledger entries to postPaymentReversalCascade(). Unlike
- * emitPaymentReceived (which tracks partial amounts and breaks early), this
- * unconditionally reverses every obligation — partial reversal would leave
- * the cash ledger inconsistent.
- *
- * Each call is idempotent via posting-group deduplication in the cash ledger.
- * Return value (including clawbackRequired) is currently discarded —
- * payout clawback handling is deferred to ENG-175+.
+ * Called by `reversalCascadeWorkflow` — not directly by the scheduler.
  */
-export const emitPaymentReversed = internalMutation({
-	args: collectionAttemptEffectValidator,
+export const executeReversalCascadeStep = internalMutation({
+	args: {
+		entityId: v.id("collectionAttempts"),
+		source: effectPayloadValidator.source,
+		reason: v.string(),
+		effectiveDate: v.string(),
+	},
 	handler: async (ctx, args) => {
-		const { planEntry } = await loadAttemptAndPlanEntry(
-			ctx,
-			args,
-			"emitPaymentReversed"
-		);
-
-		let reason: string;
-		if (typeof args.payload?.reason === "string") {
-			reason = args.payload.reason;
-		} else {
-			reason = "payment_reversed";
-			console.warn(
-				`[emitPaymentReversed] No valid reason in payload for attempt=${args.entityId}. Defaulting to "${reason}".`
+		const attempt = await ctx.db.get(args.entityId);
+		if (!attempt) {
+			throw new Error(
+				`[executeReversalCascadeStep] Collection attempt not found: ${args.entityId}`
 			);
 		}
-
-		// Prefer effectiveDate from event payload (set at event-receive time);
-		// fall back to current date if not provided.
-		const effectiveDate =
-			typeof args.payload?.effectiveDate === "string"
-				? args.payload.effectiveDate
-				: new Date().toISOString().slice(0, 10);
+		const planEntry = await ctx.db.get(attempt.planEntryId);
+		if (!planEntry) {
+			throw new Error(
+				`[executeReversalCascadeStep] Plan entry not found: ${attempt.planEntryId} (attempt=${args.entityId})`
+			);
+		}
 
 		for (const obligationId of planEntry.obligationIds) {
 			const obligation = await ctx.db.get(obligationId);
 			if (!obligation) {
 				throw new Error(
-					`[emitPaymentReversed] Obligation not found: ${obligationId} ` +
+					`[executeReversalCascadeStep] Obligation not found: ${obligationId} ` +
 						`(attempt=${args.entityId}). Cannot complete reversal — ` +
 						"the cash ledger would be left in an inconsistent state."
 				);
@@ -257,20 +248,20 @@ export const emitPaymentReversed = internalMutation({
 			const shouldCreateCorrective = obligation.status === "settled";
 
 			console.info(
-				`[emitPaymentReversed] Starting reversal cascade for attempt=${args.entityId}, obligation=${obligationId}`
+				`[executeReversalCascadeStep] Starting reversal cascade for attempt=${args.entityId}, obligation=${obligationId}`
 			);
 
 			const cascadeResult = await postPaymentReversalCascade(ctx, {
 				attemptId: args.entityId,
 				obligationId,
 				mortgageId: obligation.mortgageId,
-				effectiveDate,
+				effectiveDate: args.effectiveDate,
 				source: args.source,
-				reason,
+				reason: args.reason,
 			});
 
 			console.info(
-				`[emitPaymentReversed] Reversal cascade complete for attempt=${args.entityId}, obligation=${obligationId}`
+				`[executeReversalCascadeStep] Reversal cascade complete for attempt=${args.entityId}, obligation=${obligationId}`
 			);
 
 			// Schedule corrective obligation creation (ENG-180)
@@ -289,7 +280,7 @@ export const emitPaymentReversed = internalMutation({
 				);
 				if (!cashReceivedReversal) {
 					throw new Error(
-						"[emitPaymentReversed] No CASH_RECEIVED reversal entry found in cascade result " +
+						"[executeReversalCascadeStep] No CASH_RECEIVED reversal entry found in cascade result " +
 							`for attempt=${args.entityId}, obligation=${obligationId}. ` +
 							"Cannot determine reversedAmount for corrective obligation."
 					);
@@ -303,16 +294,105 @@ export const emitPaymentReversed = internalMutation({
 					{
 						originalObligationId: obligationId,
 						reversedAmount,
-						reason,
+						reason: args.reason,
 						postingGroupId: cascadeResult.postingGroupId,
 						source: args.source,
 					}
 				);
 
 				console.info(
-					`[emitPaymentReversed] Scheduled corrective obligation for attempt=${args.entityId}, obligation=${obligationId}`
+					`[executeReversalCascadeStep] Scheduled corrective obligation for attempt=${args.entityId}, obligation=${obligationId}`
 				);
 			}
 		}
+	},
+});
+
+/**
+ * Durable workflow for payment reversal cascade.
+ *
+ * Wraps executeReversalCascadeStep with automatic retries via the workflow
+ * component. The cascade is idempotent via postingGroupId, so retries are
+ * safe and will not create duplicate ledger entries.
+ *
+ * Follows the same pattern as hashChainJournalEntry in engine/hashChain.ts.
+ */
+export const reversalCascadeWorkflow = workflow.define({
+	args: {
+		entityId: v.id("collectionAttempts"),
+		source: effectPayloadValidator.source,
+		reason: v.string(),
+		effectiveDate: v.string(),
+	},
+	handler: async (step, args) => {
+		await step.runMutation(
+			internal.engine.effects.collectionAttempt.executeReversalCascadeStep,
+			{
+				entityId: args.entityId,
+				source: args.source,
+				reason: args.reason,
+				effectiveDate: args.effectiveDate,
+			}
+		);
+	},
+});
+
+/**
+ * Cross-entity effect: triggers cash ledger reversal cascade via durable workflow.
+ * Triggered when a collection attempt transitions to `reversed` via PAYMENT_REVERSED.
+ *
+ * Starts a durable workflow (with automatic retries) that iterates all
+ * obligationIds in the plan entry, delegating reversal of each obligation's
+ * ledger entries to postPaymentReversalCascade(). Unlike emitPaymentReceived
+ * (which tracks partial amounts and breaks early), the workflow unconditionally
+ * reverses every obligation — partial reversal would leave the cash ledger
+ * inconsistent.
+ *
+ * Each call is idempotent via posting-group deduplication in the cash ledger,
+ * so workflow retries are safe and will not create duplicate entries.
+ *
+ * Return value (including clawbackRequired) is currently discarded —
+ * payout clawback handling is deferred to ENG-175+.
+ */
+export const emitPaymentReversed = internalMutation({
+	args: collectionAttemptEffectValidator,
+	handler: async (ctx, args) => {
+		let reason: string;
+		if (typeof args.payload?.reason === "string") {
+			reason = args.payload.reason;
+		} else {
+			reason = "payment_reversed";
+			console.warn(
+				`[emitPaymentReversed] No valid reason in payload for attempt=${args.entityId}. Defaulting to "${reason}".`
+			);
+		}
+
+		// Prefer effectiveDate from event payload (set at event-receive time);
+		// fall back to current date if not provided.
+		const effectiveDate =
+			typeof args.payload?.effectiveDate === "string"
+				? args.payload.effectiveDate
+				: new Date().toISOString().slice(0, 10);
+
+		// Start durable workflow — the workflow component handles retries
+		// automatically if the reversal cascade step fails. The cascade is
+		// idempotent via postingGroupId so retries are safe.
+		await workflow.start(
+			ctx,
+			internal.engine.effects.collectionAttempt.reversalCascadeWorkflow,
+			{
+				entityId: args.entityId,
+				source: args.source,
+				reason,
+				effectiveDate,
+			},
+			{
+				startAsync: true,
+			}
+		);
+
+		console.info(
+			`[emitPaymentReversed] Started durable reversal cascade workflow for attempt=${args.entityId}`
+		);
 	},
 });
