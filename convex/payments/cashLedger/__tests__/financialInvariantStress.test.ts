@@ -57,8 +57,8 @@ describe("Financial invariant stress tests", () => {
 		};
 	}
 
-	// ── T-010: Conservation holds after reversal + re-collection ──
-	it("conservation holds after reversal and re-collection", async () => {
+	// ── T-010: BORROWER_RECEIVABLE balance conservation through accrue→receipt→reversal→re-collection cycle ──
+	it("conservation of BORROWER_RECEIVABLE balance through accrue→receipt→reversal→re-collection cycle", async () => {
 		const t = createHarness(modules);
 		const { borrowerId, mortgageId } = await seedMinimalEntities(t);
 
@@ -438,6 +438,26 @@ describe("Financial invariant stress tests", () => {
 				"LENDER_PAYABLE should be negative after REVERSAL"
 			).toBeLessThan(0n);
 		});
+
+		// Post-reversal enforcement: a non-REVERSAL entry debiting the now-negative
+		// LENDER_PAYABLE should be rejected, confirming enforcement resumes after reversal
+		await t.run(async (ctx) => {
+			const { postCashEntryInternal } = await import("../postEntry");
+			await expect(
+				postCashEntryInternal(ctx, {
+					entryType: "LENDER_PAYOUT_SENT",
+					effectiveDate: "2026-03-01",
+					amount: 1000,
+					debitAccountId: lenderPayable._id,
+					creditAccountId: trustCash._id,
+					idempotencyKey: buildIdempotencyKey(
+						"stress-payout",
+						"post-reversal-enforcement"
+					),
+					source: SYSTEM_SOURCE,
+				})
+			).rejects.toThrow(NEGATIVE_BALANCE_PATTERN);
+		});
 	});
 
 	// ── T-013: Point-in-time reconstruction matches running balances (50+ entries) ──
@@ -565,16 +585,34 @@ describe("Financial invariant stress tests", () => {
 			firstRunEntryIds.push(result.entry._id);
 		}
 
-		// Snapshot the CONTROL account balance after first run
-		const snapshotBalance = await t.run(async (ctx) => {
-			const account = await ctx.db.get(controlAccount._id);
-			expect(account).not.toBeNull();
-			if (!account) {
+		// Snapshot all account balances and journal entry count after first run
+		const snapshot = await t.run(async (ctx) => {
+			const control = await ctx.db.get(controlAccount._id);
+			expect(control).not.toBeNull();
+			if (!control) {
 				throw new Error("CONTROL account not found");
 			}
+			const lender = await ctx.db.get(lenderPayable._id);
+			expect(lender).not.toBeNull();
+			if (!lender) {
+				throw new Error("LENDER_PAYABLE account not found");
+			}
+
+			// Count total journal entries to verify no new ones are created on replay
+			const allEntries = await ctx.db
+				.query("cash_ledger_journal_entries")
+				.collect();
+
 			return {
-				cumulativeDebits: account.cumulativeDebits,
-				cumulativeCredits: account.cumulativeCredits,
+				control: {
+					cumulativeDebits: control.cumulativeDebits,
+					cumulativeCredits: control.cumulativeCredits,
+				},
+				lenderPayable: {
+					cumulativeDebits: lender.cumulativeDebits,
+					cumulativeCredits: lender.cumulativeCredits,
+				},
+				journalEntryCount: allEntries.length,
 			};
 		});
 
@@ -597,23 +635,49 @@ describe("Financial invariant stress tests", () => {
 			).toBe(firstRunEntryIds[i]);
 		}
 
-		// Verify CONTROL account balance unchanged after replay
+		// Verify all account balances and journal entry count unchanged after replay
 		await t.run(async (ctx) => {
-			const account = await ctx.db.get(controlAccount._id);
-			if (!account) {
+			const control = await ctx.db.get(controlAccount._id);
+			if (!control) {
 				throw new Error(
 					"CONTROL account not found for idempotent replay verification"
 				);
 			}
+			const lender = await ctx.db.get(lenderPayable._id);
+			if (!lender) {
+				throw new Error(
+					"LENDER_PAYABLE account not found for idempotent replay verification"
+				);
+			}
 
+			// Verify CONTROL unchanged
 			expect(
-				account.cumulativeDebits,
-				"cumulativeDebits should be unchanged after idempotent replay"
-			).toBe(snapshotBalance.cumulativeDebits);
+				control.cumulativeDebits,
+				"CONTROL cumulativeDebits should be unchanged after idempotent replay"
+			).toBe(snapshot.control.cumulativeDebits);
 			expect(
-				account.cumulativeCredits,
-				"cumulativeCredits should be unchanged after idempotent replay"
-			).toBe(snapshotBalance.cumulativeCredits);
+				control.cumulativeCredits,
+				"CONTROL cumulativeCredits should be unchanged after idempotent replay"
+			).toBe(snapshot.control.cumulativeCredits);
+
+			// Verify LENDER_PAYABLE unchanged
+			expect(
+				lender.cumulativeDebits,
+				"LENDER_PAYABLE cumulativeDebits should be unchanged after idempotent replay"
+			).toBe(snapshot.lenderPayable.cumulativeDebits);
+			expect(
+				lender.cumulativeCredits,
+				"LENDER_PAYABLE cumulativeCredits should be unchanged after idempotent replay"
+			).toBe(snapshot.lenderPayable.cumulativeCredits);
+
+			// Verify no additional journal entries were created on replay
+			const allEntries = await ctx.db
+				.query("cash_ledger_journal_entries")
+				.collect();
+			expect(
+				allEntries.length,
+				"No additional journal entries should be created on idempotent replay"
+			).toBe(snapshot.journalEntryCount);
 		});
 	});
 });
