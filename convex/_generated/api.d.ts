@@ -164,6 +164,7 @@ import type * as payments_methods_interface from "../payments/methods/interface.
 import type * as payments_methods_manual from "../payments/methods/manual.js";
 import type * as payments_methods_mockPAD from "../payments/methods/mockPAD.js";
 import type * as payments_methods_registry from "../payments/methods/registry.js";
+import type * as payments_obligations_createCorrectiveObligation from "../payments/obligations/createCorrectiveObligation.js";
 import type * as payments_obligations_crons from "../payments/obligations/crons.js";
 import type * as payments_obligations_generate from "../payments/obligations/generate.js";
 import type * as payments_obligations_generateImpl from "../payments/obligations/generateImpl.js";
@@ -348,6 +349,7 @@ declare const fullApi: ApiFromModules<{
   "payments/methods/manual": typeof payments_methods_manual;
   "payments/methods/mockPAD": typeof payments_methods_mockPAD;
   "payments/methods/registry": typeof payments_methods_registry;
+  "payments/obligations/createCorrectiveObligation": typeof payments_obligations_createCorrectiveObligation;
   "payments/obligations/crons": typeof payments_obligations_crons;
   "payments/obligations/generate": typeof payments_obligations_generate;
   "payments/obligations/generateImpl": typeof payments_obligations_generateImpl;

@@ -98,3 +98,56 @@ export const getLateFeeForObligation = internalQuery({
 			.first();
 	},
 });
+
+/**
+ * Get all corrective obligations derived from a source obligation.
+ * Uses the by_source_obligation index, filtering out late_fee type
+ * to return only corrective obligations.
+ */
+export const getCorrectiveObligations = internalQuery({
+	args: {
+		sourceObligationId: v.id("obligations"),
+	},
+	handler: async (ctx, { sourceObligationId }) => {
+		return await ctx.db
+			.query("obligations")
+			.withIndex("by_source_obligation", (q) =>
+				q.eq("sourceObligationId", sourceObligationId)
+			)
+			.filter((q) => q.neq(q.field("type"), "late_fee"))
+			.collect();
+	},
+});
+
+/**
+ * Get an obligation together with all its corrective obligations.
+ * Returns the original obligation plus correctives (via by_source_obligation index),
+ * providing a complete view of original + correctives.
+ */
+export const getObligationWithCorrectives = internalQuery({
+	args: {
+		obligationId: v.id("obligations"),
+	},
+	handler: async (ctx, { obligationId }) => {
+		const obligation = await ctx.db.get(obligationId);
+		if (!obligation) {
+			console.warn(
+				`[getObligationWithCorrectives] Obligation not found: ${obligationId as string}`
+			);
+			return null;
+		}
+
+		const correctives = await ctx.db
+			.query("obligations")
+			.withIndex("by_source_obligation", (q) =>
+				q.eq("sourceObligationId", obligationId)
+			)
+			.filter((q) => q.neq(q.field("type"), "late_fee"))
+			.collect();
+
+		return {
+			obligation,
+			correctives,
+		};
+	},
+});
