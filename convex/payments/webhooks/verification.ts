@@ -103,42 +103,59 @@ function parseStripeSignatureHeader(header: string): ParsedStripeHeader | null {
 	return { timestamp, signatures };
 }
 
+// ── Verification result types ───────────────────────────────────────
+
+export type VerificationResult =
+	| { ok: true }
+	| { ok: false; error: "missing_secret" }
+	| { ok: false; error: "invalid_signature" };
+
 // ── Internal Actions (callable from httpActions via ctx.runAction) ───
 
 /**
  * Verify a Rotessa webhook signature via internalAction.
  * Runs in the Node.js runtime so it can use node:crypto.
+ *
+ * Returns a structured result distinguishing missing secrets from bad signatures.
  */
 export const verifyRotessaSignatureAction = internalAction({
 	args: {
 		body: v.string(),
 		signature: v.string(),
 	},
-	handler: async (_ctx, args): Promise<boolean> => {
+	handler: async (_ctx, args): Promise<VerificationResult> => {
 		const secret = process.env.ROTESSA_WEBHOOK_SECRET;
 		if (!secret) {
 			console.error("[Rotessa Webhook] ROTESSA_WEBHOOK_SECRET not configured");
-			return false;
+			return { ok: false, error: "missing_secret" };
 		}
-		return verifyRotessaSignature(args.body, args.signature, secret);
+		const valid = verifyRotessaSignature(args.body, args.signature, secret);
+		return valid ? { ok: true } : { ok: false, error: "invalid_signature" };
 	},
 });
 
 /**
  * Verify a Stripe webhook signature via internalAction.
  * Runs in the Node.js runtime so it can use node:crypto.
+ *
+ * Returns a structured result distinguishing missing secrets from bad signatures.
  */
 export const verifyStripeSignatureAction = internalAction({
 	args: {
 		body: v.string(),
 		signatureHeader: v.string(),
 	},
-	handler: async (_ctx, args): Promise<boolean> => {
+	handler: async (_ctx, args): Promise<VerificationResult> => {
 		const secret = process.env.STRIPE_WEBHOOK_SECRET;
 		if (!secret) {
 			console.error("[Stripe Webhook] STRIPE_WEBHOOK_SECRET not configured");
-			return false;
+			return { ok: false, error: "missing_secret" };
 		}
-		return verifyStripeSignature(args.body, args.signatureHeader, secret);
+		const valid = verifyStripeSignature(
+			args.body,
+			args.signatureHeader,
+			secret
+		);
+		return valid ? { ok: true } : { ok: false, error: "invalid_signature" };
 	},
 });

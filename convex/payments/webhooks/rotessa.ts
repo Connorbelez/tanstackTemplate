@@ -3,6 +3,7 @@ import { httpAction } from "../../_generated/server";
 import { handlePaymentReversal } from "./handleReversal";
 import type { ReversalWebhookPayload } from "./types";
 import { jsonResponse } from "./utils";
+import type { VerificationResult } from "./verification";
 
 // ── Rotessa-specific types ──────────────────────────────────────────
 
@@ -62,7 +63,7 @@ export function toPayload(event: RotessaWebhookEvent): ReversalWebhookPayload {
 	const today = new Date().toISOString().slice(0, 10);
 
 	return {
-		originalAmount: Math.round(event.data.amount * 100),
+		originalAmount: Math.round((event.data.amount + Number.EPSILON) * 100),
 		provider: "rotessa",
 		providerEventId: event.data.event_id ?? event.data.transaction_id,
 		providerRef: event.data.transaction_id,
@@ -84,12 +85,16 @@ export const rotessaWebhook = httpAction(async (ctx, request) => {
 		return jsonResponse({ error: "invalid_signature" }, 401);
 	}
 
-	const isValid: boolean = await ctx.runAction(
+	const verification: VerificationResult = await ctx.runAction(
 		internal.payments.webhooks.verification.verifyRotessaSignatureAction,
 		{ body, signature }
 	);
 
-	if (!isValid) {
+	if (!verification.ok) {
+		if (verification.error === "missing_secret") {
+			console.error("[Rotessa Webhook] ROTESSA_WEBHOOK_SECRET not configured");
+			return jsonResponse({ error: "server_configuration_error" }, 500);
+		}
 		console.warn("[Rotessa Webhook] Signature verification failed");
 		return jsonResponse({ error: "invalid_signature" }, 401);
 	}
@@ -115,7 +120,13 @@ export const rotessaWebhook = httpAction(async (ctx, request) => {
 		const result = await handlePaymentReversal(ctx, payload);
 		return jsonResponse({ ...result });
 	} catch (err) {
+		// Always return 200 to prevent Rotessa retry storms.
+		// Non-200 responses are reserved for signature/JSON parsing failures only.
 		console.error("[Rotessa Webhook] Reversal processing failed:", err);
-		return jsonResponse({ error: "processing_failed" }, 500);
+		return jsonResponse({
+			accepted: true,
+			error: "processing_failed",
+			message: err instanceof Error ? err.message : "Unknown error",
+		});
 	}
 });
