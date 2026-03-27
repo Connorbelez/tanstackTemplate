@@ -310,7 +310,7 @@ describe("ManualTransferProvider", () => {
 	it("initiate returns pending for outbound manual transfers", async () => {
 		const result = await provider.initiate({
 			...sampleInput,
-			counterpartyId: "lender_123",
+			counterpartyId: toDomainEntityId("lender_123", "counterpartyId"),
 			counterpartyType: "lender",
 			direction: "outbound",
 			transferType: "lender_dispersal_payout",

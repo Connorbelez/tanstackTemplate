@@ -19,5 +19,5 @@ Completed: 2026-03-27 17:42 America/Toronto
 - `bun run test convex/payments/transfers/__tests__/mutations.test.ts convex/payments/transfers/__tests__/handlers.integration.test.ts`: pass
 
 ## Notes
-- `bun check` reports unrelated existing complexity warnings in [`convex/dispersal/createDispersalEntries.ts`](/Users/connor/.codex/worktrees/e8bf/fairlendapp/convex/dispersal/createDispersalEntries.ts), [`convex/engine/effects/collectionAttempt.ts`](/Users/connor/.codex/worktrees/e8bf/fairlendapp/convex/engine/effects/collectionAttempt.ts), [`convex/payments/payout/adminPayout.ts`](/Users/connor/.codex/worktrees/e8bf/fairlendapp/convex/payments/payout/adminPayout.ts), and [`convex/payments/payout/batchPayout.ts`](/Users/connor/.codex/worktrees/e8bf/fairlendapp/convex/payments/payout/batchPayout.ts).
+- `bun check` reports unrelated existing complexity warnings in `convex/dispersal/createDispersalEntries.ts`, `convex/engine/effects/collectionAttempt.ts`, `convex/payments/payout/adminPayout.ts`, and `convex/payments/payout/batchPayout.ts`.
 - `coderabbit review --plain` was attempted but did not return a summary before timing out, so no review findings were produced from that tool run.
