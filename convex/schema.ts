@@ -1036,6 +1036,7 @@ export default defineSchema({
 		attemptCount: v.number(),
 		lastAttemptAt: v.number(),
 		escalatedAt: v.optional(v.number()),
+		resolvedAt: v.optional(v.number()),
 		status: v.union(
 			v.literal("retrying"),
 			v.literal("escalated"),
