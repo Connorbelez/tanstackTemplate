@@ -13,7 +13,11 @@ import {
 } from "./accounts";
 import { postCashEntryInternal } from "./postEntry";
 import { validatePostingGroupAmounts } from "./postingGroups";
-import { buildIdempotencyKey, type CashEntryType } from "./types";
+import {
+	buildIdempotencyKey,
+	type CashAccountFamily,
+	type CashEntryType,
+} from "./types";
 
 interface LegacySource {
 	actor?: string;
@@ -1682,4 +1686,194 @@ export async function postTransferReversal(
 	});
 
 	return { entry: result.entry };
+}
+
+// ── Transfer-backed Cash Posting ─────────────────────────────────
+
+/**
+ * Maps an inbound transfer type to the credit account family.
+ *
+ * - borrower_interest_collection, borrower_principal_collection,
+ *   borrower_late_fee_collection, borrower_arrears_cure → BORROWER_RECEIVABLE
+ * - locking_fee_collection, commitment_deposit_collection → UNAPPLIED_CASH
+ * - deal_principal_transfer → CASH_CLEARING
+ */
+function inboundTransferCreditFamily(
+	transferType: string | undefined
+): CashAccountFamily {
+	switch (transferType) {
+		case "borrower_interest_collection":
+		case "borrower_principal_collection":
+		case "borrower_late_fee_collection":
+		case "borrower_arrears_cure":
+			return "BORROWER_RECEIVABLE";
+		case "locking_fee_collection":
+		case "commitment_deposit_collection":
+			return "UNAPPLIED_CASH";
+		case "deal_principal_transfer":
+			return "CASH_CLEARING";
+		default:
+			// Defensive default — route unknown types to UNAPPLIED_CASH so
+			// the entry is journaled and discoverable for manual resolution.
+			return "UNAPPLIED_CASH";
+	}
+}
+
+/**
+ * Posts a CASH_RECEIVED journal entry for an inbound transfer.
+ *
+ * Debit: TRUST_CASH, Credit: mapped from transfer type.
+ * Idempotency: `cash-ledger:cash-received:transfer:{transferRequestId}`
+ */
+export async function postCashReceiptForTransfer(
+	ctx: MutationCtx,
+	args: {
+		transferRequestId: Id<"transferRequests">;
+		source: CommandSource;
+	}
+): Promise<Doc<"cash_ledger_journal_entries">> {
+	const transfer = await ctx.db.get(args.transferRequestId);
+	if (!transfer) {
+		throw new ConvexError(
+			`Transfer request not found: ${args.transferRequestId}`
+		);
+	}
+	if (!(transfer.amount && Number.isSafeInteger(transfer.amount))) {
+		throw new ConvexError(
+			`Transfer ${args.transferRequestId} has no valid amount`
+		);
+	}
+	if (!transfer.mortgageId) {
+		throw new ConvexError(
+			`Transfer ${args.transferRequestId} has no mortgageId`
+		);
+	}
+
+	const creditFamily = inboundTransferCreditFamily(transfer.transferType);
+
+	if (creditFamily === "BORROWER_RECEIVABLE" && !transfer.obligationId) {
+		throw new ConvexError(
+			`Transfer ${args.transferRequestId} requires an obligationId for receivable-backed transfer type "${transfer.transferType}"`
+		);
+	}
+
+	const trustCashAccount = await getOrCreateCashAccount(ctx, {
+		family: "TRUST_CASH",
+		mortgageId: transfer.mortgageId,
+	});
+
+	const creditAccountArgs: Parameters<typeof getOrCreateCashAccount>[1] =
+		creditFamily === "BORROWER_RECEIVABLE" && transfer.obligationId
+			? {
+					family: "BORROWER_RECEIVABLE",
+					mortgageId: transfer.mortgageId,
+					obligationId: transfer.obligationId,
+					borrowerId: transfer.borrowerId ?? undefined,
+				}
+			: {
+					family: creditFamily,
+					mortgageId: transfer.mortgageId,
+				};
+
+	const creditAccount = await getOrCreateCashAccount(ctx, creditAccountArgs);
+
+	const result = await postCashEntryInternal(ctx, {
+		entryType: "CASH_RECEIVED",
+		effectiveDate: unixMsToBusinessDate(transfer.settledAt ?? Date.now()),
+		amount: transfer.amount,
+		debitAccountId: trustCashAccount._id,
+		creditAccountId: creditAccount._id,
+		idempotencyKey: buildIdempotencyKey(
+			"cash-received",
+			"transfer",
+			args.transferRequestId
+		),
+		mortgageId: transfer.mortgageId,
+		obligationId: transfer.obligationId,
+		transferRequestId: args.transferRequestId,
+		borrowerId: transfer.borrowerId,
+		lenderId: transfer.lenderId,
+		dealId: transfer.dealId,
+		dispersalEntryId: transfer.dispersalEntryId,
+		source: normalizeSource(args.source),
+		metadata: {
+			transferType: transfer.transferType,
+			direction: transfer.direction,
+		},
+	});
+
+	return result.entry;
+}
+
+/**
+ * Posts a LENDER_PAYOUT_SENT journal entry for an outbound transfer.
+ *
+ * Debit: LENDER_PAYABLE, Credit: TRUST_CASH.
+ * Idempotency: `cash-ledger:lender-payout-sent:transfer:{transferRequestId}`
+ */
+export async function postLenderPayoutForTransfer(
+	ctx: MutationCtx,
+	args: {
+		transferRequestId: Id<"transferRequests">;
+		source: CommandSource;
+	}
+): Promise<Doc<"cash_ledger_journal_entries">> {
+	const transfer = await ctx.db.get(args.transferRequestId);
+	if (!transfer) {
+		throw new ConvexError(
+			`Transfer request not found: ${args.transferRequestId}`
+		);
+	}
+	if (!(transfer.amount && Number.isSafeInteger(transfer.amount))) {
+		throw new ConvexError(
+			`Transfer ${args.transferRequestId} has no valid amount`
+		);
+	}
+	if (!transfer.mortgageId) {
+		throw new ConvexError(
+			`Transfer ${args.transferRequestId} has no mortgageId`
+		);
+	}
+	if (!transfer.lenderId) {
+		throw new ConvexError(
+			`Transfer ${args.transferRequestId} has no lenderId for lender payout`
+		);
+	}
+
+	const lenderPayableAccount = await getOrCreateCashAccount(ctx, {
+		family: "LENDER_PAYABLE",
+		mortgageId: transfer.mortgageId,
+		lenderId: transfer.lenderId,
+	});
+
+	const trustCashAccount = await getOrCreateCashAccount(ctx, {
+		family: "TRUST_CASH",
+		mortgageId: transfer.mortgageId,
+	});
+
+	const result = await postCashEntryInternal(ctx, {
+		entryType: "LENDER_PAYOUT_SENT",
+		effectiveDate: unixMsToBusinessDate(transfer.settledAt ?? Date.now()),
+		amount: transfer.amount,
+		debitAccountId: lenderPayableAccount._id,
+		creditAccountId: trustCashAccount._id,
+		idempotencyKey: buildIdempotencyKey(
+			"lender-payout-sent",
+			"transfer",
+			args.transferRequestId
+		),
+		mortgageId: transfer.mortgageId,
+		transferRequestId: args.transferRequestId,
+		lenderId: transfer.lenderId,
+		borrowerId: transfer.borrowerId,
+		dealId: transfer.dealId,
+		dispersalEntryId: transfer.dispersalEntryId,
+		source: normalizeSource(args.source),
+		metadata: {
+			transferType: transfer.transferType,
+			direction: transfer.direction,
+		},
+	});
+
+	return result.entry;
 }

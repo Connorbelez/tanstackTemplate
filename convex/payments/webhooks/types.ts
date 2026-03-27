@@ -4,7 +4,7 @@ import type { Id } from "../../_generated/dataModel";
 export interface ReversalWebhookPayload {
 	/** Original amount in cents */
 	originalAmount: number;
-	provider: "rotessa" | "stripe";
+	provider: "rotessa" | "stripe" | "pad_vopay";
 	/** For idempotency dedup */
 	providerEventId: string;
 	/** Maps to collectionAttempts.providerRef */

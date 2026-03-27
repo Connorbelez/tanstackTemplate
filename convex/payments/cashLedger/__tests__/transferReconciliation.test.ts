@@ -413,7 +413,9 @@ describe("retriggerTransferConfirmation self-healing", () => {
 		);
 		await t.finishAllScheduledFunctions(vi.runAllTimers);
 
-		expect(result.action).toBe("retriggered");
+		// retryTransferConfirmationEffect is currently a no-op placeholder (see ENG-184).
+		// Returns "pending_no_effect" until a real publish hook is wired.
+		expect(result.action).toBe("pending_no_effect");
 		expect(result.attemptCount).toBe(1);
 
 		// Verify transferHealingAttempts record was created

@@ -5,6 +5,7 @@ import { dealMachine } from "./deal.machine";
 import { mortgageMachine } from "./mortgage.machine";
 import { obligationMachine } from "./obligation.machine";
 import { onboardingRequestMachine } from "./onboardingRequest.machine";
+import { transferMachine } from "./transfer.machine";
 
 /**
  * Type-safe registry mapping every GovernedEntityType to its XState machine.
@@ -17,6 +18,7 @@ export const machineRegistry: Record<GovernedEntityType, AnyStateMachine> = {
 	mortgage: mortgageMachine,
 	obligation: obligationMachine,
 	onboardingRequest: onboardingRequestMachine,
+	transfer: transferMachine,
 } as const;
 
 /**

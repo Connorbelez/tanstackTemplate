@@ -1,4 +1,5 @@
 import { internal } from "../../../_generated/api";
+import type { Doc } from "../../../_generated/dataModel";
 import type { ActionCtx } from "../../../_generated/server";
 import type { RuleEvalContext, RuleHandler } from "../engine";
 
@@ -30,7 +31,7 @@ export const scheduleRuleHandler: RuleHandler = {
 		// Batch idempotency check: load planned entries once for all obligations
 		const coveredObligations = await ctx.runQuery(
 			internal.payments.collectionPlan.queries.getPlannedEntriesForObligations,
-			{ obligationIds: obligations.map((o) => o._id) }
+			{ obligationIds: obligations.map((o: Doc<"obligations">) => o._id) }
 		);
 
 		for (const obligation of obligations) {
