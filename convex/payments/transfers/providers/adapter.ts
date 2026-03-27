@@ -24,6 +24,22 @@ export class PaymentMethodAdapter implements TransferProvider {
 	}
 
 	async initiate(request: TransferRequestInput): Promise<InitiateResult> {
+		if (request.direction !== "inbound") {
+			throw new Error(
+				"PaymentMethodAdapter only supports inbound transfers. " +
+					`Received direction="${request.direction}". ` +
+					"Use a native TransferProvider for outbound transfers."
+			);
+		}
+
+		if (request.counterpartyType !== "borrower") {
+			throw new Error(
+				"PaymentMethodAdapter only supports borrower counterparties. " +
+					`Received counterpartyType="${request.counterpartyType}". ` +
+					"Use a native TransferProvider for non-borrower counterparties."
+			);
+		}
+
 		const params: InitiateParams = {
 			amount: request.amount,
 			borrowerId: request.counterpartyId,

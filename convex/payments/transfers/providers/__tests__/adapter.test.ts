@@ -15,6 +15,10 @@ import type {
 import type { TransferRequestInput } from "../../interface";
 import { PaymentMethodAdapter } from "../adapter";
 
+// ── Error patterns ──────────────────────────────────────────────────
+const INBOUND_ONLY_RE = /only supports inbound transfers/;
+const BORROWER_ONLY_RE = /only supports borrower counterparties/;
+
 // ── Mock PaymentMethod ──────────────────────────────────────────────
 
 class MockPaymentMethod implements PaymentMethod {
@@ -149,6 +153,52 @@ describe("PaymentMethodAdapter", () => {
 			const result = await adapter.initiate(makeInput());
 			expect(result.providerRef).toBe("mock-ref");
 			expect(result.status).toBe("confirmed");
+		});
+
+		it("rejects outbound transfers", async () => {
+			const mock = new MockPaymentMethod();
+			const adapter = new PaymentMethodAdapter(mock);
+			await expect(
+				adapter.initiate(makeInput({ direction: "outbound" }))
+			).rejects.toThrow(INBOUND_ONLY_RE);
+			expect(mock.calls).toHaveLength(0);
+		});
+
+		it("rejects non-borrower counterpartyType 'lender'", async () => {
+			const mock = new MockPaymentMethod();
+			const adapter = new PaymentMethodAdapter(mock);
+			await expect(
+				adapter.initiate(makeInput({ counterpartyType: "lender" }))
+			).rejects.toThrow(BORROWER_ONLY_RE);
+			expect(mock.calls).toHaveLength(0);
+		});
+
+		it("rejects non-borrower counterpartyType 'investor'", async () => {
+			const mock = new MockPaymentMethod();
+			const adapter = new PaymentMethodAdapter(mock);
+			await expect(
+				adapter.initiate(makeInput({ counterpartyType: "investor" }))
+			).rejects.toThrow(BORROWER_ONLY_RE);
+			expect(mock.calls).toHaveLength(0);
+		});
+
+		it("rejects non-borrower counterpartyType 'trust'", async () => {
+			const mock = new MockPaymentMethod();
+			const adapter = new PaymentMethodAdapter(mock);
+			await expect(
+				adapter.initiate(makeInput({ counterpartyType: "trust" }))
+			).rejects.toThrow(BORROWER_ONLY_RE);
+			expect(mock.calls).toHaveLength(0);
+		});
+
+		it("accepts inbound + borrower combination", async () => {
+			const mock = new MockPaymentMethod();
+			const adapter = new PaymentMethodAdapter(mock);
+			const result = await adapter.initiate(
+				makeInput({ direction: "inbound", counterpartyType: "borrower" })
+			);
+			expect(result.providerRef).toBe("mock-ref");
+			expect(mock.calls).toHaveLength(1);
 		});
 	});
 
