@@ -49,6 +49,10 @@ async function getBorrowerByAuthId(
 		.first();
 }
 
+/**
+ * Resolve lender entity from a WorkOS auth ID.
+ * Auth boundary note: `authId` is not a domain `Id<"lenders">`.
+ */
 async function getLenderByAuthId(ctx: { db: QueryCtx["db"] }, authId: string) {
 	const user = await getUserByAuthId(ctx, authId);
 	if (!user) {
@@ -63,10 +67,12 @@ async function getLenderByAuthId(ctx: { db: QueryCtx["db"] }, authId: string) {
 // ── T-002: getLenderMortgageIds ─────────────────────────────────────
 // Returns the set of mortgage IDs where the given lender holds a
 // POSITION account with a positive balance.
-// `lenderAuthId` is the WorkOS authId string stored in ledger_accounts.lenderId.
+// `lenderAuthId` is the WorkOS authId string stored in ledger_accounts.lenderId,
+// not a domain `Id<"lenders">`.
 
 export async function getLenderMortgageIds(
 	ctx: { db: QueryCtx["db"] },
+	/** WorkOS auth ID, not a domain lender entity ID. */
 	lenderAuthId: string
 ): Promise<Set<Id<"mortgages">>> {
 	// Primary: indexed lookup on lenderId

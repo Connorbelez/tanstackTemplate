@@ -11,6 +11,7 @@ import type { Id } from "../../_generated/dataModel";
 import type { CommandSource } from "../../engine/types";
 import type {
 	CounterpartyType,
+	DomainEntityId,
 	ProviderCode,
 	TransferDirection,
 	TransferType,
@@ -25,7 +26,8 @@ export interface TransferRequestInput {
 	/** Safe-integer cents - MUST be a positive integer */
 	amount: number;
 	bankAccountRef?: string;
-	counterpartyId: string;
+	/** Validated domain entity ID; never a WorkOS auth ID. */
+	counterpartyId: DomainEntityId;
 	counterpartyType: CounterpartyType;
 	currency: "CAD";
 	direction: TransferDirection;

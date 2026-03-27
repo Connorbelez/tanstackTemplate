@@ -1188,6 +1188,7 @@ export default defineSchema({
 			v.literal("POSITION")
 		),
 		mortgageId: v.optional(v.string()),
+		/** WorkOS auth ID string, not `Id<"lenders">` (see ENG-218 / Foot Gun 5). */
 		lenderId: v.optional(v.string()),
 		cumulativeDebits: v.int64(),
 		cumulativeCredits: v.int64(),
@@ -1436,6 +1437,7 @@ export default defineSchema({
 		amount: v.number(),
 		currency: v.literal("CAD"),
 		counterpartyType: counterpartyTypeValidator,
+		/** Domain counterparty identifier, never a WorkOS auth ID. */
 		counterpartyId: v.string(),
 		providerCode: providerCodeValidator,
 		idempotencyKey: v.string(),
@@ -1446,6 +1448,7 @@ export default defineSchema({
 		// ── Cross-reference IDs (optional — depend on transfer type) ─
 		mortgageId: v.optional(v.id("mortgages")),
 		obligationId: v.optional(v.id("obligations")),
+		/** Domain lender entity ID (`Id<"lenders">`), not a WorkOS auth ID. */
 		lenderId: v.optional(v.id("lenders")),
 		borrowerId: v.optional(v.id("borrowers")),
 		dispersalEntryId: v.optional(v.id("dispersalEntries")),
