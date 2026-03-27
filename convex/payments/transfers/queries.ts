@@ -12,6 +12,7 @@
 import { v } from "convex/values";
 import { internalQuery } from "../../_generated/server";
 import { paymentQuery } from "../../fluent";
+import { computePipelineStatus } from "./pipeline.types";
 import {
 	counterpartyTypeValidator,
 	transferStatusValidator,
@@ -204,6 +205,84 @@ export const getTransferTimeline = paymentQuery
 		};
 	})
 	.public();
+
+// ── getPipelineStatus ────────────────────────────────────────────────
+/**
+ * Returns all pipeline legs and derived pipeline status for a deal.
+ * Queries by dealId, filters for transfers with a pipelineId,
+ * then computes the pipeline status from leg statuses.
+ */
+export const getPipelineStatus = paymentQuery
+	.input({
+		dealId: v.id("deals"),
+	})
+	.handler(async (ctx, args) => {
+		const transfers = await ctx.db
+			.query("transferRequests")
+			.withIndex("by_deal", (q) => q.eq("dealId", args.dealId))
+			.collect();
+
+		const pipelineLegs = transfers.filter((t) => t.pipelineId != null);
+
+		if (pipelineLegs.length === 0) {
+			return null;
+		}
+
+		const pipelineId = pipelineLegs[0].pipelineId;
+		const status = computePipelineStatus(pipelineLegs);
+
+		return {
+			pipelineId,
+			status,
+			legs: pipelineLegs.map((leg) => ({
+				_id: leg._id,
+				legNumber: leg.legNumber,
+				status: leg.status,
+				direction: leg.direction,
+				transferType: leg.transferType,
+				amount: leg.amount,
+				settledAt: leg.settledAt,
+				failedAt: leg.failedAt,
+				failureReason: leg.failureReason,
+			})),
+		};
+	})
+	.public();
+
+// ── getTransfersByPipeline ──────────────────────────────────────────
+/**
+ * Returns all transfer legs for a specific pipeline ID.
+ * Uses the by_pipeline index for efficient lookup.
+ */
+export const getTransfersByPipeline = paymentQuery
+	.input({
+		pipelineId: v.string(),
+	})
+	.handler(async (ctx, args) => {
+		const legs = await ctx.db
+			.query("transferRequests")
+			.withIndex("by_pipeline", (q) => q.eq("pipelineId", args.pipelineId))
+			.collect();
+
+		return {
+			pipelineId: args.pipelineId,
+			status: computePipelineStatus(legs),
+			legs,
+		};
+	})
+	.public();
+
+// ── getPipelineLegsInternal ─────────────────────────────────────────
+/** Internal query for loading pipeline legs from effects (no auth). */
+export const getPipelineLegsInternal = internalQuery({
+	args: { pipelineId: v.string() },
+	handler: async (ctx, args) => {
+		return ctx.db
+			.query("transferRequests")
+			.withIndex("by_pipeline", (q) => q.eq("pipelineId", args.pipelineId))
+			.collect();
+	},
+});
 
 export function compareTimelineRecords(
 	left: TimelineRecord,
