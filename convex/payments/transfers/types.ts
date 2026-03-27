@@ -34,9 +34,15 @@ export type TransferType = InboundTransferType | OutboundTransferType;
  * Used by the Provider Capability Registry (ENG-215) to map
  * (transferType, direction) pairs to enabled providers.
  *
+ * Only semantically valid combinations are allowed:
+ * - inbound transfer types with 'inbound'
+ * - outbound transfer types with 'outbound'
+ *
  * Example: 'borrower_interest_collection:inbound'
  */
-export type ProviderCapabilityKey = `${TransferType}:${TransferDirection}`;
+export type ProviderCapabilityKey =
+	| `${InboundTransferType}:inbound`
+	| `${OutboundTransferType}:outbound`;
 
 export const ALL_TRANSFER_TYPES = [
 	...INBOUND_TRANSFER_TYPES,
