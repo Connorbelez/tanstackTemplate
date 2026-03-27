@@ -1,34 +1,25 @@
 /**
  * Transfer bridge tests — validates the shape and idempotency logic of
- * bridged transfer records created by emitPaymentReceived (T-019).
+ * bridged transfer records created by emitPaymentReceived (ENG-197).
  *
- * The bridge logic lives inside the collectionAttempt effect
- * (convex/engine/effects/collectionAttempt.ts) and creates a transfer
- * record with status "confirmed" + direction "inbound" + a deterministic
- * idempotency key of `transfer:bridge:{collectionAttemptId}`.
- *
- * Since the bridge insertion runs inside an internalMutation that requires
- * the full Convex runtime + loaded entities, these tests validate the
- * expected record shape and idempotency key format as pure unit tests.
+ * The production bridge flow is:
+ * 1. Insert transferRequests row with status "initiated"
+ * 2. Immediately fire executeTransition(... FUNDS_SETTLED ...)
+ * 3. publishTransferConfirmed sees collectionAttemptId and skips duplicate cash posting
  */
 
 import { describe, expect, it } from "vitest";
 import type { CommandSource } from "../../../engine/types";
+import {
+	DEFAULT_OBLIGATION_TRANSFER_TYPE,
+	obligationTypeToTransferType,
+} from "../types";
 
-// ── Top-level regex constants (biome/useTopLevelRegex) ──────────────
 const BRIDGE_KEY_PREFIX_RE = /^transfer:bridge:/;
 
-// ── Bridge Record Shape ─────────────────────────────────────────────
-
-/**
- * Mirrors the shape of the bridged transfer record inserted by
- * emitPaymentReceived. Any deviation from this shape would break the
- * bridge's integration with publishTransferConfirmed and reconciliation.
- */
-interface BridgeTransferRecord {
+interface BridgeTransferInsertRecord {
 	amount: number;
 	collectionAttemptId: string;
-	confirmedAt: number;
 	counterpartyId: string;
 	counterpartyType: "borrower";
 	createdAt: number;
@@ -41,28 +32,33 @@ interface BridgeTransferRecord {
 	planEntryId?: string;
 	providerCode: string;
 	providerRef: string;
-	settledAt: number;
 	source: CommandSource;
-	status: "confirmed";
+	status: "initiated";
 	transferType: string;
 }
 
-function buildBridgeRecord(opts: {
+interface BridgeSettlementPayload {
+	providerData: { bridged: true };
+	settledAt: number;
+}
+
+function buildBridgeInsertRecord(opts: {
 	attemptId: string;
 	amount: number;
 	borrowerId?: string;
 	mortgageId?: string;
 	obligationId?: string;
+	obligationType?: string;
 	planEntryId?: string;
 	providerCode?: string;
 	providerRef?: string;
 	source: CommandSource;
-}): BridgeTransferRecord {
+}): BridgeTransferInsertRecord {
 	const now = Date.now();
 	return {
-		status: "confirmed",
+		status: "initiated",
 		direction: "inbound",
-		transferType: "borrower_interest_collection",
+		transferType: obligationTypeToTransferType(opts.obligationType),
 		amount: opts.amount,
 		currency: "CAD",
 		counterpartyType: "borrower",
@@ -75,10 +71,17 @@ function buildBridgeRecord(opts: {
 		providerRef: opts.providerRef ?? `bridge_${opts.attemptId}`,
 		idempotencyKey: `transfer:bridge:${opts.attemptId}`,
 		source: opts.source,
-		confirmedAt: now,
-		settledAt: now,
 		lastTransitionAt: now,
 		createdAt: now,
+	};
+}
+
+function buildBridgeSettlementPayload(
+	settledAt = Date.now()
+): BridgeSettlementPayload {
+	return {
+		settledAt,
+		providerData: { bridged: true },
 	};
 }
 
@@ -89,18 +92,18 @@ const TEST_SOURCE: CommandSource = {
 	channel: "admin_dashboard",
 };
 
-describe("bridge transfer record shape", () => {
-	it("has status confirmed", () => {
-		const record = buildBridgeRecord({
+describe("bridge transfer insert record shape", () => {
+	it("starts in initiated status so GT can confirm it via FUNDS_SETTLED", () => {
+		const record = buildBridgeInsertRecord({
 			attemptId: "attempt_001",
 			amount: 50_000,
 			source: TEST_SOURCE,
 		});
-		expect(record.status).toBe("confirmed");
+		expect(record.status).toBe("initiated");
 	});
 
 	it("has direction inbound", () => {
-		const record = buildBridgeRecord({
+		const record = buildBridgeInsertRecord({
 			attemptId: "attempt_001",
 			amount: 50_000,
 			source: TEST_SOURCE,
@@ -109,7 +112,7 @@ describe("bridge transfer record shape", () => {
 	});
 
 	it("has collectionAttemptId set to the source attempt", () => {
-		const record = buildBridgeRecord({
+		const record = buildBridgeInsertRecord({
 			attemptId: "attempt_001",
 			amount: 50_000,
 			source: TEST_SOURCE,
@@ -118,7 +121,7 @@ describe("bridge transfer record shape", () => {
 	});
 
 	it("has currency CAD", () => {
-		const record = buildBridgeRecord({
+		const record = buildBridgeInsertRecord({
 			attemptId: "attempt_001",
 			amount: 50_000,
 			source: TEST_SOURCE,
@@ -127,7 +130,7 @@ describe("bridge transfer record shape", () => {
 	});
 
 	it("has counterpartyType borrower", () => {
-		const record = buildBridgeRecord({
+		const record = buildBridgeInsertRecord({
 			attemptId: "attempt_001",
 			amount: 50_000,
 			source: TEST_SOURCE,
@@ -136,7 +139,7 @@ describe("bridge transfer record shape", () => {
 	});
 
 	it("preserves amount from the collection attempt", () => {
-		const record = buildBridgeRecord({
+		const record = buildBridgeInsertRecord({
 			attemptId: "attempt_001",
 			amount: 75_000,
 			source: TEST_SOURCE,
@@ -144,21 +147,19 @@ describe("bridge transfer record shape", () => {
 		expect(record.amount).toBe(75_000);
 	});
 
-	it("has timestamps set", () => {
+	it("has insert timestamps set", () => {
 		const before = Date.now();
-		const record = buildBridgeRecord({
+		const record = buildBridgeInsertRecord({
 			attemptId: "attempt_001",
 			amount: 50_000,
 			source: TEST_SOURCE,
 		});
-		expect(record.confirmedAt).toBeGreaterThanOrEqual(before);
-		expect(record.settledAt).toBeGreaterThanOrEqual(before);
 		expect(record.lastTransitionAt).toBeGreaterThanOrEqual(before);
 		expect(record.createdAt).toBeGreaterThanOrEqual(before);
 	});
 
 	it("uses the attempt providerRef when available", () => {
-		const record = buildBridgeRecord({
+		const record = buildBridgeInsertRecord({
 			attemptId: "attempt_001",
 			amount: 50_000,
 			providerRef: "pad_ref_123",
@@ -168,7 +169,7 @@ describe("bridge transfer record shape", () => {
 	});
 
 	it("falls back to bridge_{attemptId} providerRef when none provided", () => {
-		const record = buildBridgeRecord({
+		const record = buildBridgeInsertRecord({
 			attemptId: "attempt_001",
 			amount: 50_000,
 			source: TEST_SOURCE,
@@ -177,7 +178,7 @@ describe("bridge transfer record shape", () => {
 	});
 
 	it("includes mortgageId when provided", () => {
-		const record = buildBridgeRecord({
+		const record = buildBridgeInsertRecord({
 			attemptId: "attempt_001",
 			amount: 50_000,
 			mortgageId: "mortgage_abc",
@@ -187,7 +188,7 @@ describe("bridge transfer record shape", () => {
 	});
 
 	it("includes obligationId when provided", () => {
-		const record = buildBridgeRecord({
+		const record = buildBridgeInsertRecord({
 			attemptId: "attempt_001",
 			amount: 50_000,
 			obligationId: "obligation_xyz",
@@ -197,7 +198,7 @@ describe("bridge transfer record shape", () => {
 	});
 
 	it("defaults providerCode to manual", () => {
-		const record = buildBridgeRecord({
+		const record = buildBridgeInsertRecord({
 			attemptId: "attempt_001",
 			amount: 50_000,
 			source: TEST_SOURCE,
@@ -206,7 +207,7 @@ describe("bridge transfer record shape", () => {
 	});
 
 	it("uses custom providerCode when provided", () => {
-		const record = buildBridgeRecord({
+		const record = buildBridgeInsertRecord({
 			attemptId: "attempt_001",
 			amount: 50_000,
 			providerCode: "pad_rotessa",
@@ -216,11 +217,81 @@ describe("bridge transfer record shape", () => {
 	});
 });
 
-// ── Bridge Idempotency Key ──────────────────────────────────────────
+describe("bridge transfer type derivation", () => {
+	it("maps regular_interest to borrower_interest_collection", () => {
+		const record = buildBridgeInsertRecord({
+			attemptId: "attempt_001",
+			amount: 50_000,
+			obligationType: "regular_interest",
+			source: TEST_SOURCE,
+		});
+		expect(record.transferType).toBe("borrower_interest_collection");
+	});
+
+	it("maps principal_repayment to borrower_principal_collection", () => {
+		const record = buildBridgeInsertRecord({
+			attemptId: "attempt_001",
+			amount: 50_000,
+			obligationType: "principal_repayment",
+			source: TEST_SOURCE,
+		});
+		expect(record.transferType).toBe("borrower_principal_collection");
+	});
+
+	it("maps late_fee to borrower_late_fee_collection", () => {
+		const record = buildBridgeInsertRecord({
+			attemptId: "attempt_001",
+			amount: 50_000,
+			obligationType: "late_fee",
+			source: TEST_SOURCE,
+		});
+		expect(record.transferType).toBe("borrower_late_fee_collection");
+	});
+
+	it("maps arrears_cure to borrower_arrears_cure", () => {
+		const record = buildBridgeInsertRecord({
+			attemptId: "attempt_001",
+			amount: 50_000,
+			obligationType: "arrears_cure",
+			source: TEST_SOURCE,
+		});
+		expect(record.transferType).toBe("borrower_arrears_cure");
+	});
+
+	it("falls back safely for undefined obligation types", () => {
+		const record = buildBridgeInsertRecord({
+			attemptId: "attempt_001",
+			amount: 50_000,
+			source: TEST_SOURCE,
+		});
+		expect(record.transferType).toBe(DEFAULT_OBLIGATION_TRANSFER_TYPE);
+	});
+
+	it("falls back safely for unmapped obligation types", () => {
+		const record = buildBridgeInsertRecord({
+			attemptId: "attempt_001",
+			amount: 50_000,
+			obligationType: "servicing",
+			source: TEST_SOURCE,
+		});
+		expect(record.transferType).toBe(DEFAULT_OBLIGATION_TRANSFER_TYPE);
+	});
+});
+
+describe("bridge GT confirmation payload", () => {
+	it("uses a bridged settlement payload for the immediate FUNDS_SETTLED transition", () => {
+		const settledAt = Date.now();
+		const payload = buildBridgeSettlementPayload(settledAt);
+		expect(payload).toEqual({
+			settledAt,
+			providerData: { bridged: true },
+		});
+	});
+});
 
 describe("bridge idempotency key", () => {
 	it("follows transfer:bridge:{attemptId} format", () => {
-		const record = buildBridgeRecord({
+		const record = buildBridgeInsertRecord({
 			attemptId: "attempt_001",
 			amount: 50_000,
 			source: TEST_SOURCE,
@@ -229,12 +300,12 @@ describe("bridge idempotency key", () => {
 	});
 
 	it("is deterministic for the same attemptId", () => {
-		const r1 = buildBridgeRecord({
+		const r1 = buildBridgeInsertRecord({
 			attemptId: "attempt_001",
 			amount: 50_000,
 			source: TEST_SOURCE,
 		});
-		const r2 = buildBridgeRecord({
+		const r2 = buildBridgeInsertRecord({
 			attemptId: "attempt_001",
 			amount: 75_000,
 			source: TEST_SOURCE,
@@ -243,12 +314,12 @@ describe("bridge idempotency key", () => {
 	});
 
 	it("produces different keys for different attemptIds", () => {
-		const r1 = buildBridgeRecord({
+		const r1 = buildBridgeInsertRecord({
 			attemptId: "attempt_001",
 			amount: 50_000,
 			source: TEST_SOURCE,
 		});
-		const r2 = buildBridgeRecord({
+		const r2 = buildBridgeInsertRecord({
 			attemptId: "attempt_002",
 			amount: 50_000,
 			source: TEST_SOURCE,
@@ -257,7 +328,7 @@ describe("bridge idempotency key", () => {
 	});
 
 	it("starts with transfer:bridge: prefix", () => {
-		const record = buildBridgeRecord({
+		const record = buildBridgeInsertRecord({
 			attemptId: "attempt_xyz",
 			amount: 50_000,
 			source: TEST_SOURCE,
@@ -266,21 +337,17 @@ describe("bridge idempotency key", () => {
 	});
 });
 
-// ── D4 Conditional: Bridge Skips Cash Posting ───────────────────────
-
 describe("D4 conditional — bridged transfer detection", () => {
 	it("record with collectionAttemptId is identified as bridged", () => {
-		const record = buildBridgeRecord({
+		const record = buildBridgeInsertRecord({
 			attemptId: "attempt_001",
 			amount: 50_000,
 			source: TEST_SOURCE,
 		});
-		// The publishTransferConfirmed effect checks: if (transfer.collectionAttemptId)
 		expect(record.collectionAttemptId).toBeTruthy();
 	});
 
 	it("non-bridged transfer has no collectionAttemptId", () => {
-		// A directly created transfer (not via bridge) would not have collectionAttemptId
 		const directTransfer = {
 			status: "confirmed" as const,
 			direction: "inbound" as const,

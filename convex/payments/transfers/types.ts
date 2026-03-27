@@ -187,6 +187,33 @@ export type ObligationType = NonNullable<
 	(typeof TRANSFER_TYPE_TO_OBLIGATION_TYPE)[TransferType]
 >;
 
+/**
+ * Reverse lookup used by the Phase M2a collection-attempt bridge.
+ * Only obligation-backed inbound transfer types participate.
+ */
+export const OBLIGATION_TYPE_TO_TRANSFER_TYPE = {
+	regular_interest: "borrower_interest_collection",
+	principal_repayment: "borrower_principal_collection",
+	late_fee: "borrower_late_fee_collection",
+	arrears_cure: "borrower_arrears_cure",
+} as const satisfies Record<ObligationType, InboundTransferType>;
+
+export const DEFAULT_OBLIGATION_TRANSFER_TYPE: InboundTransferType =
+	"borrower_interest_collection";
+
+export function obligationTypeToTransferType(
+	obligationType: string | undefined
+): InboundTransferType {
+	if (!obligationType) {
+		return DEFAULT_OBLIGATION_TRANSFER_TYPE;
+	}
+
+	return (
+		OBLIGATION_TYPE_TO_TRANSFER_TYPE[obligationType as ObligationType] ??
+		DEFAULT_OBLIGATION_TRANSFER_TYPE
+	);
+}
+
 // ── Type Guards ──────────────────────────────────────────────────────
 export function isInboundTransferType(
 	value: string
