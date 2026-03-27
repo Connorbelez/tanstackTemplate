@@ -10,6 +10,7 @@
 
 import { v } from "convex/values";
 import { internal } from "../../_generated/api";
+import type { Id } from "../../_generated/dataModel";
 import { httpAction, internalMutation } from "../../_generated/server";
 import { auditLog } from "../../auditLog";
 import { executeTransition } from "../../engine/transition";
@@ -109,9 +110,35 @@ export const vopayWebhook = httpAction(async (ctx, request) => {
 		return jsonResponse({ error: "missing_required_fields" }, 400);
 	}
 
-	// 3. Process webhook event (inline via runMutation)
-	// Always return 200 to prevent VoPay retry storms.
-	// Non-200 responses are reserved for signature/JSON parsing failures only.
+	// 3. Persist raw payload durably BEFORE acknowledging the provider.
+	//    If persistence succeeds, the durable record guarantees eventual processing
+	//    even if the processing step itself fails transiently.
+	const providerEventId = event.event_id ?? event.transaction_id;
+	let webhookEventId: string;
+	try {
+		webhookEventId = await ctx.runMutation(
+			internal.payments.webhooks.vopay.persistRawWebhookEvent,
+			{
+				provider: "pad_vopay",
+				providerEventId,
+				rawBody: body,
+			}
+		);
+	} catch (err) {
+		// Persistence failed — return 5xx so VoPay retries.
+		console.error("[VoPay Webhook] Failed to persist raw event:", err);
+		return jsonResponse(
+			{
+				error: "persistence_failed",
+				message: err instanceof Error ? err.message : "Unknown error",
+			},
+			500
+		);
+	}
+
+	// 4. Process webhook event. The raw payload is already persisted,
+	//    so it's safe to ACK even if processing fails — a retry/recovery
+	//    mechanism can re-process from the durable record.
 	try {
 		await ctx.runMutation(
 			internal.payments.webhooks.vopay.processVoPayWebhook,
@@ -124,15 +151,105 @@ export const vopayWebhook = httpAction(async (ctx, request) => {
 				timestamp: event.timestamp,
 			}
 		);
+
+		// Mark the persisted event as processed
+		await ctx.runMutation(
+			internal.payments.webhooks.vopay.updateWebhookEventStatus,
+			{ webhookEventId, status: "processed" }
+		);
+
 		return jsonResponse({ accepted: true });
 	} catch (err) {
 		console.error("[VoPay Webhook] Processing failed:", err);
-		return jsonResponse({
-			accepted: true,
-			error: "processing_failed",
-			message: err instanceof Error ? err.message : "Unknown error",
-		});
+
+		// Mark the persisted event as failed for later retry
+		try {
+			await ctx.runMutation(
+				internal.payments.webhooks.vopay.updateWebhookEventStatus,
+				{
+					webhookEventId,
+					status: "failed",
+					error: err instanceof Error ? err.message : "Unknown error",
+				}
+			);
+		} catch (updateErr) {
+			console.error(
+				"[VoPay Webhook] Failed to update webhook event status:",
+				updateErr
+			);
+		}
+
+		// Still return accepted: true because the raw payload IS durably persisted.
+		// The failed record can be retried via an internal recovery mechanism.
+		return jsonResponse({ accepted: true });
 	}
+});
+
+// ── Durable persistence mutations ────────────────────────────────────
+
+/**
+ * Persist the raw webhook payload before ACKing the provider.
+ * Returns the webhookEvent document ID so callers can update its status.
+ */
+export const persistRawWebhookEvent = internalMutation({
+	args: {
+		provider: v.string(),
+		providerEventId: v.string(),
+		rawBody: v.string(),
+	},
+	handler: async (ctx, args) => {
+		// Idempotency: if we already have this event, return existing ID
+		const existing = await ctx.db
+			.query("webhookEvents")
+			.withIndex("by_provider_event", (q) =>
+				q
+					.eq("provider", args.provider)
+					.eq("providerEventId", args.providerEventId)
+			)
+			.first();
+
+		if (existing) {
+			return existing._id;
+		}
+
+		const id = await ctx.db.insert("webhookEvents", {
+			provider: args.provider,
+			providerEventId: args.providerEventId,
+			rawBody: args.rawBody,
+			status: "pending",
+			receivedAt: Date.now(),
+			attempts: 0,
+		});
+
+		return id;
+	},
+});
+
+/**
+ * Update the processing status of a persisted webhook event.
+ */
+export const updateWebhookEventStatus = internalMutation({
+	args: {
+		webhookEventId: v.string(),
+		status: v.union(v.literal("processed"), v.literal("failed")),
+		error: v.optional(v.string()),
+	},
+	handler: async (ctx, args) => {
+		const doc = await ctx.db.get(args.webhookEventId as Id<"webhookEvents">);
+		if (!doc) {
+			console.warn(
+				`[VoPay Webhook] webhookEvent ${args.webhookEventId} not found for status update`
+			);
+			return;
+		}
+
+		await ctx.db.patch(doc._id, {
+			status: args.status,
+			processedAt: Date.now(),
+			error: args.error,
+			attempts: doc.attempts + 1,
+		});
+	},
 });
 
 // ── Processing mutation ─────────────────────────────────────────────

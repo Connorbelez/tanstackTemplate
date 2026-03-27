@@ -1491,6 +1491,32 @@ export default defineSchema({
 		.index("by_pipeline", ["pipelineId", "legNumber"])
 		.index("by_provider_ref", ["providerCode", "providerRef"]),
 
+	/** Durable store for raw webhook payloads — persist before ACKing the provider. */
+	webhookEvents: defineTable({
+		/** Which payment provider sent this event (e.g., "pad_vopay", "stripe", "rotessa") */
+		provider: v.string(),
+		/** Provider-assigned event/transaction identifier for idempotency */
+		providerEventId: v.string(),
+		/** Raw JSON body as received */
+		rawBody: v.string(),
+		/** Processing status */
+		status: v.union(
+			v.literal("pending"),
+			v.literal("processed"),
+			v.literal("failed")
+		),
+		/** When the event was received */
+		receivedAt: v.number(),
+		/** When processing completed (or last failed) */
+		processedAt: v.optional(v.number()),
+		/** Error message if processing failed */
+		error: v.optional(v.string()),
+		/** Number of processing attempts */
+		attempts: v.number(),
+	})
+		.index("by_provider_event", ["provider", "providerEventId"])
+		.index("by_status", ["status"]),
+
 	// ══════════════════════════════════════════════════════════
 	// DEMO TABLES
 	// ══════════════════════════════════════════════════════════
