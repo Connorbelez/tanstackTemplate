@@ -1,0 +1,1209 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1.0">
+		<title>
+			ENG-214 — Zero-Regression Test Suite for Unified Payment Rails
+		</title>
+		<link rel="preconnect" href="https://fonts.googleapis.com">
+		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+		<link
+			href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Noto+Sans+Mono:wght@400;500;600;700&display=swap"
+			rel="stylesheet"
+		>
+		<style>
+		:root {
+			--font-body: "Crimson Pro", Georgia, serif;
+			--font-mono: "Noto Sans Mono", "SF Mono", Consolas, monospace;
+			--bg: #faf9f6;
+			--surface: #ffffff;
+			--surface-elevated: #ffffff;
+			--border: rgba(0, 0, 0, 0.08);
+			--border-bright: rgba(0, 0, 0, 0.15);
+			--text: #1c1917;
+			--text-dim: #78716c;
+			--accent: #0f766e;
+			--accent-dim: rgba(15, 118, 110, 0.08);
+			--gold: #b45309;
+			--gold-dim: rgba(180, 83, 9, 0.08);
+			--sage: #166534;
+			--sage-dim: rgba(22, 101, 52, 0.08);
+			--rose: #9f1239;
+			--rose-dim: rgba(159, 18, 57, 0.08);
+			--amber: #92400e;
+			--amber-dim: rgba(146, 64, 14, 0.08);
+		}
+		@media (prefers-color-scheme: dark) {
+			:root {
+				--bg: #0c0a09;
+				--surface: #1c1917;
+				--surface-elevated: #292524;
+				--border: rgba(255, 255, 255, 0.06);
+				--border-bright: rgba(255, 255, 255, 0.12);
+				--text: #fafaf9;
+				--text-dim: #a8a29e;
+				--accent: #2dd4bf;
+				--accent-dim: rgba(45, 212, 191, 0.1);
+				--gold: #fbbf24;
+				--gold-dim: rgba(251, 191, 36, 0.1);
+				--sage: #4ade80;
+				--sage-dim: rgba(74, 222, 128, 0.1);
+				--rose: #fb7185;
+				--rose-dim: rgba(251, 113, 133, 0.1);
+				--amber: #fbbf24;
+				--amber-dim: rgba(251, 191, 36, 0.1);
+			}
+		}
+		*,
+		*::before,
+		*::after {
+			box-sizing: border-box;
+			padding: 0;
+			margin: 0;
+		}
+		body {
+			padding: 0;
+			font-family: var(--font-body);
+			font-size: 18px;
+			line-height: 1.6;
+			color: var(--text);
+			overflow-wrap: break-word;
+			background: var(--bg);
+			background-image: radial-gradient(
+				circle,
+				var(--border) 1px,
+				transparent 1px
+			);
+			background-size: 32px 32px;
+		}
+		a {
+			color: var(--accent);
+			text-decoration: underline;
+			text-underline-offset: 2px;
+		}
+		.container {
+			max-width: 1100px;
+			padding: 24px;
+			margin: 0 auto;
+		}
+		.header {
+			padding: 60px 0 40px;
+			margin-bottom: 48px;
+			border-bottom: 1px solid var(--border-bright);
+		}
+		.header__label {
+			margin-bottom: 12px;
+			font-family: var(--font-mono);
+			font-size: 11px;
+			font-weight: 600;
+			color: var(--accent);
+			text-transform: uppercase;
+			letter-spacing: 2px;
+		}
+		.header__title {
+			margin-bottom: 16px;
+			font-size: clamp(32px, 5vw, 48px);
+			font-weight: 700;
+			line-height: 1.15;
+		}
+		.header__subtitle {
+			max-width: 700px;
+			font-size: 20px;
+			font-style: italic;
+			line-height: 1.5;
+			color: var(--text-dim);
+		}
+		.header__meta {
+			display: flex;
+			flex-wrap: wrap;
+			gap: 24px;
+			margin-top: 20px;
+		}
+		.header__meta-item {
+			display: flex;
+			gap: 6px;
+			align-items: center;
+			font-family: var(--font-mono);
+			font-size: 12px;
+			color: var(--text-dim);
+		}
+		.header__meta-dot {
+			width: 8px;
+			height: 8px;
+			border-radius: 50%;
+		}
+		.section {
+			margin-bottom: 56px;
+		}
+		.section__label {
+			display: flex;
+			gap: 8px;
+			align-items: center;
+			margin-bottom: 10px;
+			font-family: var(--font-mono);
+			font-size: 11px;
+			font-weight: 600;
+			color: var(--accent);
+			text-transform: uppercase;
+			letter-spacing: 2px;
+		}
+		.section__label::before {
+			width: 8px;
+			height: 8px;
+			content: "";
+			background: currentColor;
+			border-radius: 50%;
+		}
+		.section__title {
+			margin-bottom: 16px;
+			font-size: 28px;
+			font-weight: 600;
+		}
+		.section__desc {
+			max-width: 800px;
+			margin-bottom: 24px;
+			color: var(--text-dim);
+		}
+		.ve-card {
+			position: relative;
+			min-width: 0;
+			padding: 20px 24px;
+			background: var(--surface);
+			border: 1px solid var(--border);
+			border-radius: 10px;
+		}
+		.ve-card--elevated {
+			background: var(--surface-elevated);
+			box-shadow:
+				0 2px 8px rgba(0, 0, 0, 0.06),
+				0 1px 2px rgba(0, 0, 0, 0.03);
+		}
+		.ve-card--hero {
+			background: color-mix(in srgb, var(--surface) 92%, var(--accent) 8%);
+			border-color: color-mix(in srgb, var(--border) 50%, var(--accent) 50%);
+			box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06);
+		}
+		.grid-2 {
+			display: grid;
+			grid-template-columns: 1fr 1fr;
+			gap: 20px;
+		}
+		.grid-5 {
+			display: grid;
+			grid-template-columns: repeat(5, 1fr);
+			gap: 12px;
+		}
+		@media (max-width: 768px) {
+			.grid-2,
+			.grid-5 {
+				grid-template-columns: 1fr;
+			}
+		}
+		.compare-grid {
+			display: grid;
+			grid-template-columns: 1fr 1fr;
+			gap: 20px;
+		}
+		@media (max-width: 768px) {
+			.compare-grid {
+				grid-template-columns: 1fr;
+			}
+		}
+		.compare-header {
+			display: inline-block;
+			padding: 8px 12px;
+			margin-bottom: 12px;
+			font-family: var(--font-mono);
+			font-size: 11px;
+			font-weight: 600;
+			text-transform: uppercase;
+			letter-spacing: 1.5px;
+			border-radius: 6px;
+		}
+		.compare-header--before {
+			color: var(--rose);
+			background: var(--rose-dim);
+		}
+		.compare-header--after {
+			color: var(--sage);
+			background: var(--sage-dim);
+		}
+		.compare-step {
+			display: flex;
+			gap: 10px;
+			padding: 6px 0;
+			font-size: 16px;
+			border-bottom: 1px solid var(--border);
+		}
+		.compare-step:last-child {
+			border-bottom: none;
+		}
+		.compare-num {
+			min-width: 24px;
+			font-family: var(--font-mono);
+			font-size: 13px;
+			font-weight: 600;
+			color: var(--text-dim);
+		}
+		.data-table {
+			width: 100%;
+			font-size: 15px;
+			border-collapse: collapse;
+		}
+		.data-table th {
+			position: sticky;
+			top: 0;
+			z-index: 1;
+			padding: 10px 12px;
+			font-family: var(--font-mono);
+			font-size: 11px;
+			font-weight: 600;
+			color: var(--text-dim);
+			text-align: left;
+			text-transform: uppercase;
+			letter-spacing: 1px;
+			background: var(--surface);
+			border-bottom: 2px solid var(--border-bright);
+		}
+		.data-table td {
+			padding: 10px 12px;
+			vertical-align: top;
+			border-bottom: 1px solid var(--border);
+		}
+		.data-table tr:nth-child(even) td {
+			background: var(--accent-dim);
+		}
+		.data-table code {
+			padding: 2px 6px;
+			font-family: var(--font-mono);
+			font-size: 13px;
+			white-space: nowrap;
+			background: var(--accent-dim);
+			border-radius: 4px;
+		}
+		.callout {
+			padding: 16px 20px;
+			margin-bottom: 16px;
+			background: var(--accent-dim);
+			border-left: 4px solid var(--accent);
+			border-radius: 0 8px 8px 0;
+		}
+		.callout--gold {
+			background: var(--gold-dim);
+			border-left-color: var(--gold);
+		}
+		.callout--rose {
+			background: var(--rose-dim);
+			border-left-color: var(--rose);
+		}
+		.callout--amber {
+			background: var(--amber-dim);
+			border-left-color: var(--amber);
+		}
+		.callout__title {
+			margin-bottom: 6px;
+			font-family: var(--font-mono);
+			font-size: 12px;
+			font-weight: 700;
+			text-transform: uppercase;
+			letter-spacing: 1px;
+		}
+		.callout--gold .callout__title {
+			color: var(--gold);
+		}
+		.callout--rose .callout__title {
+			color: var(--rose);
+		}
+		.callout--amber .callout__title {
+			color: var(--amber);
+		}
+		.mermaid-wrap {
+			position: relative;
+			padding: 24px;
+			margin-bottom: 12px;
+			overflow: auto;
+			background: var(--surface);
+			border: 1px solid var(--border);
+			border-radius: 12px;
+		}
+		.mermaid .nodeLabel {
+			color: var(--text) !important;
+		}
+		.mermaid .edgeLabel {
+			color: var(--text-dim) !important;
+			background-color: var(--bg) !important;
+		}
+		.mermaid .edgeLabel rect {
+			fill: var(--bg) !important;
+		}
+		.mermaid .edgeLabel {
+			font-family: var(--font-mono) !important;
+			font-size: 12px !important;
+		}
+		.mermaid .nodeLabel {
+			font-family: var(--font-body) !important;
+			font-size: 15px !important;
+		}
+		.mermaid-caption {
+			margin-top: 8px;
+			font-size: 14px;
+			font-style: italic;
+			color: var(--text-dim);
+			text-align: center;
+		}
+		.chunk-card {
+			position: relative;
+			min-width: 0;
+			padding: 20px;
+			background: var(--surface-elevated);
+			border: 1px solid var(--border);
+			border-radius: 10px;
+		}
+		.chunk-card__number {
+			position: absolute;
+			top: 12px;
+			right: 16px;
+			font-family: var(--font-mono);
+			font-size: 40px;
+			font-weight: 700;
+			line-height: 1;
+			color: color-mix(in srgb, var(--accent) 30%, transparent 70%);
+		}
+		.chunk-card__title {
+			margin-bottom: 8px;
+			font-family: var(--font-mono);
+			font-size: 13px;
+			font-weight: 600;
+			color: var(--accent);
+			text-transform: uppercase;
+			letter-spacing: 1px;
+		}
+		.chunk-card__desc {
+			margin-bottom: 12px;
+			font-size: 16px;
+			font-weight: 500;
+		}
+		.chunk-card__tasks {
+			padding: 0;
+			list-style: none;
+		}
+		.chunk-card__tasks li {
+			display: flex;
+			gap: 8px;
+			align-items: baseline;
+			padding: 4px 0;
+			font-size: 14px;
+			border-bottom: 1px solid var(--border);
+		}
+		.chunk-card__tasks li:last-child {
+			border-bottom: none;
+		}
+		.chunk-card__tasks li::before {
+			flex-shrink: 0;
+			font-family: var(--font-mono);
+			font-size: 12px;
+			color: var(--text-dim);
+			content: "\25A1";
+		}
+		.task-id {
+			flex-shrink: 0;
+			font-family: var(--font-mono);
+			font-size: 12px;
+			font-weight: 600;
+			color: var(--accent);
+		}
+		.stat {
+			padding: 16px;
+			text-align: center;
+		}
+		.stat__value {
+			font-family: var(--font-mono);
+			font-size: 36px;
+			font-weight: 700;
+			color: var(--accent);
+		}
+		.stat__label {
+			margin-top: 4px;
+			font-family: var(--font-mono);
+			font-size: 13px;
+			color: var(--text-dim);
+			text-transform: uppercase;
+			letter-spacing: 1px;
+		}
+		.badge {
+			display: inline-block;
+			padding: 3px 8px;
+			font-family: var(--font-mono);
+			font-size: 11px;
+			font-weight: 600;
+			border-radius: 4px;
+		}
+		.badge--done {
+			color: var(--sage);
+			background: var(--sage-dim);
+		}
+		.badge--progress {
+			color: var(--gold);
+			background: var(--gold-dim);
+		}
+		.flow-arrow {
+			padding: 8px 0;
+			font-size: 24px;
+			color: var(--text-dim);
+			text-align: center;
+		}
+		</style>
+	</head>
+	<body>
+		<div class="container">
+			<header class="header">
+				<div class="header__label">Implementation Spec</div>
+				<h1 class="header__title">
+					Zero-Regression Test Suite<br>for Unified Payment Rails
+				</h1>
+				<p class="header__subtitle">
+					Comprehensive test coverage ensuring the unified payment rails
+					introduce zero regression to the existing three-layer payment
+					architecture, plus new tests for all unified rail flows.
+				</p>
+				<div class="header__meta">
+					<span class="header__meta-item"
+						><span
+							class="header__meta-dot"
+							style="background:var(--rose)"
+						></span>ENG-214</span
+					>
+					<span class="header__meta-item"
+						><span
+							class="header__meta-dot"
+							style="background:var(--gold)"
+						></span>8 Points</span
+					>
+					<span class="header__meta-item"
+						><span
+							class="header__meta-dot"
+							style="background:var(--sage)"
+						></span>5 Chunks / 23 Tasks</span
+					>
+					<span class="header__meta-item"
+						><span
+							class="header__meta-dot"
+							style="background:var(--accent)"
+						></span>2026-03-27</span
+					>
+				</div>
+			</header>
+
+			<div class="section">
+				<div class="grid-5">
+					<div class="ve-card ve-card--elevated stat">
+						<div class="stat__value">23</div>
+						<div class="stat__label">Test Tasks</div>
+					</div>
+					<div class="ve-card ve-card--elevated stat">
+						<div class="stat__value">5</div>
+						<div class="stat__label">Chunks</div>
+					</div>
+					<div class="ve-card ve-card--elevated stat">
+						<div class="stat__value">10</div>
+						<div class="stat__label">Transfer Types</div>
+					</div>
+					<div class="ve-card ve-card--elevated stat">
+						<div class="stat__value">7</div>
+						<div class="stat__label">Machine States</div>
+					</div>
+					<div class="ve-card ve-card--elevated stat">
+						<div class="stat__value">4</div>
+						<div class="stat__label">Invariants</div>
+					</div>
+				</div>
+			</div>
+
+			<div class="section">
+				<div class="section__label">The Problem</div>
+				<h2 class="section__title">Before vs. After This Test Suite</h2>
+				<div class="compare-grid">
+					<div class="ve-card ve-card--elevated">
+						<div class="compare-header compare-header--before">
+							Current State
+						</div>
+						<div class="compare-step">
+							<span class="compare-num">1.</span>
+							Transfer machine has zero transition coverage tests
+						</div>
+						<div class="compare-step">
+							<span class="compare-num">2.</span>
+							No end-to-end collection to settlement test
+						</div>
+						<div class="compare-step">
+							<span class="compare-num">3.</span>
+							No outbound disbursement flow tests
+						</div>
+						<div class="compare-step">
+							<span class="compare-num">4.</span>
+							No multi-leg deal closing failure scenario tests
+						</div>
+						<div class="compare-step">
+							<span class="compare-num">5.</span>
+							Financial invariants not formally verified
+						</div>
+						<div class="compare-step">
+							<span class="compare-num">6.</span>
+							D4 conditional tested only as pure logic
+						</div>
+					</div>
+					<div class="ve-card ve-card--elevated">
+						<div class="compare-header compare-header--after">
+							After Implementation
+						</div>
+						<div class="compare-step">
+							<span class="compare-num">1.</span>
+							Every valid and invalid machine transition tested
+						</div>
+						<div class="compare-step">
+							<span class="compare-num">2.</span>
+							Full inbound pipeline through Convex runtime
+						</div>
+						<div class="compare-step">
+							<span class="compare-num">3.</span>
+							Outbound disbursement through GT lifecycle
+						</div>
+						<div class="compare-step">
+							<span class="compare-num">4.</span>
+							Leg 1 success + Leg 2 failure verified
+						</div>
+						<div class="compare-step">
+							<span class="compare-num">5.</span>
+							Deterministic property tests for all invariants
+						</div>
+						<div class="compare-step">
+							<span class="compare-num">6.</span>
+							D4 conditional verified in integration
+						</div>
+					</div>
+				</div>
+			</div>
+
+			<div class="section">
+				<div class="section__label">Transfer Lifecycle</div>
+				<h2 class="section__title">State Machine Under Test</h2>
+				<p class="section__desc">
+					The transfer machine governs every dollar moving through the platform.
+					All 7 states, 7 events, and 12 valid transitions must be covered.
+				</p>
+				<div class="mermaid-wrap">
+					<pre class="mermaid">
+stateDiagram-v2
+    [*] --> initiated
+    initiated --> pending : PROVIDER_INITIATED
+    initiated --> confirmed : FUNDS_SETTLED
+    initiated --> cancelled : TRANSFER_CANCELLED
+    pending --> pending : PROVIDER_ACKNOWLEDGED
+    pending --> processing : PROCESSING_UPDATE
+    pending --> confirmed : FUNDS_SETTLED
+    pending --> failed : TRANSFER_FAILED
+    processing --> confirmed : FUNDS_SETTLED
+    processing --> failed : TRANSFER_FAILED
+    confirmed --> reversed : TRANSFER_REVERSED
+    failed --> [*]
+    cancelled --> [*]
+    reversed --> [*]
+    </pre>
+				</div>
+				<p class="mermaid-caption">
+					Transfer lifecycle: 7 states, 7 event types, 12 valid transitions.
+					Final states: failed, cancelled, reversed.
+				</p>
+			</div>
+
+			<div class="section">
+				<div class="section__label">Dependencies</div>
+				<h2 class="section__title">Blocking Issues</h2>
+				<div class="grid-2">
+					<div class="ve-card ve-card--elevated">
+						<h3 style="font-size:18px; margin-bottom:12px;">Blocked By</h3>
+						<div
+							style="margin-bottom:12px; padding:10px; border:1px solid var(--border); border-radius:8px;"
+						>
+							<div
+								style="display:flex; justify-content:space-between; align-items:center;"
+							>
+								<strong>ENG-220</strong>
+								<span class="badge badge--done">Done</span>
+							</div>
+							<div
+								style="font-size:15px; color:var(--text-dim); margin-top:4px;"
+							>
+								MockTransferProvider with 4 modes and webhook simulation
+							</div>
+						</div>
+						<div
+							style="padding:10px; border:1px solid var(--border); border-radius:8px;"
+						>
+							<div
+								style="display:flex; justify-content:space-between; align-items:center;"
+							>
+								<strong>ENG-197</strong>
+								<span class="badge badge--progress">In Progress</span>
+							</div>
+							<div
+								style="font-size:15px; color:var(--text-dim); margin-top:4px;"
+							>
+								Collection Attempt to TransferRequest bridge (Phase M2a)
+							</div>
+						</div>
+					</div>
+					<div class="ve-card ve-card--elevated">
+						<h3 style="font-size:18px; margin-bottom:12px;">Context Sources</h3>
+						<div style="font-size:15px;">
+							<div
+								style="padding:6px 0; border-bottom:1px solid var(--border);"
+							>
+								<strong>PaymentRailsSpec</strong>
+								&#8212; Transfer types, machine, integration points
+							</div>
+							<div
+								style="padding:6px 0; border-bottom:1px solid var(--border);"
+							>
+								<strong>Unified Payment Rails Goal</strong>
+								&#8212; Event contract, account families
+							</div>
+							<div
+								style="padding:6px 0; border-bottom:1px solid var(--border);"
+							>
+								<strong>ENG-220 Impl Plan</strong>
+								&#8212; MockTransferProvider architecture
+							</div>
+							<div style="padding:6px 0;">
+								<strong>ENG-197 Impl Plan</strong>
+								&#8212; Bridge D4 conditional, migration strategy
+							</div>
+						</div>
+					</div>
+				</div>
+			</div>
+
+			<div class="section">
+				<div class="section__label">Execution Plan</div>
+				<h2 class="section__title">5 Chunks, Sequential Execution</h2>
+				<p class="section__desc">
+					Chunks 1 and 2 are independent (pure unit tests). Chunks 3 and 4 build
+					on their patterns. Chunk 5 verifies everything.
+				</p>
+				<div class="grid-2" style="margin-bottom:16px;">
+					<div class="chunk-card">
+						<div class="chunk-card__number">01</div>
+						<div class="chunk-card__title">
+							Transfer Machine and Provider Registry
+						</div>
+						<div class="chunk-card__desc">
+							Pure unit tests for state transitions and DI factory
+						</div>
+						<ul class="chunk-card__tasks">
+							<li>
+								<span class="task-id">T-001</span>
+								All valid state transitions
+							</li>
+							<li>
+								<span class="task-id">T-002</span>
+								All invalid transitions rejected
+							</li>
+							<li>
+								<span class="task-id">T-003</span>
+								Actions fire on correct transitions
+							</li>
+							<li>
+								<span class="task-id">T-004</span>
+								Provider registry resolution
+							</li>
+							<li>
+								<span class="task-id">T-005</span>
+								Mock provider env gating
+							</li>
+						</ul>
+					</div>
+					<div class="chunk-card">
+						<div class="chunk-card__number">02</div>
+						<div class="chunk-card__title">Cash Ledger Bridge Mapping</div>
+						<div class="chunk-card__desc">
+							Transfer type to journal entry mapping and webhook pipeline
+						</div>
+						<ul class="chunk-card__tasks">
+							<li>
+								<span class="task-id">T-006</span>
+								All transfer types to entry + accounts
+							</li>
+							<li>
+								<span class="task-id">T-007</span>
+								Idempotency key convention
+							</li>
+							<li>
+								<span class="task-id">T-008</span>
+								Webhook to GT transition pipeline
+							</li>
+							<li><span class="task-id">T-009</span> Webhook deduplication</li>
+							<li>
+								<span class="task-id">T-010</span>
+								Reconciliation orphan detection
+							</li>
+						</ul>
+					</div>
+				</div>
+				<div class="flow-arrow">&#8595;</div>
+				<div class="grid-2" style="margin-bottom:16px;">
+					<div class="chunk-card">
+						<div class="chunk-card__number">03</div>
+						<div class="chunk-card__title">Inbound Collection Flow</div>
+						<div class="chunk-card__desc">
+							End-to-end: collection plan to bridge to settlement
+						</div>
+						<ul class="chunk-card__tasks">
+							<li>
+								<span class="task-id">T-011</span>
+								Full inbound pipeline e2e
+							</li>
+							<li>
+								<span class="task-id">T-012</span>
+								Manual inbound to CASH_RECEIVED
+							</li>
+							<li>
+								<span class="task-id">T-013</span>
+								D4 conditional integration
+							</li>
+							<li><span class="task-id">T-014</span> Bridge idempotency</li>
+						</ul>
+					</div>
+					<div class="chunk-card">
+						<div class="chunk-card__number">04</div>
+						<div class="chunk-card__title">Outbound and Multi-Leg</div>
+						<div class="chunk-card__desc">
+							Disbursement safety and deal closing failure scenarios
+						</div>
+						<ul class="chunk-card__tasks">
+							<li>
+								<span class="task-id">T-015</span>
+								Obligation to dispersal to outbound
+							</li>
+							<li>
+								<span class="task-id">T-016</span>
+								Failed outbound preserves LENDER_PAYABLE
+							</li>
+							<li>
+								<span class="task-id">T-017</span>
+								Leg 1 success + Leg 2 failure
+							</li>
+							<li>
+								<span class="task-id">T-018</span>
+								Manual outbound to LENDER_PAYOUT_SENT
+							</li>
+						</ul>
+					</div>
+				</div>
+				<div class="flow-arrow">&#8595;</div>
+				<div class="chunk-card" style="max-width:600px; margin:0 auto;">
+					<div class="chunk-card__number">05</div>
+					<div class="chunk-card__title">
+						Financial Properties and Regression
+					</div>
+					<div class="chunk-card__desc">
+						Deterministic invariant tests and full suite verification
+					</div>
+					<ul class="chunk-card__tasks">
+						<li>
+							<span class="task-id">T-019</span>
+							Sum of dispersal outputs = distributable amount
+						</li>
+						<li>
+							<span class="task-id">T-020</span>
+							1 confirmation = exactly 1 ledger posting
+						</li>
+						<li>
+							<span class="task-id">T-021</span>
+							Replayed webhook = 0 additional postings
+						</li>
+						<li><span class="task-id">T-022</span> Reversal net effect = 0</li>
+						<li>
+							<span class="task-id">T-023</span>
+							Full regression: all existing tests pass
+						</li>
+					</ul>
+				</div>
+			</div>
+
+			<div class="section">
+				<div class="section__label">Core Mapping</div>
+				<h2 class="section__title">Transfer Type to Cash Ledger Journal</h2>
+				<div class="ve-card ve-card--elevated" style="overflow-x:auto;">
+					<table class="data-table">
+						<thead>
+							<tr>
+								<th>Transfer Type</th>
+								<th>Direction</th>
+								<th>Entry Type</th>
+								<th>Debit</th>
+								<th>Credit</th>
+							</tr>
+						</thead>
+						<tbody>
+							<tr>
+								<td><code>borrower_interest_collection</code></td>
+								<td>inbound</td>
+								<td>CASH_RECEIVED</td>
+								<td>TRUST_CASH</td>
+								<td>BORROWER_RECEIVABLE</td>
+							</tr>
+							<tr>
+								<td><code>borrower_principal_collection</code></td>
+								<td>inbound</td>
+								<td>CASH_RECEIVED</td>
+								<td>TRUST_CASH</td>
+								<td>BORROWER_RECEIVABLE</td>
+							</tr>
+							<tr>
+								<td><code>borrower_late_fee_collection</code></td>
+								<td>inbound</td>
+								<td>CASH_RECEIVED</td>
+								<td>TRUST_CASH</td>
+								<td>BORROWER_RECEIVABLE</td>
+							</tr>
+							<tr>
+								<td><code>borrower_arrears_cure</code></td>
+								<td>inbound</td>
+								<td>CASH_RECEIVED</td>
+								<td>TRUST_CASH</td>
+								<td>BORROWER_RECEIVABLE</td>
+							</tr>
+							<tr>
+								<td><code>locking_fee_collection</code></td>
+								<td>inbound</td>
+								<td>CASH_RECEIVED</td>
+								<td>TRUST_CASH</td>
+								<td>UNAPPLIED_CASH</td>
+							</tr>
+							<tr>
+								<td><code>commitment_deposit_collection</code></td>
+								<td>inbound</td>
+								<td>CASH_RECEIVED</td>
+								<td>TRUST_CASH</td>
+								<td>UNAPPLIED_CASH</td>
+							</tr>
+							<tr>
+								<td><code>deal_principal_transfer</code></td>
+								<td>inbound</td>
+								<td>CASH_RECEIVED</td>
+								<td>TRUST_CASH</td>
+								<td>CASH_CLEARING</td>
+							</tr>
+							<tr>
+								<td><code>lender_dispersal_payout</code></td>
+								<td>outbound</td>
+								<td>LENDER_PAYOUT_SENT</td>
+								<td>LENDER_PAYABLE</td>
+								<td>TRUST_CASH</td>
+							</tr>
+							<tr>
+								<td><code>lender_principal_return</code></td>
+								<td>outbound</td>
+								<td>LENDER_PAYOUT_SENT</td>
+								<td>LENDER_PAYABLE</td>
+								<td>TRUST_CASH</td>
+							</tr>
+							<tr>
+								<td><code>deal_seller_payout</code></td>
+								<td>outbound</td>
+								<td>LENDER_PAYOUT_SENT</td>
+								<td>LENDER_PAYABLE</td>
+								<td>TRUST_CASH</td>
+							</tr>
+						</tbody>
+					</table>
+				</div>
+			</div>
+
+			<div class="section">
+				<div class="section__label">New Files</div>
+				<h2 class="section__title">Test File Map</h2>
+				<div class="ve-card ve-card--elevated" style="overflow-x:auto;">
+					<table class="data-table">
+						<thead>
+							<tr>
+								<th>File Path</th>
+								<th>Chunk</th>
+								<th>Type</th>
+								<th>Purpose</th>
+							</tr>
+						</thead>
+						<tbody>
+							<tr>
+								<td><code>__tests__/transferMachine.test.ts</code></td>
+								<td>1</td>
+								<td>Unit</td>
+								<td>XState transitions + action verification</td>
+							</tr>
+							<tr>
+								<td><code>providers/__tests__/registry.test.ts</code></td>
+								<td>1</td>
+								<td>Unit</td>
+								<td>Provider resolution, production guard</td>
+							</tr>
+							<tr>
+								<td><code>__tests__/cashLedgerMapping.test.ts</code></td>
+								<td>2</td>
+								<td>Unit</td>
+								<td>Transfer type to entry mapping</td>
+							</tr>
+							<tr>
+								<td><code>__tests__/webhookPipeline.test.ts</code></td>
+								<td>2</td>
+								<td>Integration</td>
+								<td>Webhook through GT pipeline</td>
+							</tr>
+							<tr>
+								<td><code>__tests__/inboundFlow.integration.test.ts</code></td>
+								<td>3</td>
+								<td>Integration</td>
+								<td>Collection to settlement pipeline</td>
+							</tr>
+							<tr>
+								<td><code>__tests__/outboundFlow.integration.test.ts</code></td>
+								<td>4</td>
+								<td>Integration</td>
+								<td>Outbound + multi-leg scenarios</td>
+							</tr>
+							<tr>
+								<td><code>__tests__/financialProperties.test.ts</code></td>
+								<td>5</td>
+								<td>Property</td>
+								<td>Financial invariant verification</td>
+							</tr>
+						</tbody>
+					</table>
+				</div>
+			</div>
+
+			<div class="section">
+				<div class="section__label">Financial Invariants</div>
+				<h2 class="section__title">Four Non-Negotiable Properties</h2>
+				<div class="grid-2">
+					<div class="ve-card ve-card--hero">
+						<h3 style="font-size:18px; margin-bottom:8px;">
+							Sum Dispersal = Distributable
+						</h3>
+						<p style="font-size:15px; color:var(--text-dim);">
+							Sum of all rounded per-lender dispersal outputs must exactly equal
+							the total distributable amount. No cents lost or created.
+						</p>
+						<div
+							style="font-family:var(--font-mono); font-size:12px; color:var(--text-dim); margin-top:12px;"
+						>
+							T-019
+						</div>
+					</div>
+					<div class="ve-card ve-card--hero">
+						<h3 style="font-size:18px; margin-bottom:8px;">
+							1 Confirmation = 1 Posting
+						</h3>
+						<p style="font-size:15px; color:var(--text-dim);">
+							A single FUNDS_SETTLED event produces exactly one cash ledger
+							journal entry. Not zero, not two.
+						</p>
+						<div
+							style="font-family:var(--font-mono); font-size:12px; color:var(--text-dim); margin-top:12px;"
+						>
+							T-020
+						</div>
+					</div>
+					<div class="ve-card ve-card--hero">
+						<h3 style="font-size:18px; margin-bottom:8px;">
+							Replay = Zero Effect
+						</h3>
+						<p style="font-size:15px; color:var(--text-dim);">
+							Processing the same webhook event twice must not create additional
+							ledger entries. State machine rejects; idempotency key
+							deduplicates.
+						</p>
+						<div
+							style="font-family:var(--font-mono); font-size:12px; color:var(--text-dim); margin-top:12px;"
+						>
+							T-021
+						</div>
+					</div>
+					<div class="ve-card ve-card--hero">
+						<h3 style="font-size:18px; margin-bottom:8px;">
+							Reversal Net = Zero
+						</h3>
+						<p style="font-size:15px; color:var(--text-dim);">
+							After reversal, the net effect on all accounts is zero. The
+							compensating entry exactly cancels the original.
+						</p>
+						<div
+							style="font-family:var(--font-mono); font-size:12px; color:var(--text-dim); margin-top:12px;"
+						>
+							T-022
+						</div>
+					</div>
+				</div>
+			</div>
+
+			<div class="section">
+				<div class="section__label">Edge Cases</div>
+				<h2 class="section__title">Scenarios That Must Not Break</h2>
+				<div class="ve-card ve-card--elevated" style="overflow-x:auto;">
+					<table class="data-table">
+						<thead>
+							<tr>
+								<th>Scenario</th>
+								<th>Expected Behavior</th>
+								<th>Task</th>
+							</tr>
+						</thead>
+						<tbody>
+							<tr>
+								<td>FUNDS_SETTLED on already-confirmed transfer</td>
+								<td>No state change, no duplicate posting</td>
+								<td>T-002, T-021</td>
+							</tr>
+							<tr>
+								<td>TRANSFER_FAILED on initiated state</td>
+								<td>Rejected &#8212; stays initiated</td>
+								<td>T-002</td>
+							</tr>
+							<tr>
+								<td>Bridge transfer + direct cash posting</td>
+								<td>D4 skip &#8212; zero double-posting</td>
+								<td>T-013</td>
+							</tr>
+							<tr>
+								<td>emitPaymentReceived called twice</td>
+								<td>Idempotent &#8212; one bridge transfer</td>
+								<td>T-014</td>
+							</tr>
+							<tr>
+								<td>Failed outbound after dispersal entry</td>
+								<td>LENDER_PAYABLE untouched</td>
+								<td>T-016</td>
+							</tr>
+							<tr>
+								<td>Leg 1 confirms, Leg 2 fails</td>
+								<td>Funds in TRUST_CASH, deal stays in fundsTransfer</td>
+								<td>T-017</td>
+							</tr>
+							<tr>
+								<td>3 lenders at 33.33% each</td>
+								<td>Sum of shares = distributable (no cent lost)</td>
+								<td>T-019</td>
+							</tr>
+							<tr>
+								<td>Mock provider without ENABLE_MOCK_PROVIDERS</td>
+								<td>Registry throws production guard error</td>
+								<td>T-005</td>
+							</tr>
+							<tr>
+								<td>Unknown provider code</td>
+								<td>Throws "not yet implemented"</td>
+								<td>T-004</td>
+							</tr>
+							<tr>
+								<td>Duplicate webhook eventId</td>
+								<td>Second delivery &#8212; zero effects</td>
+								<td>T-009</td>
+							</tr>
+						</tbody>
+					</table>
+				</div>
+			</div>
+
+			<div class="section">
+				<div class="section__label">Notes</div>
+				<h2 class="section__title">Implementation Guidance</h2>
+				<div class="callout callout--gold">
+					<div class="callout__title">Backward Compatibility</div>
+					<p>
+						All new tests are <strong>additions only</strong>. No existing test
+						file may be modified. The D4 conditional ensures bridge transfers
+						coexist with legacy collection attempt cash posting.
+					</p>
+				</div>
+				<div class="callout callout--rose">
+					<div class="callout__title">
+						Critical: Hash Chain Disabled in Tests
+					</div>
+					<p>
+						All integration tests must set
+						<code style="font-family:var(--font-mono); font-size:14px;"
+							>process.env.DISABLE_GT_HASHCHAIN = "true"</code
+						>
+						before creating the convex-test harness.
+					</p>
+				</div>
+				<div class="callout callout--amber">
+					<div class="callout__title">Test Harness Pattern</div>
+					<p>
+						Use
+						<code style="font-family:var(--font-mono); font-size:14px;"
+							>convexTest(schema, modules)</code
+						>
+						with
+						<code style="font-family:var(--font-mono); font-size:14px;"
+							>auditLogTest.register(t, "auditLog")</code
+						>. Seed entities via
+						<code style="font-family:var(--font-mono); font-size:14px;"
+							>t.run()</code
+						>. Identity injection via
+						<code style="font-family:var(--font-mono); font-size:14px;"
+							>t.withIdentity()</code
+						>.
+					</p>
+				</div>
+				<div class="callout">
+					<div class="callout__title" style="color:var(--accent);">
+						Quality Gates
+					</div>
+					<p>
+						After each chunk:
+						<code style="font-family:var(--font-mono); font-size:14px;"
+							>bun check</code
+						>
+						+
+						<code style="font-family:var(--font-mono); font-size:14px;"
+							>bun typecheck</code
+						>
+						+
+						<code style="font-family:var(--font-mono); font-size:14px;"
+							>bunx convex codegen</code
+						>. After chunk 5: full
+						<code style="font-family:var(--font-mono); font-size:14px;"
+							>bun run test</code
+						>
+						must be green.
+					</p>
+				</div>
+			</div>
+		</div>
+		<script type="module">
+		import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+
+		const isDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+		mermaid.initialize({
+			startOnLoad: true,
+			theme: "base",
+			look: "classic",
+			themeVariables: {
+				primaryColor: isDark ? "#134e4a" : "#ccfbf1",
+				primaryBorderColor: isDark ? "#14b8a6" : "#0d9488",
+				primaryTextColor: isDark ? "#f0fdfa" : "#134e4a",
+				secondaryColor: isDark ? "#1e293b" : "#f0fdf4",
+				secondaryBorderColor: isDark ? "#059669" : "#16a34a",
+				secondaryTextColor: isDark ? "#f1f5f9" : "#1e293b",
+				tertiaryColor: isDark ? "#27201a" : "#fef3c7",
+				tertiaryBorderColor: isDark ? "#d97706" : "#f59e0b",
+				tertiaryTextColor: isDark ? "#fef3c7" : "#27201a",
+				lineColor: isDark ? "#64748b" : "#94a3b8",
+				fontSize: "15px",
+				fontFamily: "'Crimson Pro', Georgia, serif",
+			},
+		});
+		</script>
+	</body>
+</html>
