@@ -16,13 +16,22 @@ import type {
 	TransferProvider,
 	TransferRequestInput,
 } from "../interface";
+import { OUTBOUND_TRANSFER_TYPES } from "../types";
+
+function isOutboundManualProviderRef(ref: string) {
+	return OUTBOUND_TRANSFER_TYPES.some((transferType) =>
+		ref.startsWith(`manual_${transferType}_`)
+	);
+}
 
 export class ManualTransferProvider implements TransferProvider {
 	async initiate(request: TransferRequestInput): Promise<InitiateResult> {
-		// Generate provider ref using transfer type + UUID for uniqueness
 		return {
 			providerRef: `manual_${request.transferType}_${crypto.randomUUID()}`,
-			status: "confirmed", // Immediate confirmation — operator asserts settlement at entry time
+			// Inbound manual entries assert receipt at initiation time. Outbound
+			// manual entries require a separate admin confirmation step after the
+			// transfer is initiated.
+			status: request.direction === "outbound" ? "pending" : "confirmed",
 		};
 	}
 
@@ -40,7 +49,7 @@ export class ManualTransferProvider implements TransferProvider {
 
 	async getStatus(ref: string): Promise<StatusResult> {
 		return {
-			status: "confirmed",
+			status: isOutboundManualProviderRef(ref) ? "pending" : "confirmed",
 			providerData: { providerRef: ref, method: "manual" },
 		};
 	}

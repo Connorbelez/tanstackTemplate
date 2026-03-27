@@ -21,7 +21,11 @@ import {
 import type { TransferRequestInput } from "./interface";
 import { areMockTransferProvidersEnabled } from "./mockProviders";
 import { getTransferProvider } from "./providers/registry";
-import { InvalidDomainEntityIdError, toDomainEntityId } from "./types";
+import {
+	InvalidDomainEntityIdError,
+	type TransferDirection,
+	toDomainEntityId,
+} from "./types";
 import {
 	counterpartyTypeValidator,
 	directionValidator,
@@ -41,7 +45,14 @@ export function canRetryTransferStatus(status: string) {
 	return status === "failed";
 }
 
-export function canManuallyConfirmTransferStatus(status: string) {
+export function canManuallyConfirmTransferStatus(
+	status: string,
+	direction?: TransferDirection
+) {
+	if (direction === "outbound") {
+		return status === "pending" || status === "processing";
+	}
+
 	return (
 		status === "initiated" || status === "pending" || status === "processing"
 	);
@@ -91,12 +102,12 @@ export const createTransferRequest = paymentMutation
 		let counterpartyId: TransferRequestInput["counterpartyId"];
 		try {
 			counterpartyId = toDomainEntityId(args.counterpartyId, "counterpartyId");
-			} catch (error) {
-				if (error instanceof InvalidDomainEntityIdError) {
-					throw new ConvexError(error.message);
-				}
-				throw error;
+		} catch (error) {
+			if (error instanceof InvalidDomainEntityIdError) {
+				throw new ConvexError(error.message);
 			}
+			throw error;
+		}
 
 		if (
 			(args.providerCode === "mock_pad" || args.providerCode === "mock_eft") &&
@@ -441,9 +452,15 @@ export const confirmManualTransfer = paymentMutation
 			);
 		}
 
-		if (!canManuallyConfirmTransferStatus(transfer.status)) {
+		if (
+			!canManuallyConfirmTransferStatus(transfer.status, transfer.direction)
+		) {
+			const allowedStates =
+				transfer.direction === "outbound"
+					? `"pending" or "processing"`
+					: `"initiated", "pending", or "processing"`;
 			throw new ConvexError(
-				`Transfer must be in "initiated", "pending", or "processing" status to confirm manually, currently: "${transfer.status}"`
+				`Transfer must be in ${allowedStates} status to confirm manually, currently: "${transfer.status}"`
 			);
 		}
 

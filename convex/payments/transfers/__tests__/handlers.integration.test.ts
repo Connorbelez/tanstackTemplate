@@ -1,10 +1,12 @@
 import auditLogTest from "convex-audit-log/test";
 import { convexTest } from "convex-test";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { api } from "../../../_generated/api";
 import type { Id } from "../../../_generated/dataModel";
 import { FAIRLEND_STAFF_ORG_ID } from "../../../constants";
 import schema from "../../../schema";
+import { getOrCreateCashAccount } from "../../cashLedger/accounts";
+import { postObligationAccrued } from "../../cashLedger/integrations";
 
 const modules = import.meta.glob("/convex/**/*.ts");
 
@@ -29,6 +31,8 @@ const PAYMENT_HANDLER_IDENTITY = {
 const INITIATED_STATUS_RE = /initiated/;
 const ONLY_MANUAL_CONFIRM_RE =
 	/Only manual transfers can be confirmed manually/;
+const OUTBOUND_CONFIRM_AFTER_INITIATE_RE =
+	/Transfer must be in "pending" or "processing" status to confirm manually/;
 
 const ADMIN_SOURCE = {
 	channel: "admin_dashboard" as const,
@@ -40,6 +44,7 @@ type TestHarness = ReturnType<typeof convexTest>;
 
 function createHarness() {
 	process.env.DISABLE_GT_HASHCHAIN = "true";
+	process.env.DISABLE_CASH_LEDGER_HASHCHAIN = "true";
 	const t = convexTest(schema, modules);
 	auditLogTest.register(t, "auditLog");
 	return t;
@@ -188,6 +193,72 @@ async function insertTransfer(
 	});
 }
 
+async function createDueObligation(
+	t: TestHarness,
+	args: {
+		amount: number;
+		borrowerId: Id<"borrowers">;
+		mortgageId: Id<"mortgages">;
+	}
+) {
+	return t.run(async (ctx) => {
+		return ctx.db.insert("obligations", {
+			status: "due",
+			machineContext: {},
+			lastTransitionAt: Date.now(),
+			mortgageId: args.mortgageId,
+			borrowerId: args.borrowerId,
+			paymentNumber: 1,
+			type: "regular_interest",
+			amount: args.amount,
+			amountSettled: 0,
+			dueDate: Date.parse("2026-02-01T00:00:00Z"),
+			gracePeriodEnd: Date.parse("2026-02-16T00:00:00Z"),
+			createdAt: Date.now(),
+		});
+	});
+}
+
+async function accrueObligation(
+	t: TestHarness,
+	obligationId: Id<"obligations">
+) {
+	return t.run(async (ctx) => {
+		await postObligationAccrued(ctx, {
+			obligationId,
+			source: ADMIN_SOURCE,
+		});
+	});
+}
+
+async function seedOutboundBalances(
+	t: TestHarness,
+	args: {
+		amount: number;
+		lenderId: Id<"lenders">;
+		mortgageId: Id<"mortgages">;
+	}
+) {
+	return t.run(async (ctx) => {
+		const trustCashAccount = await getOrCreateCashAccount(ctx, {
+			family: "TRUST_CASH",
+			mortgageId: args.mortgageId,
+		});
+		await ctx.db.patch(trustCashAccount._id, {
+			cumulativeDebits: BigInt(args.amount),
+		});
+
+		const lenderPayableAccount = await getOrCreateCashAccount(ctx, {
+			family: "LENDER_PAYABLE",
+			mortgageId: args.mortgageId,
+			lenderId: args.lenderId,
+		});
+		await ctx.db.patch(lenderPayableAccount._id, {
+			cumulativeCredits: BigInt(args.amount),
+		});
+	});
+}
+
 async function insertCashAccount(
 	t: TestHarness,
 	fields: {
@@ -261,6 +332,154 @@ async function insertCashTimelineEntry(
 }
 
 describe("transfer handlers integration: mutations", () => {
+	it("initiateTransfer confirms inbound manual transfers and posts CASH_RECEIVED", async () => {
+		vi.useFakeTimers();
+		const t = createHarness();
+		const auth = asPaymentUser(t);
+		const seeded = await seedCoreEntities(t);
+		try {
+			const obligationId = await createDueObligation(t, {
+				amount: 50_000,
+				borrowerId: seeded.borrowerId,
+				mortgageId: seeded.mortgageId,
+			});
+			await accrueObligation(t, obligationId);
+
+			const transferId = await auth.mutation(
+				api.payments.transfers.mutations.createTransferRequest,
+				{
+					direction: "inbound",
+					transferType: "borrower_interest_collection",
+					amount: 50_000,
+					counterpartyType: "borrower",
+					counterpartyId: `${seeded.borrowerId}`,
+					mortgageId: seeded.mortgageId,
+					obligationId,
+					borrowerId: seeded.borrowerId,
+					providerCode: "manual",
+					idempotencyKey: "manual-inbound-bidirectional",
+				}
+			);
+
+			const result = await auth.action(
+				api.payments.transfers.mutations.initiateTransfer,
+				{
+					transferId,
+				}
+			);
+
+			expect(result.success).toBe(true);
+			expect(result.previousState).toBe("initiated");
+			expect(result.newState).toBe("confirmed");
+
+			await t.finishAllScheduledFunctions(vi.runAllTimers);
+
+			await t.run(async (ctx) => {
+				const transfer = await ctx.db.get(transferId);
+				expect(transfer?.status).toBe("confirmed");
+
+				const entries = await ctx.db
+					.query("cash_ledger_journal_entries")
+					.withIndex("by_transfer_request", (q) =>
+						q.eq("transferRequestId", transferId)
+					)
+					.collect();
+
+				expect(entries).toHaveLength(1);
+				expect(entries[0]?.entryType).toBe("CASH_RECEIVED");
+			});
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it("outbound manual transfers stay pending until confirmManualTransfer and then post LENDER_PAYOUT_SENT", async () => {
+		vi.useFakeTimers();
+		const t = createHarness();
+		const auth = asPaymentUser(t);
+		const seeded = await seedCoreEntities(t);
+		try {
+			await seedOutboundBalances(t, {
+				amount: 50_000,
+				lenderId: seeded.lenderId,
+				mortgageId: seeded.mortgageId,
+			});
+
+			const transferId = await auth.mutation(
+				api.payments.transfers.mutations.createTransferRequest,
+				{
+					direction: "outbound",
+					transferType: "lender_dispersal_payout",
+					amount: 50_000,
+					counterpartyType: "lender",
+					counterpartyId: `${seeded.lenderId}`,
+					mortgageId: seeded.mortgageId,
+					lenderId: seeded.lenderId,
+					providerCode: "manual",
+					idempotencyKey: "manual-outbound-bidirectional",
+				}
+			);
+
+			const initiateResult = await auth.action(
+				api.payments.transfers.mutations.initiateTransfer,
+				{
+					transferId,
+				}
+			);
+
+			expect(initiateResult.success).toBe(true);
+			expect(initiateResult.previousState).toBe("initiated");
+			expect(initiateResult.newState).toBe("pending");
+
+			await t.finishAllScheduledFunctions(vi.runAllTimers);
+
+			await t.run(async (ctx) => {
+				const transfer = await ctx.db.get(transferId);
+				expect(transfer?.status).toBe("pending");
+			});
+
+			const pendingEntries = await t.run(async (ctx) => {
+				return ctx.db
+					.query("cash_ledger_journal_entries")
+					.withIndex("by_transfer_request", (q) =>
+						q.eq("transferRequestId", transferId)
+					)
+					.collect();
+			});
+			expect(pendingEntries).toHaveLength(0);
+
+			const confirmResult = await auth.mutation(
+				api.payments.transfers.mutations.confirmManualTransfer,
+				{
+					transferId,
+				}
+			);
+
+			expect(confirmResult.success).toBe(true);
+			expect(confirmResult.previousState).toBe("pending");
+			expect(confirmResult.newState).toBe("confirmed");
+
+			await t.finishAllScheduledFunctions(vi.runAllTimers);
+
+			await t.run(async (ctx) => {
+				const transfer = await ctx.db.get(transferId);
+				expect(transfer?.status).toBe("confirmed");
+
+				const entries = await ctx.db
+					.query("cash_ledger_journal_entries")
+					.withIndex("by_transfer_request", (q) =>
+						q.eq("transferRequestId", transferId)
+					)
+					.collect();
+
+				expect(entries).toHaveLength(1);
+				expect(entries[0]?.entryType).toBe("LENDER_PAYOUT_SENT");
+			});
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
 	it("cancelTransfer transitions initiated -> cancelled", async () => {
 		const t = createHarness();
 		const auth = asPaymentUser(t);
@@ -378,6 +597,29 @@ describe("transfer handlers integration: mutations", () => {
 				transferId: nonManualTransferId,
 			})
 		).rejects.toThrow(ONLY_MANUAL_CONFIRM_RE);
+	});
+
+	it("confirmManualTransfer rejects outbound manual transfers that have not been initiated", async () => {
+		const t = createHarness();
+		const auth = asPaymentUser(t);
+		const seeded = await seedCoreEntities(t);
+
+		const transferId = await insertTransfer(t, {
+			status: "initiated",
+			direction: "outbound",
+			transferType: "lender_dispersal_payout",
+			counterpartyType: "lender",
+			counterpartyId: `${seeded.lenderId}`,
+			lenderId: seeded.lenderId,
+			mortgageId: seeded.mortgageId,
+			idempotencyKey: "confirm-manual-outbound-needs-initiate",
+		});
+
+		await expect(
+			auth.mutation(api.payments.transfers.mutations.confirmManualTransfer, {
+				transferId,
+			})
+		).rejects.toThrow(OUTBOUND_CONFIRM_AFTER_INITIATE_RE);
 	});
 });
 

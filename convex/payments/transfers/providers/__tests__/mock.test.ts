@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { TransferRequestInput } from "../../interface";
+import { toDomainEntityId } from "../../types";
 import {
 	MockTransferProvider,
 	type MockTransferProviderConfig,
@@ -13,7 +14,7 @@ function makeInput(
 ): TransferRequestInput {
 	return {
 		amount: 50_000,
-		counterpartyId: "borrower_123",
+		counterpartyId: toDomainEntityId("borrower_123", "counterpartyId"),
 		counterpartyType: "borrower",
 		currency: "CAD",
 		direction: "inbound",
