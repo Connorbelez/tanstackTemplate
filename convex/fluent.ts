@@ -435,6 +435,15 @@ export const paymentCancelMutation = authedMutation.use(
 export const paymentAction = authedAction.use(
 	requirePermissionAction("payment:manage")
 );
+export const paymentOwnQuery = authedQuery.use(
+	requirePermission("payment:view_own")
+);
+export const paymentWebhookMutation = authedMutation.use(
+	requirePermission("payment:webhook_process")
+);
+export const paymentWebhookAction = authedAction.use(
+	requirePermissionAction("payment:webhook_process")
+);
 
 export const whoAmI = convex
 	.query()
