@@ -1751,6 +1751,12 @@ export async function postCashReceiptForTransfer(
 
 	const creditFamily = inboundTransferCreditFamily(transfer.transferType);
 
+	if (creditFamily === "BORROWER_RECEIVABLE" && !transfer.obligationId) {
+		throw new ConvexError(
+			`Transfer ${args.transferRequestId} requires an obligationId for receivable-backed transfer type "${transfer.transferType}"`
+		);
+	}
+
 	const trustCashAccount = await getOrCreateCashAccount(ctx, {
 		family: "TRUST_CASH",
 		mortgageId: transfer.mortgageId,
@@ -1773,7 +1779,7 @@ export async function postCashReceiptForTransfer(
 
 	const result = await postCashEntryInternal(ctx, {
 		entryType: "CASH_RECEIVED",
-		effectiveDate: unixMsToBusinessDate(transfer.confirmedAt ?? Date.now()),
+		effectiveDate: unixMsToBusinessDate(transfer.settledAt ?? Date.now()),
 		amount: transfer.amount,
 		debitAccountId: trustCashAccount._id,
 		creditAccountId: creditAccount._id,
@@ -1847,7 +1853,7 @@ export async function postLenderPayoutForTransfer(
 
 	const result = await postCashEntryInternal(ctx, {
 		entryType: "LENDER_PAYOUT_SENT",
-		effectiveDate: unixMsToBusinessDate(transfer.confirmedAt ?? Date.now()),
+		effectiveDate: unixMsToBusinessDate(transfer.settledAt ?? Date.now()),
 		amount: transfer.amount,
 		debitAccountId: lenderPayableAccount._id,
 		creditAccountId: trustCashAccount._id,
