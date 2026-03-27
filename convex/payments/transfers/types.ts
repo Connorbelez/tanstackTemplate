@@ -29,6 +29,15 @@ export type InboundTransferType = (typeof INBOUND_TRANSFER_TYPES)[number];
 export type OutboundTransferType = (typeof OUTBOUND_TRANSFER_TYPES)[number];
 export type TransferType = InboundTransferType | OutboundTransferType;
 
+/**
+ * Composite key for provider capability lookup.
+ * Used by the Provider Capability Registry (ENG-215) to map
+ * (transferType, direction) pairs to enabled providers.
+ *
+ * Example: 'borrower_interest_collection:inbound'
+ */
+export type ProviderCapabilityKey = `${TransferType}:${TransferDirection}`;
+
 export const ALL_TRANSFER_TYPES = [
 	...INBOUND_TRANSFER_TYPES,
 	...OUTBOUND_TRANSFER_TYPES,
