@@ -14,6 +14,7 @@ import { internal } from "../../_generated/api";
 import { internalMutation } from "../../_generated/server";
 import { buildSource } from "../../engine/commands";
 import { executeTransition } from "../../engine/transition";
+import type { TransitionResult } from "../../engine/types";
 import { sourceValidator } from "../../engine/validators";
 import { adminAction, adminMutation } from "../../fluent";
 import type { TransferRequestInput } from "./interface";
@@ -171,7 +172,7 @@ export const initiateTransfer = adminAction
 	.input({
 		transferId: v.id("transferRequests"),
 	})
-	.handler(async (ctx, args) => {
+	.handler(async (ctx, args): Promise<TransitionResult> => {
 		const transfer = await ctx.runQuery(
 			internal.payments.transfers.queries.getTransferInternal,
 			{ transferId: args.transferId }
