@@ -292,6 +292,7 @@ export const getTransfersByPipeline = paymentQuery
 			return null;
 		}
 
+
 		return {
 			pipelineId: args.pipelineId,
 			status: computePipelineStatus(legs),

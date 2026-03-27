@@ -113,6 +113,7 @@ function pickActiveLeg(
 	);
 }
 
+
 /**
  * Derives pipeline status from the statuses of its constituent legs.
  *

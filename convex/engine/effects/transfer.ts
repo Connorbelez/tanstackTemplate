@@ -404,6 +404,7 @@ async function handlePipelineLegFailed(
 		},
 	});
 
+
 	if (transfer.legNumber === 1) {
 		console.error(
 			`[handlePipelineLegFailed] Pipeline ${transfer.pipelineId} FAILED at Leg 1. ` +
