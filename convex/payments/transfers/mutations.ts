@@ -47,6 +47,9 @@ export const createTransferRequest = adminMutation
 		dispersalEntryId: v.optional(v.id("dispersalEntries")),
 		planEntryId: v.optional(v.id("collectionPlanEntries")),
 		collectionAttemptId: v.optional(v.id("collectionAttempts")),
+		// Participant references (required for ledger scoping)
+		lenderId: v.optional(v.id("lenders")),
+		borrowerId: v.optional(v.id("borrowers")),
 		// Provider & idempotency
 		providerCode: providerCodeValidator,
 		idempotencyKey: v.string(),
@@ -94,6 +97,9 @@ export const createTransferRequest = adminMutation
 			dispersalEntryId: args.dispersalEntryId,
 			planEntryId: args.planEntryId,
 			collectionAttemptId: args.collectionAttemptId,
+			// Participant references
+			lenderId: args.lenderId,
+			borrowerId: args.borrowerId,
 			// Provider & idempotency
 			providerCode: args.providerCode,
 			idempotencyKey: args.idempotencyKey,
@@ -133,6 +139,22 @@ export const fireInitiateTransition = internalMutation({
 			payload: args.payload as Record<string, unknown> | undefined,
 			source: args.source,
 		});
+	},
+});
+
+// ── persistProviderRef (internal) ──────────────────────────────────
+/**
+ * Patches providerRef onto a transfer record. Used by the immediate-confirm
+ * path in initiateTransfer where the state machine transition (FUNDS_SETTLED)
+ * does not fire the recordTransferProviderRef effect.
+ */
+export const persistProviderRef = internalMutation({
+	args: {
+		transferId: v.id("transferRequests"),
+		providerRef: v.string(),
+	},
+	handler: async (ctx, args) => {
+		await ctx.db.patch(args.transferId, { providerRef: args.providerRef });
 	},
 });
 
@@ -195,12 +217,26 @@ export const initiateTransfer = adminAction
 		const source = buildSource(ctx.viewer, "admin_dashboard");
 
 		if (result.status === "confirmed") {
+			// Persist providerRef before transitioning — the FUNDS_SETTLED path
+			// in the state machine does not fire recordTransferProviderRef, so
+			// without this the provider reference would be lost.
+			await ctx.runMutation(
+				internal.payments.transfers.mutations.persistProviderRef,
+				{
+					transferId: args.transferId,
+					providerRef: result.providerRef,
+				}
+			);
 			return ctx.runMutation(
 				internal.payments.transfers.mutations.fireInitiateTransition,
 				{
 					transferId: args.transferId,
 					eventType: "FUNDS_SETTLED",
-					payload: { settledAt: Date.now(), providerData: {} },
+					payload: {
+						settledAt: Date.now(),
+						providerData: {},
+						providerRef: result.providerRef,
+					},
 					source,
 				}
 			);
