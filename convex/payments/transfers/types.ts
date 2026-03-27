@@ -81,9 +81,20 @@ export type PersistedTransferStatus = TransferStatus | LegacyTransferStatus;
  * `null` means the transfer is not backed by an obligation
  * (e.g., locking fees, commitment deposits, disbursements).
  *
- * Used by the `publishTransferConfirmed` effect to determine
+ * Preparatory constant for ENG-194 (transfer effect handlers).
+ * Will be consumed by the transfer-confirmed effect to determine
  * which Cash Ledger posting function to call.
  */
+/** Known obligation-type literal values for compile-time typo protection. */
+const OBLIGATION_TYPE_VALUES = [
+	"regular_interest",
+	"principal_repayment",
+	"late_fee",
+	"arrears_cure",
+] as const;
+
+type ObligationTypeValue = (typeof OBLIGATION_TYPE_VALUES)[number];
+
 export const TRANSFER_TYPE_TO_OBLIGATION_TYPE = {
 	// Inbound — obligation-backed
 	borrower_interest_collection: "regular_interest",
@@ -98,7 +109,7 @@ export const TRANSFER_TYPE_TO_OBLIGATION_TYPE = {
 	lender_dispersal_payout: null,
 	lender_principal_return: null,
 	deal_seller_payout: null,
-} as const satisfies Record<TransferType, string | null>;
+} as const satisfies Record<TransferType, ObligationTypeValue | null>;
 
 /** Obligation types that are backed by transfer types. */
 export type ObligationType = NonNullable<
