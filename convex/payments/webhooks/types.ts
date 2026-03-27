@@ -1,5 +1,21 @@
 import type { Id } from "../../_generated/dataModel";
 
+export type NormalizedTransferWebhookEventType =
+	| "FUNDS_SETTLED"
+	| "TRANSFER_FAILED"
+	| "TRANSFER_REVERSED"
+	| "PROCESSING_UPDATE";
+
+export type TransferWebhookProcessingStatus =
+	| "pending"
+	| "processed"
+	| "failed";
+
+export interface TransferWebhookMetadataPatch {
+	normalizedEventType?: NormalizedTransferWebhookEventType;
+	transferRequestId?: Id<"transferRequests">;
+}
+
 /** Normalized payload from any payment provider's reversal webhook. */
 export interface ReversalWebhookPayload {
 	/** Original amount in cents */

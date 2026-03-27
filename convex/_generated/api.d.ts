@@ -192,10 +192,13 @@ import type * as payments_transfers_queries from "../payments/transfers/queries.
 import type * as payments_transfers_reconciliation from "../payments/transfers/reconciliation.js";
 import type * as payments_transfers_types from "../payments/transfers/types.js";
 import type * as payments_transfers_validators from "../payments/transfers/validators.js";
+import type * as payments_webhooks_eftVopay from "../payments/webhooks/eftVopay.js";
 import type * as payments_webhooks_handleReversal from "../payments/webhooks/handleReversal.js";
 import type * as payments_webhooks_processReversal from "../payments/webhooks/processReversal.js";
 import type * as payments_webhooks_rotessa from "../payments/webhooks/rotessa.js";
+import type * as payments_webhooks_rotessaPad from "../payments/webhooks/rotessaPad.js";
 import type * as payments_webhooks_stripe from "../payments/webhooks/stripe.js";
+import type * as payments_webhooks_transferCore from "../payments/webhooks/transferCore.js";
 import type * as payments_webhooks_types from "../payments/webhooks/types.js";
 import type * as payments_webhooks_utils from "../payments/webhooks/utils.js";
 import type * as payments_webhooks_verification from "../payments/webhooks/verification.js";
@@ -407,10 +410,13 @@ declare const fullApi: ApiFromModules<{
   "payments/transfers/reconciliation": typeof payments_transfers_reconciliation;
   "payments/transfers/types": typeof payments_transfers_types;
   "payments/transfers/validators": typeof payments_transfers_validators;
+  "payments/webhooks/eftVopay": typeof payments_webhooks_eftVopay;
   "payments/webhooks/handleReversal": typeof payments_webhooks_handleReversal;
   "payments/webhooks/processReversal": typeof payments_webhooks_processReversal;
   "payments/webhooks/rotessa": typeof payments_webhooks_rotessa;
+  "payments/webhooks/rotessaPad": typeof payments_webhooks_rotessaPad;
   "payments/webhooks/stripe": typeof payments_webhooks_stripe;
+  "payments/webhooks/transferCore": typeof payments_webhooks_transferCore;
   "payments/webhooks/types": typeof payments_webhooks_types;
   "payments/webhooks/utils": typeof payments_webhooks_utils;
   "payments/webhooks/verification": typeof payments_webhooks_verification;
