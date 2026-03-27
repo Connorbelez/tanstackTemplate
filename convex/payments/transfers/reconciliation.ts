@@ -22,6 +22,7 @@ import { internalMutation } from "../../_generated/server";
 
 const ORPHAN_THRESHOLD_MS = 5 * 60 * 1000;
 const MAX_HEALING_ATTEMPTS = 3;
+const RECONCILIATION_PAGE_SIZE = 100;
 
 // ── Helpers ─────────────────────────────────────────────────────────
 
@@ -120,44 +121,54 @@ export const transferReconciliationCron = internalMutation({
 	handler: async (ctx) => {
 		const threshold = Date.now() - ORPHAN_THRESHOLD_MS;
 
-		const confirmedTransfers = await ctx.db
-			.query("transferRequests")
-			.withIndex("by_status", (q) => q.eq("status", "confirmed"))
-			.take(100);
+		let cursor: string | null = null;
 
-		for (const transfer of confirmedTransfers) {
-			if (isFreshTransfer(transfer, threshold)) {
-				continue;
+		while (true) {
+			const { continueCursor, isDone, page } = await ctx.db
+				.query("transferRequests")
+				.withIndex("by_status", (q) => q.eq("status", "confirmed"))
+				.paginate({ cursor, numItems: RECONCILIATION_PAGE_SIZE });
+
+			for (const transfer of page) {
+				if (isFreshTransfer(transfer, threshold)) {
+					continue;
+				}
+
+				// Bridged transfers have journal entries via the collection attempt path
+				if (transfer.collectionAttemptId) {
+					continue;
+				}
+
+				const journalEntry = await ctx.db
+					.query("cash_ledger_journal_entries")
+					.withIndex("by_transfer_request", (q) =>
+						q.eq("transferRequestId", transfer._id)
+					)
+					.first();
+
+				if (journalEntry) {
+					continue;
+				}
+
+				const healing = await ctx.db
+					.query("transferHealingAttempts")
+					.withIndex("by_transfer_request", (q) =>
+						q.eq("transferRequestId", transfer._id)
+					)
+					.first();
+
+				if (healing?.status === "escalated" || healing?.status === "resolved") {
+					continue;
+				}
+
+				await processOrphanedTransfer(ctx, transfer._id, healing);
 			}
 
-			// Bridged transfers have journal entries via the collection attempt path
-			if (transfer.collectionAttemptId) {
-				continue;
+			if (isDone) {
+				break;
 			}
 
-			const journalEntry = await ctx.db
-				.query("cash_ledger_journal_entries")
-				.withIndex("by_transfer_request", (q) =>
-					q.eq("transferRequestId", transfer._id)
-				)
-				.first();
-
-			if (journalEntry) {
-				continue;
-			}
-
-			const healing = await ctx.db
-				.query("transferHealingAttempts")
-				.withIndex("by_transfer_request", (q) =>
-					q.eq("transferRequestId", transfer._id)
-				)
-				.first();
-
-			if (healing?.status === "escalated" || healing?.status === "resolved") {
-				continue;
-			}
-
-			await processOrphanedTransfer(ctx, transfer._id, healing);
+			cursor = continueCursor;
 		}
 	},
 });
