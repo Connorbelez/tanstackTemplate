@@ -10,7 +10,10 @@ import {
 	postPaymentReversalCascade,
 } from "../../payments/cashLedger/integrations";
 import { IDEMPOTENCY_KEY_PREFIX } from "../../payments/cashLedger/types";
-import { PROVIDER_CODES } from "../../payments/transfers/types";
+import {
+	obligationTypeToTransferType,
+	PROVIDER_CODES,
+} from "../../payments/transfers/types";
 import { executeTransition } from "../transition";
 import type { CommandSource } from "../types";
 import { effectPayloadValidator } from "../validators";
@@ -158,12 +161,10 @@ export const emitPaymentReceived = internalMutation({
 			const firstOblForBridge = await ctx.db.get(planEntry.obligationIds[0]);
 			if (firstOblForBridge?.borrowerId) {
 				const now = Date.now();
-				// FIXME(ENG-XXX): transferType is hardcoded to borrower_interest_collection.
-				// Should derive from obligation type once obligation-to-transferType mapping exists.
 				const bridgeTransferId = await ctx.db.insert("transferRequests", {
 					status: "initiated",
 					direction: "inbound",
-					transferType: "borrower_interest_collection",
+					transferType: obligationTypeToTransferType(firstOblForBridge.type),
 					amount: attempt.amount,
 					currency: "CAD",
 					counterpartyType: "borrower",

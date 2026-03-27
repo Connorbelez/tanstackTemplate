@@ -6,7 +6,13 @@
 
 import { describe, expect, it } from "vitest";
 import type { ObligationType, TransferType } from "../types";
-import { ALL_TRANSFER_TYPES, TRANSFER_TYPE_TO_OBLIGATION_TYPE } from "../types";
+import {
+	ALL_TRANSFER_TYPES,
+	DEFAULT_OBLIGATION_TRANSFER_TYPE,
+	OBLIGATION_TYPE_TO_TRANSFER_TYPE,
+	obligationTypeToTransferType,
+	TRANSFER_TYPE_TO_OBLIGATION_TYPE,
+} from "../types";
 
 // Known obligation type literals — derived from the mapping at the time of writing.
 const KNOWN_OBLIGATION_TYPES: readonly string[] = [
@@ -75,5 +81,58 @@ describe("TRANSFER_TYPE_TO_OBLIGATION_TYPE", () => {
 				`Expected "${transferType}" to map to null`
 			).toBeNull();
 		}
+	});
+});
+
+describe("OBLIGATION_TYPE_TO_TRANSFER_TYPE", () => {
+	it("has a key for every known obligation type", () => {
+		const mappingKeys = Object.keys(OBLIGATION_TYPE_TO_TRANSFER_TYPE);
+		for (const obligationType of KNOWN_OBLIGATION_TYPES) {
+			expect(mappingKeys).toContain(obligationType);
+		}
+	});
+
+	it("maps every obligation-backed type back to its inbound transfer type", () => {
+		const expected = {
+			regular_interest: "borrower_interest_collection",
+			principal_repayment: "borrower_principal_collection",
+			late_fee: "borrower_late_fee_collection",
+			arrears_cure: "borrower_arrears_cure",
+		} as const satisfies Record<ObligationType, TransferType>;
+
+		for (const [obligationType, transferType] of Object.entries(expected)) {
+			expect(
+				OBLIGATION_TYPE_TO_TRANSFER_TYPE[obligationType as ObligationType]
+			).toBe(transferType);
+		}
+	});
+});
+
+describe("obligationTypeToTransferType", () => {
+	it("returns the mapped inbound transfer type for known obligation types", () => {
+		expect(obligationTypeToTransferType("regular_interest")).toBe(
+			"borrower_interest_collection"
+		);
+		expect(obligationTypeToTransferType("principal_repayment")).toBe(
+			"borrower_principal_collection"
+		);
+		expect(obligationTypeToTransferType("late_fee")).toBe(
+			"borrower_late_fee_collection"
+		);
+		expect(obligationTypeToTransferType("arrears_cure")).toBe(
+			"borrower_arrears_cure"
+		);
+	});
+
+	it("falls back safely for undefined obligation types", () => {
+		expect(obligationTypeToTransferType(undefined)).toBe(
+			DEFAULT_OBLIGATION_TRANSFER_TYPE
+		);
+	});
+
+	it("falls back safely for unmapped obligation types", () => {
+		expect(obligationTypeToTransferType("servicing")).toBe(
+			DEFAULT_OBLIGATION_TRANSFER_TYPE
+		);
 	});
 });
