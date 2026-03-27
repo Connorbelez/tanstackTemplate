@@ -1541,6 +1541,52 @@ export default defineSchema({
 		.index("by_transfer_request", ["transferRequestId"]),
 
 	// ══════════════════════════════════════════════════════════
+	// BANK ACCOUNTS — Pre-transfer validation (ENG-205)
+	// ══════════════════════════════════════════════════════════
+
+	bankAccounts: defineTable({
+		ownerType: v.union(
+			v.literal("borrower"),
+			v.literal("lender"),
+			v.literal("investor"),
+			v.literal("trust")
+		),
+		ownerId: v.string(),
+		institutionNumber: v.optional(v.string()),
+		transitNumber: v.optional(v.string()),
+		accountNumber: v.optional(v.string()),
+		accountLast4: v.optional(v.string()),
+		country: v.optional(v.literal("CA")),
+		currency: v.optional(v.literal("CAD")),
+		status: v.union(
+			v.literal("pending_validation"),
+			v.literal("validated"),
+			v.literal("revoked"),
+			v.literal("rejected")
+		),
+		validationMethod: v.optional(
+			v.union(
+				v.literal("manual"),
+				v.literal("micro_deposit"),
+				v.literal("provider_verified")
+			)
+		),
+		mandateStatus: v.union(
+			v.literal("not_required"),
+			v.literal("pending"),
+			v.literal("active"),
+			v.literal("revoked")
+		),
+		isDefaultInbound: v.optional(v.boolean()),
+		isDefaultOutbound: v.optional(v.boolean()),
+		createdAt: v.number(),
+		updatedAt: v.optional(v.number()),
+		metadata: v.optional(v.any()),
+	})
+		.index("by_owner", ["ownerType", "ownerId"])
+		.index("by_status", ["status"]),
+
+	// ══════════════════════════════════════════════════════════
 	// DEMO TABLES
 	// ══════════════════════════════════════════════════════════
 

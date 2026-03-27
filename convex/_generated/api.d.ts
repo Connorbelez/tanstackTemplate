@@ -134,6 +134,10 @@ import type * as onboarding_internal from "../onboarding/internal.js";
 import type * as onboarding_mutations from "../onboarding/mutations.js";
 import type * as onboarding_queries from "../onboarding/queries.js";
 import type * as onboarding_validators from "../onboarding/validators.js";
+import type * as payments_bankAccounts_mutations from "../payments/bankAccounts/mutations.js";
+import type * as payments_bankAccounts_queries from "../payments/bankAccounts/queries.js";
+import type * as payments_bankAccounts_types from "../payments/bankAccounts/types.js";
+import type * as payments_bankAccounts_validation from "../payments/bankAccounts/validation.js";
 import type * as payments_cashLedger___tests___testUtils from "../payments/cashLedger/__tests__/testUtils.js";
 import type * as payments_cashLedger_accounts from "../payments/cashLedger/accounts.js";
 import type * as payments_cashLedger_disbursementGate from "../payments/cashLedger/disbursementGate.js";
@@ -184,6 +188,7 @@ import type * as payments_payout_validators from "../payments/payout/validators.
 import type * as payments_transfers_interface from "../payments/transfers/interface.js";
 import type * as payments_transfers_mockProviders from "../payments/transfers/mockProviders.js";
 import type * as payments_transfers_mutations from "../payments/transfers/mutations.js";
+import type * as payments_transfers_pipeline from "../payments/transfers/pipeline.js";
 import type * as payments_transfers_providers_adapter from "../payments/transfers/providers/adapter.js";
 import type * as payments_transfers_providers_manual from "../payments/transfers/providers/manual.js";
 import type * as payments_transfers_providers_mock from "../payments/transfers/providers/mock.js";
@@ -352,6 +357,10 @@ declare const fullApi: ApiFromModules<{
   "onboarding/mutations": typeof onboarding_mutations;
   "onboarding/queries": typeof onboarding_queries;
   "onboarding/validators": typeof onboarding_validators;
+  "payments/bankAccounts/mutations": typeof payments_bankAccounts_mutations;
+  "payments/bankAccounts/queries": typeof payments_bankAccounts_queries;
+  "payments/bankAccounts/types": typeof payments_bankAccounts_types;
+  "payments/bankAccounts/validation": typeof payments_bankAccounts_validation;
   "payments/cashLedger/__tests__/testUtils": typeof payments_cashLedger___tests___testUtils;
   "payments/cashLedger/accounts": typeof payments_cashLedger_accounts;
   "payments/cashLedger/disbursementGate": typeof payments_cashLedger_disbursementGate;
@@ -402,6 +411,7 @@ declare const fullApi: ApiFromModules<{
   "payments/transfers/interface": typeof payments_transfers_interface;
   "payments/transfers/mockProviders": typeof payments_transfers_mockProviders;
   "payments/transfers/mutations": typeof payments_transfers_mutations;
+  "payments/transfers/pipeline": typeof payments_transfers_pipeline;
   "payments/transfers/providers/adapter": typeof payments_transfers_providers_adapter;
   "payments/transfers/providers/manual": typeof payments_transfers_providers_manual;
   "payments/transfers/providers/mock": typeof payments_transfers_providers_mock;

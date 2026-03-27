@@ -7,6 +7,7 @@
 
 import { ConvexError, v } from "convex/values";
 import { internal } from "../../_generated/api";
+import type { Doc, Id } from "../../_generated/dataModel";
 import { internalAction, internalMutation } from "../../_generated/server";
 import { buildSource } from "../../engine/commands";
 import { executeTransition } from "../../engine/transition";
@@ -276,6 +277,23 @@ export const initiateTransfer = paymentAction
 			throw error;
 		}
 
+		// ── Bank account validation gate (ENG-205) ────────────────────
+		const bankValidation = await ctx.runQuery(
+			internal.payments.bankAccounts.validation.validateBankAccountForTransfer,
+			{
+				counterpartyType: transfer.counterpartyType,
+				counterpartyId: transfer.counterpartyId,
+				providerCode: transfer.providerCode,
+			}
+		);
+		if (!bankValidation.valid) {
+			throw new ConvexError({
+				code: bankValidation.errorCode,
+				message:
+					bankValidation.errorMessage ?? "Bank account validation failed",
+			});
+		}
+
 		const input: TransferRequestInput = {
 			amount: transfer.amount,
 			bankAccountRef: transfer.bankAccountRef,
@@ -476,6 +494,23 @@ export const initiateTransferInternal = internalAction({
 			throw error;
 		}
 
+		// ── Bank account validation gate (ENG-205) ────────────────────
+		const bankValidation = await ctx.runQuery(
+			internal.payments.bankAccounts.validation.validateBankAccountForTransfer,
+			{
+				counterpartyType: transfer.counterpartyType,
+				counterpartyId: transfer.counterpartyId,
+				providerCode: transfer.providerCode,
+			}
+		);
+		if (!bankValidation.valid) {
+			throw new ConvexError({
+				code: bankValidation.errorCode,
+				message:
+					bankValidation.errorMessage ?? "Bank account validation failed",
+			});
+		}
+
 		const input: TransferRequestInput = {
 			amount: transfer.amount,
 			bankAccountRef: transfer.bankAccountRef,
@@ -585,62 +620,81 @@ export const startDealClosingPipeline = paymentAction
 		leg2Amount: v.optional(v.number()),
 		providerCode: v.optional(providerCodeValidator),
 	})
-	.handler(async (ctx, args) => {
-		const deal = await ctx.runQuery(internal.deals.queries.getInternalDeal, {
-			dealId: args.dealId,
-		});
-
-		// Validate deal is in fundsTransfer.pending
-		if (deal.status !== "fundsTransfer.pending") {
-			throw new ConvexError(
-				`Deal must be in "fundsTransfer.pending" to start pipeline, currently: "${deal.status}"`
+	.handler(
+		async (
+			ctx,
+			args
+		): Promise<{
+			pipelineId: string;
+			leg1TransferId: Id<"transferRequests"> | undefined;
+			alreadyExists: boolean;
+		}> => {
+			const deal: Doc<"deals"> = await ctx.runQuery(
+				internal.deals.queries.getInternalDeal,
+				{
+					dealId: args.dealId,
+				}
 			);
-		}
 
-		// Idempotency: check if pipeline already exists for this deal.
-		// Uses the deterministic pipeline ID to query by_pipeline index.
-		const existingTransfers = await ctx.runQuery(
-			internal.payments.transfers.queries.getPipelineLegsInternal,
-			{ pipelineId: `deal-closing:${args.dealId}` }
-		);
-
-		if (existingTransfers.length > 0) {
-			const pipelineId = existingTransfers[0].pipelineId;
-			console.info(
-				`[startDealClosingPipeline] Pipeline already exists for deal ${args.dealId}: ${pipelineId}`
-			);
-			return {
-				pipelineId,
-				leg1TransferId: existingTransfers.find((t) => t.legNumber === 1)?._id,
-				alreadyExists: true,
-			};
-		}
-
-		// Generate deterministic pipeline ID from dealId
-		const pipelineId = `deal-closing:${args.dealId}`;
-		const leg2Amount = args.leg2Amount ?? args.leg1Amount;
-		const providerCode = args.providerCode ?? "manual";
-
-		const result = await ctx.runAction(
-			internal.payments.transfers.pipeline.createDealClosingPipeline,
-			{
-				dealId: args.dealId,
-				pipelineId,
-				buyerId: deal.buyerId,
-				sellerId: deal.sellerId,
-				mortgageId: deal.mortgageId,
-				leg1Amount: args.leg1Amount,
-				leg2Amount,
-				providerCode,
+			// Validate deal is in fundsTransfer.pending
+			if (deal.status !== "fundsTransfer.pending") {
+				throw new ConvexError(
+					`Deal must be in "fundsTransfer.pending" to start pipeline, currently: "${deal.status}"`
+				);
 			}
-		);
 
-		console.info(
-			`[startDealClosingPipeline] Started pipeline for deal ${args.dealId}: ${pipelineId}`
-		);
+			// Idempotency: check if pipeline already exists for this deal
+			const existingTransfers: Doc<"transferRequests">[] = await ctx.runQuery(
+				internal.payments.transfers.queries.getPipelineLegsInternal,
+				// We query by deal index since pipeline hasn't been created yet
+				{ pipelineId: `deal-closing:${args.dealId}` }
+			);
 
-		return { ...result, alreadyExists: false };
-	})
+			if (existingTransfers.length > 0) {
+				const expectedPipelineId = `deal-closing:${args.dealId}`;
+				const pipelineId =
+					existingTransfers[0].pipelineId ?? expectedPipelineId;
+				console.info(
+					`[startDealClosingPipeline] Pipeline already exists for deal ${args.dealId}: ${pipelineId}`
+				);
+				return {
+					pipelineId,
+					leg1TransferId: existingTransfers.find(
+						(t: Doc<"transferRequests">) => t.legNumber === 1
+					)?._id,
+					alreadyExists: true,
+				};
+			}
+
+			// Generate deterministic pipeline ID from dealId
+			const pipelineId = `deal-closing:${args.dealId}`;
+			const leg2Amount = args.leg2Amount ?? args.leg1Amount;
+			const providerCode = args.providerCode ?? "manual";
+
+			const result: {
+				pipelineId: string;
+				leg1TransferId: Id<"transferRequests">;
+			} = await ctx.runAction(
+				internal.payments.transfers.pipeline.createDealClosingPipeline,
+				{
+					dealId: args.dealId,
+					pipelineId,
+					buyerId: deal.buyerId,
+					sellerId: deal.sellerId,
+					mortgageId: deal.mortgageId,
+					leg1Amount: args.leg1Amount,
+					leg2Amount,
+					providerCode,
+				}
+			);
+
+			console.info(
+				`[startDealClosingPipeline] Started pipeline for deal ${args.dealId}: ${pipelineId}`
+			);
+
+			return { ...result, alreadyExists: false };
+		}
+	)
 	.public();
 
 // ── cancelTransfer ──────────────────────────────────────────────────
