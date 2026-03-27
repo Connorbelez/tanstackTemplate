@@ -192,6 +192,27 @@ export function requirePermission(permission: string) {
 		});
 }
 
+/**
+ * Action-safe permission middleware.
+ * Actions do not expose `db`, so this variant relies on `auditAuthFailure`'s
+ * action-compatible fallback when recording permission denials.
+ */
+export function requirePermissionAction(permission: string) {
+	return convex
+		.$context<{ viewer: Viewer }>()
+		.createMiddleware(async (context, next) => {
+			if (!context.viewer.permissions.has(permission)) {
+				await auditAuthFailure(context, context.viewer, {
+					middleware: "requirePermissionAction",
+					required: permission,
+					reason: `Missing permission: ${permission}`,
+				});
+				throw new ConvexError(`Forbidden: permission "${permission}" required`);
+			}
+			return next({ ...context, permission });
+		});
+}
+
 // ── Onion Middleware: withLogging ────────────────────────────────────
 // Parameterized middleware that wraps the handler, logging start/end
 // and catching errors with duration.
@@ -400,6 +421,28 @@ export const cashLedgerQuery = authedQuery.use(
 );
 export const cashLedgerMutation = authedMutation.use(
 	requirePermission("cash_ledger:correct")
+);
+export const paymentQuery = authedQuery.use(requirePermission("payment:view"));
+export const paymentMutation = authedMutation.use(
+	requirePermission("payment:manage")
+);
+export const paymentRetryMutation = authedMutation.use(
+	requirePermission("payment:retry")
+);
+export const paymentCancelMutation = authedMutation.use(
+	requirePermission("payment:cancel")
+);
+export const paymentAction = authedAction.use(
+	requirePermissionAction("payment:manage")
+);
+export const paymentOwnQuery = authedQuery.use(
+	requirePermission("payment:view_own")
+);
+export const paymentWebhookMutation = authedMutation.use(
+	requirePermission("payment:webhook_process")
+);
+export const paymentWebhookAction = authedAction.use(
+	requirePermissionAction("payment:webhook_process")
 );
 
 export const whoAmI = convex

@@ -1,12 +1,8 @@
 /**
- * Transfer domain mutations — admin-gated seed operations for Phase 1.
+ * Transfer domain mutations — payment permission-gated operations.
  *
- * These mutations follow the Phase 1 "seed, don't build flows" pattern:
- * transfer requests are created and initiated via admin mutations/actions,
- * not user-facing workflows.
- *
- * `initiateTransfer` is an adminAction (not mutation) because future providers
- * will make external HTTP calls, which only actions can do in Convex.
+ * `initiateTransfer` remains an action (not mutation) because provider-backed
+ * implementations perform external HTTP calls, which only actions can do.
  */
 
 import { ConvexError, v } from "convex/values";
@@ -16,7 +12,12 @@ import { buildSource } from "../../engine/commands";
 import { executeTransition } from "../../engine/transition";
 import type { TransitionResult } from "../../engine/types";
 import { sourceValidator } from "../../engine/validators";
-import { adminAction, adminMutation } from "../../fluent";
+import {
+	paymentAction,
+	paymentCancelMutation,
+	paymentMutation,
+	paymentRetryMutation,
+} from "../../fluent";
 import type { TransferRequestInput } from "./interface";
 import { areMockTransferProvidersEnabled } from "./mockProviders";
 import { getTransferProvider } from "./providers/registry";
@@ -27,13 +28,31 @@ import {
 	transferTypeValidator,
 } from "./validators";
 
+export function buildRetryIdempotencyKey(transferId: string) {
+	return `retry:${transferId}`;
+}
+
+export function canCancelTransferStatus(status: string) {
+	return status === "initiated";
+}
+
+export function canRetryTransferStatus(status: string) {
+	return status === "failed";
+}
+
+export function canManuallyConfirmTransferStatus(status: string) {
+	return (
+		status === "initiated" || status === "pending" || status === "processing"
+	);
+}
+
 // ── createTransferRequest ──────────────────────────────────────────
 /**
  * Creates a new transfer request record with status "initiated".
  * Idempotent: if a transfer with the same idempotencyKey exists, returns
  * the existing record's ID without creating a duplicate.
  */
-export const createTransferRequest = adminMutation
+export const createTransferRequest = paymentMutation
 	.input({
 		direction: directionValidator,
 		transferType: transferTypeValidator,
@@ -175,10 +194,10 @@ export const persistProviderRef = internalMutation({
  * Depending on the provider result, fires either FUNDS_SETTLED (confirmed)
  * or PROVIDER_INITIATED (pending) through the transition engine.
  *
- * This is an adminAction (not mutation) because future providers will make
+ * This is an action (not mutation) because future providers will make
  * external HTTP calls to VoPay/Rotessa/Plaid, which only actions can do.
  */
-export const initiateTransfer = adminAction
+export const initiateTransfer = paymentAction
 	.input({
 		transferId: v.id("transferRequests"),
 	})
@@ -262,5 +281,166 @@ export const initiateTransfer = adminAction
 				source,
 			}
 		);
+	})
+	.public();
+
+// ── cancelTransfer ──────────────────────────────────────────────────
+/**
+ * Cancels a transfer that has not been initiated with a provider yet.
+ * Current transfer machine semantics only allow cancellation from `initiated`.
+ */
+export const cancelTransfer = paymentCancelMutation
+	.input({
+		transferId: v.id("transferRequests"),
+		reason: v.optional(v.string()),
+	})
+	.handler(async (ctx, args) => {
+		const transfer = await ctx.db.get(args.transferId);
+		if (!transfer) {
+			throw new ConvexError("Transfer request not found");
+		}
+
+		if (!canCancelTransferStatus(transfer.status)) {
+			throw new ConvexError(
+				`Transfer must be in "initiated" status to cancel, currently: "${transfer.status}"`
+			);
+		}
+
+		const source = buildSource(ctx.viewer, "admin_dashboard");
+		return executeTransition(ctx, {
+			entityType: "transfer",
+			entityId: args.transferId,
+			eventType: "TRANSFER_CANCELLED",
+			payload: { reason: args.reason ?? "Cancelled by admin" },
+			source,
+		});
+	})
+	.public();
+
+// ── retryTransfer ───────────────────────────────────────────────────
+/**
+ * Creates a fresh transfer request from a failed transfer so the operation
+ * can be retried. The retry idempotency key is deterministic per failed
+ * transfer record so repeated invocations for the same failed transfer are
+ * request-idempotent, while retries of later failed retry records still
+ * produce distinct keys.
+ */
+export const retryTransfer = paymentRetryMutation
+	.input({
+		transferId: v.id("transferRequests"),
+	})
+	.handler(async (ctx, args) => {
+		const transfer = await ctx.db.get(args.transferId);
+		if (!transfer) {
+			throw new ConvexError("Transfer request not found");
+		}
+
+		if (!canRetryTransferStatus(transfer.status)) {
+			throw new ConvexError(
+				`Transfer must be in "failed" status to retry, currently: "${transfer.status}"`
+			);
+		}
+
+		const now = Date.now();
+		const retryIdempotencyKey = buildRetryIdempotencyKey(`${args.transferId}`);
+
+		const existing = await ctx.db
+			.query("transferRequests")
+			.withIndex("by_idempotency", (q) =>
+				q.eq("idempotencyKey", retryIdempotencyKey)
+			)
+			.first();
+		if (existing) {
+			return existing._id;
+		}
+
+		const source = buildSource(ctx.viewer, "admin_dashboard");
+		const originalMetadata = transfer.metadata as
+			| Record<string, unknown>
+			| undefined;
+		const metadata: Record<string, unknown> = {
+			...(originalMetadata ?? {}),
+			retryOfTransferId: `${args.transferId}`,
+			retriedAt: now,
+		};
+
+		return ctx.db.insert("transferRequests", {
+			status: "initiated",
+			direction: transfer.direction,
+			transferType: transfer.transferType,
+			amount: transfer.amount,
+			currency: transfer.currency,
+			counterpartyType: transfer.counterpartyType,
+			counterpartyId: transfer.counterpartyId,
+			bankAccountRef: transfer.bankAccountRef,
+			mortgageId: transfer.mortgageId,
+			obligationId: transfer.obligationId,
+			dealId: transfer.dealId,
+			dispersalEntryId: transfer.dispersalEntryId,
+			planEntryId: transfer.planEntryId,
+			collectionAttemptId: transfer.collectionAttemptId,
+			lenderId: transfer.lenderId,
+			borrowerId: transfer.borrowerId,
+			providerCode: transfer.providerCode,
+			idempotencyKey: retryIdempotencyKey,
+			source,
+			pipelineId: transfer.pipelineId,
+			legNumber: transfer.legNumber,
+			metadata,
+			createdAt: now,
+			lastTransitionAt: now,
+		});
+	})
+	.public();
+
+// ── confirmManualTransfer ───────────────────────────────────────────
+/**
+ * Confirms settlement for manual transfers without calling a provider API.
+ * This supports permission-gated manual cash/cheque/wire flows.
+ */
+export const confirmManualTransfer = paymentMutation
+	.input({
+		transferId: v.id("transferRequests"),
+		providerRef: v.optional(v.string()),
+	})
+	.handler(async (ctx, args) => {
+		const transfer = await ctx.db.get(args.transferId);
+		if (!transfer) {
+			throw new ConvexError("Transfer request not found");
+		}
+
+		if (transfer.providerCode !== "manual") {
+			throw new ConvexError(
+				`Only manual transfers can be confirmed manually, got "${transfer.providerCode}"`
+			);
+		}
+
+		if (!canManuallyConfirmTransferStatus(transfer.status)) {
+			throw new ConvexError(
+				`Transfer must be in "initiated", "pending", or "processing" status to confirm manually, currently: "${transfer.status}"`
+			);
+		}
+
+		const now = Date.now();
+		const providerRef =
+			args.providerRef ?? transfer.providerRef ?? `manual_${now}`;
+		if (transfer.providerRef !== providerRef) {
+			await ctx.db.patch(args.transferId, { providerRef });
+		}
+
+		const source = buildSource(ctx.viewer, "admin_dashboard");
+		return executeTransition(ctx, {
+			entityType: "transfer",
+			entityId: args.transferId,
+			eventType: "FUNDS_SETTLED",
+			payload: {
+				settledAt: now,
+				providerData: {
+					providerRef,
+					method: "manual",
+				},
+			},
+			source,
+		});
 	})
 	.public();

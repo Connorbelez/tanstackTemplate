@@ -10,6 +10,12 @@
 
 import { describe, expect, it } from "vitest";
 import type { TransferRequestInput } from "../interface";
+import {
+	buildRetryIdempotencyKey,
+	canCancelTransferStatus,
+	canManuallyConfirmTransferStatus,
+	canRetryTransferStatus,
+} from "../mutations";
 import { ManualTransferProvider } from "../providers/manual";
 import { MockTransferProvider } from "../providers/mock";
 import { getTransferProvider } from "../providers/registry";
@@ -29,6 +35,7 @@ const MOCK_DISABLED_RE = /disabled by default/;
 const EFT_VOPAY_RE = /eft_vopay/;
 const MANUAL_PREFIX_RE = /^manual_/;
 const BRIDGE_PREFIX_RE = /^transfer:bridge:/;
+const RETRY_PREFIX_RE = /^retry:[\w-]+$/;
 
 // ── Amount Validation ───────────────────────────────────────────────
 // The mutation checks: !Number.isInteger(amount) || amount <= 0
@@ -330,5 +337,35 @@ describe("idempotency key format", () => {
 		const key1 = `transfer:bridge:${"attempt_123"}`;
 		const key2 = `transfer:bridge:${"attempt_456"}`;
 		expect(key1).not.toBe(key2);
+	});
+
+	it("retry idempotency key uses retry:{transferId}", () => {
+		const key = buildRetryIdempotencyKey("transfer_123");
+		expect(key).toBe("retry:transfer_123");
+		expect(key).toMatch(RETRY_PREFIX_RE);
+	});
+});
+
+// ── Mutation Status Guards ──────────────────────────────────────────
+
+describe("ENG-201 transfer status guards", () => {
+	it("cancel only allows initiated status", () => {
+		expect(canCancelTransferStatus("initiated")).toBe(true);
+		expect(canCancelTransferStatus("pending")).toBe(false);
+		expect(canCancelTransferStatus("failed")).toBe(false);
+	});
+
+	it("retry only allows failed status", () => {
+		expect(canRetryTransferStatus("failed")).toBe(true);
+		expect(canRetryTransferStatus("initiated")).toBe(false);
+		expect(canRetryTransferStatus("confirmed")).toBe(false);
+	});
+
+	it("manual confirm allows initiated, pending, and processing", () => {
+		expect(canManuallyConfirmTransferStatus("initiated")).toBe(true);
+		expect(canManuallyConfirmTransferStatus("pending")).toBe(true);
+		expect(canManuallyConfirmTransferStatus("processing")).toBe(true);
+		expect(canManuallyConfirmTransferStatus("failed")).toBe(false);
+		expect(canManuallyConfirmTransferStatus("cancelled")).toBe(false);
 	});
 });

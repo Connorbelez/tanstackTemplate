@@ -13,7 +13,7 @@ import { buildIdempotencyKey } from "../types";
 import {
 	assertAccountIntegrity,
 	assertSettlementReconciles,
-} from "./e2eHelpers";
+} from "./e2eHelpers.test-utils";
 import {
 	createDueObligation,
 	createHarness,
