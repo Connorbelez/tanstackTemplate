@@ -18,6 +18,19 @@ import type {
 	StatusResult,
 } from "./interface";
 
+let hasWarnedAboutLegacyMockPAD = false;
+
+function warnLegacyMockPADUsage(): void {
+	if (hasWarnedAboutLegacyMockPAD) {
+		return;
+	}
+	hasWarnedAboutLegacyMockPAD = true;
+	console.warn(
+		"[DEPRECATED] MockPADMethod uses the legacy PaymentMethod interface. " +
+			'Use TransferProvider mock codes ("mock_pad" / "mock_eft") instead.'
+	);
+}
+
 // ---------------------------------------------------------------------------
 // Config & DI types
 // ---------------------------------------------------------------------------
@@ -59,6 +72,8 @@ export class MockPADMethod implements PaymentMethod {
 		scheduleSettlement: ScheduleSettlementFn,
 		config: Partial<MockPADConfig> = {}
 	) {
+		warnLegacyMockPADUsage();
+
 		const merged = { ...DEFAULT_MOCK_PAD_CONFIG, ...config };
 
 		if (

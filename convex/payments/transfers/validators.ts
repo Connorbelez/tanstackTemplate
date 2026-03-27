@@ -56,6 +56,8 @@ export const counterpartyTypeValidator = v.union(
 // ── Provider Codes ───────────────────────────────────────────────────
 export const providerCodeValidator = v.union(
 	v.literal("manual"),
+	v.literal("mock_pad"),
+	v.literal("mock_eft"),
 	v.literal("pad_vopay"),
 	v.literal("pad_rotessa"),
 	v.literal("eft_vopay"),

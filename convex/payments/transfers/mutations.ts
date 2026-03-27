@@ -26,6 +26,13 @@ import {
 	transferTypeValidator,
 } from "./validators";
 
+function areMockTransferProvidersEnabled(): boolean {
+	if (process.env.NODE_ENV !== "production") {
+		return true;
+	}
+	return process.env.ENABLE_MOCK_PROVIDERS === "true";
+}
+
 // ── createTransferRequest ──────────────────────────────────────────
 /**
  * Creates a new transfer request record with status "initiated".
@@ -63,6 +70,15 @@ export const createTransferRequest = adminMutation
 		// 1. Validate amount is positive integer (safe-integer cents)
 		if (!Number.isInteger(args.amount) || args.amount <= 0) {
 			throw new ConvexError("Amount must be a positive integer (cents)");
+		}
+
+		if (
+			(args.providerCode === "mock_pad" || args.providerCode === "mock_eft") &&
+			!areMockTransferProvidersEnabled()
+		) {
+			throw new ConvexError(
+				`Transfer provider "${args.providerCode}" is disabled in production. Set ENABLE_MOCK_PROVIDERS="true" to opt in.`
+			);
 		}
 
 		// 2. Idempotency check
