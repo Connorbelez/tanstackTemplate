@@ -1,12 +1,7 @@
-/**
- * VoPay webhook handlers for transfer settlement callbacks.
- *
- * The HTTP layer verifies the signature, persists the raw payload durably,
- * schedules processing, and returns immediately. The scheduled mutation
- * resolves the transfer, performs idempotency checks, and fires the governed
- * transition using normalized transfer events.
- */
-
+import {
+	makeFunctionReference,
+	type SchedulableFunctionReference,
+} from "convex/server";
 import { v } from "convex/values";
 import { internal } from "../../_generated/api";
 import type { Id } from "../../_generated/dataModel";
@@ -19,7 +14,6 @@ import {
 import { auditLog } from "../../auditLog";
 import { executeTransition } from "../../engine/transition";
 import type { CommandSource } from "../../engine/types";
-import type { ProviderCode } from "../transfers/types";
 import {
 	isTransferAlreadyInTargetState,
 	markTransferWebhookFailed,
@@ -29,72 +23,65 @@ import type { NormalizedTransferWebhookEventType } from "./types";
 import { jsonResponse } from "./utils";
 import type { VerificationResult } from "./verification";
 
-type VoPayProviderCode = Extract<ProviderCode, "pad_vopay" | "eft_vopay">;
-
-const VOPAY_PROVIDER_CODE_VALIDATOR = v.union(
-	v.literal("pad_vopay"),
-	v.literal("eft_vopay")
-);
-
-/** Placeholder VoPay webhook event structure. */
-export interface VoPayWebhookEvent {
-	/** Amount value from VoPay — unit (dollars vs cents) TBD (ENG-185) */
-	amount?: number;
-	/** VoPay-assigned event identifier for idempotency */
-	event_id?: string;
-	/** Reason for failure/return */
-	reason?: string;
-	/** VoPay event/status string (e.g., "completed", "failed", "returned") */
-	status: string;
-	/** ISO 8601 timestamp */
-	timestamp?: string;
-	/** VoPay transaction reference */
-	transaction_id: string;
+export interface RotessaPadWebhookEvent {
+	data: {
+		amount?: number;
+		date?: string;
+		event_id?: string;
+		reason?: string;
+		return_code?: string;
+		transaction_id: string;
+	};
+	event_type: string;
 }
 
-interface ProcessVoPayWebhookArgs {
-	amount?: number;
+interface ProcessRotessaPadWebhookArgs {
+	date?: string;
 	eventId?: string;
-	providerCode: VoPayProviderCode;
+	eventType: string;
 	reason?: string;
-	status: string;
-	timestamp?: string;
+	returnCode?: string;
 	transactionId: string;
 	webhookEventId: Id<"webhookEvents">;
 }
 
-/**
- * Maps a VoPay webhook status to a transfer machine event type.
- * Returns undefined for statuses we don't act on.
- *
- * Placeholder mapping — real VoPay status values TBD (ENG-185).
- */
-export function mapVoPayStatusToTransferEvent(
-	voPayStatus: string
+type ProcessRotessaPadWebhookReferenceArgs = Record<string, unknown> &
+	ProcessRotessaPadWebhookArgs;
+
+const processRotessaPadWebhookReference = makeFunctionReference<
+	"mutation",
+	ProcessRotessaPadWebhookReferenceArgs,
+	Promise<void>
+>(
+	"payments/webhooks/rotessaPad:processRotessaPadWebhook"
+) as unknown as SchedulableFunctionReference;
+
+export function mapRotessaPadStatusToTransferEvent(
+	rotessaEventType: string
 ): NormalizedTransferWebhookEventType | undefined {
-	switch (voPayStatus) {
-		case "completed":
-		case "settled":
+	switch (rotessaEventType) {
+		case "transaction.completed":
+		case "transaction.settled":
 			return "FUNDS_SETTLED";
-		case "failed":
-		case "error":
+		case "transaction.nsf":
+		case "transaction.failed":
 			return "TRANSFER_FAILED";
-		case "returned":
-		case "reversed":
+		case "transaction.returned":
+		case "transaction.reversed":
 			return "TRANSFER_REVERSED";
-		case "pending":
-		case "processing":
+		case "transaction.pending":
+		case "transaction.processing":
 			return "PROCESSING_UPDATE";
 		default:
 			return undefined;
 	}
 }
 
-export function buildVoPayTransitionPayload(
+export function buildRotessaPadTransitionPayload(
 	eventType: NormalizedTransferWebhookEventType,
 	args: Pick<
-		ProcessVoPayWebhookArgs,
-		"eventId" | "reason" | "status" | "transactionId"
+		ProcessRotessaPadWebhookArgs,
+		"date" | "eventId" | "eventType" | "reason" | "returnCode" | "transactionId"
 	>
 ): Record<string, unknown> {
 	switch (eventType) {
@@ -102,25 +89,27 @@ export function buildVoPayTransitionPayload(
 			return {
 				settledAt: Date.now(),
 				providerData: {
-					voPayTransactionId: args.transactionId,
-					voPayEventId: args.eventId,
+					rotessaTransactionId: args.transactionId,
+					rotessaEventId: args.eventId,
+					rotessaEventType: args.eventType,
 				},
 			};
 		case "TRANSFER_FAILED":
 			return {
-				errorCode: "VOPAY_FAILURE",
-				reason: args.reason ?? `VoPay status: ${args.status}`,
+				errorCode: args.returnCode ?? "ROTESSA_FAILURE",
+				reason: args.reason ?? `Rotessa event: ${args.eventType}`,
 			};
 		case "TRANSFER_REVERSED":
 			return {
 				reversalRef: args.eventId ?? args.transactionId,
-				reason: args.reason ?? `VoPay reversal: ${args.status}`,
+				reason: args.reason ?? `Rotessa reversal: ${args.eventType}`,
 			};
 		case "PROCESSING_UPDATE":
 			return {
 				providerData: {
-					voPayTransactionId: args.transactionId,
-					status: args.status,
+					rotessaTransactionId: args.transactionId,
+					rotessaEventType: args.eventType,
+					processedDate: args.date,
 				},
 			};
 		default:
@@ -139,7 +128,7 @@ async function finalizeWebhookEvent(
 	const doc = await ctx.db.get(args.webhookEventId);
 	if (!doc) {
 		console.warn(
-			`[VoPay Webhook] webhookEvent ${args.webhookEventId} not found for status update`
+			`[Rotessa PAD Webhook] webhookEvent ${args.webhookEventId} not found for status update`
 		);
 		return;
 	}
@@ -178,15 +167,17 @@ async function patchWebhookEventMetadata(
 	await ctx.db.patch(args.webhookEventId, patch);
 }
 
-export async function processVoPayTransferWebhook(
+export async function processRotessaPadTransferWebhook(
 	ctx: MutationCtx,
-	args: ProcessVoPayWebhookArgs
+	args: ProcessRotessaPadWebhookArgs
 ) {
 	try {
-		const eventType = mapVoPayStatusToTransferEvent(args.status);
-		if (!eventType) {
+		const normalizedEventType = mapRotessaPadStatusToTransferEvent(
+			args.eventType
+		);
+		if (!normalizedEventType) {
 			console.info(
-				`[VoPay Webhook] Ignoring unmapped status="${args.status}" for provider=${args.providerCode}, transaction=${args.transactionId}`
+				`[Rotessa PAD Webhook] Ignoring unmapped eventType="${args.eventType}" for transaction=${args.transactionId}`
 			);
 			await finalizeWebhookEvent(ctx, {
 				webhookEventId: args.webhookEventId,
@@ -199,18 +190,18 @@ export async function processVoPayTransferWebhook(
 			.query("transferRequests")
 			.withIndex("by_provider_ref", (q) =>
 				q
-					.eq("providerCode", args.providerCode)
+					.eq("providerCode", "pad_rotessa")
 					.eq("providerRef", args.transactionId)
 			)
 			.first();
 
 		if (!transfer) {
 			console.warn(
-				`[VoPay Webhook] No transfer found for providerCode=${args.providerCode}, providerRef=${args.transactionId}`
+				`[Rotessa PAD Webhook] No transfer found for providerRef=${args.transactionId}`
 			);
 			await patchWebhookEventMetadata(ctx, {
 				webhookEventId: args.webhookEventId,
-				normalizedEventType: eventType,
+				normalizedEventType,
 			});
 			await finalizeWebhookEvent(ctx, {
 				webhookEventId: args.webhookEventId,
@@ -221,13 +212,13 @@ export async function processVoPayTransferWebhook(
 
 		await patchWebhookEventMetadata(ctx, {
 			webhookEventId: args.webhookEventId,
-			normalizedEventType: eventType,
+			normalizedEventType,
 			transferRequestId: transfer._id,
 		});
 
-		if (isTransferAlreadyInTargetState(transfer.status, eventType)) {
+		if (isTransferAlreadyInTargetState(transfer.status, normalizedEventType)) {
 			console.info(
-				`[VoPay Webhook] Transfer ${transfer._id} already in target state "${transfer.status}" — idempotent skip`
+				`[Rotessa PAD Webhook] Transfer ${transfer._id} already in target state "${transfer.status}" — idempotent skip`
 			);
 			await finalizeWebhookEvent(ctx, {
 				webhookEventId: args.webhookEventId,
@@ -239,29 +230,28 @@ export async function processVoPayTransferWebhook(
 		const source: CommandSource = {
 			actorType: "system",
 			channel: "api_webhook",
-			actorId: `webhook:${args.providerCode}`,
+			actorId: "webhook:pad_rotessa",
 		};
 
 		const result = await executeTransition(ctx, {
 			entityType: "transfer",
 			entityId: transfer._id,
-			eventType,
-			payload: buildVoPayTransitionPayload(eventType, args),
+			eventType: normalizedEventType,
+			payload: buildRotessaPadTransitionPayload(normalizedEventType, args),
 			source,
 		});
 
 		if (!result.success) {
 			await auditLog.log(ctx, {
-				action: "webhook.vopay.transition_failed",
+				action: "webhook.rotessa_pad.transition_failed",
 				actorId: "system",
 				resourceType: "transferRequests",
 				resourceId: transfer._id,
 				severity: "error",
 				metadata: {
-					eventType,
-					providerCode: args.providerCode,
+					eventType: normalizedEventType,
 					transactionId: args.transactionId,
-					voPayStatus: args.status,
+					rotessaEventType: args.eventType,
 					reason: result.reason,
 				},
 			});
@@ -280,7 +270,7 @@ export async function processVoPayTransferWebhook(
 		});
 	} catch (error) {
 		const message = error instanceof Error ? error.message : "Unknown error";
-		console.error("[VoPay Webhook] Processing failed:", error);
+		console.error("[Rotessa PAD Webhook] Processing failed:", error);
 		await finalizeWebhookEvent(ctx, {
 			webhookEventId: args.webhookEventId,
 			status: "failed",
@@ -289,7 +279,7 @@ export async function processVoPayTransferWebhook(
 	}
 }
 
-async function verifyVoPayWebhookRequest(
+async function verifyRotessaPadWebhookRequest(
 	ctx: ActionCtx,
 	args: {
 		body: string;
@@ -297,12 +287,12 @@ async function verifyVoPayWebhookRequest(
 	}
 ) {
 	if (!args.signature) {
-		console.warn("[VoPay Webhook] Missing signature header");
+		console.warn("[Rotessa PAD Webhook] Missing signature header");
 		return jsonResponse({ error: "invalid_signature" }, 401);
 	}
 
 	const verification: VerificationResult = await ctx.runAction(
-		internal.payments.webhooks.verification.verifyVoPaySignatureAction,
+		internal.payments.webhooks.verification.verifyRotessaSignatureAction,
 		{ body: args.body, signature: args.signature }
 	);
 
@@ -311,20 +301,22 @@ async function verifyVoPayWebhookRequest(
 	}
 
 	if (verification.error === "missing_secret") {
-		console.error("[VoPay Webhook] VOPAY_WEBHOOK_SECRET not configured");
+		console.error(
+			"[Rotessa PAD Webhook] ROTESSA_WEBHOOK_SECRET not configured"
+		);
 		return jsonResponse({ error: "server_configuration_error" }, 500);
 	}
 
-	console.warn("[VoPay Webhook] Signature verification failed");
+	console.warn("[Rotessa PAD Webhook] Signature verification failed");
 	return jsonResponse({ error: "invalid_signature" }, 401);
 }
 
-function parseVoPayWebhookEvent(body: string) {
+function parseRotessaPadWebhookEvent(body: string) {
 	try {
-		const event = JSON.parse(body) as VoPayWebhookEvent;
-		if (!(event.transaction_id && event.status)) {
+		const event = JSON.parse(body) as RotessaPadWebhookEvent;
+		if (!(event.data?.transaction_id && event.event_type)) {
 			console.warn(
-				"[VoPay Webhook] Missing required fields: transaction_id or status"
+				"[Rotessa PAD Webhook] Missing required fields: data.transaction_id or event_type"
 			);
 			return {
 				ok: false as const,
@@ -334,7 +326,7 @@ function parseVoPayWebhookEvent(body: string) {
 		return { ok: true as const, event };
 	} catch (err) {
 		console.warn(
-			"[VoPay Webhook] Malformed JSON body:",
+			"[Rotessa PAD Webhook] Malformed JSON body:",
 			err instanceof Error ? err.message : err
 		);
 		return {
@@ -344,26 +336,28 @@ function parseVoPayWebhookEvent(body: string) {
 	}
 }
 
-async function persistVoPayWebhookEvent(
+async function persistRotessaPadWebhookEvent(
 	ctx: ActionCtx,
 	args: {
 		body: string;
-		event: VoPayWebhookEvent;
-		providerCode: VoPayProviderCode;
+		event: RotessaPadWebhookEvent;
 	}
 ) {
 	try {
 		return {
 			ok: true as const,
 			webhookEventId: await persistVerifiedTransferWebhook(ctx, {
-				provider: args.providerCode,
-				providerEventId: args.event.event_id ?? args.event.transaction_id,
+				provider: "pad_rotessa",
+				providerEventId:
+					args.event.data.event_id ?? args.event.data.transaction_id,
 				rawBody: args.body,
-				normalizedEventType: mapVoPayStatusToTransferEvent(args.event.status),
+				normalizedEventType: mapRotessaPadStatusToTransferEvent(
+					args.event.event_type
+				),
 			}),
 		};
 	} catch (err) {
-		console.error("[VoPay Webhook] Failed to persist raw event:", err);
+		console.error("[Rotessa PAD Webhook] Failed to persist raw event:", err);
 		return jsonResponse(
 			{
 				error: "persistence_failed",
@@ -374,32 +368,29 @@ async function persistVoPayWebhookEvent(
 	}
 }
 
-async function scheduleVoPayWebhookProcessing(
+async function scheduleRotessaPadWebhookProcessing(
 	ctx: ActionCtx,
 	args: {
-		event: VoPayWebhookEvent;
-		providerCode: VoPayProviderCode;
+		event: RotessaPadWebhookEvent;
 		webhookEventId: Id<"webhookEvents">;
 	}
 ) {
 	try {
-		await ctx.scheduler.runAfter(
-			0,
-			internal.payments.webhooks.vopay.processVoPayWebhook,
-			{
-				webhookEventId: args.webhookEventId,
-				providerCode: args.providerCode,
-				transactionId: args.event.transaction_id,
-				status: args.event.status,
-				amount: args.event.amount,
-				reason: args.event.reason,
-				eventId: args.event.event_id,
-				timestamp: args.event.timestamp,
-			}
-		);
+		await ctx.scheduler.runAfter(0, processRotessaPadWebhookReference, {
+			webhookEventId: args.webhookEventId,
+			transactionId: args.event.data.transaction_id,
+			eventType: args.event.event_type,
+			eventId: args.event.data.event_id,
+			reason: args.event.data.reason,
+			returnCode: args.event.data.return_code,
+			date: args.event.data.date,
+		});
 	} catch (error) {
 		const message = error instanceof Error ? error.message : "scheduler_failed";
-		console.error("[VoPay Webhook] Failed to schedule processing:", error);
+		console.error(
+			"[Rotessa PAD Webhook] Failed to schedule processing:",
+			error
+		);
 		await markTransferWebhookFailed(ctx, {
 			webhookEventId: args.webhookEventId,
 			error: message,
@@ -407,59 +398,52 @@ async function scheduleVoPayWebhookProcessing(
 	}
 }
 
-export function vopayWebhookFactory(providerCode: VoPayProviderCode) {
-	return httpAction(async (ctx, request) => {
-		const body = await request.text();
-		const verificationError = await verifyVoPayWebhookRequest(ctx, {
-			body,
-			signature: request.headers.get("X-VoPay-Signature"),
-		});
-		if (verificationError) {
-			return verificationError;
-		}
-
-		const parsed = parseVoPayWebhookEvent(body);
-		if (!parsed.ok) {
-			return parsed.response;
-		}
-
-		const persisted = await persistVoPayWebhookEvent(ctx, {
-			body,
-			event: parsed.event,
-			providerCode,
-		});
-		if (persisted instanceof Response) {
-			return persisted;
-		}
-
-		console.info(
-			`[VoPay Webhook] Received ${providerCode} event ${parsed.event.event_id ?? parsed.event.transaction_id} for transaction ${parsed.event.transaction_id}`
-		);
-
-		await scheduleVoPayWebhookProcessing(ctx, {
-			webhookEventId: persisted.webhookEventId,
-			providerCode,
-			event: parsed.event,
-		});
-
-		return jsonResponse({ accepted: true });
+export const rotessaPadWebhook = httpAction(async (ctx, request) => {
+	const body = await request.text();
+	const verificationError = await verifyRotessaPadWebhookRequest(ctx, {
+		body,
+		signature: request.headers.get("X-Rotessa-Signature"),
 	});
-}
+	if (verificationError) {
+		return verificationError;
+	}
 
-export const vopayWebhook = vopayWebhookFactory("pad_vopay");
+	const parsed = parseRotessaPadWebhookEvent(body);
+	if (!parsed.ok) {
+		return parsed.response;
+	}
 
-export const processVoPayWebhook = internalMutation({
+	const persisted = await persistRotessaPadWebhookEvent(ctx, {
+		body,
+		event: parsed.event,
+	});
+	if (persisted instanceof Response) {
+		return persisted;
+	}
+
+	console.info(
+		`[Rotessa PAD Webhook] Received event ${parsed.event.data.event_id ?? parsed.event.data.transaction_id} for transaction ${parsed.event.data.transaction_id}`
+	);
+
+	await scheduleRotessaPadWebhookProcessing(ctx, {
+		webhookEventId: persisted.webhookEventId,
+		event: parsed.event,
+	});
+
+	return jsonResponse({ accepted: true });
+});
+
+export const processRotessaPadWebhook = internalMutation({
 	args: {
 		webhookEventId: v.id("webhookEvents"),
-		providerCode: VOPAY_PROVIDER_CODE_VALIDATOR,
 		transactionId: v.string(),
-		status: v.string(),
-		amount: v.optional(v.number()),
-		reason: v.optional(v.string()),
+		eventType: v.string(),
 		eventId: v.optional(v.string()),
-		timestamp: v.optional(v.string()),
+		reason: v.optional(v.string()),
+		returnCode: v.optional(v.string()),
+		date: v.optional(v.string()),
 	},
 	handler: async (ctx, args) => {
-		await processVoPayTransferWebhook(ctx, args);
+		await processRotessaPadTransferWebhook(ctx, args);
 	},
 });

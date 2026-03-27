@@ -1525,9 +1525,16 @@ export default defineSchema({
 		error: v.optional(v.string()),
 		/** Number of processing attempts */
 		attempts: v.number(),
+		/** Whether the inbound webhook signature was successfully verified */
+		signatureVerified: v.optional(v.boolean()),
+		/** Normalized transfer event type (e.g. FUNDS_SETTLED) derived inside the provider boundary */
+		normalizedEventType: v.optional(v.string()),
+		/** Linked transfer request, if the webhook could be resolved to one */
+		transferRequestId: v.optional(v.id("transferRequests")),
 	})
 		.index("by_provider_event", ["provider", "providerEventId"])
-		.index("by_status", ["status"]),
+		.index("by_status", ["status"])
+		.index("by_transfer_request", ["transferRequestId"]),
 
 	// ══════════════════════════════════════════════════════════
 	// DEMO TABLES

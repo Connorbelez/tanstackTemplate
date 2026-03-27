@@ -6,6 +6,10 @@ import {
 	REVERSAL_EVENT_TYPES,
 	toPayload,
 } from "../rotessa";
+import {
+	buildRotessaPadTransitionPayload,
+	mapRotessaPadStatusToTransferEvent,
+} from "../rotessaPad";
 
 // ── Constants ────────────────────────────────────────────────────────
 
@@ -259,6 +263,41 @@ describe("Rotessa webhook handler", () => {
 		it("returns undefined for unknown event type", () => {
 			const event = makeEvent({ event_type: "transaction.created" });
 			expect(buildReversalCode(event)).toBeUndefined();
+		});
+	});
+
+	describe("transfer-domain Rotessa PAD skeleton", () => {
+		it.each([
+			["transaction.completed", "FUNDS_SETTLED"],
+			["transaction.settled", "FUNDS_SETTLED"],
+			["transaction.nsf", "TRANSFER_FAILED"],
+			["transaction.failed", "TRANSFER_FAILED"],
+			["transaction.returned", "TRANSFER_REVERSED"],
+			["transaction.reversed", "TRANSFER_REVERSED"],
+			["transaction.pending", "PROCESSING_UPDATE"],
+			["transaction.processing", "PROCESSING_UPDATE"],
+		] as const)('maps "%s" → "%s"', (eventType, expected) => {
+			expect(mapRotessaPadStatusToTransferEvent(eventType)).toBe(expected);
+		});
+
+		it("returns undefined for an unmapped Rotessa PAD event type", () => {
+			expect(
+				mapRotessaPadStatusToTransferEvent("transaction.unknown")
+			).toBeUndefined();
+		});
+
+		it("builds a failed transfer payload with returnCode fallback", () => {
+			const payload = buildRotessaPadTransitionPayload("TRANSFER_FAILED", {
+				transactionId: "txn_rotessa_pad_001",
+				eventType: "transaction.nsf",
+				returnCode: "NSF",
+				reason: "Insufficient funds",
+			});
+
+			expect(payload).toEqual({
+				errorCode: "NSF",
+				reason: "Insufficient funds",
+			});
 		});
 	});
 });
