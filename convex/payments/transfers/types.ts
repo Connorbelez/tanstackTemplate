@@ -75,6 +75,36 @@ export type LegacyTransferStatus = (typeof LEGACY_TRANSFER_STATUSES)[number];
  */
 export type PersistedTransferStatus = TransferStatus | LegacyTransferStatus;
 
+// ── Transfer Type → Obligation Type Mapping ─────────────────────────
+/**
+ * Maps each transfer type to its corresponding obligation type.
+ * `null` means the transfer is not backed by an obligation
+ * (e.g., locking fees, commitment deposits, disbursements).
+ *
+ * Used by the `publishTransferConfirmed` effect to determine
+ * which Cash Ledger posting function to call.
+ */
+export const TRANSFER_TYPE_TO_OBLIGATION_TYPE = {
+	// Inbound — obligation-backed
+	borrower_interest_collection: "regular_interest",
+	borrower_principal_collection: "principal_repayment",
+	borrower_late_fee_collection: "late_fee",
+	borrower_arrears_cure: "arrears_cure",
+	// Inbound — not obligation-backed
+	locking_fee_collection: null,
+	commitment_deposit_collection: null,
+	deal_principal_transfer: null,
+	// Outbound — not obligation-backed
+	lender_dispersal_payout: null,
+	lender_principal_return: null,
+	deal_seller_payout: null,
+} as const satisfies Record<TransferType, string | null>;
+
+/** Obligation types that are backed by transfer types. */
+export type ObligationType = NonNullable<
+	(typeof TRANSFER_TYPE_TO_OBLIGATION_TYPE)[TransferType]
+>;
+
 // ── Type Guards ──────────────────────────────────────────────────────
 export function isInboundTransferType(
 	value: string
