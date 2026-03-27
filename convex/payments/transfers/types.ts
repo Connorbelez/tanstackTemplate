@@ -82,7 +82,7 @@ export class InvalidDomainEntityIdError extends Error {
 const WORKOS_AUTH_ID_PATTERN =
 	/^(?:user|org|om|session|token)_[A-Za-z0-9]{20,}$/;
 
-export function isWorkOsAuthPrincipalId(
+export function isWorkosAuthPrincipalId(
 	value: string
 ): value is AuthPrincipalId {
 	return WORKOS_AUTH_ID_PATTERN.test(value);
@@ -92,7 +92,7 @@ export function assertDomainEntityId(
 	value: string,
 	fieldName: string
 ): asserts value is DomainEntityId {
-	if (isWorkOsAuthPrincipalId(value)) {
+	if (isWorkosAuthPrincipalId(value)) {
 		throw new InvalidDomainEntityIdError(fieldName, value);
 	}
 }
