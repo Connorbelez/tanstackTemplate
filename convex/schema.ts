@@ -1487,7 +1487,13 @@ export default defineSchema({
 		.index("by_idempotency", ["idempotencyKey"])
 		.index("by_direction_and_type", ["direction", "transferType", "status"])
 		.index("by_counterparty", ["counterpartyType", "counterpartyId"])
+		.index("by_counterparty_status", [
+			"counterpartyType",
+			"counterpartyId",
+			"status",
+		])
 		.index("by_deal", ["dealId"])
+		.index("by_deal_status", ["dealId", "status"])
 		.index("by_collection_attempt", ["collectionAttemptId"])
 		.index("by_pipeline", ["pipelineId", "legNumber"])
 		.index("by_provider_ref", ["providerCode", "providerRef"]),
