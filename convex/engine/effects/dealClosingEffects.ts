@@ -1,4 +1,5 @@
 import { v } from "convex/values";
+import { internal } from "../../_generated/api";
 import { internalAction } from "../../_generated/server";
 import { effectPayloadValidator } from "../validators";
 
@@ -69,6 +70,62 @@ export const confirmFundsReceipt = internalAction({
 	handler: async (_ctx, args) => {
 		console.info(
 			`[stub] confirmFundsReceipt: Would confirm funds receipt for ${args.entityType} ${args.entityId}`
+		);
+	},
+});
+
+/**
+ * Collects a locking fee from the buyer when a deal enters the locked state.
+ * Locking fees credit UNAPPLIED_CASH (not BORROWER_RECEIVABLE) and have no obligation reference.
+ * Resilient: logs and returns on missing deal or zero/undefined fee amount.
+ */
+export const collectLockingFee = internalAction({
+	args: dealEffectPayloadValidator,
+	handler: async (ctx, args) => {
+		const deal = await ctx
+			.runQuery(internal.deals.queries.getInternalDeal, {
+				dealId: args.entityId,
+			})
+			.catch(() => null);
+
+		if (!deal) {
+			console.error(
+				`[collectLockingFee] Deal ${args.entityId} not found — skipping`
+			);
+			return;
+		}
+
+		if (deal.lockingFeeAmount === undefined || deal.lockingFeeAmount <= 0) {
+			console.info(
+				`[collectLockingFee] No locking fee configured for deal ${args.entityId} — skipping`
+			);
+			return;
+		}
+
+		const idempotencyKey = `locking-fee:${args.entityId}`;
+
+		const transferId = await ctx.runMutation(
+			internal.payments.transfers.mutations.createTransferRequestInternal,
+			{
+				direction: "inbound",
+				transferType: "locking_fee_collection",
+				amount: deal.lockingFeeAmount,
+				counterpartyType: "borrower",
+				counterpartyId: deal.buyerId,
+				mortgageId: deal.mortgageId,
+				dealId: args.entityId,
+				providerCode: "manual",
+				idempotencyKey,
+			}
+		);
+
+		await ctx.runAction(
+			internal.payments.transfers.mutations.initiateTransferInternal,
+			{ transferId }
+		);
+
+		console.info(
+			`[collectLockingFee] Created and initiated locking fee transfer ${transferId} for deal ${args.entityId}`
 		);
 	},
 });
