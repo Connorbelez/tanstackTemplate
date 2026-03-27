@@ -55,6 +55,8 @@ export type CounterpartyType = "borrower" | "lender" | "investor" | "trust";
 // ── Provider Codes ───────────────────────────────────────────────────
 export const PROVIDER_CODES = [
 	"manual",
+	"mock_pad",
+	"mock_eft",
 	"pad_vopay",
 	"pad_rotessa",
 	"eft_vopay",

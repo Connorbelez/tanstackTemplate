@@ -18,6 +18,7 @@ import type { TransitionResult } from "../../engine/types";
 import { sourceValidator } from "../../engine/validators";
 import { adminAction, adminMutation } from "../../fluent";
 import type { TransferRequestInput } from "./interface";
+import { areMockTransferProvidersEnabled } from "./mockProviders";
 import { getTransferProvider } from "./providers/registry";
 import {
 	counterpartyTypeValidator,
@@ -63,6 +64,15 @@ export const createTransferRequest = adminMutation
 		// 1. Validate amount is positive integer (safe-integer cents)
 		if (!Number.isInteger(args.amount) || args.amount <= 0) {
 			throw new ConvexError("Amount must be a positive integer (cents)");
+		}
+
+		if (
+			(args.providerCode === "mock_pad" || args.providerCode === "mock_eft") &&
+			!areMockTransferProvidersEnabled()
+		) {
+			throw new ConvexError(
+				`Transfer provider "${args.providerCode}" is disabled by default. Set ENABLE_MOCK_PROVIDERS="true" to opt in.`
+			);
 		}
 
 		// 2. Idempotency check

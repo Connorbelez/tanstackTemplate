@@ -11,6 +11,7 @@
 import { describe, expect, it } from "vitest";
 import type { TransferRequestInput } from "../interface";
 import { ManualTransferProvider } from "../providers/manual";
+import { MockTransferProvider } from "../providers/mock";
 import { getTransferProvider } from "../providers/registry";
 import {
 	ALL_TRANSFER_TYPES,
@@ -24,6 +25,7 @@ import {
 
 // ── Top-level regex constants (biome/useTopLevelRegex) ──────────────
 const NOT_YET_IMPLEMENTED_RE = /not yet implemented/;
+const MOCK_DISABLED_RE = /disabled by default/;
 const EFT_VOPAY_RE = /eft_vopay/;
 const MANUAL_PREFIX_RE = /^manual_/;
 const BRIDGE_PREFIX_RE = /^transfer:bridge:/;
@@ -150,17 +152,84 @@ describe("provider codes", () => {
 		expect(PROVIDER_CODES).toContain("manual");
 	});
 
-	it("has 7 provider codes", () => {
-		expect(PROVIDER_CODES).toHaveLength(7);
+	it("includes mock provider codes", () => {
+		expect(PROVIDER_CODES).toContain("mock_pad");
+		expect(PROVIDER_CODES).toContain("mock_eft");
+	});
+
+	it("has 9 provider codes", () => {
+		expect(PROVIDER_CODES).toHaveLength(9);
 	});
 });
 
 // ── Provider Registry ───────────────────────────────────────────────
 
 describe("transfer provider registry", () => {
+	const originalNodeEnv = process.env.NODE_ENV;
+	const originalEnableMockProviders = process.env.ENABLE_MOCK_PROVIDERS;
+
+	function restoreEnv(): void {
+		if (originalNodeEnv === undefined) {
+			// biome-ignore lint/performance/noDelete: process.env must delete the key to truly restore absence.
+			delete process.env.NODE_ENV;
+		} else {
+			process.env.NODE_ENV = originalNodeEnv;
+		}
+		if (originalEnableMockProviders === undefined) {
+			// biome-ignore lint/performance/noDelete: process.env must delete the key to truly restore absence.
+			delete process.env.ENABLE_MOCK_PROVIDERS;
+			return;
+		}
+		process.env.ENABLE_MOCK_PROVIDERS = originalEnableMockProviders;
+	}
+
 	it('getTransferProvider("manual") returns ManualTransferProvider', () => {
 		const provider = getTransferProvider("manual");
 		expect(provider).toBeInstanceOf(ManualTransferProvider);
+	});
+
+	it('getTransferProvider("mock_pad") returns MockTransferProvider with explicit opt-in', () => {
+		try {
+			process.env.NODE_ENV = "test";
+			process.env.ENABLE_MOCK_PROVIDERS = "true";
+			const provider = getTransferProvider("mock_pad");
+			expect(provider).toBeInstanceOf(MockTransferProvider);
+		} finally {
+			restoreEnv();
+		}
+	});
+
+	it('getTransferProvider("mock_eft") returns MockTransferProvider with explicit opt-in', () => {
+		try {
+			process.env.NODE_ENV = "development";
+			process.env.ENABLE_MOCK_PROVIDERS = "true";
+			const provider = getTransferProvider("mock_eft");
+			expect(provider).toBeInstanceOf(MockTransferProvider);
+		} finally {
+			restoreEnv();
+		}
+	});
+
+	it("mock providers are blocked in production without explicit opt-in", () => {
+		try {
+			process.env.NODE_ENV = "production";
+			// biome-ignore lint/performance/noDelete: explicit unset for env-gate tests.
+			delete process.env.ENABLE_MOCK_PROVIDERS;
+			expect(() => getTransferProvider("mock_pad")).toThrow(MOCK_DISABLED_RE);
+		} finally {
+			restoreEnv();
+		}
+	});
+
+	it("mock providers are allowed in production with explicit opt-in", () => {
+		try {
+			process.env.NODE_ENV = "production";
+			process.env.ENABLE_MOCK_PROVIDERS = "true";
+			const provider = getTransferProvider("mock_pad");
+			expect(provider).toBeInstanceOf(MockTransferProvider);
+		} finally {
+			restoreEnv();
+		}
 	});
 
 	it("throws for unimplemented provider codes", () => {
