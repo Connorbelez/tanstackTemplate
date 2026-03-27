@@ -307,6 +307,17 @@ describe("ManualTransferProvider", () => {
 		expect(result.status).toBe("confirmed");
 	});
 
+	it("initiate returns pending for outbound manual transfers", async () => {
+		const result = await provider.initiate({
+			...sampleInput,
+			counterpartyId: "lender_123",
+			counterpartyType: "lender",
+			direction: "outbound",
+			transferType: "lender_dispersal_payout",
+		});
+		expect(result.status).toBe("pending");
+	});
+
 	it("initiate returns a providerRef containing the transfer type", async () => {
 		const result = await provider.initiate(sampleInput);
 		expect(result.providerRef).toContain("borrower_interest_collection");
@@ -341,6 +352,17 @@ describe("ManualTransferProvider", () => {
 		expect(result.status).toBe("confirmed");
 		expect(result.providerData).toEqual({
 			providerRef: "manual_ref_001",
+			method: "manual",
+		});
+	});
+
+	it("getStatus returns pending for outbound manual provider refs", async () => {
+		const result = await provider.getStatus(
+			"manual_lender_dispersal_payout_001"
+		);
+		expect(result.status).toBe("pending");
+		expect(result.providerData).toEqual({
+			providerRef: "manual_lender_dispersal_payout_001",
 			method: "manual",
 		});
 	});
@@ -396,5 +418,18 @@ describe("ENG-201 transfer status guards", () => {
 		expect(canManuallyConfirmTransferStatus("processing")).toBe(true);
 		expect(canManuallyConfirmTransferStatus("failed")).toBe(false);
 		expect(canManuallyConfirmTransferStatus("cancelled")).toBe(false);
+	});
+
+	it("manual outbound confirm requires a post-initiation status", () => {
+		expect(canManuallyConfirmTransferStatus("initiated", "outbound")).toBe(
+			false
+		);
+		expect(canManuallyConfirmTransferStatus("pending", "outbound")).toBe(true);
+		expect(canManuallyConfirmTransferStatus("processing", "outbound")).toBe(
+			true
+		);
+		expect(canManuallyConfirmTransferStatus("confirmed", "outbound")).toBe(
+			false
+		);
 	});
 });

@@ -41,7 +41,14 @@ export function canRetryTransferStatus(status: string) {
 	return status === "failed";
 }
 
-export function canManuallyConfirmTransferStatus(status: string) {
+export function canManuallyConfirmTransferStatus(
+	status: string,
+	direction?: string
+) {
+	if (direction === "outbound") {
+		return status === "pending" || status === "processing";
+	}
+
 	return (
 		status === "initiated" || status === "pending" || status === "processing"
 	);
@@ -441,9 +448,15 @@ export const confirmManualTransfer = paymentMutation
 			);
 		}
 
-		if (!canManuallyConfirmTransferStatus(transfer.status)) {
+		if (
+			!canManuallyConfirmTransferStatus(transfer.status, transfer.direction)
+		) {
+			const allowedStates =
+				transfer.direction === "outbound"
+					? `"pending" or "processing"`
+					: `"initiated", "pending", or "processing"`;
 			throw new ConvexError(
-				`Transfer must be in "initiated", "pending", or "processing" status to confirm manually, currently: "${transfer.status}"`
+				`Transfer must be in ${allowedStates} status to confirm manually, currently: "${transfer.status}"`
 			);
 		}
 
