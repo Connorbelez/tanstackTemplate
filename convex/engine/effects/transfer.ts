@@ -75,6 +75,16 @@ export const publishTransferConfirmed = internalMutation({
 	handler: async (ctx, args) => {
 		const transfer = await loadTransfer(ctx, args, "publishTransferConfirmed");
 
+		// Preserve the provider's settlement timestamp when available (e.g. webhook/reconciliation replays).
+		// Falls back to current time for real-time confirmations.
+		const settledAt =
+			typeof args.payload?.settledAt === "number"
+				? args.payload.settledAt
+				: Date.now();
+
+		// Persist settledAt BEFORE posting cash so posting helpers see the authoritative timestamp.
+		await ctx.db.patch(args.entityId, { settledAt });
+
 		// D4: bridged transfer — cash posted via collection attempt path
 		if (transfer.collectionAttemptId) {
 			console.info(
@@ -98,8 +108,6 @@ export const publishTransferConfirmed = internalMutation({
 					"Cannot post cash entry — this is a data integrity violation."
 			);
 		}
-
-		await ctx.db.patch(args.entityId, { settledAt: Date.now() });
 	},
 });
 
@@ -190,9 +198,12 @@ export const publishTransferReversed = internalMutation({
 				`[publishTransferReversed] No journal entry for bridged transfer ${args.entityId}. Cash reversal skipped (handled by collection attempt path).`
 			);
 		} else {
-			console.error(
+			// Fail closed: a non-bridged transfer MUST have a journal entry for reversal.
+			// Returning silently would leave permanent ledger drift with no retry/healing signal.
+			throw new Error(
 				`[publishTransferReversed] No journal entry found for NON-bridged transfer ${args.entityId}. ` +
-					"Cash reversal cannot be posted — possible data integrity issue."
+					"Cash reversal cannot be posted — failing closed to prevent ledger drift. " +
+					"Investigate and reconcile manually or enqueue a healing action."
 			);
 		}
 	},
