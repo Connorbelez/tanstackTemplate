@@ -335,6 +335,8 @@ async function normalizePositions(
 		}
 
 		const cachedLenderId = lenderIdCache.get(position.lenderAuthId);
+		// Auth boundary: ledger POSITION accounts store WorkOS auth IDs.
+		// Normalize to domain `Id<"lenders">` once here before persistence.
 		const lenderId =
 			cachedLenderId ??
 			(await resolveLenderIdFromAuthId(ctx, position.lenderAuthId));

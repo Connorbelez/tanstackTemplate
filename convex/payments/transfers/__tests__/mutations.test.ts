@@ -21,12 +21,15 @@ import { MockTransferProvider } from "../providers/mock";
 import { getTransferProvider } from "../providers/registry";
 import {
 	ALL_TRANSFER_TYPES,
+	assertDomainEntityId,
 	INBOUND_TRANSFER_TYPES,
+	InvalidDomainEntityIdError,
 	isInboundTransferType,
 	isOutboundTransferType,
 	OUTBOUND_TRANSFER_TYPES,
 	PROVIDER_CODES,
 	TRANSFER_STATUSES,
+	toDomainEntityId,
 } from "../types";
 
 // ── Top-level regex constants (biome/useTopLevelRegex) ──────────────
@@ -36,7 +39,6 @@ const EFT_VOPAY_RE = /eft_vopay/;
 const MANUAL_PREFIX_RE = /^manual_/;
 const BRIDGE_PREFIX_RE = /^transfer:bridge:/;
 const RETRY_PREFIX_RE = /^retry:[\w-]+$/;
-
 // ── Amount Validation ───────────────────────────────────────────────
 // The mutation checks: !Number.isInteger(amount) || amount <= 0
 
@@ -75,6 +77,33 @@ describe("amount validation logic", () => {
 
 	it("accepts MAX_SAFE_INTEGER", () => {
 		expect(validateAmount(Number.MAX_SAFE_INTEGER)).toBe(true);
+	});
+});
+
+// ── Auth-ID / Entity-ID Guard ───────────────────────────────────────
+
+describe("counterpartyId auth/entity guard", () => {
+	it("rejects WorkOS user IDs", () => {
+		expect(() =>
+			assertDomainEntityId("user_01KKFF8EA41DV152KVHD8VJB48", "counterpartyId")
+		).toThrow(InvalidDomainEntityIdError);
+	});
+
+	it("rejects non-user WorkOS auth IDs", () => {
+		expect(() =>
+			assertDomainEntityId("org_01KKFF8EA41DV152KVHD8VJB48", "counterpartyId")
+		).toThrow(InvalidDomainEntityIdError);
+	});
+
+	it("accepts domain-style IDs", () => {
+		expect(() =>
+			assertDomainEntityId("j571234abcdEFGHijklmn", "counterpartyId")
+		).not.toThrow();
+	});
+
+	it("brands validated domain IDs through the constructor helper", () => {
+		const value = toDomainEntityId("j571234abcdEFGHijklmn", "counterpartyId");
+		expect(value).toBe("j571234abcdEFGHijklmn");
 	});
 });
 
@@ -257,7 +286,7 @@ describe("ManualTransferProvider", () => {
 
 	const sampleInput: TransferRequestInput = {
 		amount: 50_000,
-		counterpartyId: "borrower_123",
+		counterpartyId: toDomainEntityId("borrower_123", "counterpartyId"),
 		counterpartyType: "borrower",
 		currency: "CAD",
 		direction: "inbound",

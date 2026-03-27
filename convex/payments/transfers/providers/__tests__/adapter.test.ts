@@ -13,6 +13,7 @@ import type {
 	StatusResult,
 } from "../../../methods/interface";
 import type { TransferRequestInput } from "../../interface";
+import { toDomainEntityId } from "../../types";
 import { PaymentMethodAdapter } from "../adapter";
 
 // ── Error patterns ──────────────────────────────────────────────────
@@ -52,7 +53,7 @@ function makeInput(
 ): TransferRequestInput {
 	return {
 		amount: 10_000,
-		counterpartyId: "borrower-123",
+		counterpartyId: toDomainEntityId("borrower-123", "counterpartyId"),
 		counterpartyType: "borrower",
 		currency: "CAD",
 		direction: "inbound",
@@ -77,7 +78,11 @@ describe("PaymentMethodAdapter", () => {
 		it("maps counterpartyId to borrowerId", async () => {
 			const mock = new MockPaymentMethod();
 			const adapter = new PaymentMethodAdapter(mock);
-			await adapter.initiate(makeInput({ counterpartyId: "bor-999" }));
+			await adapter.initiate(
+				makeInput({
+					counterpartyId: toDomainEntityId("bor-999", "counterpartyId"),
+				})
+			);
 
 			const params = mock.calls[0].args[0] as InitiateParams;
 			expect(params.borrowerId).toBe("bor-999");

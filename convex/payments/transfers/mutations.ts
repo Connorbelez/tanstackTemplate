@@ -21,6 +21,7 @@ import {
 import type { TransferRequestInput } from "./interface";
 import { areMockTransferProvidersEnabled } from "./mockProviders";
 import { getTransferProvider } from "./providers/registry";
+import { InvalidDomainEntityIdError, toDomainEntityId } from "./types";
 import {
 	counterpartyTypeValidator,
 	directionValidator,
@@ -85,6 +86,18 @@ export const createTransferRequest = paymentMutation
 			throw new ConvexError("Amount must be a positive integer (cents)");
 		}
 
+		// 1b. Guard against auth-ID / entity-ID confusion (ENG-218).
+		// counterpartyId must stay in domain entity ID space.
+		let counterpartyId: TransferRequestInput["counterpartyId"];
+		try {
+			counterpartyId = toDomainEntityId(args.counterpartyId, "counterpartyId");
+			} catch (error) {
+				if (error instanceof InvalidDomainEntityIdError) {
+					throw new ConvexError(error.message);
+				}
+				throw error;
+			}
+
 		if (
 			(args.providerCode === "mock_pad" || args.providerCode === "mock_eft") &&
 			!areMockTransferProvidersEnabled()
@@ -118,7 +131,7 @@ export const createTransferRequest = paymentMutation
 			amount: args.amount,
 			currency: args.currency ?? "CAD",
 			counterpartyType: args.counterpartyType,
-			counterpartyId: args.counterpartyId,
+			counterpartyId,
 			bankAccountRef: args.bankAccountRef,
 			// References
 			mortgageId: args.mortgageId,
@@ -219,10 +232,23 @@ export const initiateTransfer = paymentAction
 		// Schema guarantees these are typed — no unsafe casts needed
 		const provider = getTransferProvider(transfer.providerCode);
 
+		let counterpartyId: TransferRequestInput["counterpartyId"];
+		try {
+			counterpartyId = toDomainEntityId(
+				transfer.counterpartyId,
+				"counterpartyId"
+			);
+		} catch (error) {
+			if (error instanceof InvalidDomainEntityIdError) {
+				throw new ConvexError(error.message);
+			}
+			throw error;
+		}
+
 		const input: TransferRequestInput = {
 			amount: transfer.amount,
 			bankAccountRef: transfer.bankAccountRef,
-			counterpartyId: transfer.counterpartyId,
+			counterpartyId,
 			counterpartyType: transfer.counterpartyType,
 			currency: transfer.currency,
 			direction: transfer.direction,

@@ -52,6 +52,60 @@ export const ALL_TRANSFER_TYPES = [
 // ── Counterparty ─────────────────────────────────────────────────────
 export type CounterpartyType = "borrower" | "lender" | "investor" | "trust";
 
+/**
+ * Branded ID aliases to document ID-space boundaries:
+ * - DomainEntityId: FairLend domain/entity identifier
+ * - AuthPrincipalId: WorkOS auth identifier
+ */
+export type DomainEntityId = string & { readonly __brand: "DomainEntityId" };
+export type AuthPrincipalId = string & { readonly __brand: "AuthPrincipalId" };
+
+/** Thrown when a WorkOS auth ID is used where a domain entity ID is required. */
+export class InvalidDomainEntityIdError extends Error {
+	readonly fieldName: string;
+	readonly value: string;
+
+	constructor(fieldName: string, value: string) {
+		super(
+			`${fieldName} contains a WorkOS auth ID (${value.slice(
+				0,
+				12
+			)}...). Expected a domain entity ID.`
+		);
+		this.name = "InvalidDomainEntityIdError";
+		this.fieldName = fieldName;
+		this.value = value;
+		Object.setPrototypeOf(this, new.target.prototype);
+	}
+}
+
+const WORKOS_AUTH_ID_PATTERN =
+	/^(?:user|org|om|session|token)_[A-Za-z0-9]{20,}$/;
+
+export function isWorkosAuthPrincipalId(
+	value: string
+): value is AuthPrincipalId {
+	return WORKOS_AUTH_ID_PATTERN.test(value);
+}
+
+export function assertDomainEntityId(
+	value: string,
+	fieldName: string
+): asserts value is DomainEntityId {
+	if (isWorkosAuthPrincipalId(value)) {
+		throw new InvalidDomainEntityIdError(fieldName, value);
+	}
+}
+
+/** Converts a string into a branded domain entity ID after validation. */
+export function toDomainEntityId(
+	value: string,
+	fieldName: string
+): DomainEntityId {
+	assertDomainEntityId(value, fieldName);
+	return value;
+}
+
 // ── Provider Codes ───────────────────────────────────────────────────
 export const PROVIDER_CODES = [
 	"manual",
