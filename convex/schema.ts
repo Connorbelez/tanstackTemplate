@@ -28,6 +28,12 @@ import {
 	feeSurfaceValidator,
 } from "./fees/validators";
 import { payoutFrequencyValidator } from "./payments/payout/validators";
+import {
+	counterpartyTypeValidator,
+	directionValidator,
+	providerCodeValidator,
+	transferTypeValidator,
+} from "./payments/transfers/validators";
 
 export default defineSchema({
 	// ══════════════════════════════════════════════════════════
@@ -1408,45 +1414,82 @@ export default defineSchema({
 		.index("by_signing_status", ["signingStatus"]),
 
 	// ══════════════════════════════════════════════════════════
-	// TRANSFER REQUESTS (stub — populated by ENG-190)
-	// Field expectations by status for non-legacy (new) records:
-	//   confirmed: direction, amount, confirmedAt are expected to be non-null
-	//   reversed: direction, amount, reversedAt are expected to be non-null
-	//   pending/processing: legacy stub records may have null direction/amount;
-	//     new writes should populate these when known
-	// Note: the schema keeps these fields optional for backward compatibility.
+	// TRANSFER REQUESTS — Unified transfer domain (ENG-184)
+	// Greenfield table — no legacy data. Required fields are enforced at schema level.
 	// ══════════════════════════════════════════════════════════
 
 	transferRequests: defineTable({
 		status: v.union(
+			v.literal("initiated"),
 			v.literal("pending"),
-			v.literal("approved"),
+			v.literal("approved"), // LEGACY status — not used by transfer state machine
 			v.literal("processing"),
-			v.literal("completed"),
+			v.literal("completed"), // LEGACY status — not used by transfer state machine
 			v.literal("confirmed"),
 			v.literal("reversed"),
 			v.literal("failed"),
 			v.literal("cancelled")
 		),
-		direction: v.optional(v.union(v.literal("inbound"), v.literal("outbound"))),
-		transferType: v.optional(v.string()),
-		amount: v.optional(v.number()),
-		currency: v.optional(v.string()),
+		direction: directionValidator,
+		transferType: transferTypeValidator,
+		amount: v.number(),
+		currency: v.literal("CAD"),
+		counterpartyType: counterpartyTypeValidator,
+		counterpartyId: v.string(),
+		providerCode: providerCodeValidator,
+		idempotencyKey: v.string(),
+		source: sourceValidator,
+		createdAt: v.number(),
+		lastTransitionAt: v.number(),
+
+		// ── Cross-reference IDs (optional — depend on transfer type) ─
 		mortgageId: v.optional(v.id("mortgages")),
 		obligationId: v.optional(v.id("obligations")),
 		lenderId: v.optional(v.id("lenders")),
 		borrowerId: v.optional(v.id("borrowers")),
 		dispersalEntryId: v.optional(v.id("dispersalEntries")),
+		dealId: v.optional(v.id("deals")),
+		planEntryId: v.optional(v.id("collectionPlanEntries")),
+		collectionAttemptId: v.optional(v.id("collectionAttempts")),
+
+		// ── Governed-Transition fields ──────────────────────────────
+		// Record type (not strict object) because the GT engine hydrates/persists
+		// XState snapshot context which may vary during machine evolution.
+		machineContext: v.optional(v.record(v.string(), v.any())),
+
+		// ── Provider (ref set later by effect, not at creation) ─────
+		providerRef: v.optional(v.string()),
+		bankAccountRef: v.optional(v.string()),
+
+		// ── Lifecycle timestamps (set during state transitions) ─────
 		confirmedAt: v.optional(v.number()),
 		reversedAt: v.optional(v.number()),
-		createdAt: v.number(),
+		settledAt: v.optional(v.number()),
+		failedAt: v.optional(v.number()),
+		failureReason: v.optional(v.string()),
+		failureCode: v.optional(v.string()),
+		reversalRef: v.optional(v.string()),
+
+		// ── Multi-leg pipeline ──────────────────────────────────────
+		pipelineId: v.optional(v.string()),
+		legNumber: v.optional(v.number()),
+
+		// ── Metadata ────────────────────────────────────────────────
+		metadata: v.optional(v.record(v.string(), v.any())),
 	})
 		.index("by_status", ["status"])
 		.index("by_status_and_direction", ["status", "direction"])
 		.index("by_mortgage", ["mortgageId", "status"])
 		.index("by_obligation", ["obligationId"])
 		.index("by_dispersal_entry", ["dispersalEntryId"])
-		.index("by_lender_and_status", ["lenderId", "status"]),
+		.index("by_lender_and_status", ["lenderId", "status"])
+		.index("by_idempotency", ["idempotencyKey"])
+		.index("by_direction_and_type", ["direction", "transferType", "status"])
+		.index("by_counterparty", ["counterpartyType", "counterpartyId"])
+		.index("by_deal", ["dealId"])
+		.index("by_collection_attempt", ["collectionAttemptId"])
+		.index("by_pipeline", ["pipelineId", "legNumber"])
+		.index("by_provider_ref", ["providerCode", "providerRef"]),
 
 	// ══════════════════════════════════════════════════════════
 	// DEMO TABLES

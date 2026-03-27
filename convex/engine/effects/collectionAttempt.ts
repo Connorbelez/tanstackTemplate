@@ -10,6 +10,7 @@ import {
 	postPaymentReversalCascade,
 } from "../../payments/cashLedger/integrations";
 import { IDEMPOTENCY_KEY_PREFIX } from "../../payments/cashLedger/types";
+import { PROVIDER_CODES } from "../../payments/transfers/types";
 import { executeTransition } from "../transition";
 import type { CommandSource } from "../types";
 import { effectPayloadValidator } from "../validators";
@@ -134,6 +135,68 @@ export const emitPaymentReceived = internalMutation({
 			} else {
 				console.warn(
 					`[emitPaymentReceived] Overpayment of ${remainingAmount} cents but no obligation found for mortgageId resolution. attempt=${args.entityId}`
+				);
+			}
+		}
+
+		// ─── Phase M2a: Create parallel transfer record for audit trail ───
+		// Decision D4: Bridged transfers skip cash posting in publishTransferConfirmed
+		// because the collection attempt path already posted via postCashReceiptForObligation().
+		//
+		// The bridge creates the transfer at "initiated" then immediately fires
+		// FUNDS_SETTLED via executeTransition, maintaining GT compliance:
+		// audit journal, hash chain, and effect scheduling all go through the engine.
+		const bridgeIdempotencyKey = `transfer:bridge:${args.entityId}`;
+		const existingBridge = await ctx.db
+			.query("transferRequests")
+			.withIndex("by_idempotency", (q) =>
+				q.eq("idempotencyKey", bridgeIdempotencyKey)
+			)
+			.first();
+
+		if (!existingBridge) {
+			const firstOblForBridge = await ctx.db.get(planEntry.obligationIds[0]);
+			if (firstOblForBridge?.borrowerId) {
+				const now = Date.now();
+				// FIXME(ENG-XXX): transferType is hardcoded to borrower_interest_collection.
+				// Should derive from obligation type once obligation-to-transferType mapping exists.
+				const bridgeTransferId = await ctx.db.insert("transferRequests", {
+					status: "initiated",
+					direction: "inbound",
+					transferType: "borrower_interest_collection",
+					amount: attempt.amount,
+					currency: "CAD",
+					counterpartyType: "borrower",
+					counterpartyId: String(firstOblForBridge.borrowerId),
+					mortgageId: firstOblForBridge.mortgageId,
+					obligationId: planEntry.obligationIds[0],
+					planEntryId: planEntry._id,
+					collectionAttemptId: args.entityId,
+					providerCode: (PROVIDER_CODES as readonly string[]).includes(
+						planEntry.method ?? ""
+					)
+						? (planEntry.method as (typeof PROVIDER_CODES)[number])
+						: "manual",
+					providerRef: attempt.providerRef ?? `bridge_${args.entityId}`,
+					idempotencyKey: bridgeIdempotencyKey,
+					source: args.source,
+					createdAt: now,
+					lastTransitionAt: now,
+				});
+
+				// Fire GT transition to reach confirmed state — creates audit journal
+				// + hash chain entry. publishTransferConfirmed will see collectionAttemptId
+				// and skip cash posting (D4 conditional).
+				await executeTransition(ctx, {
+					entityType: "transfer",
+					entityId: bridgeTransferId,
+					eventType: "FUNDS_SETTLED",
+					payload: { settledAt: now, providerData: { bridged: true } },
+					source: args.source,
+				});
+			} else {
+				console.warn(
+					`[emitPaymentReceived] Cannot create bridge transfer for attempt=${args.entityId}: no borrowerId on obligation ${planEntry.obligationIds[0]}`
 				);
 			}
 		}

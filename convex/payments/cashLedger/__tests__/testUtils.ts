@@ -331,11 +331,21 @@ export async function createConfirmedTransfer(
 	}
 ): Promise<Id<"transferRequests">> {
 	return t.run(async (ctx) => {
+		const now = Date.now();
 		return ctx.db.insert("transferRequests", {
 			status: "confirmed",
 			direction: args.direction,
+			transferType:
+				args.direction === "inbound"
+					? "borrower_interest_collection"
+					: "lender_dispersal_payout",
 			amount: args.amount,
 			currency: "CAD",
+			counterpartyType: args.direction === "inbound" ? "borrower" : "lender",
+			counterpartyId: "test-counterparty",
+			providerCode: "manual",
+			idempotencyKey: `test-confirmed-${now}-${Math.random()}`,
+			source: SYSTEM_SOURCE,
 			...(args.mortgageId !== undefined && { mortgageId: args.mortgageId }),
 			...(args.obligationId !== undefined && {
 				obligationId: args.obligationId,
@@ -345,8 +355,9 @@ export async function createConfirmedTransfer(
 			...(args.dispersalEntryId !== undefined && {
 				dispersalEntryId: args.dispersalEntryId,
 			}),
-			confirmedAt: args.confirmedAt ?? Date.now() - 10 * 60_000, // 10 min ago
-			createdAt: Date.now(),
+			confirmedAt: args.confirmedAt ?? now - 10 * 60_000, // 10 min ago
+			createdAt: now,
+			lastTransitionAt: now,
 		});
 	});
 }
@@ -364,14 +375,25 @@ export async function createReversedTransfer(
 	}
 ): Promise<Id<"transferRequests">> {
 	return t.run(async (ctx) => {
+		const now = Date.now();
 		return ctx.db.insert("transferRequests", {
 			status: "reversed",
 			direction: args.direction,
+			transferType:
+				args.direction === "inbound"
+					? "borrower_interest_collection"
+					: "lender_dispersal_payout",
 			amount: args.amount,
 			currency: "CAD",
+			counterpartyType: args.direction === "inbound" ? "borrower" : "lender",
+			counterpartyId: "test-counterparty",
+			providerCode: "manual",
+			idempotencyKey: `test-reversed-${now}-${Math.random()}`,
+			source: SYSTEM_SOURCE,
 			...(args.mortgageId !== undefined && { mortgageId: args.mortgageId }),
-			reversedAt: args.reversedAt ?? Date.now() - 10 * 60_000,
-			createdAt: Date.now(),
+			reversedAt: args.reversedAt ?? now - 10 * 60_000,
+			createdAt: now,
+			lastTransitionAt: now,
 		});
 	});
 }

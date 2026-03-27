@@ -6,6 +6,7 @@ export type EntityType =
 	| "obligation"
 	| "collectionAttempt"
 	| "deal"
+	| "transfer"
 	| "provisionalApplication"
 	| "applicationPackage"
 	| "broker"
@@ -24,7 +25,8 @@ export type GovernedEntityType =
 	| "mortgage"
 	| "obligation"
 	| "collectionAttempt"
-	| "deal";
+	| "deal"
+	| "transfer";
 
 // ── Command Source ──────────────────────────────────────────────────
 export type CommandChannel =
@@ -168,6 +170,7 @@ export const ENTITY_TABLE_MAP = {
 	obligation: "obligations",
 	collectionAttempt: "collectionAttempts",
 	deal: "deals",
+	transfer: "transferRequests",
 	provisionalApplication: "provisionalApplications",
 	applicationPackage: "applicationPackages",
 	broker: "brokers",

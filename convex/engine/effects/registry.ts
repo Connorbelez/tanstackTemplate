@@ -61,4 +61,13 @@ export const effectRegistry: Record<
 	// Collection Attempt reversal effect (ENG-173)
 	emitPaymentReversed:
 		internal.engine.effects.collectionAttempt.emitPaymentReversed,
+
+	// Transfer effects (ENG-184)
+	recordTransferProviderRef:
+		internal.engine.effects.transfer.recordTransferProviderRef,
+	publishTransferConfirmed:
+		internal.engine.effects.transfer.publishTransferConfirmed,
+	publishTransferFailed: internal.engine.effects.transfer.publishTransferFailed,
+	publishTransferReversed:
+		internal.engine.effects.transfer.publishTransferReversed,
 };

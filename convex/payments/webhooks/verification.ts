@@ -103,6 +103,31 @@ function parseStripeSignatureHeader(header: string): ParsedStripeHeader | null {
 	return { timestamp, signatures };
 }
 
+/**
+ * Verify a VoPay webhook signature (HMAC-SHA256).
+ *
+ * VoPay sends the signature in the `X-VoPay-Signature` header as a
+ * hex-encoded HMAC-SHA256 digest of the raw request body.
+ *
+ * This is a Phase 1 skeleton — the exact header name and encoding
+ * will be confirmed when VoPay integration is finalized (ENG-185).
+ */
+export function verifyVoPaySignature(
+	body: string,
+	signature: string,
+	secret: string
+): boolean {
+	const expected = createHmac("sha256", secret).update(body).digest("hex");
+	const sigBuffer = Buffer.from(signature, "hex");
+	const expectedBuffer = Buffer.from(expected, "hex");
+
+	if (sigBuffer.length !== expectedBuffer.length) {
+		return false;
+	}
+
+	return timingSafeEqual(sigBuffer, expectedBuffer);
+}
+
 // ── Verification result types ───────────────────────────────────────
 
 export type VerificationResult =
@@ -156,6 +181,28 @@ export const verifyStripeSignatureAction = internalAction({
 			args.signatureHeader,
 			secret
 		);
+		return valid ? { ok: true } : { ok: false, error: "invalid_signature" };
+	},
+});
+
+/**
+ * Verify a VoPay webhook signature via internalAction.
+ * Runs in the Node.js runtime so it can use node:crypto.
+ *
+ * Returns a structured result distinguishing missing secrets from bad signatures.
+ */
+export const verifyVoPaySignatureAction = internalAction({
+	args: {
+		body: v.string(),
+		signature: v.string(),
+	},
+	handler: async (_ctx, args): Promise<VerificationResult> => {
+		const secret = process.env.VOPAY_WEBHOOK_SECRET;
+		if (!secret) {
+			console.error("[VoPay Webhook] VOPAY_WEBHOOK_SECRET not configured");
+			return { ok: false, error: "missing_secret" };
+		}
+		const valid = verifyVoPaySignature(args.body, args.signature, secret);
 		return valid ? { ok: true } : { ok: false, error: "invalid_signature" };
 	},
 });

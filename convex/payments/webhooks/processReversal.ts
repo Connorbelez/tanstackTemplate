@@ -20,7 +20,11 @@ export const processReversalCascade = internalMutation({
 		attemptId: v.id("collectionAttempts"),
 		effectiveDate: v.string(),
 		reason: v.string(),
-		provider: v.union(v.literal("rotessa"), v.literal("stripe")),
+		provider: v.union(
+			v.literal("rotessa"),
+			v.literal("stripe"),
+			v.literal("pad_vopay")
+		),
 		providerEventId: v.string(),
 	},
 	handler: async (ctx, args) => {

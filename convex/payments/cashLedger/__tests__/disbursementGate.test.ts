@@ -447,14 +447,22 @@ describe("disbursementGate", () => {
 		await seedPayable(t, seeded, 55_000);
 
 		await t.run(async (ctx) => {
+			const now = Date.now();
 			// Create in-flight outbound transfer of 20,000
 			await ctx.db.insert("transferRequests", {
 				status: "processing",
 				direction: "outbound",
+				transferType: "lender_dispersal_payout",
 				amount: 20_000,
 				currency: "CAD",
+				counterpartyType: "lender",
+				counterpartyId: "test-lender",
+				providerCode: "manual",
+				idempotencyKey: `test-outbound-inflight-${now}`,
+				source: SYSTEM_SOURCE,
 				lenderId: seeded.lenderAId,
-				createdAt: Date.now(),
+				createdAt: now,
+				lastTransitionAt: now,
 			});
 
 			// Available = 55,000 - 20,000 = 35,000
@@ -480,14 +488,22 @@ describe("disbursementGate", () => {
 		await seedPayable(t, seeded, 55_000);
 
 		await t.run(async (ctx) => {
+			const now = Date.now();
 			// Inbound transfer — should be ignored
 			await ctx.db.insert("transferRequests", {
 				status: "processing",
 				direction: "inbound",
+				transferType: "borrower_interest_collection",
 				amount: 20_000,
 				currency: "CAD",
+				counterpartyType: "borrower",
+				counterpartyId: "test-borrower",
+				providerCode: "manual",
+				idempotencyKey: `test-inbound-ignored-${now}`,
+				source: SYSTEM_SOURCE,
 				lenderId: seeded.lenderAId,
-				createdAt: Date.now(),
+				createdAt: now,
+				lastTransitionAt: now,
 			});
 
 			const result = await validateDisbursementAmount(ctx, {
@@ -500,18 +516,28 @@ describe("disbursementGate", () => {
 		});
 	});
 
-	it("transfer with undefined amount is safely skipped", async () => {
+	it("transfer with zero amount is safely skipped", async () => {
 		const t = createHarness(modules);
 		const seeded = await seedMinimalEntities(t);
 		await seedPayable(t, seeded, 55_000);
 
 		await t.run(async (ctx) => {
-			// Legacy transfer with no amount
+			const now = Date.now();
+			// Transfer with zero amount — should be safely skipped
 			await ctx.db.insert("transferRequests", {
 				status: "processing",
 				direction: "outbound",
+				transferType: "lender_dispersal_payout",
+				amount: 0,
+				currency: "CAD",
+				counterpartyType: "lender",
+				counterpartyId: "test-lender",
+				providerCode: "manual",
+				idempotencyKey: `test-zero-amount-${now}`,
+				source: SYSTEM_SOURCE,
 				lenderId: seeded.lenderAId,
-				createdAt: Date.now(),
+				createdAt: now,
+				lastTransitionAt: now,
 			});
 
 			const result = await validateDisbursementAmount(ctx, {
@@ -530,15 +556,23 @@ describe("disbursementGate", () => {
 		await seedPayable(t, seeded, 90_000);
 
 		await t.run(async (ctx) => {
+			const now = Date.now();
 			// One transfer per in-flight status
 			for (const status of ["pending", "approved", "processing"] as const) {
 				await ctx.db.insert("transferRequests", {
 					status,
 					direction: "outbound",
+					transferType: "lender_dispersal_payout",
 					amount: 10_000,
 					currency: "CAD",
+					counterpartyType: "lender",
+					counterpartyId: "test-lender",
+					providerCode: "manual",
+					idempotencyKey: `test-inflight-${status}-${now}-${Math.random()}`,
+					source: SYSTEM_SOURCE,
 					lenderId: seeded.lenderAId,
-					createdAt: Date.now(),
+					createdAt: now,
+					lastTransitionAt: now,
 				});
 			}
 
@@ -564,16 +598,24 @@ describe("disbursementGate", () => {
 		await seedPayable(t, seeded, 55_000);
 
 		await t.run(async (ctx) => {
+			const now = Date.now();
 			// These terminal-state transfers should NOT reduce balance
 			for (const status of ["completed", "confirmed"] as const) {
 				await ctx.db.insert("transferRequests", {
 					status,
 					direction: "outbound",
+					transferType: "lender_dispersal_payout",
 					amount: 20_000,
 					currency: "CAD",
+					counterpartyType: "lender",
+					counterpartyId: "test-lender",
+					providerCode: "manual",
+					idempotencyKey: `test-terminal-${status}-${now}-${Math.random()}`,
+					source: SYSTEM_SOURCE,
 					lenderId: seeded.lenderAId,
-					confirmedAt: Date.now(),
-					createdAt: Date.now(),
+					confirmedAt: now,
+					createdAt: now,
+					lastTransitionAt: now,
 				});
 			}
 

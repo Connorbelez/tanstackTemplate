@@ -562,14 +562,22 @@ describe("T-010: Amount validation via assertReversalAmountValid", () => {
 
 		// Create a transfer request
 		const transferRequestId = await t.run(async (ctx) => {
+			const now = Date.now();
 			return ctx.db.insert("transferRequests", {
 				status: "reversed",
 				direction: "inbound",
+				transferType: "borrower_interest_collection",
 				amount: TOTAL_AMOUNT,
 				currency: "CAD",
+				counterpartyType: "borrower",
+				counterpartyId: "test-borrower",
+				providerCode: "manual",
+				idempotencyKey: `test-reversal-amount-${now}`,
+				source: SYSTEM_SOURCE,
 				mortgageId: state.mortgageId,
-				reversedAt: Date.now(),
-				createdAt: Date.now(),
+				reversedAt: now,
+				createdAt: now,
+				lastTransitionAt: now,
 			});
 		});
 
@@ -734,16 +742,24 @@ describe("T-013: postTransferReversal single-entry", () => {
 
 		// Create a transfer request linked to the cash received entry
 		const transferRequestId = await t.run(async (ctx) => {
+			const now = Date.now();
 			return ctx.db.insert("transferRequests", {
 				status: "reversed",
 				direction: "inbound",
+				transferType: "borrower_interest_collection",
 				amount: TOTAL_AMOUNT,
 				currency: "CAD",
+				counterpartyType: "borrower",
+				counterpartyId: "test-borrower",
+				providerCode: "manual",
+				idempotencyKey: `test-reversal-linkage-${now}`,
+				source: SYSTEM_SOURCE,
 				mortgageId: state.mortgageId,
 				obligationId: state.obligationId,
 				borrowerId: state.borrowerId,
-				reversedAt: Date.now(),
-				createdAt: Date.now(),
+				reversedAt: now,
+				createdAt: now,
+				lastTransitionAt: now,
 			});
 		});
 
