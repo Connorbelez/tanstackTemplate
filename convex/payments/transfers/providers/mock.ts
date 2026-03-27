@@ -276,15 +276,17 @@ export class MockTransferProvider implements TransferProvider {
 
 	async simulateWebhook(
 		providerRef: string,
-		event: MockWebhookEvent
+		event: MockWebhookEvent,
+		explicitEventId?: string
 	): Promise<MockWebhookPayload> {
 		const transfer = this.requireTransfer(providerRef);
-		const now = this.config.now();
-		const eventId = `mock_evt_${this.config.randomUUID()}`;
+		const eventId = explicitEventId ?? `mock_evt_${this.config.randomUUID()}`;
 
 		if (transfer.latencyMs > 0) {
 			await this.config.sleep(transfer.latencyMs);
 		}
+
+		const now = this.config.now();
 
 		let reason: string | undefined;
 		switch (event) {

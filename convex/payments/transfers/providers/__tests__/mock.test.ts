@@ -102,6 +102,28 @@ describe("MockTransferProvider", () => {
 		});
 	});
 
+	it("simulateWebhook accepts explicit event IDs for duplicate deliveries", async () => {
+		const provider = createProvider({ defaultMode: "async" });
+		const initiated = await provider.initiate(makeInput());
+
+		const first = await provider.simulateWebhook(
+			initiated.providerRef,
+			"failed",
+			"mock_evt_duplicate_001"
+		);
+		const second = await provider.simulateWebhook(
+			initiated.providerRef,
+			"failed",
+			"mock_evt_duplicate_001"
+		);
+
+		expect(first.eventId).toBe("mock_evt_duplicate_001");
+		expect(first.providerEventId).toBe("mock_evt_duplicate_001");
+		expect(second.eventId).toBe("mock_evt_duplicate_001");
+		expect(second.providerEventId).toBe("mock_evt_duplicate_001");
+		expect(first.rawBody).toBe(second.rawBody);
+	});
+
 	it("reversal mode supports confirm then reversal webhook sequence", async () => {
 		const dispatched: MockWebhookPayload[] = [];
 		const provider = createProvider({
@@ -157,6 +179,37 @@ describe("MockTransferProvider", () => {
 		);
 		expect(payload.reason).toBe("INVALID_ACCOUNT");
 		expect(sleeps).toContain(25);
+	});
+
+	it("captures webhook timestamp after simulated latency", async () => {
+		const events: string[] = [];
+		const provider = createProvider({
+			defaultMode: "async",
+			sleep: async (ms) => {
+				events.push(`sleep:${ms}`);
+			},
+			now: () => {
+				events.push("now");
+				return 1_700_000_000_000;
+			},
+		});
+
+		const initiated = await provider.initiate(
+			makeInput({
+				metadata: {
+					mockLatencyMs: 25,
+				},
+			})
+		);
+		events.length = 0;
+
+		const payload = await provider.simulateWebhook(
+			initiated.providerRef,
+			"confirmed"
+		);
+
+		expect(events).toEqual(["sleep:25", "now"]);
+		expect(payload.timestamp).toBe(new Date(1_700_000_000_000).toISOString());
 	});
 
 	it("autoDispatchModeWebhook emits mode-specific webhook events on initiate", async () => {

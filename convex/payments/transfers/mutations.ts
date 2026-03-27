@@ -18,6 +18,7 @@ import type { TransitionResult } from "../../engine/types";
 import { sourceValidator } from "../../engine/validators";
 import { adminAction, adminMutation } from "../../fluent";
 import type { TransferRequestInput } from "./interface";
+import { areMockTransferProvidersEnabled } from "./mockProviders";
 import { getTransferProvider } from "./providers/registry";
 import {
 	counterpartyTypeValidator,
@@ -25,13 +26,6 @@ import {
 	providerCodeValidator,
 	transferTypeValidator,
 } from "./validators";
-
-function areMockTransferProvidersEnabled(): boolean {
-	if (process.env.NODE_ENV !== "production") {
-		return true;
-	}
-	return process.env.ENABLE_MOCK_PROVIDERS === "true";
-}
 
 // ── createTransferRequest ──────────────────────────────────────────
 /**
@@ -77,7 +71,7 @@ export const createTransferRequest = adminMutation
 			!areMockTransferProvidersEnabled()
 		) {
 			throw new ConvexError(
-				`Transfer provider "${args.providerCode}" is disabled in production. Set ENABLE_MOCK_PROVIDERS="true" to opt in.`
+				`Transfer provider "${args.providerCode}" is disabled by default. Set ENABLE_MOCK_PROVIDERS="true" to opt in.`
 			);
 		}
 

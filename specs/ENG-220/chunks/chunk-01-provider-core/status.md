@@ -1,7 +1,7 @@
 # Chunk 1 Status
 
 ## Result
-completed
+blocked
 
 ## Completed Tasks
 - T-001: Added `mock_pad` and `mock_eft` to `PROVIDER_CODES` in `convex/payments/transfers/types.ts`

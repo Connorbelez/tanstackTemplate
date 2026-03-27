@@ -6,16 +6,10 @@
  */
 
 import type { TransferProvider } from "../interface";
+import { areMockTransferProvidersEnabled } from "../mockProviders";
 import type { ProviderCode } from "../types";
 import { ManualTransferProvider } from "./manual";
 import { MockTransferProvider } from "./mock";
-
-function areMockProvidersEnabled(): boolean {
-	if (process.env.NODE_ENV !== "production") {
-		return true;
-	}
-	return process.env.ENABLE_MOCK_PROVIDERS === "true";
-}
 
 /** Resolves a TransferProvider by canonical provider code.
  *  Phase 1: manual + mock providers are supported. Others throw.
@@ -28,9 +22,9 @@ export function getTransferProvider(
 			return new ManualTransferProvider();
 		case "mock_pad":
 		case "mock_eft":
-			if (!areMockProvidersEnabled()) {
+			if (!areMockTransferProvidersEnabled()) {
 				throw new Error(
-					'Mock transfer providers are disabled in production. Set ENABLE_MOCK_PROVIDERS="true" to opt in.'
+					'Mock transfer providers are disabled by default. Set ENABLE_MOCK_PROVIDERS="true" to opt in.'
 				);
 			}
 			return new MockTransferProvider();
