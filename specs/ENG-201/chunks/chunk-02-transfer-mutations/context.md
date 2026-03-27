@@ -16,13 +16,13 @@ Implementation guidance:
 - `cancelTransfer`
   - Use `paymentCancelMutation`.
   - Args: `transferId`.
-  - Valid only from `initiated` or `pending`.
+  - Valid only from `initiated` (`pending` currently ignores `TRANSFER_CANCELLED`).
   - Execute GT event `TRANSFER_CANCELLED`.
 - `retryTransfer`
   - Use `paymentRetryMutation`.
   - Args: `transferId`.
   - Load failed transfer, create a new transfer row with copied fields.
-  - Generate fresh idempotency key format: `retry:{originalId}:{timestamp}`.
+  - Generate fresh idempotency key format: `retry:{transferId}`.
 - `confirmManualTransfer`
   - Use `paymentMutation`.
   - Args: `transferId`, optional `providerRef`.

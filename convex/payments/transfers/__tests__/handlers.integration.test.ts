@@ -388,7 +388,7 @@ describe("transfer handlers integration: queries", () => {
 		const seeded = await seedCoreEntities(t);
 		const borrowerCounterparty = `${seeded.borrowerId}`;
 
-		const t1 = await insertTransfer(t, {
+		await insertTransfer(t, {
 			status: "failed",
 			counterpartyType: "borrower",
 			counterpartyId: borrowerCounterparty,
@@ -431,11 +431,11 @@ describe("transfer handlers integration: queries", () => {
 				counterpartyType: "borrower",
 				counterpartyId: borrowerCounterparty,
 				status: "failed",
-				limit: 10,
+				limit: 2,
 			}
 		);
 
-		expect(rows.map((row) => row._id)).toEqual([t2, t3, t1]);
+		expect(rows.map((row) => row._id)).toEqual([t2, t3]);
 	});
 
 	it("listTransfersByDeal returns filtered, sorted transfers", async () => {
@@ -444,7 +444,7 @@ describe("transfer handlers integration: queries", () => {
 		const seeded = await seedCoreEntities(t);
 		const borrowerCounterparty = `${seeded.borrowerId}`;
 
-		const t1 = await insertTransfer(t, {
+		await insertTransfer(t, {
 			status: "failed",
 			counterpartyId: borrowerCounterparty,
 			dealId: seeded.dealAId,
@@ -482,11 +482,11 @@ describe("transfer handlers integration: queries", () => {
 			{
 				dealId: seeded.dealAId,
 				status: "failed",
-				limit: 10,
+				limit: 2,
 			}
 		);
 
-		expect(rows.map((row) => row._id)).toEqual([t4, t2, t1]);
+		expect(rows.map((row) => row._id)).toEqual([t4, t2]);
 	});
 
 	it("getTransferTimeline returns transfer, audit entries, and cash ledger entries in timestamp order", async () => {

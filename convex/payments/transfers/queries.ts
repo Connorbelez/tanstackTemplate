@@ -17,6 +17,12 @@ import {
 	transferStatusValidator,
 } from "./validators";
 
+interface TimelineRecord {
+	recordId: string;
+	source: string;
+	timestamp: number;
+}
+
 // ── getTransferInternal ───────────────────────────────────────────
 /** Internal query for loading a transfer record from actions (no auth). */
 export const getTransferInternal = internalQuery({
@@ -85,32 +91,30 @@ export const listTransfersByCounterparty = paymentQuery
 		limit: v.optional(v.number()),
 	})
 	.handler(async (ctx, args) => {
-		const transfers = await (async () => {
-			const status = args.status;
-			if (status !== undefined) {
-				return ctx.db
-					.query("transferRequests")
-					.withIndex("by_counterparty_status", (q) =>
-						q
-							.eq("counterpartyType", args.counterpartyType)
-							.eq("counterpartyId", args.counterpartyId)
-							.eq("status", status)
-					)
-					.collect();
-			}
+		const limit = args.limit ?? 50;
+		const status = args.status;
+		if (status !== undefined) {
 			return ctx.db
 				.query("transferRequests")
-				.withIndex("by_counterparty", (q) =>
+				.withIndex("by_counterparty_status", (q) =>
 					q
 						.eq("counterpartyType", args.counterpartyType)
 						.eq("counterpartyId", args.counterpartyId)
+						.eq("status", status)
 				)
-				.collect();
-		})();
+				.order("desc")
+				.take(limit);
+		}
 
-		return transfers
-			.sort((left, right) => right.createdAt - left.createdAt)
-			.slice(0, args.limit ?? 50);
+		return ctx.db
+			.query("transferRequests")
+			.withIndex("by_counterparty", (q) =>
+				q
+					.eq("counterpartyType", args.counterpartyType)
+					.eq("counterpartyId", args.counterpartyId)
+			)
+			.order("desc")
+			.take(limit);
 	})
 	.public();
 
@@ -123,25 +127,23 @@ export const listTransfersByDeal = paymentQuery
 		limit: v.optional(v.number()),
 	})
 	.handler(async (ctx, args) => {
-		const transfers = await (async () => {
-			const status = args.status;
-			if (status !== undefined) {
-				return ctx.db
-					.query("transferRequests")
-					.withIndex("by_deal_status", (q) =>
-						q.eq("dealId", args.dealId).eq("status", status)
-					)
-					.collect();
-			}
+		const limit = args.limit ?? 50;
+		const status = args.status;
+		if (status !== undefined) {
 			return ctx.db
 				.query("transferRequests")
-				.withIndex("by_deal", (q) => q.eq("dealId", args.dealId))
-				.collect();
-		})();
+				.withIndex("by_deal_status", (q) =>
+					q.eq("dealId", args.dealId).eq("status", status)
+				)
+				.order("desc")
+				.take(limit);
+		}
 
-		return transfers
-			.sort((left, right) => right.createdAt - left.createdAt)
-			.slice(0, args.limit ?? 50);
+		return ctx.db
+			.query("transferRequests")
+			.withIndex("by_deal", (q) => q.eq("dealId", args.dealId))
+			.order("desc")
+			.take(limit);
 	})
 	.public();
 
@@ -192,7 +194,7 @@ export const getTransferTimeline = paymentQuery
 				state: "posted",
 				outcome: "posted" as const,
 			})),
-		].sort((left, right) => left.timestamp - right.timestamp);
+		].sort(compareTimelineRecords);
 
 		return {
 			transfer,
@@ -202,3 +204,18 @@ export const getTransferTimeline = paymentQuery
 		};
 	})
 	.public();
+
+export function compareTimelineRecords(
+	left: TimelineRecord,
+	right: TimelineRecord
+) {
+	if (left.timestamp !== right.timestamp) {
+		return left.timestamp - right.timestamp;
+	}
+
+	if (left.source !== right.source) {
+		return left.source.localeCompare(right.source);
+	}
+
+	return left.recordId.localeCompare(right.recordId);
+}
