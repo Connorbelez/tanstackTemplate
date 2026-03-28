@@ -235,29 +235,27 @@ export const getPipelineStatus = paymentQuery
 			.withIndex("by_deal", (q) => q.eq("dealId", args.dealId))
 			.collect();
 
-		const pipelineLegs = transfers.filter((t) => t.pipelineId != null);
+		// Only consider well-formed pipeline legs for this deal.
+		const pipelineLegs = transfers.filter(
+			(t) => t.pipelineId != null && t.legNumber != null
+		);
 
 		if (pipelineLegs.length === 0) {
 			return null;
 		}
 
-		// Use the deterministic pipeline ID for this deal, and filter legs
-		// to that specific pipeline to avoid cross-pipeline contamination.
-		const pipelineId = `deal-closing:${args.dealId}`;
-		const legsForPipeline = pipelineLegs.filter(
+		// Choose a pipelineId and restrict legs to that pipelineId so
+		// status and legs are consistent with the returned pipelineId.
+		const pipelineId = pipelineLegs[0].pipelineId;
+		const pipelineLegsForId = pipelineLegs.filter(
 			(leg) => leg.pipelineId === pipelineId
 		);
-
-		if (legsForPipeline.length === 0) {
-			return null;
-		}
-
-		const status = computePipelineStatus(legsForPipeline);
+		const status = computePipelineStatus(pipelineLegsForId);
 
 		return {
 			pipelineId,
 			status,
-			legs: legsForPipeline.map((leg) => ({
+			legs: pipelineLegsForId.map((leg) => ({
 				_id: leg._id,
 				legNumber: leg.legNumber,
 				status: leg.status,
