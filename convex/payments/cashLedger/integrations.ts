@@ -1698,7 +1698,7 @@ export async function postTransferReversal(
  * - locking_fee_collection, commitment_deposit_collection → UNAPPLIED_CASH
  * - deal_principal_transfer → CASH_CLEARING
  */
-function inboundTransferCreditFamily(
+export function inboundTransferCreditFamily(
 	transferType: string | undefined
 ): CashAccountFamily {
 	switch (transferType) {

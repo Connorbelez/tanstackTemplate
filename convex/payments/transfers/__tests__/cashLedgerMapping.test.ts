@@ -7,6 +7,7 @@
  */
 
 import { describe, expect, it } from "vitest";
+import { inboundTransferCreditFamily } from "../../cashLedger/integrations";
 import {
 	buildIdempotencyKey,
 	CASH_ENTRY_TYPE_FAMILY_MAP,
@@ -26,32 +27,6 @@ import {
 
 // ── T-006: Cash Ledger Bridge Mapping ────────────────────────────────────
 
-/**
- * Pure function replicating the inboundTransferCreditFamily logic from
- * convex/payments/cashLedger/integrations.ts — determines the credit account
- * family for inbound transfers based on transfer type.
- */
-function inboundTransferCreditFamily(
-	transferType: InboundTransferType
-): CashAccountFamily {
-	switch (transferType) {
-		case "borrower_interest_collection":
-		case "borrower_principal_collection":
-		case "borrower_late_fee_collection":
-		case "borrower_arrears_cure":
-			return "BORROWER_RECEIVABLE";
-		case "locking_fee_collection":
-		case "commitment_deposit_collection":
-			return "UNAPPLIED_CASH";
-		case "deal_principal_transfer":
-			return "CASH_CLEARING";
-		default: {
-			const _exhaustive: never = transferType;
-			throw new Error(`Unknown transfer type: ${_exhaustive}`);
-		}
-	}
-}
-
 interface CashLedgerMapping {
 	creditFamily: CashAccountFamily;
 	debitFamily: CashAccountFamily;
@@ -66,9 +41,7 @@ function getCashLedgerMapping(
 	direction: "inbound" | "outbound"
 ): CashLedgerMapping {
 	if (direction === "inbound") {
-		const creditFamily = inboundTransferCreditFamily(
-			transferType as InboundTransferType
-		);
+		const creditFamily = inboundTransferCreditFamily(transferType);
 		return {
 			entryType: "CASH_RECEIVED",
 			debitFamily: "TRUST_CASH",
