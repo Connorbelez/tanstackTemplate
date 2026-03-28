@@ -10,15 +10,17 @@
  * T-014: Bridge idempotency — re-running emitPaymentReceived does not create
  *        duplicate transfer
  *
- * ORDERING NOTE: T-012 and T-013 are placed BEFORE T-011/T-014 because
- * finishAllScheduledFunctions (used by T-011/T-014) leaves the convex-test
+ * ORDERING NOTE: T-012 and T-013 are placed BEFORE T-011 because
+ * finishAllScheduledFunctions (used by T-011) leaves the convex-test
  * workflow component in a state where subsequent workflow.start calls fail.
- * This is a known convex-test limitation — not a bug in application code.
+ * T-014 does not use finishAllScheduledFunctions but is placed before T-011
+ * for the same reason. This is a known convex-test limitation — not a bug
+ * in application code.
  */
 
 import auditLogTest from "convex-audit-log/test";
 import { convexTest } from "convex-test";
-import { describe, expect, it, vi } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
 import workflowSchema from "../../../../node_modules/@convex-dev/workflow/dist/component/schema.js";
 import workpoolSchema from "../../../../node_modules/@convex-dev/workpool/dist/component/schema.js";
 import type { Id } from "../../../_generated/dataModel";
@@ -44,8 +46,13 @@ const workpoolModules = import.meta.glob(
 );
 
 // Enable fake timers for the entire file. Required for
-// finishAllScheduledFunctions in T-011 and T-014.
+// finishAllScheduledFunctions in T-011.
 vi.useFakeTimers();
+
+afterAll(() => {
+	vi.clearAllTimers();
+	vi.useRealTimers();
+});
 
 // ── Test harness ────────────────────────────────────────────────────
 
