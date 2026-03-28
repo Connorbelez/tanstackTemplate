@@ -7,10 +7,10 @@
 
 import { ConvexError, v } from "convex/values";
 import { internal } from "../../_generated/api";
-import { internalMutation } from "../../_generated/server";
+import { internalAction, internalMutation } from "../../_generated/server";
 import { buildSource } from "../../engine/commands";
 import { executeTransition } from "../../engine/transition";
-import type { TransitionResult } from "../../engine/types";
+import type { CommandSource, TransitionResult } from "../../engine/types";
 import { sourceValidator } from "../../engine/validators";
 import {
 	paymentAction,
@@ -20,6 +20,7 @@ import {
 } from "../../fluent";
 import type { TransferRequestInput } from "./interface";
 import { areMockTransferProvidersEnabled } from "./mockProviders";
+import { validatePipelineFields } from "./pipeline.types";
 import { getTransferProvider } from "./providers/registry";
 import {
 	InvalidDomainEntityIdError,
@@ -95,6 +96,15 @@ export const createTransferRequest = paymentMutation
 		// 1. Validate amount is positive integer (safe-integer cents)
 		if (!Number.isInteger(args.amount) || args.amount <= 0) {
 			throw new ConvexError("Amount must be a positive integer (cents)");
+		}
+
+		// 1a. Pipeline fields must be co-required: both present or both absent
+		const pipelineError = validatePipelineFields(
+			args.pipelineId,
+			args.legNumber
+		);
+		if (pipelineError) {
+			throw new ConvexError(pipelineError);
 		}
 
 		// 1b. Guard against auth-ID / entity-ID confusion (ENG-218).
@@ -318,6 +328,337 @@ export const initiateTransfer = paymentAction
 				source,
 			}
 		);
+	})
+	.public();
+
+// ═══════════════════════════════════════════════════════════════════════
+// Internal (system-initiated) mutations for pipeline orchestration
+// ═══════════════════════════════════════════════════════════════════════
+
+const PIPELINE_SOURCE: CommandSource = {
+	channel: "scheduler",
+	actorType: "system",
+};
+
+// ── createTransferRequestInternal ──────────────────────────────────
+/**
+ * Creates a transfer request without RBAC checks.
+ * Used by the deal closing pipeline to create system-initiated transfers.
+ */
+export const createTransferRequestInternal = internalMutation({
+	args: {
+		direction: directionValidator,
+		transferType: transferTypeValidator,
+		amount: v.number(),
+		currency: v.optional(v.literal("CAD")),
+		counterpartyType: counterpartyTypeValidator,
+		counterpartyId: v.string(),
+		bankAccountRef: v.optional(v.string()),
+		// References
+		mortgageId: v.optional(v.id("mortgages")),
+		obligationId: v.optional(v.id("obligations")),
+		dealId: v.optional(v.id("deals")),
+		dispersalEntryId: v.optional(v.id("dispersalEntries")),
+		planEntryId: v.optional(v.id("collectionPlanEntries")),
+		collectionAttemptId: v.optional(v.id("collectionAttempts")),
+		// Participant references
+		lenderId: v.optional(v.id("lenders")),
+		borrowerId: v.optional(v.id("borrowers")),
+		// Provider & idempotency
+		providerCode: providerCodeValidator,
+		idempotencyKey: v.string(),
+		// Pipeline
+		pipelineId: v.optional(v.string()),
+		legNumber: v.optional(v.number()),
+		// Metadata
+		metadata: v.optional(v.record(v.string(), v.any())),
+	},
+	handler: async (ctx, args) => {
+		if (!Number.isInteger(args.amount) || args.amount <= 0) {
+			throw new ConvexError("Amount must be a positive integer (cents)");
+		}
+
+		// Pipeline fields must be co-required: both present or both absent
+		const pipelineError = validatePipelineFields(
+			args.pipelineId,
+			args.legNumber
+		);
+		if (pipelineError) {
+			throw new ConvexError(pipelineError);
+		}
+
+		let counterpartyId: string;
+		try {
+			counterpartyId = toDomainEntityId(args.counterpartyId, "counterpartyId");
+		} catch (error) {
+			if (error instanceof InvalidDomainEntityIdError) {
+				throw new ConvexError(error.message);
+			}
+			throw error;
+		}
+
+		if (
+			(args.providerCode === "mock_pad" || args.providerCode === "mock_eft") &&
+			!areMockTransferProvidersEnabled()
+		) {
+			throw new ConvexError(
+				`Transfer provider "${args.providerCode}" is disabled by default. Set ENABLE_MOCK_PROVIDERS="true" to opt in.`
+			);
+		}
+
+		// Idempotency check
+		const existing = await ctx.db
+			.query("transferRequests")
+			.withIndex("by_idempotency", (q) =>
+				q.eq("idempotencyKey", args.idempotencyKey)
+			)
+			.first();
+
+		if (existing) {
+			return existing._id;
+		}
+
+		const now = Date.now();
+		return ctx.db.insert("transferRequests", {
+			status: "initiated",
+			direction: args.direction,
+			transferType: args.transferType,
+			amount: args.amount,
+			currency: args.currency ?? "CAD",
+			counterpartyType: args.counterpartyType,
+			counterpartyId,
+			bankAccountRef: args.bankAccountRef,
+			mortgageId: args.mortgageId,
+			obligationId: args.obligationId,
+			dealId: args.dealId,
+			dispersalEntryId: args.dispersalEntryId,
+			planEntryId: args.planEntryId,
+			collectionAttemptId: args.collectionAttemptId,
+			lenderId: args.lenderId,
+			borrowerId: args.borrowerId,
+			providerCode: args.providerCode,
+			idempotencyKey: args.idempotencyKey,
+			source: PIPELINE_SOURCE,
+			pipelineId: args.pipelineId,
+			legNumber: args.legNumber,
+			metadata: args.metadata,
+			createdAt: now,
+			lastTransitionAt: now,
+		});
+	},
+});
+
+// ── initiateTransferInternal ──────────────────────────────────────
+/**
+ * Initiates a transfer without RBAC checks. Used by pipeline orchestration.
+ * Same logic as initiateTransfer but with system source.
+ */
+export const initiateTransferInternal = internalAction({
+	args: {
+		transferId: v.id("transferRequests"),
+	},
+	handler: async (ctx, args): Promise<TransitionResult> => {
+		const transfer = await ctx.runQuery(
+			internal.payments.transfers.queries.getTransferInternal,
+			{ transferId: args.transferId }
+		);
+		if (!transfer) {
+			throw new ConvexError("Transfer request not found");
+		}
+
+		// Retry-safe: if the transfer is already beyond "initiated" (e.g., "pending"
+		// or "confirmed" from a prior run), return early instead of throwing.
+		// This makes pipeline retry/idempotency safe — createDealClosingPipeline and
+		// createAndInitiateLeg2 may be re-scheduled by Convex's retry mechanism.
+		if (transfer.status !== "initiated") {
+			console.info(
+				`[initiateTransferInternal] Transfer ${args.transferId} already in "${transfer.status}" — skipping initiation (retry-safe).`
+			);
+			return {
+				entityId: args.transferId,
+				status: transfer.status,
+			} as TransitionResult;
+		}
+
+		const provider = getTransferProvider(transfer.providerCode);
+
+		let counterpartyId: TransferRequestInput["counterpartyId"];
+		try {
+			counterpartyId = toDomainEntityId(
+				transfer.counterpartyId,
+				"counterpartyId"
+			);
+		} catch (error) {
+			if (error instanceof InvalidDomainEntityIdError) {
+				throw new ConvexError(error.message);
+			}
+			throw error;
+		}
+
+		const input: TransferRequestInput = {
+			amount: transfer.amount,
+			bankAccountRef: transfer.bankAccountRef,
+			counterpartyId,
+			counterpartyType: transfer.counterpartyType,
+			currency: transfer.currency,
+			direction: transfer.direction,
+			idempotencyKey: transfer.idempotencyKey,
+			legNumber: transfer.legNumber,
+			metadata: transfer.metadata as Record<string, unknown> | undefined,
+			pipelineId: transfer.pipelineId,
+			providerCode: transfer.providerCode,
+			references: {
+				mortgageId: transfer.mortgageId,
+				obligationId: transfer.obligationId,
+				dealId: transfer.dealId,
+				dispersalEntryId: transfer.dispersalEntryId,
+				planEntryId: transfer.planEntryId,
+				collectionAttemptId: transfer.collectionAttemptId,
+			},
+			source: PIPELINE_SOURCE,
+			transferType: transfer.transferType,
+		};
+
+		const result = await provider.initiate(input);
+
+		if (result.status === "confirmed") {
+			await ctx.runMutation(
+				internal.payments.transfers.mutations.persistProviderRef,
+				{
+					transferId: args.transferId,
+					providerRef: result.providerRef,
+				}
+			);
+			return ctx.runMutation(
+				internal.payments.transfers.mutations.fireInitiateTransition,
+				{
+					transferId: args.transferId,
+					eventType: "FUNDS_SETTLED",
+					payload: {
+						settledAt: Date.now(),
+						providerData: {},
+						providerRef: result.providerRef,
+					},
+					source: PIPELINE_SOURCE,
+				}
+			);
+		}
+
+		return ctx.runMutation(
+			internal.payments.transfers.mutations.fireInitiateTransition,
+			{
+				transferId: args.transferId,
+				eventType: "PROVIDER_INITIATED",
+				payload: { providerRef: result.providerRef },
+				source: PIPELINE_SOURCE,
+			}
+		);
+	},
+});
+
+// ── fireDealTransitionInternal ──────────────────────────────────────
+/**
+ * Fires a transition on a deal entity from system context.
+ * Used by the pipeline to fire FUNDS_RECEIVED when Leg 2 completes.
+ */
+export const fireDealTransitionInternal = internalMutation({
+	args: {
+		dealId: v.id("deals"),
+		eventType: v.literal("FUNDS_RECEIVED"),
+		payload: v.optional(
+			v.object({
+				method: v.union(
+					v.literal("vopay"),
+					v.literal("wire_receipt"),
+					v.literal("manual")
+				),
+			})
+		),
+	},
+	handler: async (ctx, args) => {
+		return executeTransition(ctx, {
+			entityType: "deal",
+			entityId: args.dealId,
+			eventType: args.eventType,
+			payload: args.payload as Record<string, unknown> | undefined,
+			source: PIPELINE_SOURCE,
+		});
+	},
+});
+
+// ── startDealClosingPipeline ────────────────────────────────────────
+/**
+ * Admin-facing action to start a deal closing pipeline.
+ *
+ * Validates the deal is in fundsTransfer.pending, checks idempotency
+ * (no existing pipeline for this deal), and kicks off Leg 1.
+ *
+ * Supported provider codes: "manual" (default), "mock_pad", "mock_eft".
+ * Other codes (pad_vopay, eft_vopay, etc.) require the corresponding
+ * provider implementation — currently Phase 2+.
+ */
+export const startDealClosingPipeline = paymentAction
+	.input({
+		dealId: v.id("deals"),
+		leg1Amount: v.number(),
+		leg2Amount: v.optional(v.number()),
+		providerCode: v.optional(providerCodeValidator),
+	})
+	.handler(async (ctx, args) => {
+		const deal = await ctx.runQuery(internal.deals.queries.getInternalDeal, {
+			dealId: args.dealId,
+		});
+
+		// Validate deal is in fundsTransfer.pending
+		if (deal.status !== "fundsTransfer.pending") {
+			throw new ConvexError(
+				`Deal must be in "fundsTransfer.pending" to start pipeline, currently: "${deal.status}"`
+			);
+		}
+
+		// Idempotency: check if pipeline already exists for this deal.
+		// Uses the deterministic pipeline ID to query by_pipeline index.
+		const existingTransfers = await ctx.runQuery(
+			internal.payments.transfers.queries.getPipelineLegsInternal,
+			{ pipelineId: `deal-closing:${args.dealId}` }
+		);
+
+		if (existingTransfers.length > 0) {
+			const pipelineId = existingTransfers[0].pipelineId;
+			console.info(
+				`[startDealClosingPipeline] Pipeline already exists for deal ${args.dealId}: ${pipelineId}`
+			);
+			return {
+				pipelineId,
+				leg1TransferId: existingTransfers.find((t) => t.legNumber === 1)?._id,
+				alreadyExists: true,
+			};
+		}
+
+		// Generate deterministic pipeline ID from dealId
+		const pipelineId = `deal-closing:${args.dealId}`;
+		const leg2Amount = args.leg2Amount ?? args.leg1Amount;
+		const providerCode = args.providerCode ?? "manual";
+
+		const result = await ctx.runAction(
+			internal.payments.transfers.pipeline.createDealClosingPipeline,
+			{
+				dealId: args.dealId,
+				pipelineId,
+				buyerId: deal.buyerId,
+				sellerId: deal.sellerId,
+				mortgageId: deal.mortgageId,
+				leg1Amount: args.leg1Amount,
+				leg2Amount,
+				providerCode,
+			}
+		);
+
+		console.info(
+			`[startDealClosingPipeline] Started pipeline for deal ${args.dealId}: ${pipelineId}`
+		);
+
+		return { ...result, alreadyExists: false };
 	})
 	.public();
 
