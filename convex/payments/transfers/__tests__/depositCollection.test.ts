@@ -1,8 +1,8 @@
 /**
  * Commitment deposit collection tests — pure domain logic validation.
  *
- * Imports real helpers from `depositCollection.logic` alongside transfer
- * taxonomy and cash-ledger routing expectations.
+ * Covers inbound transfer taxonomy, obligation-type mapping, idempotency key
+ * generation, config validation, provider-code defaults, and metadata shape.
  */
 
 import { describe, expect, it } from "vitest";
