@@ -465,6 +465,8 @@ export async function postSettlementAllocation(
 		obligationId: Id<"obligations">;
 		mortgageId: Id<"mortgages">;
 		settledDate: string;
+		/** Gross cash allocated in this settlement (lender totals + servicing). Defaults to `obligation.amount` when omitted. */
+		settledAmount?: number;
 		servicingFee: number;
 		entries: Array<{
 			dispersalEntryId: Id<"dispersalEntries">;
@@ -480,8 +482,9 @@ export async function postSettlementAllocation(
 		throw new ConvexError(`Obligation not found: ${args.obligationId}`);
 	}
 
+	const grossAllocation = args.settledAmount ?? obligation.amount;
 	validatePostingGroupAmounts(
-		obligation.amount,
+		grossAllocation,
 		args.entries.map((e) => e.amount),
 		args.servicingFee
 	);
