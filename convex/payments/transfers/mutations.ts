@@ -28,6 +28,7 @@ import type { TransferRequestInput } from "./interface";
 import { areMockTransferProvidersEnabled } from "./mockProviders";
 import { buildPipelineIdempotencyKey } from "./pipeline";
 import { validatePipelineFields } from "./pipeline.types";
+import { buildPrincipalReturnIdempotencyKey } from "./principalReturn.logic";
 import { getTransferProvider } from "./providers/registry";
 import {
 	InvalidDomainEntityIdError,
@@ -552,7 +553,6 @@ export const initiateTransferInternal = internalAction({
 			)
 		);
 
-
 		const input: TransferRequestInput = {
 			amount: transfer.amount,
 			bankAccountRef: transfer.bankAccountRef,
@@ -723,6 +723,7 @@ export const startDealClosingPipeline = paymentAction
 					pipelineId,
 					buyerId: deal.buyerId,
 					sellerId: deal.sellerId,
+					lenderId: deal.lenderId,
 					mortgageId: deal.mortgageId,
 					leg1Amount: args.leg1Amount,
 					leg2Amount,
@@ -1007,6 +1008,81 @@ export const collectCommitmentDepositAdmin = paymentAction
 				mortgageId: args.mortgageId,
 				amount: args.amount,
 				providerCode: args.providerCode,
+			}
+		);
+
+		return { ...result, alreadyExists: false };
+	})
+	.public();
+
+// ── returnInvestorPrincipal ─────────────────────────────────────────
+/**
+ * Admin-facing action to trigger investor principal return.
+ * Validates the deal is in a post-close state, checks idempotency,
+ * and delegates to the principalReturn orchestrator.
+ */
+export const returnInvestorPrincipal = paymentAction
+	.input({
+		dealId: v.id("deals"),
+		sellerId: v.string(),
+		lenderId: v.id("lenders"),
+		mortgageId: v.id("mortgages"),
+		principalAmount: v.number(),
+		prorationAdjustment: v.optional(v.number()),
+		providerCode: v.optional(providerCodeValidator),
+		bankAccountRef: v.optional(v.string()),
+	})
+	.handler(async (ctx, args) => {
+		// Validate deal exists and is in a post-close state
+		const deal = await ctx.runQuery(internal.deals.queries.getInternalDeal, {
+			dealId: args.dealId,
+		});
+		if (deal.status !== "confirmed") {
+			throw new ConvexError(
+				`Deal must be in "confirmed" status for principal return, currently: "${deal.status}"`
+			);
+		}
+
+		// Check idempotency
+		const idempotencyKey = buildPrincipalReturnIdempotencyKey(
+			args.dealId,
+			args.sellerId
+		);
+		const existing = await ctx.runQuery(
+			internal.payments.transfers.queries.getTransferByIdempotencyKeyInternal,
+			{ idempotencyKey }
+		);
+		if (existing && existing.transferType === "lender_principal_return") {
+			if (
+				existing.status === "confirmed" ||
+				existing.status === "pending" ||
+				existing.status === "processing"
+			) {
+				return { transferId: existing._id, alreadyExists: true };
+			}
+			if (existing.status === "failed") {
+				throw new ConvexError(
+					`A principal return transfer exists but failed (${existing._id}). Use the retry flow or cancel before trying again.`
+				);
+			}
+			if (existing.status !== "initiated") {
+				throw new ConvexError(
+					`A principal return transfer exists in terminal status "${existing.status}" (${existing._id}). This transfer cannot be retried — resolve at the deal level or create a new principal return.`
+				);
+			}
+		}
+
+		const result = await ctx.runAction(
+			internal.payments.transfers.principalReturn.createPrincipalReturn,
+			{
+				dealId: args.dealId,
+				sellerId: args.sellerId,
+				lenderId: args.lenderId,
+				mortgageId: args.mortgageId,
+				principalAmount: args.principalAmount,
+				prorationAdjustment: args.prorationAdjustment ?? 0,
+				providerCode: args.providerCode ?? "manual",
+				bankAccountRef: args.bankAccountRef,
 			}
 		);
 

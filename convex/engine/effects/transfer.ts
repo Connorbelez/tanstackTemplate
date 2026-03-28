@@ -251,6 +251,7 @@ async function handlePipelineLegConfirmed(
 				pipelineId: transfer.pipelineId,
 				dealId: transfer.dealId,
 				sellerId: leg1Meta.sellerId,
+				lenderId: leg1Meta.lenderId as Id<"lenders"> | undefined,
 				mortgageId: transfer.mortgageId,
 				leg2Amount: leg1Meta.leg2Amount,
 				providerCode: assertProviderCode(transfer.providerCode),
@@ -382,7 +383,6 @@ async function handlePipelineLegFailed(
 			},
 		},
 	});
-
 
 	if (transfer.legNumber === 1) {
 		console.error(

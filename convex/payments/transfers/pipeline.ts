@@ -42,6 +42,7 @@ export const createDealClosingPipeline = internalAction({
 		pipelineId: v.string(),
 		buyerId: v.string(),
 		sellerId: v.string(),
+		lenderId: v.optional(v.id("lenders")),
 		mortgageId: v.id("mortgages"),
 		leg1Amount: v.number(),
 		leg2Amount: v.number(),
@@ -87,6 +88,7 @@ export const createDealClosingPipeline = internalAction({
 					pipelineType: "deal_closing",
 					sellerId: args.sellerId,
 					leg2Amount: args.leg2Amount,
+					lenderId: args.lenderId,
 				} satisfies DealClosingLeg1Metadata,
 			}
 		);
@@ -139,6 +141,7 @@ export const createAndInitiateLeg2 = internalAction({
 		pipelineId: v.string(),
 		dealId: v.id("deals"),
 		sellerId: v.string(),
+		lenderId: v.optional(v.id("lenders")),
 		mortgageId: v.id("mortgages"),
 		leg2Amount: v.number(),
 		providerCode: providerCodeValidator,
@@ -157,6 +160,7 @@ export const createAndInitiateLeg2 = internalAction({
 				currency: "CAD",
 				counterpartyType: "investor",
 				counterpartyId: args.sellerId,
+				lenderId: args.lenderId,
 				mortgageId: args.mortgageId,
 				dealId: args.dealId,
 				providerCode: args.providerCode,

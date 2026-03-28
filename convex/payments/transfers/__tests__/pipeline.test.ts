@@ -279,7 +279,7 @@ describe("buildPipelineIdempotencyKey", () => {
 // ── extractLeg1Metadata ─────────────────────────────────────────────
 
 describe("extractLeg1Metadata", () => {
-	it("returns metadata for valid DealClosingLeg1Metadata shape", () => {
+	it("returns metadata for valid DealClosingLeg1Metadata shape (without lenderId)", () => {
 		const result = extractLeg1Metadata({
 			pipelineType: "deal_closing",
 			sellerId: "seller-123",
@@ -289,7 +289,45 @@ describe("extractLeg1Metadata", () => {
 			pipelineType: "deal_closing",
 			sellerId: "seller-123",
 			leg2Amount: 50_000,
+			lenderId: undefined,
 		});
+	});
+
+	it("returns metadata with lenderId when present", () => {
+		const result = extractLeg1Metadata({
+			pipelineType: "deal_closing",
+			sellerId: "seller-123",
+			leg2Amount: 50_000,
+			lenderId: "lender_abc123",
+		});
+		expect(result).toEqual({
+			pipelineType: "deal_closing",
+			sellerId: "seller-123",
+			leg2Amount: 50_000,
+			lenderId: "lender_abc123",
+		});
+	});
+
+	it("accepts undefined lenderId", () => {
+		const result = extractLeg1Metadata({
+			pipelineType: "deal_closing",
+			sellerId: "seller-123",
+			leg2Amount: 50_000,
+			lenderId: undefined,
+		});
+		expect(result).not.toBeNull();
+		expect(result?.lenderId).toBeUndefined();
+	});
+
+	it("returns null for non-string lenderId", () => {
+		expect(
+			extractLeg1Metadata({
+				pipelineType: "deal_closing",
+				sellerId: "seller-123",
+				leg2Amount: 50_000,
+				lenderId: 12_345,
+			})
+		).toBeNull();
 	});
 
 	it("returns null for undefined metadata", () => {
