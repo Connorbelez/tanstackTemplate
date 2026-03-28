@@ -126,7 +126,17 @@ export const publishTransferConfirmed = internalMutation({
 		// ── Pipeline orchestration (post-cash, async-scheduled) ───────
 		// Cash posting is committed above. Pipeline follow-ups are scheduled
 		// asynchronously so failures don't roll back cash ledger entries.
-		await handlePipelineLegConfirmed(ctx, transfer);
+		// Wrapped in try/catch: in Convex, an unhandled throw rolls back ALL
+		// writes in this mutation — including the settled patch and cash postings.
+		try {
+			await handlePipelineLegConfirmed(ctx, transfer);
+		} catch (error) {
+			console.error(
+				`[publishTransferConfirmed] Pipeline follow-up failed for transfer ${args.entityId}`,
+				error
+			);
+			// Intentionally do not rethrow: cash postings and settledAt must remain committed.
+		}
 	},
 });
 

@@ -47,6 +47,19 @@ export const createDealClosingPipeline = internalAction({
 		providerCode: providerCodeValidator,
 	},
 	handler: async (ctx, args) => {
+		// Validate leg2Amount early — reject before Leg 1 is created to avoid
+		// locking buyer funds when Leg 2 would later fail validation.
+		if (!Number.isInteger(args.leg2Amount) || args.leg2Amount <= 0) {
+			throw new Error(
+				`[createDealClosingPipeline] leg2Amount must be a positive integer (cents), got: ${args.leg2Amount}`
+			);
+		}
+		if (!args.sellerId || typeof args.sellerId !== "string") {
+			throw new Error(
+				"[createDealClosingPipeline] sellerId is required for Leg 2 metadata"
+			);
+		}
+
 		// Create Leg 1: buyer → trust (inbound, deal_principal_transfer)
 		const leg1Id = await ctx.runMutation(
 			internal.payments.transfers.mutations.createTransferRequestInternal,

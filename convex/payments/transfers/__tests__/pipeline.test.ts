@@ -188,15 +188,42 @@ describe("PipelineStatus type", () => {
 
 // ── Edge: duplicate leg numbers ──────────────────────────────────────
 
-describe("computePipelineStatus with duplicate legs", () => {
-	it("uses first matching leg when duplicates exist (find() semantics)", () => {
-		// Data corruption: two Leg 1 entries. find() returns first match.
+describe("computePipelineStatus with duplicate legs (retries)", () => {
+	it("prefers active leg over terminal after retry", () => {
+		// Retry scenario: cancelled original + pending retry
 		const legs = [
-			{ legNumber: 1, status: "confirmed" },
-			{ legNumber: 1, status: "failed" },
+			{ legNumber: 1, status: "cancelled" },
+			{ legNumber: 1, status: "pending" },
 			{ legNumber: 2, status: "confirmed" },
 		];
-		// First Leg 1 is "confirmed", so pipeline shows "completed"
+		// Active Leg 1 ("pending") is preferred over cancelled
+		expect(computePipelineStatus(legs)).toBe("pending");
+	});
+
+	it("prefers confirmed retry over failed original", () => {
+		const legs = [
+			{ legNumber: 1, status: "failed" },
+			{ legNumber: 1, status: "confirmed" },
+			{ legNumber: 2, status: "confirmed" },
+		];
+		// Active Leg 1 ("confirmed") is preferred over failed
+		expect(computePipelineStatus(legs)).toBe("completed");
+	});
+
+	it("falls back to last terminal if all are terminal", () => {
+		const legs = [
+			{ legNumber: 1, status: "cancelled" },
+			{ legNumber: 1, status: "failed" },
+		];
+		// No active records — falls back to last terminal ("failed")
+		expect(computePipelineStatus(legs)).toBe("failed");
+	});
+
+	it("single record per leg works as before", () => {
+		const legs = [
+			{ legNumber: 1, status: "confirmed" },
+			{ legNumber: 2, status: "confirmed" },
+		];
 		expect(computePipelineStatus(legs)).toBe("completed");
 	});
 });

@@ -85,11 +85,38 @@ export function validatePipelineFields(
  * - Leg 1 confirmed, Leg 2 not yet terminal → leg1_confirmed
  * - Otherwise → pending
  */
+
+const TERMINAL_STATUSES = new Set(["failed", "cancelled", "reversed"]);
+
+/**
+ * Finds the preferred leg record for a given leg number.
+ * After a retry, there may be multiple records (e.g., cancelled original + pending retry).
+ * Prefers active (non-terminal) records; falls back to the last terminal record.
+ */
+function findPreferredLeg(
+	legs: Pick<Doc<"transferRequests">, "legNumber" | "status">[],
+	legNumber: number
+): Pick<Doc<"transferRequests">, "legNumber" | "status"> | undefined {
+	const matching = legs.filter((l) => l.legNumber === legNumber);
+	if (matching.length === 0) {
+		return undefined;
+	}
+	if (matching.length === 1) {
+		return matching[0];
+	}
+	// Prefer any active (non-terminal) record over terminal ones
+	const active = matching.find((l) => !TERMINAL_STATUSES.has(l.status));
+	return active ?? matching.at(-1);
+}
+
 export function computePipelineStatus(
 	legs: Pick<Doc<"transferRequests">, "legNumber" | "status">[]
 ): PipelineStatus {
-	const leg1 = legs.find((l) => l.legNumber === 1);
-	const leg2 = legs.find((l) => l.legNumber === 2);
+	// After a retry, there may be multiple records per leg number (e.g., the
+	// cancelled original + the re-initiated retry). Prefer the active (non-terminal)
+	// record for each leg; fall back to the last terminal record if none is active.
+	const leg1 = findPreferredLeg(legs, 1);
+	const leg2 = findPreferredLeg(legs, 2);
 
 	// No legs at all — shouldn't happen, but be safe
 	if (!leg1) {

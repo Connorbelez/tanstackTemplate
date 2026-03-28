@@ -228,13 +228,23 @@ export const getPipelineStatus = paymentQuery
 			return null;
 		}
 
-		const pipelineId = pipelineLegs[0].pipelineId;
-		const status = computePipelineStatus(pipelineLegs);
+		// Use the deterministic pipeline ID for this deal, and filter legs
+		// to that specific pipeline to avoid cross-pipeline contamination.
+		const pipelineId = `deal-closing:${args.dealId}`;
+		const legsForPipeline = pipelineLegs.filter(
+			(leg) => leg.pipelineId === pipelineId
+		);
+
+		if (legsForPipeline.length === 0) {
+			return null;
+		}
+
+		const status = computePipelineStatus(legsForPipeline);
 
 		return {
 			pipelineId,
 			status,
-			legs: pipelineLegs.map((leg) => ({
+			legs: legsForPipeline.map((leg) => ({
 				_id: leg._id,
 				legNumber: leg.legNumber,
 				status: leg.status,
@@ -263,6 +273,11 @@ export const getTransfersByPipeline = paymentQuery
 			.query("transferRequests")
 			.withIndex("by_pipeline", (q) => q.eq("pipelineId", args.pipelineId))
 			.collect();
+
+		// Return null for unknown/typoed pipelineIds instead of a misleading "pending"
+		if (legs.length === 0) {
+			return null;
+		}
 
 		return {
 			pipelineId: args.pipelineId,

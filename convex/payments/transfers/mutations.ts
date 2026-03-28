@@ -98,6 +98,15 @@ export const createTransferRequest = paymentMutation
 			throw new ConvexError("Amount must be a positive integer (cents)");
 		}
 
+		// 1a. Pipeline fields must be co-required: both present or both absent
+		const pipelineError = validatePipelineFields(
+			args.pipelineId,
+			args.legNumber
+		);
+		if (pipelineError) {
+			throw new ConvexError(pipelineError);
+		}
+
 		// 1b. Guard against auth-ID / entity-ID confusion (ENG-218).
 		// counterpartyId must stay in domain entity ID space.
 		let counterpartyId: TransferRequestInput["counterpartyId"];
@@ -457,10 +466,18 @@ export const initiateTransferInternal = internalAction({
 			throw new ConvexError("Transfer request not found");
 		}
 
+		// Retry-safe: if the transfer is already beyond "initiated" (e.g., "pending"
+		// or "confirmed" from a prior run), return early instead of throwing.
+		// This makes pipeline retry/idempotency safe — createDealClosingPipeline and
+		// createAndInitiateLeg2 may be re-scheduled by Convex's retry mechanism.
 		if (transfer.status !== "initiated") {
-			throw new ConvexError(
-				`Transfer must be in "initiated" status to initiate, currently: "${transfer.status}"`
+			console.info(
+				`[initiateTransferInternal] Transfer ${args.transferId} already in "${transfer.status}" — skipping initiation (retry-safe).`
 			);
+			return {
+				entityId: args.transferId,
+				status: transfer.status,
+			} as TransitionResult;
 		}
 
 		const provider = getTransferProvider(transfer.providerCode);
@@ -575,6 +592,10 @@ export const fireDealTransitionInternal = internalMutation({
  *
  * Validates the deal is in fundsTransfer.pending, checks idempotency
  * (no existing pipeline for this deal), and kicks off Leg 1.
+ *
+ * Supported provider codes: "manual" (default), "mock_pad", "mock_eft".
+ * Other codes (pad_vopay, eft_vopay, etc.) require the corresponding
+ * provider implementation — currently Phase 2+.
  */
 export const startDealClosingPipeline = paymentAction
 	.input({
@@ -595,10 +616,10 @@ export const startDealClosingPipeline = paymentAction
 			);
 		}
 
-		// Idempotency: check if pipeline already exists for this deal
+		// Idempotency: check if pipeline already exists for this deal.
+		// Uses the deterministic pipeline ID to query by_pipeline index.
 		const existingTransfers = await ctx.runQuery(
 			internal.payments.transfers.queries.getPipelineLegsInternal,
-			// We query by deal index since pipeline hasn't been created yet
 			{ pipelineId: `deal-closing:${args.dealId}` }
 		);
 
