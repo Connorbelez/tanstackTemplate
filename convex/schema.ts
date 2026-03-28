@@ -34,6 +34,7 @@ import {
 	providerCodeValidator,
 	transferTypeValidator,
 } from "./payments/transfers/validators";
+import { normalizedEventTypeValidator } from "./payments/webhooks/types";
 
 export default defineSchema({
 	// ══════════════════════════════════════════════════════════
@@ -1532,7 +1533,7 @@ export default defineSchema({
 		/** Whether the inbound webhook signature was successfully verified */
 		signatureVerified: v.optional(v.boolean()),
 		/** Normalized transfer event type (e.g. FUNDS_SETTLED) derived inside the provider boundary */
-		normalizedEventType: v.optional(v.string()),
+		normalizedEventType: v.optional(normalizedEventTypeValidator),
 		/** Linked transfer request, if the webhook could be resolved to one */
 		transferRequestId: v.optional(v.id("transferRequests")),
 	})

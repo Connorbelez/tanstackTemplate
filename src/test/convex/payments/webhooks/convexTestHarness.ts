@@ -1,6 +1,5 @@
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
-import { pathToFileURL } from "node:url";
 import { convexTest } from "convex-test";
 import aggregateSchema from "../../../../../node_modules/@convex-dev/aggregate/dist/component/schema.js";
 import workflowSchema from "../../../../../node_modules/@convex-dev/workflow/dist/component/schema.js";
@@ -47,13 +46,18 @@ function loadModulesFromRoot(root: URL, mountPrefix: string) {
 				continue;
 			}
 
+			// Skip declaration files — they aren't executable modules
+			if (entry.name.endsWith(".d.ts")) {
+				continue;
+			}
+
 			const moduleKey = join(mountPrefix, nextRelativePath).replaceAll(
 				"\\",
 				"/"
 			);
 			moduleEntries.push([
 				moduleKey,
-				() => import(pathToFileURL(nextUrl.pathname).href),
+				() => import(nextUrl.href),
 			]);
 		}
 	};
