@@ -12,15 +12,22 @@
  *  - Proration adjustment applied before persistence
  *  - Pipeline fields threaded through
  *  - Deal status validation logic used by returnInvestorPrincipal
+ *
+ * Real-function invocation tests (Fix B) directly exercise:
+ *  - returnInvestorPrincipal admin action via t.withIdentity().action()
+ *  - createPrincipalReturn internalAction via t.action(internal.xxx)
+ *  with assertions on the resulting transfer record and idempotency.
  */
 
 import auditLogTest from "convex-audit-log/test";
 import { convexTest } from "convex-test";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import workflowSchema from "../../../../node_modules/@convex-dev/workflow/dist/component/schema.js";
 import workpoolSchema from "../../../../node_modules/@convex-dev/workpool/dist/component/schema.js";
+import { api, internal } from "../../../_generated/api";
 import type { Id } from "../../../_generated/dataModel";
 import auditTrailSchema from "../../../components/auditTrail/schema";
+import { FAIRLEND_STAFF_ORG_ID } from "../../../constants";
 import schema from "../../../schema";
 import {
 	buildPrincipalReturnIdempotencyKey,
@@ -41,17 +48,38 @@ const workpoolModules = import.meta.glob(
 	"/node_modules/@convex-dev/workpool/dist/component/**/*.js"
 );
 
+// ── Identity fixtures ────────────────────────────────────────────────
+
+const PAYMENT_ADMIN_IDENTITY = {
+	subject: "user_pr_payment_admin",
+	issuer: "https://api.workos.com",
+	org_id: FAIRLEND_STAFF_ORG_ID,
+	organization_name: "FairLend Staff",
+	role: "admin",
+	roles: JSON.stringify(["admin"]),
+	permissions: JSON.stringify(["payment:manage", "payment:view"]),
+	user_email: "pr-payment-admin@fairlend.ca",
+	user_first_name: "PR",
+	user_last_name: "Admin",
+} as const;
+
 // ── Test harness ────────────────────────────────────────────────────
 
 type TestHarness = ReturnType<typeof createFullHarness>;
 
 function createFullHarness() {
+	process.env.DISABLE_GT_HASHCHAIN = "true";
+	process.env.DISABLE_CASH_LEDGER_HASHCHAIN = "true";
 	const t = convexTest(schema, modules);
 	auditLogTest.register(t, "auditLog");
 	t.registerComponent("auditTrail", auditTrailSchema, auditTrailModules);
 	t.registerComponent("workflow", workflowSchema, workflowModules);
 	t.registerComponent("workflow/workpool", workpoolSchema, workpoolModules);
 	return t;
+}
+
+function asPaymentAdmin(t: TestHarness) {
+	return t.withIdentity(PAYMENT_ADMIN_IDENTITY);
 }
 
 // ── Seed helpers ────────────────────────────────────────────────────
@@ -479,7 +507,12 @@ describe("T-011: idempotency check for existing principal return transfers", () 
 		expect(result?.transferId).toBe(transferId);
 	});
 
-	it("does not flag cancelled transfers as already existing", async () => {
+	it("throws for cancelled transfers (terminal status)", async () => {
+		// The actual returnInvestorPrincipal implementation at mutations.ts:1087-1091
+		// throws a ConvexError for any status that is not "initiated" (after the
+		// explicit confirmed/pending/processing and failed checks). Since
+		// "cancelled" !== "initiated", it hits the terminal-status throw branch.
+		// This test simulates that exact logic path.
 		const t = createFullHarness();
 		const seeded = await seedCoreEntities(t);
 		const sellerId = "investor-seller-cancelled";
@@ -501,7 +534,9 @@ describe("T-011: idempotency check for existing principal return transfers", () 
 			await ctx.db.patch(transferId, { status: "cancelled" });
 		});
 
-		// Simulate the idempotency check from returnInvestorPrincipal
+		// Simulate the exact idempotency check from returnInvestorPrincipal:
+		// any status that is not confirmed/pending/processing/failed and is
+		// not "initiated" triggers the terminal-status error branch.
 		const result = await t.run(async (ctx) => {
 			const existing = await ctx.db
 				.query("transferRequests")
@@ -521,12 +556,17 @@ describe("T-011: idempotency check for existing principal return transfers", () 
 				if (existing.status === "failed") {
 					return { shouldThrow: true };
 				}
+				// Matches the mutations.ts:1087 branch:
+				// if (existing.status !== "initiated") throw ConvexError(...)
+				if (existing.status !== "initiated") {
+					return { shouldThrow: true };
+				}
 			}
-			// Cancelled — allow new creation
 			return null;
 		});
 
-		expect(result).toBeNull();
+		expect(result).not.toBeNull();
+		expect(result?.shouldThrow).toBe(true);
 	});
 });
 
@@ -537,5 +577,196 @@ describe("T-011: idempotency check for existing principal return transfers", () 
 describe("T-011: lender_principal_return is an outbound transfer type", () => {
 	it("isOutboundTransferType recognizes lender_principal_return", () => {
 		expect(isOutboundTransferType("lender_principal_return")).toBe(true);
+	});
+});
+
+// ══════════════════════════════════════════════════════════════════════
+// T-011: Real function invocation via convex-test (Fix B)
+// Exercises returnInvestorPrincipal (paymentAction) and
+// createPrincipalReturn (internalAction) through the real Convex runtime.
+// ══════════════════════════════════════════════════════════════════════
+
+describe("T-011: returnInvestorPrincipal real action invocation", () => {
+	it("happy path: creates a pending outbound transfer and returns transferId", async () => {
+		vi.useFakeTimers();
+		const t = createFullHarness();
+		const seeded = await seedCoreEntities(t);
+		const auth = asPaymentAdmin(t);
+
+		try {
+			const result = await auth.action(
+				api.payments.transfers.mutations.returnInvestorPrincipal,
+				{
+					dealId: seeded.dealId,
+					sellerId: `${seeded.lenderId}`,
+					lenderId: seeded.lenderId,
+					mortgageId: seeded.mortgageId,
+					principalAmount: 100_000,
+					prorationAdjustment: 0,
+					providerCode: "manual",
+				}
+			);
+
+			await t.finishAllScheduledFunctions(vi.runAllTimers);
+
+			expect(result.transferId).toBeDefined();
+			expect(result.alreadyExists).toBe(false);
+
+			// Assert the persisted transfer has the expected shape
+			await t.run(async (ctx) => {
+				const transfer = await ctx.db.get(
+					result.transferId as Id<"transferRequests">
+				);
+				expect(transfer).not.toBeNull();
+				expect(transfer?.transferType).toBe("lender_principal_return");
+				expect(transfer?.direction).toBe("outbound");
+				expect(transfer?.counterpartyType).toBe("investor");
+				expect(transfer?.counterpartyId).toBe(`${seeded.lenderId}`);
+				expect(transfer?.amount).toBe(100_000);
+				expect(transfer?.dealId).toBe(seeded.dealId);
+				expect(transfer?.mortgageId).toBe(seeded.mortgageId);
+				expect(transfer?.lenderId).toBe(seeded.lenderId);
+				// Manual outbound transfers transition to "pending" after initiation
+				expect(transfer?.status).toBe("pending");
+			});
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it("idempotency: calling returnInvestorPrincipal twice returns alreadyExists on the second call", async () => {
+		vi.useFakeTimers();
+		const t = createFullHarness();
+		const seeded = await seedCoreEntities(t);
+		const auth = asPaymentAdmin(t);
+
+		const args = {
+			dealId: seeded.dealId,
+			sellerId: `${seeded.lenderId}`,
+			lenderId: seeded.lenderId,
+			mortgageId: seeded.mortgageId,
+			principalAmount: 100_000,
+			prorationAdjustment: 0,
+			providerCode: "manual" as const,
+		};
+
+		try {
+			const first = await auth.action(
+				api.payments.transfers.mutations.returnInvestorPrincipal,
+				args
+			);
+			await t.finishAllScheduledFunctions(vi.runAllTimers);
+
+			expect(first.alreadyExists).toBe(false);
+			expect(first.transferId).toBeDefined();
+
+			const second = await auth.action(
+				api.payments.transfers.mutations.returnInvestorPrincipal,
+				args
+			);
+			await t.finishAllScheduledFunctions(vi.runAllTimers);
+
+			// Second call finds the existing "pending" transfer and returns it
+			expect(second.alreadyExists).toBe(true);
+			expect(second.transferId).toBe(first.transferId);
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+});
+
+describe("T-011: createPrincipalReturn internalAction real invocation", () => {
+	it("happy path: createPrincipalReturn creates a transfer and returns transferId", async () => {
+		vi.useFakeTimers();
+		const t = createFullHarness();
+		const seeded = await seedCoreEntities(t);
+
+		try {
+			const result = await t.action(
+				internal.payments.transfers.principalReturn.createPrincipalReturn,
+				{
+					dealId: seeded.dealId,
+					sellerId: `${seeded.lenderId}`,
+					lenderId: seeded.lenderId,
+					mortgageId: seeded.mortgageId,
+					principalAmount: 50_000,
+					prorationAdjustment: -250,
+					providerCode: "manual",
+				}
+			);
+
+			await t.finishAllScheduledFunctions(vi.runAllTimers);
+
+			expect(result.transferId).toBeDefined();
+
+			await t.run(async (ctx) => {
+				const transfer = await ctx.db.get(
+					result.transferId as Id<"transferRequests">
+				);
+				expect(transfer).not.toBeNull();
+				expect(transfer?.transferType).toBe("lender_principal_return");
+				// prorationAdjustment of -250 applied: 50_000 - 250 = 49_750
+				expect(transfer?.amount).toBe(49_750);
+				expect(transfer?.idempotencyKey).toBe(
+					buildPrincipalReturnIdempotencyKey(
+						seeded.dealId,
+						`${seeded.lenderId}`
+					)
+				);
+			});
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it("idempotency: calling createPrincipalReturn twice with same args returns same transferId", async () => {
+		vi.useFakeTimers();
+		const t = createFullHarness();
+		const seeded = await seedCoreEntities(t);
+
+		const args = {
+			dealId: seeded.dealId,
+			sellerId: `${seeded.lenderId}`,
+			lenderId: seeded.lenderId,
+			mortgageId: seeded.mortgageId,
+			principalAmount: 75_000,
+			prorationAdjustment: 0,
+			providerCode: "manual" as const,
+		};
+
+		try {
+			const first = await t.action(
+				internal.payments.transfers.principalReturn.createPrincipalReturn,
+				args
+			);
+			await t.finishAllScheduledFunctions(vi.runAllTimers);
+
+			// Second call: createTransferRequestInternal finds existing record by
+			// idempotency key and returns the same ID without creating a duplicate.
+			const second = await t.action(
+				internal.payments.transfers.principalReturn.createPrincipalReturn,
+				args
+			);
+			await t.finishAllScheduledFunctions(vi.runAllTimers);
+
+			expect(first.transferId).toBe(second.transferId);
+
+			// Only one transfer record should exist for this idempotency key
+			await t.run(async (ctx) => {
+				const idempotencyKey = buildPrincipalReturnIdempotencyKey(
+					seeded.dealId,
+					`${seeded.lenderId}`
+				);
+				const records = await ctx.db
+					.query("transferRequests")
+					.withIndex("by_idempotency", (q) =>
+						q.eq("idempotencyKey", idempotencyKey)
+					)
+					.collect();
+				expect(records).toHaveLength(1);
+			});
+		} finally {
+			vi.useRealTimers();
+		}
 	});
 });
