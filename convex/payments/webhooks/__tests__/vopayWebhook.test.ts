@@ -196,6 +196,55 @@ describe("payload construction per event type", () => {
 	});
 });
 
+/** Seed a provider-owned transfer (no collectionAttemptId). Starts at "pending". */
+async function seedProviderOwnedTransfer(
+	opts: {
+		providerCode: "pad_vopay" | "eft_vopay";
+		providerRef: string;
+	},
+	t = createWebhookTestHarness()
+) {
+	const seeded = await t.run(async (ctx) => {
+		const transferId = await ctx.db.insert("transferRequests", {
+			status: "pending",
+			direction: opts.providerCode === "eft_vopay" ? "outbound" : "inbound",
+			transferType:
+				opts.providerCode === "eft_vopay"
+					? "lender_dispersal_payout"
+					: "borrower_interest_collection",
+			amount: 50_000,
+			currency: "CAD",
+			counterpartyType:
+				opts.providerCode === "eft_vopay" ? "lender" : "borrower",
+			counterpartyId: "test-counterparty",
+			providerCode: opts.providerCode,
+			providerRef: opts.providerRef,
+			idempotencyKey: `${opts.providerCode}-${opts.providerRef}`,
+			source: TEST_SOURCE,
+			createdAt: Date.now(),
+			lastTransitionAt: Date.now(),
+		});
+
+		const webhookEventId = await ctx.db.insert("webhookEvents", {
+			provider: opts.providerCode,
+			providerEventId: `evt-${opts.providerRef}`,
+			rawBody: JSON.stringify(makeEvent({ transaction_id: opts.providerRef })),
+			status: "pending",
+			receivedAt: Date.now(),
+			attempts: 0,
+			signatureVerified: true,
+		});
+
+		return { transferId, webhookEventId };
+	});
+
+	return { ...seeded, t };
+}
+
+/**
+ * Seed a bridged transfer (with collectionAttemptId). Defaults to "confirmed"
+ * because the bridge flow confirms transfers before any provider webhook arrives.
+ */
 async function seedBridgedTransfer(
 	opts: {
 		providerCode: "pad_vopay" | "eft_vopay";
@@ -227,7 +276,7 @@ async function seedBridgedTransfer(
 		});
 
 		const transferId = await ctx.db.insert("transferRequests", {
-			status: opts.status ?? "pending",
+			status: opts.status ?? "confirmed",
 			direction: opts.providerCode === "eft_vopay" ? "outbound" : "inbound",
 			transferType:
 				opts.providerCode === "eft_vopay"
@@ -265,7 +314,7 @@ async function seedBridgedTransfer(
 
 describe("processVoPayWebhook integration", () => {
 	it("marks PAD webhook processed, links transferRequestId, and confirms the transfer", async () => {
-		const { t, transferId, webhookEventId } = await seedBridgedTransfer({
+		const { t, transferId, webhookEventId } = await seedProviderOwnedTransfer({
 			providerCode: "pad_vopay",
 			providerRef: "txn_pad_confirm_001",
 		});

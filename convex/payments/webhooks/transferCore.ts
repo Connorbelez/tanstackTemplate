@@ -7,10 +7,11 @@ import {
 	internalQuery,
 } from "../../_generated/server";
 import { providerCodeValidator } from "../transfers/validators";
-import type {
-	NormalizedTransferWebhookEventType,
-	TransferWebhookMetadataPatch,
-	TransferWebhookProcessingStatus,
+import {
+	type NormalizedTransferWebhookEventType,
+	normalizedEventTypeValidator,
+	type TransferWebhookMetadataPatch,
+	type TransferWebhookProcessingStatus,
 } from "./types";
 
 const TARGET_STATE_MAP: Record<NormalizedTransferWebhookEventType, string[]> = {
@@ -50,7 +51,7 @@ export const persistTransferWebhookEvent = internalMutation({
 		providerEventId: v.string(),
 		rawBody: v.string(),
 		signatureVerified: v.boolean(),
-		normalizedEventType: v.optional(v.string()),
+		normalizedEventType: v.optional(normalizedEventTypeValidator),
 	},
 	handler: async (ctx, args) => {
 		const existing = await ctx.db
@@ -64,7 +65,7 @@ export const persistTransferWebhookEvent = internalMutation({
 
 		if (existing) {
 			const patch: {
-				normalizedEventType?: string;
+				normalizedEventType?: NormalizedTransferWebhookEventType;
 				signatureVerified?: boolean;
 			} = {};
 
@@ -99,15 +100,14 @@ export const persistTransferWebhookEvent = internalMutation({
 export const patchTransferWebhookMetadata = internalMutation({
 	args: {
 		webhookEventId: v.id("webhookEvents"),
-		normalizedEventType: v.optional(v.string()),
+		normalizedEventType: v.optional(normalizedEventTypeValidator),
 		transferRequestId: v.optional(v.id("transferRequests")),
 	},
 	handler: async (ctx, args) => {
 		const patch: TransferWebhookMetadataPatch = {};
 
 		if (args.normalizedEventType !== undefined) {
-			patch.normalizedEventType =
-				args.normalizedEventType as NormalizedTransferWebhookEventType;
+			patch.normalizedEventType = args.normalizedEventType;
 		}
 		if (args.transferRequestId !== undefined) {
 			patch.transferRequestId = args.transferRequestId;

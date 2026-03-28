@@ -1,3 +1,4 @@
+import { v } from "convex/values";
 import type { Id } from "../../_generated/dataModel";
 
 export type NormalizedTransferWebhookEventType =
@@ -5,6 +6,14 @@ export type NormalizedTransferWebhookEventType =
 	| "TRANSFER_FAILED"
 	| "TRANSFER_REVERSED"
 	| "PROCESSING_UPDATE";
+
+/** Runtime validator matching NormalizedTransferWebhookEventType. */
+export const normalizedEventTypeValidator = v.union(
+	v.literal("FUNDS_SETTLED"),
+	v.literal("TRANSFER_FAILED"),
+	v.literal("TRANSFER_REVERSED"),
+	v.literal("PROCESSING_UPDATE")
+);
 
 export type TransferWebhookProcessingStatus =
 	| "pending"
