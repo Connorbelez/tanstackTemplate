@@ -58,6 +58,7 @@ import type * as demo_triggers from "../demo/triggers.js";
 import type * as demo_workflow from "../demo/workflow.js";
 import type * as demo_workosAuth from "../demo/workosAuth.js";
 import type * as dispersal_createDispersalEntries from "../dispersal/createDispersalEntries.js";
+import type * as dispersal_disbursementBridge from "../dispersal/disbursementBridge.js";
 import type * as dispersal_holdPeriod from "../dispersal/holdPeriod.js";
 import type * as dispersal_lenderIdentity from "../dispersal/lenderIdentity.js";
 import type * as dispersal_queries from "../dispersal/queries.js";
@@ -281,6 +282,7 @@ declare const fullApi: ApiFromModules<{
   "demo/workflow": typeof demo_workflow;
   "demo/workosAuth": typeof demo_workosAuth;
   "dispersal/createDispersalEntries": typeof dispersal_createDispersalEntries;
+  "dispersal/disbursementBridge": typeof dispersal_disbursementBridge;
   "dispersal/holdPeriod": typeof dispersal_holdPeriod;
   "dispersal/lenderIdentity": typeof dispersal_lenderIdentity;
   "dispersal/queries": typeof dispersal_queries;

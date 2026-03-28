@@ -148,6 +148,7 @@ async function createTransferRequest(
 			| "deal_seller_payout";
 		borrowerId?: Id<"borrowers">;
 		collectionAttemptId?: Id<"collectionAttempts">;
+		dispersalEntryId?: Id<"dispersalEntries">;
 		lenderId?: Id<"lenders">;
 		obligationId?: Id<"obligations">;
 		status?:
@@ -180,6 +181,72 @@ async function createTransferRequest(
 			lenderId: args.lenderId,
 			borrowerId: args.borrowerId,
 			collectionAttemptId: args.collectionAttemptId,
+			dispersalEntryId: args.dispersalEntryId,
+		});
+	});
+}
+
+async function createDispersalEntry(
+	t: TestHarness,
+	args: {
+		mortgageId: Id<"mortgages">;
+		lenderId: Id<"lenders">;
+		amount: number;
+		status?: "pending" | "disbursed" | "failed";
+		obligationId?: Id<"obligations">;
+	}
+) {
+	return t.run(async (ctx) => {
+		// Seed a ledger_account for lenderAccountId (required field)
+		const lenderAccountId = await ctx.db.insert("ledger_accounts", {
+			type: "POSITION",
+			mortgageId: `${args.mortgageId}`,
+			lenderId: `${args.lenderId}`,
+			cumulativeDebits: 0n,
+			cumulativeCredits: BigInt(args.amount),
+			createdAt: Date.now(),
+		});
+
+		// Need a valid obligationId — reuse the pattern from createObligation
+		const borrower = await ctx.db.query("borrowers").first();
+		const obligationId =
+			args.obligationId ??
+			(await ctx.db.insert("obligations", {
+				status: "due",
+				machineContext: {},
+				lastTransitionAt: Date.now(),
+				mortgageId: args.mortgageId,
+				borrowerId: borrower?._id,
+				paymentNumber: 1,
+				type: "regular_interest",
+				amount: args.amount,
+				amountSettled: 0,
+				dueDate: Date.parse("2026-03-01T00:00:00Z"),
+				gracePeriodEnd: Date.parse("2026-03-16T00:00:00Z"),
+				createdAt: Date.now(),
+			}));
+
+		return ctx.db.insert("dispersalEntries", {
+			mortgageId: args.mortgageId,
+			lenderId: args.lenderId,
+			lenderAccountId,
+			amount: args.amount,
+			dispersalDate: "2026-03-15",
+			obligationId,
+			servicingFeeDeducted: 0,
+			status: args.status ?? "pending",
+			idempotencyKey: `test-dispersal:${args.lenderId}:${Date.now()}`,
+			calculationDetails: {
+				settledAmount: args.amount,
+				servicingFee: 0,
+				distributableAmount: args.amount,
+				ownershipUnits: 100,
+				totalUnits: 100,
+				ownershipFraction: 1,
+				rawAmount: args.amount,
+				roundedAmount: args.amount,
+			},
+			createdAt: Date.now(),
 		});
 	});
 }
@@ -564,6 +631,200 @@ describe("publishTransferReversed effect", () => {
 					})
 				)
 			).rejects.toThrow(NO_JOURNAL_ENTRY_RE);
+		});
+	});
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// Dispersal entry lifecycle in transfer effects (ENG-206)
+// ═══════════════════════════════════════════════════════════════════════
+
+describe("publishTransferConfirmed — dispersal entry lifecycle", () => {
+	it("patches dispersal entry to disbursed with payoutDate on outbound confirmation", async () => {
+		const t = createTransferHarness();
+		const entities = await seedMinimalEntities(t);
+
+		const dispersalEntryId = await createDispersalEntry(t, {
+			mortgageId: entities.mortgageId,
+			lenderId: entities.lenderAId,
+			amount: 5000,
+		});
+
+		// Create LENDER_PAYABLE balance so cash posting succeeds
+		await createTestAccount(t, {
+			family: "LENDER_PAYABLE",
+			lenderId: entities.lenderAId,
+			mortgageId: entities.mortgageId,
+			initialCreditBalance: 10000n,
+		});
+
+		await createTestAccount(t, {
+			family: "TRUST_CASH",
+			mortgageId: entities.mortgageId,
+			initialDebitBalance: 50000n,
+		});
+
+		const transferId = await createTransferRequest(t, {
+			amount: 5000,
+			counterpartyId: `${entities.lenderAId}`,
+			counterpartyType: "lender",
+			direction: "outbound",
+			transferType: "lender_dispersal_payout",
+			mortgageId: entities.mortgageId,
+			lenderId: entities.lenderAId,
+			dispersalEntryId,
+		});
+
+		const settledAt = Date.parse("2026-03-20T14:00:00Z");
+
+		await t.run(async (ctx) => {
+			await publishTransferConfirmedMutation._handler(
+				ctx,
+				buildEffectArgs(transferId, {
+					effectName: "publishTransferConfirmed",
+					eventType: "FUNDS_SETTLED",
+					payload: { settledAt },
+				})
+			);
+
+			const entry = await ctx.db.get(dispersalEntryId);
+			expect(entry).not.toBeNull();
+			expect(entry?.status).toBe("disbursed");
+			expect(entry?.payoutDate).toBe("2026-03-20");
+		});
+	});
+
+	it("does not throw when dispersal entry is missing — logs error but preserves cash posting", async () => {
+		const t = createTransferHarness();
+		const entities = await seedMinimalEntities(t);
+
+		// Create accounts for cash posting
+		await createTestAccount(t, {
+			family: "LENDER_PAYABLE",
+			lenderId: entities.lenderAId,
+			mortgageId: entities.mortgageId,
+			initialCreditBalance: 10000n,
+		});
+
+		await createTestAccount(t, {
+			family: "TRUST_CASH",
+			mortgageId: entities.mortgageId,
+			initialDebitBalance: 50000n,
+		});
+
+		// Create a real dispersal entry then delete it to get a valid-format ID
+		const deletedEntryId = await createDispersalEntry(t, {
+			mortgageId: entities.mortgageId,
+			lenderId: entities.lenderAId,
+			amount: 5000,
+		});
+
+		await t.run(async (ctx) => {
+			await ctx.db.delete(deletedEntryId);
+		});
+
+		const transferId = await createTransferRequest(t, {
+			amount: 5000,
+			counterpartyId: `${entities.lenderAId}`,
+			counterpartyType: "lender",
+			direction: "outbound",
+			transferType: "lender_dispersal_payout",
+			mortgageId: entities.mortgageId,
+			lenderId: entities.lenderAId,
+			dispersalEntryId: deletedEntryId,
+		});
+
+		// Should NOT throw — cash posting and settledAt must be preserved
+		await t.run(async (ctx) => {
+			await publishTransferConfirmedMutation._handler(
+				ctx,
+				buildEffectArgs(transferId, {
+					effectName: "publishTransferConfirmed",
+					eventType: "FUNDS_SETTLED",
+					payload: { settledAt: Date.now() },
+				})
+			);
+
+			const transfer = await ctx.db.get(transferId);
+			expect(transfer).not.toBeNull();
+			expect(transfer?.settledAt).toBeDefined();
+		});
+	});
+});
+
+describe("publishTransferFailed — dispersal entry lifecycle", () => {
+	it("patches dispersal entry to failed when lender_dispersal_payout transfer fails", async () => {
+		const t = createTransferHarness();
+		const entities = await seedMinimalEntities(t);
+
+		const dispersalEntryId = await createDispersalEntry(t, {
+			mortgageId: entities.mortgageId,
+			lenderId: entities.lenderAId,
+			amount: 5000,
+		});
+
+		const transferId = await createTransferRequest(t, {
+			amount: 5000,
+			counterpartyId: `${entities.lenderAId}`,
+			counterpartyType: "lender",
+			direction: "outbound",
+			transferType: "lender_dispersal_payout",
+			mortgageId: entities.mortgageId,
+			lenderId: entities.lenderAId,
+			dispersalEntryId,
+		});
+
+		await t.run(async (ctx) => {
+			await publishTransferFailedMutation._handler(
+				ctx,
+				buildEffectArgs(transferId, {
+					effectName: "publishTransferFailed",
+					eventType: "TRANSFER_FAILED",
+					payload: { errorCode: "NSF", reason: "Insufficient funds" },
+				})
+			);
+
+			const entry = await ctx.db.get(dispersalEntryId);
+			expect(entry).not.toBeNull();
+			expect(entry?.status).toBe("failed");
+		});
+	});
+
+	it("does not patch dispersal entry for non-disbursement transfer types", async () => {
+		const t = createTransferHarness();
+		const entities = await seedMinimalEntities(t);
+
+		const dispersalEntryId = await createDispersalEntry(t, {
+			mortgageId: entities.mortgageId,
+			lenderId: entities.lenderAId,
+			amount: 5000,
+		});
+
+		// Create a non-disbursement transfer (locking_fee_collection)
+		const transferId = await createTransferRequest(t, {
+			amount: 5000,
+			counterpartyId: `${entities.borrowerId}`,
+			counterpartyType: "borrower",
+			direction: "inbound",
+			transferType: "locking_fee_collection",
+			mortgageId: entities.mortgageId,
+			borrowerId: entities.borrowerId,
+		});
+
+		await t.run(async (ctx) => {
+			await publishTransferFailedMutation._handler(
+				ctx,
+				buildEffectArgs(transferId, {
+					effectName: "publishTransferFailed",
+					eventType: "TRANSFER_FAILED",
+					payload: { errorCode: "TIMEOUT", reason: "Timed out" },
+				})
+			);
+
+			// Dispersal entry should remain untouched
+			const entry = await ctx.db.get(dispersalEntryId);
+			expect(entry).not.toBeNull();
+			expect(entry?.status).toBe("pending");
 		});
 	});
 });

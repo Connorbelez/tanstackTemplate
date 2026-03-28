@@ -64,4 +64,13 @@ crons.daily(
 	internal.payments.payout.batchPayout.processPayoutBatch
 );
 
+// Disbursement due alert: surface pending entries past hold period.
+// Admin-only trigger in Phase 1 — does NOT auto-execute disbursements.
+// Runs at 09:00 UTC (after payout batch at 08:00).
+crons.daily(
+	"check disbursements due",
+	{ hourUTC: 9, minuteUTC: 0 },
+	internal.dispersal.disbursementBridge.checkDisbursementsDue
+);
+
 export default crons;

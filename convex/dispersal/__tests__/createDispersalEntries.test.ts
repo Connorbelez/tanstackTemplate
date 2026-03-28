@@ -531,9 +531,7 @@ describe("createDispersalEntries", () => {
 		expect(first.servicingFeeEntryId).toBeTruthy();
 
 		const feeEntry = await t.run(async (ctx) =>
-			first.servicingFeeEntryId
-				? ctx.db.get(first.servicingFeeEntryId as never)
-				: null
+			first.servicingFeeEntryId ? ctx.db.get(first.servicingFeeEntryId) : null
 		);
 		expect(feeEntry?.amount).toBe(8000);
 		expect(feeEntry?.feeDue).toBe(8333);

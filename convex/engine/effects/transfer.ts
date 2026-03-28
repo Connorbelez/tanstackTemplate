@@ -12,6 +12,7 @@ import {
 import { extractLeg1Metadata } from "../../payments/transfers/pipeline.types";
 import type { ProviderCode } from "../../payments/transfers/types";
 import { PROVIDER_CODES } from "../../payments/transfers/types";
+import { appendAuditJournalEntry } from "../auditJournal";
 import type { CommandSource } from "../types";
 import { effectPayloadValidator } from "../validators";
 
@@ -121,6 +122,55 @@ export const publishTransferConfirmed = internalMutation({
 				`[publishTransferConfirmed] Transfer ${args.entityId} has no direction set. ` +
 					"Cannot post cash entry — this is a data integrity violation."
 			);
+		}
+
+		// ── Dispersal entry lifecycle (disbursement confirmation) ────────
+		// Read before patching — if the entry was deleted, log an error but
+		// do NOT throw. The transfer settlement and cash posting must not be
+		// rolled back because of a missing dispersal entry reference.
+		if (
+			transfer.transferType === "lender_dispersal_payout" &&
+			transfer.dispersalEntryId
+		) {
+			const dispersalEntry = await ctx.db.get(transfer.dispersalEntryId);
+			if (dispersalEntry) {
+				const settledDate = new Date(settledAt).toISOString().slice(0, 10);
+				const previousStatus = dispersalEntry.status;
+
+				await ctx.db.patch(transfer.dispersalEntryId, {
+					status: "disbursed" as const,
+					payoutDate: settledDate,
+				});
+
+				await appendAuditJournalEntry(ctx, {
+					entityType: "dispersalEntry",
+					entityId: `${transfer.dispersalEntryId}`,
+					eventType: "DISBURSEMENT_CONFIRMED",
+					previousState: previousStatus,
+					newState: "disbursed",
+					outcome: "transitioned",
+					actorId: args.source.actorId ?? "system",
+					actorType: args.source.actorType,
+					channel: args.source.channel,
+					payload: {
+						transferRequestId: `${args.entityId}`,
+						payoutDate: settledDate,
+						amount: transfer.amount,
+						lenderId: transfer.lenderId ? `${transfer.lenderId}` : undefined,
+					},
+					timestamp: Date.now(),
+				});
+
+				console.info(
+					`[publishTransferConfirmed] Dispersal entry ${transfer.dispersalEntryId} → disbursed (payoutDate: ${settledDate})`
+				);
+			} else {
+				console.error(
+					`[publishTransferConfirmed] Dispersal entry ${transfer.dispersalEntryId} not found — ` +
+						`transfer ${args.entityId} settled but entry status not updated. ` +
+						"Data integrity violation: investigate manually."
+				);
+			}
 		}
 
 		// ── Pipeline orchestration (post-cash, async-scheduled) ───────
@@ -321,6 +371,50 @@ export const publishTransferFailed = internalMutation({
 			`[publishTransferFailed] Transfer ${args.entityId} failed: ${reason} (${errorCode})`
 		);
 
+		// ── Dispersal entry failure ─────────────────────────────────────
+		// Read before patching — same defensive pattern as publishTransferConfirmed.
+		if (
+			transfer.transferType === "lender_dispersal_payout" &&
+			transfer.dispersalEntryId
+		) {
+			const dispersalEntry = await ctx.db.get(transfer.dispersalEntryId);
+			if (dispersalEntry) {
+				const previousStatus = dispersalEntry.status;
+
+				await ctx.db.patch(transfer.dispersalEntryId, {
+					status: "failed" as const,
+				});
+
+				await appendAuditJournalEntry(ctx, {
+					entityType: "dispersalEntry",
+					entityId: `${transfer.dispersalEntryId}`,
+					eventType: "DISBURSEMENT_FAILED",
+					previousState: previousStatus,
+					newState: "failed",
+					outcome: "transitioned",
+					actorId: args.source.actorId ?? "system",
+					actorType: args.source.actorType,
+					channel: args.source.channel,
+					payload: {
+						transferRequestId: `${args.entityId}`,
+						failureCode: errorCode,
+						failureReason: reason,
+					},
+					timestamp: Date.now(),
+				});
+
+				console.warn(
+					`[publishTransferFailed] Dispersal entry ${transfer.dispersalEntryId} → failed (transfer: ${args.entityId}, reason: ${reason})`
+				);
+			} else {
+				console.error(
+					`[publishTransferFailed] Dispersal entry ${transfer.dispersalEntryId} not found — ` +
+						`transfer ${args.entityId} failure recorded but entry status not updated. ` +
+						"Investigate manually."
+				);
+			}
+		}
+
 		// ── Pipeline failure handling ─────────────────────────────────
 		await handlePipelineLegFailed(
 			ctx,
@@ -479,6 +573,52 @@ export const publishTransferReversed = internalMutation({
 					"Cash reversal cannot be posted — failing closed to prevent ledger drift. " +
 					"Investigate and reconcile manually or enqueue a healing action."
 			);
+		}
+
+		// ── Dispersal entry reversal ──────────────────────────────────────
+		// A reversed disbursement means the lender's payout was clawed back.
+		// Reset the entry to "failed" so it can be retried or investigated.
+		if (
+			transfer.transferType === "lender_dispersal_payout" &&
+			transfer.dispersalEntryId
+		) {
+			const dispersalEntry = await ctx.db.get(transfer.dispersalEntryId);
+			if (dispersalEntry) {
+				const previousStatus = dispersalEntry.status;
+
+				await ctx.db.patch(transfer.dispersalEntryId, {
+					status: "failed" as const,
+					payoutDate: undefined,
+				});
+
+				await appendAuditJournalEntry(ctx, {
+					entityType: "dispersalEntry",
+					entityId: `${transfer.dispersalEntryId}`,
+					eventType: "DISBURSEMENT_REVERSED",
+					previousState: previousStatus,
+					newState: "failed",
+					outcome: "transitioned",
+					actorId: args.source.actorId ?? "system",
+					actorType: args.source.actorType,
+					channel: args.source.channel,
+					payload: {
+						transferRequestId: `${args.entityId}`,
+						reversalReason: reason,
+					},
+					timestamp: Date.now(),
+				});
+
+				console.warn(
+					`[publishTransferReversed] Dispersal entry ${transfer.dispersalEntryId} → failed ` +
+						`(transfer ${args.entityId} reversed, reason: ${reason})`
+				);
+			} else {
+				console.error(
+					`[publishTransferReversed] Dispersal entry ${transfer.dispersalEntryId} not found — ` +
+						`cannot revert status after transfer ${args.entityId} reversal. ` +
+						"Investigate manually."
+				);
+			}
 		}
 	},
 });

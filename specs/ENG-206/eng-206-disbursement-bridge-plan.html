@@ -1,0 +1,1283 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+	<head>
+		<meta charset="UTF-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1.0">
+		<title>ENG-206 — Dispersal → Disbursement Bridge</title>
+		<style>
+		@import url("https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,wght@0,400;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;500;600&family=DM+Sans:wght@400;500;600;700&display=swap");
+
+		:root {
+			--font-display: "Source Serif 4", Georgia, serif;
+			--font-body: "DM Sans", system-ui, sans-serif;
+			--font-mono: "JetBrains Mono", "Fira Code", monospace;
+			--gold: #d4a843;
+			--gold-dim: #b8912e;
+			--sage: #7fb685;
+			--sage-dim: #5a9060;
+			--rose: #d47b7b;
+			--rose-dim: #b35757;
+			--sky: #6ba3c7;
+			--sky-dim: #4d85a8;
+			--amber: #d4a243;
+			--amber-dim: #b88f2e;
+		}
+		[data-theme="dark"] {
+			--bg-root: #0e1117;
+			--bg-surface: #161b22;
+			--bg-elevated: #1c2128;
+			--bg-recessed: #0a0d12;
+			--bg-accent-dim: #1a1f2a;
+			--border: #2d333b;
+			--border-subtle: #21262d;
+			--text-primary: #e6edf3;
+			--text-secondary: #8b949e;
+			--text-dim: #545d68;
+			--text-inverse: #0e1117;
+			--shadow-elevated: 0 2px 12px rgba(0, 0, 0, 0.4);
+			--shadow-hero: 0 4px 24px rgba(0, 0, 0, 0.5);
+		}
+		[data-theme="light"] {
+			--bg-root: #f6f8fa;
+			--bg-surface: #ffffff;
+			--bg-elevated: #ffffff;
+			--bg-recessed: #edf0f3;
+			--bg-accent-dim: #f0f3f8;
+			--border: #d0d7de;
+			--border-subtle: #e0e5ea;
+			--text-primary: #1f2328;
+			--text-secondary: #57606a;
+			--text-dim: #8b949e;
+			--text-inverse: #ffffff;
+			--shadow-elevated: 0 1px 6px rgba(0, 0, 0, 0.08);
+			--shadow-hero: 0 2px 16px rgba(0, 0, 0, 0.1);
+		}
+		*,
+		*::before,
+		*::after {
+			box-sizing: border-box;
+			padding: 0;
+			margin: 0;
+		}
+		html {
+			font-size: 15px;
+			scroll-behavior: smooth;
+		}
+		body {
+			max-width: 1080px;
+			padding: 2rem 1.5rem 4rem;
+			margin: 0 auto;
+			font-family: var(--font-body);
+			line-height: 1.65;
+			color: var(--text-primary);
+			word-break: break-word;
+			overflow-wrap: break-word;
+			background: var(--bg-root);
+		}
+		.theme-toggle {
+			position: fixed;
+			top: 1rem;
+			right: 1rem;
+			z-index: 100;
+			padding: 6px 10px;
+			font-family: var(--font-mono);
+			font-size: 0.8rem;
+			color: var(--text-secondary);
+			cursor: pointer;
+			background: var(--bg-elevated);
+			border: 1px solid var(--border);
+			border-radius: 8px;
+			transition: all 0.2s;
+		}
+		.theme-toggle:hover {
+			color: var(--gold);
+			border-color: var(--gold);
+		}
+		.hero {
+			position: relative;
+			padding: 2.5rem 2rem;
+			margin-bottom: 3rem;
+			overflow: hidden;
+			background: var(--bg-elevated);
+			border: 1px solid var(--border);
+			border-radius: 12px;
+			box-shadow: var(--shadow-hero);
+		}
+		.hero::before {
+			position: absolute;
+			top: 0;
+			right: 0;
+			left: 0;
+			height: 3px;
+			content: "";
+			background: linear-gradient(90deg, var(--gold), var(--sage), var(--sky));
+		}
+		.hero-label {
+			margin-bottom: 0.75rem;
+			font-family: var(--font-mono);
+			font-size: 0.7rem;
+			color: var(--gold);
+			text-transform: uppercase;
+			letter-spacing: 0.15em;
+		}
+		.hero h1 {
+			margin-bottom: 0.5rem;
+			font-family: var(--font-display);
+			font-size: 2rem;
+			font-style: italic;
+			font-weight: 700;
+			line-height: 1.2;
+		}
+		.hero-subtitle {
+			max-width: 60ch;
+			font-size: 0.95rem;
+			color: var(--text-secondary);
+		}
+		.hero-meta {
+			display: flex;
+			flex-wrap: wrap;
+			gap: 1.5rem;
+			margin-top: 1.25rem;
+		}
+		.hero-meta-item {
+			padding: 3px 8px;
+			font-family: var(--font-mono);
+			font-size: 0.72rem;
+			color: var(--text-dim);
+			background: var(--bg-recessed);
+			border: 1px solid var(--border-subtle);
+			border-radius: 4px;
+		}
+		.hero-meta-item strong {
+			color: var(--text-secondary);
+		}
+		.section {
+			margin-bottom: 2.5rem;
+		}
+		.section-label {
+			margin-bottom: 0.3rem;
+			font-family: var(--font-mono);
+			font-size: 0.65rem;
+			color: var(--text-dim);
+			text-transform: uppercase;
+			letter-spacing: 0.2em;
+		}
+		.section h2 {
+			padding-bottom: 0.5rem;
+			margin-bottom: 1rem;
+			font-family: var(--font-display);
+			font-size: 1.5rem;
+			font-weight: 600;
+			border-bottom: 1px solid var(--border-subtle);
+		}
+		.section h3 {
+			margin: 1.25rem 0 0.5rem;
+			font-family: var(--font-body);
+			font-size: 1.05rem;
+			font-weight: 600;
+			color: var(--text-primary);
+		}
+		.comparison-grid {
+			display: grid;
+			grid-template-columns: 1fr 1fr;
+			gap: 1rem;
+			min-width: 0;
+		}
+		@media (max-width: 700px) {
+			.comparison-grid {
+				grid-template-columns: 1fr;
+			}
+		}
+		.comparison-panel {
+			min-width: 0;
+			padding: 1.25rem;
+			background: var(--bg-elevated);
+			border: 1px solid var(--border);
+			border-radius: 10px;
+			box-shadow: var(--shadow-elevated);
+		}
+		.comparison-panel.before {
+			border-top: 3px solid var(--rose);
+		}
+		.comparison-panel.after {
+			border-top: 3px solid var(--sage);
+		}
+		.comparison-panel .panel-header {
+			margin-bottom: 0.75rem;
+			font-family: var(--font-mono);
+			font-size: 0.7rem;
+			text-transform: uppercase;
+			letter-spacing: 0.15em;
+		}
+		.comparison-panel.before .panel-header {
+			color: var(--rose);
+		}
+		.comparison-panel.after .panel-header {
+			color: var(--sage);
+		}
+		.flow-step {
+			display: flex;
+			gap: 0.5rem;
+			align-items: flex-start;
+			margin-bottom: 0.6rem;
+			font-size: 0.88rem;
+			line-height: 1.5;
+		}
+		.flow-step .step-num {
+			display: flex;
+			flex-shrink: 0;
+			align-items: center;
+			justify-content: center;
+			min-width: 1.5rem;
+			height: 1.5rem;
+			margin-top: 2px;
+			font-family: var(--font-mono);
+			font-size: 0.7rem;
+			font-weight: 600;
+			border-radius: 50%;
+		}
+		.before .step-num {
+			color: var(--text-inverse);
+			background: var(--rose);
+		}
+		.after .step-num {
+			color: var(--text-inverse);
+			background: var(--sage);
+		}
+		.flow-arrow {
+			padding-left: 2rem;
+			margin: 0.15rem 0;
+			font-size: 0.75rem;
+			color: var(--text-dim);
+			text-align: center;
+		}
+		.mermaid-wrap {
+			position: relative;
+			padding: 1.5rem;
+			overflow: auto;
+			background: var(--bg-elevated);
+			border: 1px solid var(--border);
+			border-radius: 10px;
+			box-shadow: var(--shadow-elevated);
+		}
+		.mermaid-controls {
+			position: absolute;
+			top: 0.5rem;
+			right: 0.5rem;
+			z-index: 10;
+			display: flex;
+			gap: 4px;
+		}
+		.mermaid-controls button {
+			padding: 3px 8px;
+			font-family: var(--font-mono);
+			font-size: 0.65rem;
+			color: var(--text-secondary);
+			cursor: pointer;
+			background: var(--bg-recessed);
+			border: 1px solid var(--border);
+			border-radius: 4px;
+			transition: all 0.15s;
+		}
+		.mermaid-controls button:hover {
+			color: var(--gold);
+			border-color: var(--gold);
+		}
+		.mermaid-caption {
+			margin-top: 0.75rem;
+			font-size: 0.78rem;
+			font-style: italic;
+			color: var(--text-dim);
+			text-align: center;
+		}
+		.mermaid svg {
+			max-width: 100%;
+			height: auto;
+		}
+		.mermaid-wrap.expanded {
+			position: fixed;
+			inset: 1rem;
+			z-index: 999;
+			margin: 0;
+			border-radius: 8px;
+		}
+		.mermaid-wrap.expanded .mermaid {
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			height: calc(100% - 3rem);
+			overflow: auto;
+		}
+		.card-grid {
+			display: grid;
+			grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+			gap: 1rem;
+			min-width: 0;
+		}
+		.card {
+			min-width: 0;
+			padding: 1.25rem;
+			background: var(--bg-elevated);
+			border: 1px solid var(--border);
+			border-radius: 10px;
+			box-shadow: var(--shadow-elevated);
+		}
+		.card-label {
+			margin-bottom: 0.75rem;
+			font-family: var(--font-mono);
+			font-size: 0.65rem;
+			color: var(--text-dim);
+			text-transform: uppercase;
+			letter-spacing: 0.12em;
+		}
+		.code-block {
+			min-width: 0;
+			padding: 1rem;
+			overflow-x: auto;
+			font-family: var(--font-mono);
+			font-size: 0.78rem;
+			line-height: 1.55;
+			color: var(--text-primary);
+			word-break: break-word;
+			white-space: pre-wrap;
+			background: var(--bg-recessed);
+			border: 1px solid var(--border-subtle);
+			border-radius: 6px;
+		}
+		.code-file-path {
+			margin-bottom: 0.35rem;
+			overflow: hidden;
+			text-overflow: ellipsis;
+			font-family: var(--font-mono);
+			font-size: 0.7rem;
+			color: var(--text-dim);
+			white-space: nowrap;
+		}
+		.table-wrap {
+			min-width: 0;
+			overflow-x: auto;
+			border: 1px solid var(--border);
+			border-radius: 8px;
+		}
+		table {
+			width: 100%;
+			font-size: 0.85rem;
+			border-collapse: collapse;
+		}
+		thead {
+			background: var(--bg-recessed);
+		}
+		th {
+			position: sticky;
+			top: 0;
+			padding: 0.6rem 0.8rem;
+			font-family: var(--font-mono);
+			font-size: 0.7rem;
+			color: var(--text-dim);
+			text-align: left;
+			text-transform: uppercase;
+			letter-spacing: 0.1em;
+			background: var(--bg-recessed);
+			border-bottom: 1px solid var(--border);
+		}
+		td {
+			padding: 0.55rem 0.8rem;
+			vertical-align: top;
+			border-bottom: 1px solid var(--border-subtle);
+		}
+		tbody tr:nth-child(even) {
+			background: var(--bg-accent-dim);
+		}
+		tbody tr:last-child td {
+			border-bottom: none;
+		}
+		.callout {
+			padding: 1rem 1.25rem;
+			margin-bottom: 1rem;
+			font-size: 0.88rem;
+			background: var(--bg-elevated);
+			border-left: 4px solid;
+			border-radius: 8px;
+		}
+		.callout.gold {
+			border-left-color: var(--gold);
+		}
+		.callout.rose {
+			border-left-color: var(--rose);
+		}
+		.callout.amber {
+			border-left-color: var(--amber);
+		}
+		.callout.sage {
+			border-left-color: var(--sage);
+		}
+		.callout.sky {
+			border-left-color: var(--sky);
+		}
+		.callout-label {
+			margin-bottom: 0.35rem;
+			font-family: var(--font-mono);
+			font-size: 0.68rem;
+			font-weight: 600;
+			text-transform: uppercase;
+			letter-spacing: 0.12em;
+		}
+		.callout.gold .callout-label {
+			color: var(--gold);
+		}
+		.callout.rose .callout-label {
+			color: var(--rose);
+		}
+		.callout.amber .callout-label {
+			color: var(--amber);
+		}
+		.callout.sage .callout-label {
+			color: var(--sage);
+		}
+		.callout.sky .callout-label {
+			color: var(--sky);
+		}
+		.chunk-timeline {
+			display: flex;
+			gap: 0;
+			align-items: stretch;
+			min-width: 0;
+			margin: 1rem 0;
+		}
+		.chunk-card {
+			position: relative;
+			flex: 1;
+			min-width: 0;
+			padding: 1rem;
+			background: var(--bg-elevated);
+			border: 1px solid var(--border);
+		}
+		.chunk-card:first-child {
+			border-radius: 10px 0 0 10px;
+		}
+		.chunk-card:last-child {
+			border-radius: 0 10px 10px 0;
+		}
+		.chunk-card:not(:last-child) {
+			border-right: none;
+		}
+		.chunk-card:not(:last-child)::after {
+			position: absolute;
+			top: 50%;
+			right: -8px;
+			z-index: 1;
+			width: 16px;
+			font-size: 1rem;
+			color: var(--gold);
+			text-align: center;
+			content: "→";
+			background: var(--bg-root);
+			transform: translateY(-50%);
+		}
+		.chunk-num {
+			margin-bottom: 0.25rem;
+			font-family: var(--font-mono);
+			font-size: 0.65rem;
+			color: var(--gold);
+		}
+		.chunk-name {
+			margin-bottom: 0.35rem;
+			font-size: 0.9rem;
+			font-weight: 600;
+		}
+		.chunk-tasks {
+			font-family: var(--font-mono);
+			font-size: 0.7rem;
+			color: var(--text-dim);
+		}
+		@media (max-width: 700px) {
+			.chunk-timeline {
+				flex-direction: column;
+			}
+			.chunk-card {
+				border-radius: 0 !important;
+			}
+			.chunk-card:first-child {
+				border-radius: 10px 10px 0 0 !important;
+			}
+			.chunk-card:last-child {
+				border-radius: 0 0 10px 10px !important;
+			}
+			.chunk-card:not(:last-child) {
+				border-right: 1px solid var(--border);
+				border-bottom: none;
+			}
+			.chunk-card:not(:last-child)::after {
+				top: auto;
+				right: 50%;
+				bottom: -8px;
+				content: "↓";
+				transform: translateX(50%);
+			}
+		}
+		code {
+			padding: 1px 5px;
+			font-family: var(--font-mono);
+			font-size: 0.82em;
+			background: var(--bg-recessed);
+			border: 1px solid var(--border-subtle);
+			border-radius: 3px;
+		}
+		.mt-1 {
+			margin-top: 0.5rem;
+		}
+		.mt-2 {
+			margin-top: 1rem;
+		}
+		.dim {
+			color: var(--text-dim);
+		}
+		p {
+			margin-bottom: 0.65rem;
+		}
+		p:last-child {
+			margin-bottom: 0;
+		}
+		.badge {
+			display: inline-block;
+			padding: 2px 7px;
+			font-family: var(--font-mono);
+			font-size: 0.62rem;
+			text-transform: uppercase;
+			letter-spacing: 0.08em;
+			border-radius: 3px;
+		}
+		.badge-gold {
+			color: var(--text-inverse);
+			background: var(--gold);
+		}
+		.badge-sage {
+			color: var(--text-inverse);
+			background: var(--sage);
+		}
+		.badge-rose {
+			color: var(--text-inverse);
+			background: var(--rose);
+		}
+		.badge-sky {
+			color: var(--text-inverse);
+			background: var(--sky);
+		}
+		</style>
+	</head>
+	<body>
+		<button type="button" class="theme-toggle" onclick="toggleTheme()">
+			◐ theme
+		</button>
+
+		<header class="hero">
+			<div class="hero-label">Implementation Plan · ENG-206</div>
+			<h1>Dispersal → Disbursement Bridge</h1>
+			<p class="hero-subtitle">
+				Convert eligible dispersal entries into outbound lender payout
+				transfers. One transfer per entry, idempotent, pre-checked against the
+				LENDER_PAYABLE balance gate, with effect-driven status lifecycle and
+				daily admin alerts.
+			</p>
+			<div class="hero-meta">
+				<span class="hero-meta-item"><strong>Estimate:</strong> 8 pts</span>
+				<span class="hero-meta-item"><strong>Priority:</strong> High</span>
+				<span class="hero-meta-item"
+					><strong>Provider:</strong>
+					mock_eft (Phase 1)</span
+				>
+				<span class="hero-meta-item"><strong>15 tasks</strong> · 3 chunks</span>
+				<span class="hero-meta-item"
+					><strong>Files:</strong>
+					1 new · 2 modified</span
+				>
+			</div>
+		</header>
+
+		<!-- THE PROBLEM -->
+		<div class="section">
+			<div class="section-label">Section 01</div>
+			<h2>The Problem</h2>
+			<div class="comparison-grid">
+				<div class="comparison-panel before">
+					<div class="panel-header">Before — No Bridge</div>
+					<div class="flow-step">
+						<span class="step-num">1</span
+						><span>Borrower payment settles → obligation marked settled</span>
+					</div>
+					<div class="flow-arrow">↓</div>
+					<div class="flow-step">
+						<span class="step-num">2</span
+						><span
+							>Dispersal entries created per lender (pro-rata, fee deducted)</span
+						>
+					</div>
+					<div class="flow-arrow">↓</div>
+					<div class="flow-step">
+						<span class="step-num">3</span
+						><span
+							>Entries sit in <code>pending</code> —
+							<strong>forever</strong></span
+						>
+					</div>
+					<div class="flow-arrow">
+						↓ <em style="color:var(--rose)">dead end</em>
+					</div>
+					<div class="flow-step">
+						<span class="step-num">4</span
+						><span
+							>No mechanism to convert entries into outbound lender payments</span
+						>
+					</div>
+					<div class="flow-step">
+						<span class="step-num">5</span
+						><span>No cash ledger posting for lender payouts</span>
+					</div>
+					<div class="flow-step">
+						<span class="step-num">6</span
+						><span>LENDER_PAYABLE balance accrues but never discharges</span>
+					</div>
+				</div>
+				<div class="comparison-panel after">
+					<div class="panel-header">After — Bridge Active</div>
+					<div class="flow-step">
+						<span class="step-num">1</span
+						><span
+							>Entries accumulate in <code>pending</code> with hold period</span
+						>
+					</div>
+					<div class="flow-arrow">↓</div>
+					<div class="flow-step">
+						<span class="step-num">2</span
+						><span
+							>Daily cron alerts admin:
+							<em>"N entries due across M lenders"</em></span
+						>
+					</div>
+					<div class="flow-arrow">↓</div>
+					<div class="flow-step">
+						<span class="step-num">3</span
+						><span
+							>Admin triggers bridge → disbursement gate checks balance</span
+						>
+					</div>
+					<div class="flow-arrow">↓</div>
+					<div class="flow-step">
+						<span class="step-num">4</span
+						><span
+							>Bridge creates one <code>lender_dispersal_payout</code> transfer
+							per entry</span
+						>
+					</div>
+					<div class="flow-arrow">↓</div>
+					<div class="flow-step">
+						<span class="step-num">5</span
+						><span
+							>Transfer confirms → <code>LENDER_PAYOUT_SENT</code> journal
+							posted</span
+						>
+					</div>
+					<div class="flow-arrow">↓</div>
+					<div class="flow-step">
+						<span class="step-num">6</span
+						><span
+							>Dispersal entry → <code>disbursed</code> with
+							<code>payoutDate</code></span
+						>
+					</div>
+				</div>
+			</div>
+		</div>
+
+		<!-- STATE MACHINE -->
+		<div class="section">
+			<div class="section-label">Section 02</div>
+			<h2>State Machine — Dispersal Entry Lifecycle</h2>
+			<div class="mermaid-wrap" id="sm-wrap">
+				<div class="mermaid-controls">
+					<button type="button" onclick="mermaidZoom('sm',1.2)">+</button>
+					<button type="button" onclick="mermaidZoom('sm',0.8)">−</button>
+					<button type="button" onclick="mermaidZoom('sm','reset')">1:1</button>
+					<button type="button" onclick="toggleExpand('sm-wrap')">⤢</button>
+				</div>
+				<div class="mermaid" id="sm">
+					flowchart TD A["pending"] -->|"hold period passes + admin triggers
+					bridge"| B["Bridge Processing"] B -->|"gate OK + transfer created"|
+					C["Transfer Initiated"] B -->|"gate rejects"| A C -->|"provider
+					initiation"| D["Transfer Pending"] C -->|"immediate confirm"| E D
+					-->|"FUNDS_SETTLED"| E["Transfer Confirmed"] D -->|"TRANSFER_FAILED"|
+					F["Transfer Failed"] E -->|"publishTransferConfirmed"| G["disbursed"]
+					F -->|"publishTransferFailed"| H["failed"] H -->|"resetFailedEntry"| A
+					style A fill:#2d4a22,stroke:#5a9060,color:#e6edf3 style G
+					fill:#2d4a22,stroke:#5a9060,color:#e6edf3 style H
+					fill:#4a2222,stroke:#b35757,color:#e6edf3 style B
+					fill:#3a3520,stroke:#d4a843,color:#e6edf3 style C
+					fill:#1c2a3d,stroke:#6ba3c7,color:#e6edf3 style D
+					fill:#1c2a3d,stroke:#6ba3c7,color:#e6edf3 style E
+					fill:#1c2a3d,stroke:#6ba3c7,color:#e6edf3 style F
+					fill:#4a2222,stroke:#b35757,color:#e6edf3
+				</div>
+				<div class="mermaid-caption">
+					Green = resting states. Blue = transfer lifecycle. Gold = bridge
+					processing. Red = failure path.
+				</div>
+			</div>
+		</div>
+
+		<!-- ARCHITECTURE -->
+		<div class="section">
+			<div class="section-label">Section 03</div>
+			<h2>Architecture Flow</h2>
+			<div class="mermaid-wrap" id="arch-wrap">
+				<div class="mermaid-controls">
+					<button type="button" onclick="mermaidZoom('arch',1.2)">+</button>
+					<button type="button" onclick="mermaidZoom('arch',0.8)">−</button>
+					<button type="button" onclick="mermaidZoom('arch','reset')">
+						1:1
+					</button>
+					<button type="button" onclick="toggleExpand('arch-wrap')">⤢</button>
+				</div>
+				<div class="mermaid" id="arch">
+					flowchart LR CRON["09:00 UTC Cron"] -.->|"logs alert"| ADMIN["Admin"]
+					ADMIN -->|"triggers"| BRIDGE["triggerDisbursementBridge"] BRIDGE
+					-->|"1. runQuery"| FIND["findEligibleEntries"] BRIDGE -->|"2. per
+					entry"| PROCESS["processSingleDisbursement"] PROCESS -->|"checks"|
+					GATE["Disbursement Gate"] PROCESS -->|"creates"| TR["TransferRequest"]
+					BRIDGE -->|"3. initiate"| PROVIDER["mock_eft Provider"] PROVIDER
+					-->|"GT transition"| GT["Governed Transition"] GT -->|"effect"|
+					CONFIRM["publishTransferConfirmed"] CONFIRM -->|"posts"| LEDGER["Cash
+					Ledger"] CONFIRM -->|"patches"| ENTRY["Dispersal Entry"] style CRON
+					fill:#3a3520,stroke:#d4a843,color:#e6edf3 style BRIDGE
+					fill:#3a3520,stroke:#d4a843,color:#e6edf3 style FIND
+					fill:#1c2a3d,stroke:#6ba3c7,color:#e6edf3 style PROCESS
+					fill:#1c2a3d,stroke:#6ba3c7,color:#e6edf3 style GATE
+					fill:#4a2222,stroke:#b35757,color:#e6edf3 style PROVIDER
+					fill:#2d3a4a,stroke:#8b949e,color:#e6edf3 style GT
+					fill:#2d3a4a,stroke:#8b949e,color:#e6edf3 style CONFIRM
+					fill:#2d4a22,stroke:#5a9060,color:#e6edf3 style LEDGER
+					fill:#2d4a22,stroke:#5a9060,color:#e6edf3 style ENTRY
+					fill:#2d4a22,stroke:#5a9060,color:#e6edf3 style TR
+					fill:#1c2a3d,stroke:#6ba3c7,color:#e6edf3 style ADMIN
+					fill:#2d3a4a,stroke:#8b949e,color:#e6edf3
+				</div>
+				<div class="mermaid-caption">
+					End-to-end: cron alert → admin trigger → bridge batch → per-entry
+					processing → transfer lifecycle → cash posting + status update.
+				</div>
+			</div>
+		</div>
+
+		<!-- CHUNKS -->
+		<div class="section">
+			<div class="section-label">Section 04</div>
+			<h2>Execution Chunks</h2>
+			<div class="chunk-timeline">
+				<div class="chunk-card">
+					<div class="chunk-num">Chunk 01</div>
+					<div class="chunk-name">Bridge Core</div>
+					<div class="chunk-tasks">T-001 → T-005 · 5 tasks</div>
+					<p class="dim mt-1" style="font-size:0.8rem;">
+						Types, entry query, per-entry mutation, batch orchestrator,
+						failed-entry reset
+					</p>
+				</div>
+				<div class="chunk-card">
+					<div class="chunk-num">Chunk 02</div>
+					<div class="chunk-name">Effects + Cron</div>
+					<div class="chunk-tasks">T-006 → T-009 · 4 tasks</div>
+					<p class="dim mt-1" style="font-size:0.8rem;">
+						Modify transfer effects for dispersal lifecycle, add daily alert
+						cron
+					</p>
+				</div>
+				<div class="chunk-card">
+					<div class="chunk-num">Chunk 03</div>
+					<div class="chunk-name">Tests</div>
+					<div class="chunk-tasks">T-010 → T-015 · 6 tasks</div>
+					<p class="dim mt-1" style="font-size:0.8rem;">
+						Unit helpers, happy path, idempotency, gate, failure, ENG-219 guard
+					</p>
+				</div>
+			</div>
+		</div>
+
+		<!-- STATE VARIABLES -->
+		<div class="section">
+			<div class="section-label">Section 05</div>
+			<h2>State Variables</h2>
+			<div class="card-grid">
+				<div class="card">
+					<div class="card-label">New — DisbursementBridgeResult</div>
+					<div class="code-block">
+						interface DisbursementBridgeResult { processed: number; skipped:
+						number; failed: number; transfers: Array&lt; { dispersalEntryId:
+						Id&lt;"dispersalEntries"&gt;; transferRequestId:
+						Id&lt;"transferRequests"&gt;; amount: number; lenderId:
+						Id&lt;"lenders"&gt;; }&gt;; errors: Array&lt; { dispersalEntryId:
+						Id&lt;"dispersalEntries"&gt;; reason: string; }&gt;; }
+					</div>
+				</div>
+				<div class="card">
+					<div class="card-label">Modified — dispersalEntries status</div>
+					<div class="code-block">
+						// Status transitions (existing fields): status: "pending" → Bridge
+						finds eligible status: "disbursed" → Transfer confirmed status:
+						"failed" → Transfer failed // Set on confirmation (existing field):
+						payoutDate: "2026-03-28" // YYYY-MM-DD
+					</div>
+					<p class="dim mt-1" style="font-size:0.82rem;">
+						No schema changes. All fields and status values already exist.
+					</p>
+				</div>
+				<div class="card">
+					<div class="card-label">New — BRIDGE_SOURCE</div>
+					<div class="code-block">
+						const BRIDGE_SOURCE: CommandSource = { channel: "scheduler",
+						actorType: "system", };
+					</div>
+				</div>
+				<div class="card">
+					<div class="card-label">Idempotency Key</div>
+					<div class="code-block">
+						buildDisbursementIdempotencyKey(id) // → "disbursement:kh7x5q2p8..."
+					</div>
+				</div>
+			</div>
+		</div>
+
+		<!-- MODIFIED FUNCTIONS -->
+		<div class="section">
+			<div class="section-label">Section 06</div>
+			<h2>Modified Functions</h2>
+			<h3>publishTransferConfirmed — dispersal lifecycle</h3>
+			<div class="code-file-path">
+				convex/engine/effects/transfer.ts · after cash posting block
+			</div>
+			<div class="code-block">
+				// ── Dispersal entry lifecycle ──────────────────── if
+				(transfer.transferType === "lender_dispersal_payout" &&
+				transfer.dispersalEntryId) { const settledDate = typeof
+				args.payload?.settledAt === "number" ? new
+				Date(args.payload.settledAt).toISOString().slice(0, 10) : new
+				Date().toISOString().slice(0, 10); await
+				ctx.db.patch(transfer.dispersalEntryId, { status: "disbursed",
+				payoutDate: settledDate, }); }
+			</div>
+			<p class="dim mt-1">
+				Atomic within the same mutation as LENDER_PAYOUT_SENT cash posting.
+			</p>
+
+			<h3 class="mt-2">publishTransferFailed — dispersal failure</h3>
+			<div class="code-file-path">
+				convex/engine/effects/transfer.ts · after failure metadata patch
+			</div>
+			<div class="code-block">
+				if (transfer.transferType === "lender_dispersal_payout" &&
+				transfer.dispersalEntryId) { await
+				ctx.db.patch(transfer.dispersalEntryId, { status: "failed", }); }
+			</div>
+
+			<h3 class="mt-2">crons.ts — disbursement alert</h3>
+			<div class="code-file-path">convex/crons.ts · append before export</div>
+			<div class="code-block">
+				crons.daily( "check-disbursements-due", { hourUTC: 9, minuteUTC: 0 },
+				internal.dispersal.disbursementBridge.checkDisbursementsDue );
+			</div>
+		</div>
+
+		<!-- COMMANDS -->
+		<div class="section">
+			<div class="section-label">Section 07</div>
+			<h2>Commands &amp; API</h2>
+			<div class="table-wrap">
+				<table>
+					<thead>
+						<tr>
+							<th>Function</th>
+							<th>Type</th>
+							<th>Parameters</th>
+							<th>Behavior</th>
+						</tr>
+					</thead>
+					<tbody>
+						<tr>
+							<td><code>triggerDisbursementBridge</code></td>
+							<td><span class="badge badge-gold">action</span></td>
+							<td>
+								<code>asOfDate</code>, <code>lenderId?</code>,
+								<code>limit?</code>, <code>providerCode?</code>
+							</td>
+							<td>
+								Batch orchestrator: find → process → initiate. Returns summary.
+							</td>
+						</tr>
+						<tr>
+							<td><code>findEligibleEntriesInternal</code></td>
+							<td><span class="badge badge-sky">query</span></td>
+							<td>
+								<code>asOfDate</code>, <code>lenderId?</code>,
+								<code>limit?</code>
+							</td>
+							<td>Pending entries past hold period (no RBAC).</td>
+						</tr>
+						<tr>
+							<td><code>processSingleDisbursement</code></td>
+							<td><span class="badge badge-sage">mutation</span></td>
+							<td><code>dispersalEntryId</code>, <code>providerCode</code></td>
+							<td>Idempotency → gate → create transfer.</td>
+						</tr>
+						<tr>
+							<td><code>resetFailedEntry</code></td>
+							<td><span class="badge badge-sage">mutation</span></td>
+							<td><code>dispersalEntryId</code></td>
+							<td>Reset failed → pending for retry.</td>
+						</tr>
+						<tr>
+							<td><code>checkDisbursementsDue</code></td>
+							<td><span class="badge badge-sage">mutation</span></td>
+							<td><em>none</em></td>
+							<td>Cron: count eligible, log alert. No auto-execute.</td>
+						</tr>
+					</tbody>
+				</table>
+			</div>
+		</div>
+
+		<!-- EDGE CASES -->
+		<div class="section">
+			<div class="section-label">Section 08</div>
+			<h2>Edge Cases</h2>
+			<div class="table-wrap">
+				<table>
+					<thead>
+						<tr>
+							<th>Scenario</th>
+							<th>Expected Behavior</th>
+						</tr>
+					</thead>
+					<tbody>
+						<tr>
+							<td><strong>Duplicate bridge run</strong></td>
+							<td>
+								Idempotency key prevents second transfer. Entry
+								<code>skipped</code>.
+							</td>
+						</tr>
+						<tr>
+							<td><strong>Concurrent runs</strong></td>
+							<td>
+								Second mutation hits idempotency check → returns existing. No
+								double-spend.
+							</td>
+						</tr>
+						<tr>
+							<td><strong>Insufficient LENDER_PAYABLE</strong></td>
+							<td>
+								Gate throws → entry stays pending → error in result. Others
+								continue.
+							</td>
+						</tr>
+						<tr>
+							<td><strong>Entry status race</strong></td>
+							<td>Mutation re-reads entry. If no longer pending, skips.</td>
+						</tr>
+						<tr>
+							<td><strong>Immediate provider confirm</strong></td>
+							<td>
+								initiated → confirmed in one action. Entry becomes disbursed
+								synchronously.
+							</td>
+						</tr>
+						<tr>
+							<td><strong>Async provider</strong></td>
+							<td>
+								initiated → pending. Entry stays pending until webhook fires
+								FUNDS_SETTLED.
+							</td>
+						</tr>
+						<tr>
+							<td><strong>Transfer failure</strong></td>
+							<td>
+								Entry → failed. Admin can resetFailedEntry → re-run bridge.
+							</td>
+						</tr>
+						<tr>
+							<td><strong>Legacy entries (no hold period)</strong></td>
+							<td>Treated as immediately eligible.</td>
+						</tr>
+						<tr>
+							<td><strong>Batch limit hit</strong></td>
+							<td>Remaining entries picked up on next trigger.</td>
+						</tr>
+						<tr>
+							<td><strong>ENG-219: amount guard</strong></td>
+							<td>Bridge uses entry.amount as-is. Never recalculates.</td>
+						</tr>
+						<tr>
+							<td><strong>Mock providers disabled</strong></td>
+							<td>
+								areMockTransferProvidersEnabled() check prevents usage. Must
+								configure real provider.
+							</td>
+						</tr>
+					</tbody>
+				</table>
+			</div>
+		</div>
+
+		<!-- TESTS -->
+		<div class="section">
+			<div class="section-label">Section 09</div>
+			<h2>Test Requirements</h2>
+			<div class="table-wrap">
+				<table>
+					<thead>
+						<tr>
+							<th>ID</th>
+							<th>Cat</th>
+							<th>Test</th>
+							<th>Validates</th>
+						</tr>
+					</thead>
+					<tbody>
+						<tr>
+							<td><code>T-010</code></td>
+							<td><span class="badge badge-sky">Unit</span></td>
+							<td>Idempotency key deterministic + unique</td>
+							<td>buildDisbursementIdempotencyKey()</td>
+						</tr>
+						<tr>
+							<td><code>T-011</code></td>
+							<td><span class="badge badge-sage">Integ</span></td>
+							<td>
+								Happy path: pending → transfer → confirmed → disbursed + journal
+							</td>
+							<td>Full lifecycle</td>
+						</tr>
+						<tr>
+							<td><code>T-012</code></td>
+							<td><span class="badge badge-sage">Integ</span></td>
+							<td>Bridge twice → one transfer</td>
+							<td>Idempotency</td>
+						</tr>
+						<tr>
+							<td><code>T-013</code></td>
+							<td><span class="badge badge-sage">Integ</span></td>
+							<td>Amount exceeds LENDER_PAYABLE → rejected</td>
+							<td>Disbursement gate</td>
+						</tr>
+						<tr>
+							<td><code>T-014</code></td>
+							<td><span class="badge badge-sage">Integ</span></td>
+							<td>Failed transfer → entry failed; reset → retry works</td>
+							<td>Failure + recovery</td>
+						</tr>
+						<tr>
+							<td><code>T-015</code></td>
+							<td><span class="badge badge-rose">Guard</span></td>
+							<td>Bridge uses entry.amount, not recomputed</td>
+							<td>ENG-219 snapshot</td>
+						</tr>
+					</tbody>
+				</table>
+			</div>
+			<p class="dim mt-1" style="font-size:0.82rem;">
+				File:
+				<code>convex/dispersal/__tests__/disbursementBridge.test.ts</code>
+				· Framework: convex-test + Vitest
+			</p>
+		</div>
+
+		<!-- FILES -->
+		<div class="section">
+			<div class="section-label">Section 10</div>
+			<h2>File References</h2>
+			<div class="table-wrap">
+				<table>
+					<thead>
+						<tr>
+							<th>File</th>
+							<th>Action</th>
+							<th>Changes</th>
+						</tr>
+					</thead>
+					<tbody>
+						<tr>
+							<td><code>convex/dispersal/disbursementBridge.ts</code></td>
+							<td><span class="badge badge-gold">Create</span></td>
+							<td>All bridge functions + cron alert handler</td>
+						</tr>
+						<tr>
+							<td><code>convex/engine/effects/transfer.ts</code></td>
+							<td><span class="badge badge-sky">Modify</span></td>
+							<td>
+								+8 lines in publishTransferConfirmed, +7 in
+								publishTransferFailed
+							</td>
+						</tr>
+						<tr>
+							<td><code>convex/crons.ts</code></td>
+							<td><span class="badge badge-sky">Modify</span></td>
+							<td>+5 lines: register check-disbursements-due at 09:00 UTC</td>
+						</tr>
+						<tr>
+							<td>
+								<code
+									>convex/dispersal/__tests__/disbursementBridge.test.ts</code
+								>
+							</td>
+							<td><span class="badge badge-gold">Create</span></td>
+							<td>6 test cases (1 unit + 5 integration)</td>
+						</tr>
+					</tbody>
+				</table>
+			</div>
+		</div>
+
+		<!-- NOTES -->
+		<div class="section">
+			<div class="section-label">Section 11</div>
+			<h2>Implementation Notes</h2>
+			<div class="callout sage">
+				<div class="callout-label">All Blockers Resolved</div>
+				<p>
+					ENG-199 (Cash Ledger Bridge), ENG-217 (Servicing Fee), ENG-216
+					(Granularity), ENG-220 (MockTransferProvider) — all Done.
+				</p>
+			</div>
+			<div class="callout gold">
+				<div class="callout-label">Locked Decisions</div>
+				<p>
+					<strong>Per-entry granularity.</strong>
+					<strong>Pending → Disbursed directly.</strong>
+					<strong>Admin-only Phase 1.</strong>
+					<strong>Amount passthrough (ENG-219).</strong>
+				</p>
+			</div>
+			<div class="callout rose">
+				<div class="callout-label">Critical — Do Not Recompute Amounts</div>
+				<p>
+					Bridge MUST use <code>entry.amount</code> as-is. Recomputing at
+					disbursement time violates ENG-219 if ownership changed since
+					creation.
+				</p>
+			</div>
+			<div class="callout amber">
+				<div class="callout-label">Mock Provider Gating</div>
+				<p>
+					Phase 1 uses <code>mock_eft</code> (requires
+					<code>ENABLE_MOCK_PROVIDERS="true"</code>). When VoPay sandbox
+					arrives, <code>eft_vopay</code> drops in with zero bridge changes.
+				</p>
+			</div>
+			<div class="callout sky">
+				<div class="callout-label">Downstream — ENG-219</div>
+				<p>
+					ENG-219 is blocked by this issue. The no-recompute constraint is
+					enforced by design here.
+				</p>
+			</div>
+		</div>
+
+		<!-- CRON SCHEDULE -->
+		<div class="section">
+			<div class="section-label">Section 12</div>
+			<h2>Updated Cron Schedule</h2>
+			<div class="table-wrap">
+				<table>
+					<thead>
+						<tr>
+							<th>Time</th>
+							<th>Job</th>
+							<th>Module</th>
+						</tr>
+					</thead>
+					<tbody>
+						<tr>
+							<td><code>06:00</code></td>
+							<td>Obligation lifecycle transitions</td>
+							<td>obligations/crons</td>
+						</tr>
+						<tr>
+							<td><code>07:00</code></td>
+							<td>Daily entity reconciliation</td>
+							<td>engine/reconciliation</td>
+						</tr>
+						<tr>
+							<td><code>07:15</code></td>
+							<td>Cash ledger invariant verification</td>
+							<td>cashLedger/reconciliation</td>
+						</tr>
+						<tr>
+							<td><code>08:00</code></td>
+							<td>Lender payout batch scheduling</td>
+							<td>payout/batchPayout</td>
+						</tr>
+						<tr style="background: rgba(212,168,67,0.12);">
+							<td><code>09:00</code></td>
+							<td>
+								<strong>Disbursement due alert</strong>
+								<span class="badge badge-gold" style="font-size:0.55rem;"
+									>NEW</span
+								>
+							</td>
+							<td>dispersal/disbursementBridge</td>
+						</tr>
+						<tr>
+							<td><code>*/15m</code></td>
+							<td>Dispersal self-healing</td>
+							<td>dispersal/selfHealing</td>
+						</tr>
+						<tr>
+							<td><code>*/15m</code></td>
+							<td>Transfer reconciliation</td>
+							<td>cashLedger/transferReconciliation</td>
+						</tr>
+					</tbody>
+				</table>
+			</div>
+		</div>
+
+		<script type="module">
+		import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+
+		mermaid.initialize({
+			startOnLoad: true,
+			theme:
+				document.documentElement.getAttribute("data-theme") === "dark"
+					? "dark"
+					: "default",
+			flowchart: { useMaxWidth: true, htmlLabels: true, curve: "basis" },
+		});
+		</script>
+		<script>
+		"use strict";
+		const zoomState = {};
+		function _mermaidZoom(id, factor) {
+			const el = document.getElementById(id);
+			if (!el) {
+				return;
+			}
+			if (factor === "reset") {
+				zoomState[id] = 1;
+			} else {
+				zoomState[id] = (zoomState[id] || 1) * factor;
+			}
+			const svg = el.querySelector("svg");
+			if (svg) {
+				svg.style.transform = `scale(${zoomState[id]})`;
+			}
+		}
+		function _toggleExpand(id) {
+			document.getElementById(id)?.classList.toggle("expanded");
+		}
+		function _toggleTheme() {
+			const html = document.documentElement;
+			html.setAttribute(
+				"data-theme",
+				html.getAttribute("data-theme") === "dark" ? "light" : "dark"
+			);
+		}
+		</script>
+	</body>
+</html>
