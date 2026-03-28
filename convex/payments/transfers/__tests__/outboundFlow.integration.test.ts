@@ -6,7 +6,8 @@
  * T-016: Failed outbound transfer leaves LENDER_PAYABLE intact (no money lost)
  * T-017: Deal close Leg 1 success + Leg 2 failure -> trust-held state
  *        (TRUST_CASH holds funds)
- * T-018: Manual outbound transfer -> cash ledger LENDER_PAYOUT_SENT posting
+ * T-018: Effect-level test — publishTransferConfirmed cash ledger posting
+ *        and ledger-idempotency (public path tested in handlers.integration)
  */
 
 import auditLogTest from "convex-audit-log/test";
@@ -220,7 +221,7 @@ async function insertTransfer(
 // ══════════════════════════════════════════════════════════════════════
 
 describe("T-015: obligation settlement -> dispersal -> outbound transfer -> LENDER_PAYOUT_SENT", () => {
-	it("publishTransferConfirmed posts LENDER_PAYOUT_SENT with correct debit/credit for an outbound lender dispersal payout", async () => {
+	it("publishTransferConfirmed posts LENDER_PAYOUT_SENT with correct debit/credit for an outbound lender dispersal payout linked to a dispersal entry", async () => {
 		const t = createFullHarness();
 		const seeded = await seedCoreEntities(t);
 
@@ -245,7 +246,67 @@ describe("T-015: obligation settlement -> dispersal -> outbound transfer -> LEND
 			});
 		});
 
-		// Create an outbound transfer representing a lender dispersal payout
+		// Seed an obligation + dispersal entry to model the full
+		// settlement -> dispersal -> outbound transfer pipeline.
+		const { obligationId, dispersalEntryId } = await t.run(async (ctx) => {
+			const now = Date.now();
+
+			const obligationId = await ctx.db.insert("obligations", {
+				status: "settled",
+				machineContext: {},
+				lastTransitionAt: now,
+				mortgageId: seeded.mortgageId,
+				borrowerId: seeded.borrowerId,
+				paymentNumber: 1,
+				type: "regular_interest",
+				amount: 100_000,
+				amountSettled: 100_000,
+				dueDate: Date.parse("2026-02-01T00:00:00Z"),
+				gracePeriodEnd: Date.parse("2026-02-16T00:00:00Z"),
+				createdAt: now,
+			});
+
+			// Ownership ledger account is already seeded via seedCoreEntities.
+			// We need its ID for the dispersalEntry.
+			const lenderAccount = await ctx.db
+				.query("ledger_accounts")
+				.withIndex("by_mortgage_and_lender", (q) =>
+					q
+						.eq("mortgageId", seeded.mortgageId as unknown as string)
+						.eq("lenderId", `${seeded.lenderId}`)
+				)
+				.first();
+			if (!lenderAccount) {
+				throw new Error("Expected ledger_account to exist");
+			}
+
+			const dispersalEntryId = await ctx.db.insert("dispersalEntries", {
+				mortgageId: seeded.mortgageId,
+				lenderId: seeded.lenderId,
+				lenderAccountId: lenderAccount._id,
+				amount: 75_000,
+				dispersalDate: "2026-03-01",
+				obligationId,
+				servicingFeeDeducted: 1000,
+				status: "eligible",
+				idempotencyKey: `dispersal-t015-${now}`,
+				calculationDetails: {
+					settledAmount: 100_000,
+					servicingFee: 1000,
+					distributableAmount: 99_000,
+					ownershipUnits: 10_000,
+					totalUnits: 10_000,
+					ownershipFraction: 1.0,
+					rawAmount: 75_000,
+					roundedAmount: 75_000,
+				},
+				createdAt: now,
+			});
+
+			return { obligationId, dispersalEntryId };
+		});
+
+		// Create an outbound transfer linked to the dispersal entry
 		const transferId = await insertTransfer(t, {
 			direction: "outbound",
 			transferType: "lender_dispersal_payout",
@@ -256,6 +317,8 @@ describe("T-015: obligation settlement -> dispersal -> outbound transfer -> LEND
 			borrowerId: seeded.borrowerId,
 			counterpartyId: `${seeded.lenderId}`,
 			counterpartyType: "lender",
+			dispersalEntryId,
+			obligationId,
 		});
 
 		// Confirm the transfer — should post LENDER_PAYOUT_SENT
@@ -296,9 +359,11 @@ describe("T-015: obligation settlement -> dispersal -> outbound transfer -> LEND
 			expect(creditAccount?.family).toBe("TRUST_CASH");
 			expect(creditAccount?.mortgageId).toBe(seeded.mortgageId);
 
-			// Transfer should have settledAt set
+			// Transfer should have settledAt set and link to dispersal entry
 			const transfer = await ctx.db.get(transferId);
 			expect(transfer?.settledAt).toBeDefined();
+			expect(transfer?.dispersalEntryId).toBe(dispersalEntryId);
+			expect(transfer?.obligationId).toBe(obligationId);
 		});
 	});
 });
@@ -391,15 +456,28 @@ describe("T-016: failed outbound transfer leaves LENDER_PAYABLE intact (no money
 // ══════════════════════════════════════════════════════════════════════
 
 describe("T-017: deal close Leg 1 success + Leg 2 failure -> TRUST_CASH holds funds", () => {
-	it("Leg 1 inbound confirmed posts CASH_RECEIVED, Leg 2 outbound failed posts nothing, TRUST_CASH retains funds", async () => {
+	it("Leg 1 inbound confirmed posts CASH_RECEIVED, Leg 2 outbound failed posts nothing, TRUST_CASH retains funds, deal state unaffected", async () => {
 		const t = createFullHarness();
 		const seeded = await seedCoreEntities(t);
 
 		const pipelineId = `deal-close-pipeline-${Date.now()}`;
 
-		// Seed a BORROWER_RECEIVABLE for the inbound leg (deal_principal_transfer
-		// maps to CASH_CLEARING, not BORROWER_RECEIVABLE, so no obligation needed)
-		// deal_principal_transfer maps to CASH_CLEARING credit account
+		// Seed a deal so transfers exercise the deal -> transfer link.
+		// A regression where Leg 2 failure still advances the deal to
+		// `confirmed` would be caught by the deal-state assertion below.
+		const dealId = await t.run(async (ctx) => {
+			return ctx.db.insert("deals", {
+				status: "active",
+				machineContext: {},
+				lastTransitionAt: Date.now(),
+				mortgageId: seeded.mortgageId,
+				buyerId: `${seeded.borrowerId}`,
+				sellerId: `${seeded.lenderId}`,
+				fractionalShare: 1,
+				createdAt: Date.now(),
+				createdBy: "test-t017-suite",
+			});
+		});
 
 		// Create Leg 1: inbound deal_principal_transfer (buyer -> trust)
 		const leg1TransferId = await insertTransfer(t, {
@@ -412,6 +490,7 @@ describe("T-017: deal close Leg 1 success + Leg 2 failure -> TRUST_CASH holds fu
 			counterpartyType: "borrower",
 			pipelineId,
 			legNumber: 1,
+			dealId,
 		});
 
 		// Create Leg 2: outbound deal_seller_payout (trust -> seller/lender)
@@ -426,6 +505,7 @@ describe("T-017: deal close Leg 1 success + Leg 2 failure -> TRUST_CASH holds fu
 			counterpartyType: "lender",
 			pipelineId,
 			legNumber: 2,
+			dealId,
 		});
 
 		// Confirm Leg 1 — should post CASH_RECEIVED (debit TRUST_CASH, credit CASH_CLEARING)
@@ -502,7 +582,7 @@ describe("T-017: deal close Leg 1 success + Leg 2 failure -> TRUST_CASH holds fu
 			expect(leg1Entries[0].entryType).toBe("CASH_RECEIVED");
 		});
 
-		// Verify: Both transfers queryable by pipelineId
+		// Verify: Both transfers queryable by pipelineId and linked to dealId
 		await t.run(async (ctx) => {
 			const pipelineTransfers = await ctx.db
 				.query("transferRequests")
@@ -517,11 +597,13 @@ describe("T-017: deal close Leg 1 success + Leg 2 failure -> TRUST_CASH holds fu
 			expect(leg1).toBeDefined();
 			expect(leg1?._id).toBe(leg1TransferId);
 			expect(leg1?.settledAt).toBeDefined();
+			expect(leg1?.dealId).toBe(dealId);
 
 			expect(leg2).toBeDefined();
 			expect(leg2?._id).toBe(leg2TransferId);
 			expect(leg2?.failedAt).toBeDefined();
 			expect(leg2?.failureCode).toBe("NETWORK_ERROR");
+			expect(leg2?.dealId).toBe(dealId);
 		});
 
 		// Verify: TRUST_CASH account has the funds from Leg 1 (debit-normal, so
@@ -541,15 +623,30 @@ describe("T-017: deal close Leg 1 success + Leg 2 failure -> TRUST_CASH holds fu
 			expect(trustCash.cumulativeDebits).toBe(200_000n);
 			expect(trustCash.cumulativeCredits).toBe(0n);
 		});
+
+		// Verify: Deal state remains "active" — Leg 2 failure must NOT advance
+		// the deal to "confirmed" or any other terminal state.
+		await t.run(async (ctx) => {
+			const deal = await ctx.db.get(dealId);
+			expect(deal).not.toBeNull();
+			expect(deal?.status).toBe("active");
+		});
 	});
 });
 
 // ══════════════════════════════════════════════════════════════════════
-// T-018: Manual outbound transfer -> cash ledger LENDER_PAYOUT_SENT
+// T-018: Effect-level test — publishTransferConfirmed cash ledger posting
+//
+// NOTE: This test calls the publishTransferConfirmed effect handler
+// directly, bypassing the public `confirmManualTransfer` mutation's
+// provider/status guards and providerRef update. The public-path
+// integration (initiate -> pending -> confirmManualTransfer -> confirmed)
+// is covered in handlers.integration.test.ts. This test isolates the
+// ledger posting logic and its idempotency at the effect layer.
 // ══════════════════════════════════════════════════════════════════════
 
-describe("T-018: manual outbound transfer -> LENDER_PAYOUT_SENT posting", () => {
-	it("manual outbound lender_dispersal_payout posts LENDER_PAYOUT_SENT with correct accounts", async () => {
+describe("T-018: effect-level publishTransferConfirmed -> LENDER_PAYOUT_SENT posting", () => {
+	it("publishTransferConfirmed effect posts LENDER_PAYOUT_SENT with correct accounts and is ledger-idempotent", async () => {
 		const t = createFullHarness();
 		const seeded = await seedCoreEntities(t);
 
@@ -586,7 +683,7 @@ describe("T-018: manual outbound transfer -> LENDER_PAYOUT_SENT posting", () => 
 			counterpartyType: "lender",
 		});
 
-		// Confirm the manual transfer
+		// Invoke the effect handler directly (bypasses public confirmManualTransfer guards)
 		await t.run(async (ctx) => {
 			await publishTransferConfirmedMutation._handler(ctx, {
 				entityId: transferId,
@@ -632,8 +729,10 @@ describe("T-018: manual outbound transfer -> LENDER_PAYOUT_SENT posting", () => 
 			expect(transfer?.settledAt).toBeDefined();
 		});
 
-		// Verify: Idempotency — confirming again does NOT create a second entry
-		// (postCashEntryInternal has idempotency key check)
+		// Verify: Ledger-level idempotency — calling the effect again does NOT
+		// create a second cash entry. Note: the public confirmManualTransfer
+		// rejects already-confirmed transfers; this tests the deeper
+		// postCashEntryInternal idempotency guard.
 		await t.run(async (ctx) => {
 			await publishTransferConfirmedMutation._handler(ctx, {
 				entityId: transferId,
