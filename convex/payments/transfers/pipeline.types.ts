@@ -70,13 +70,77 @@ export function validatePipelineFields(
 	if (hasPipeline !== hasLeg) {
 		return `pipelineId and legNumber must both be set or both be absent. Got pipelineId=${pipelineId}, legNumber=${legNumber}`;
 	}
+	if (hasLeg && (!Number.isInteger(legNumber) || legNumber <= 0)) {
+		return `legNumber must be a positive integer. Got legNumber=${legNumber}`;
+	}
 	return null;
+}
+
+// ── Status Progression ──────────────────────────────────────────────
+/**
+ * Defines a status progression ranking where higher numbers represent
+ * more-progressed states.  When multiple transfers exist for the same
+ * pipeline leg (e.g. after a retry), we pick the most-progressed
+ * attempt so that a successful retry overrides a prior failed attempt.
+ *
+ * Terminal-success statuses ("confirmed") rank highest, followed by
+ * active in-flight statuses, then terminal-failure statuses, then the
+ * initial state.
+ */
+const STATUS_PROGRESSION: Record<string, number> = {
+	initiated: 0,
+	pending: 1,
+	processing: 2,
+	failed: 3,
+	cancelled: 4,
+	reversed: 5,
+	confirmed: 6,
+	// Legacy statuses
+	approved: 2,
+	completed: 6,
+};
+
+function statusProgression(status: string): number {
+	return STATUS_PROGRESSION[status] ?? -1;
+}
+
+// ── Leg Normalization ───────────────────────────────────────────────
+/**
+ * Reduces a list of pipeline legs to one effective attempt per leg
+ * number by picking the most-progressed transfer for each leg.
+ *
+ * After retries, multiple transfers share the same pipelineId and
+ * legNumber. Using `.find()` (first-match) would return a stale failed
+ * attempt if it appeared before the retry row.  This helper sorts by
+ * status progression descending so the most-progressed attempt wins.
+ */
+export function normalizePipelineLegs<
+	T extends Pick<Doc<"transferRequests">, "legNumber" | "status">,
+>(legs: T[]): Map<number, T> {
+	const bestByLeg = new Map<number, T>();
+
+	for (const leg of legs) {
+		if (leg.legNumber == null) continue;
+
+		const existing = bestByLeg.get(leg.legNumber);
+		if (
+			!existing ||
+			statusProgression(leg.status) > statusProgression(existing.status)
+		) {
+			bestByLeg.set(leg.legNumber, leg);
+		}
+	}
+
+	return bestByLeg;
 }
 
 // ── Pipeline Status Computation ─────────────────────────────────────
 
 /**
  * Derives pipeline status from the statuses of its constituent legs.
+ *
+ * When multiple transfers exist per leg (after retries), normalizes to
+ * the most-progressed attempt per leg before deriving status.
  *
  * Rules:
  * - All legs confirmed → completed
@@ -88,8 +152,9 @@ export function validatePipelineFields(
 export function computePipelineStatus(
 	legs: Pick<Doc<"transferRequests">, "legNumber" | "status">[]
 ): PipelineStatus {
-	const leg1 = legs.find((l) => l.legNumber === 1);
-	const leg2 = legs.find((l) => l.legNumber === 2);
+	const normalized = normalizePipelineLegs(legs);
+	const leg1 = normalized.get(1);
+	const leg2 = normalized.get(2);
 
 	// No legs at all — shouldn't happen, but be safe
 	if (!leg1) {

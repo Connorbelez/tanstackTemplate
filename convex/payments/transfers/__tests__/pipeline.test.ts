@@ -316,4 +316,29 @@ describe("validatePipelineFields", () => {
 		const result = validatePipelineFields(undefined, 1);
 		expect(result).toContain("pipelineId and legNumber must both be set");
 	});
+
+	it("returns error when legNumber is a float", () => {
+		const result = validatePipelineFields("pipeline-123", 1.5);
+		expect(result).toContain("legNumber must be a positive integer");
+	});
+
+	it("returns error when legNumber is zero", () => {
+		const result = validatePipelineFields("pipeline-123", 0);
+		expect(result).toContain("legNumber must be a positive integer");
+	});
+
+	it("returns error when legNumber is negative", () => {
+		const result = validatePipelineFields("pipeline-123", -1);
+		expect(result).toContain("legNumber must be a positive integer");
+	});
+
+	it("returns error when legNumber is NaN", () => {
+		const result = validatePipelineFields("pipeline-123", Number.NaN);
+		expect(result).toContain("legNumber must be a positive integer");
+	});
+
+	it("returns error when legNumber is Infinity", () => {
+		const result = validatePipelineFields("pipeline-123", Number.POSITIVE_INFINITY);
+		expect(result).toContain("legNumber must be a positive integer");
+	});
 });
