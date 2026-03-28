@@ -191,6 +191,9 @@ async function calculateServicingSplit(
 		args.obligation.type === "regular_interest"
 			? await resolveServicingFeeConfig(ctx.db, args.mortgage, args.settledDate)
 			: null;
+	// ENG-217: Fee basis is current outstanding principal (mortgage.principal).
+	// This means fees decrease as principal is repaid — standard amortizing mortgage behavior.
+	// The principalBalance used is stored in servicingFeeEntries for audit verification.
 	const feeDue =
 		servicingConfig === null
 			? 0
@@ -470,7 +473,7 @@ export const createDispersalEntries = internalMutation({
 				amount: share.amount,
 				dispersalDate: args.settledDate,
 				obligationId: args.obligationId,
-				servicingFeeDeducted: feeCashApplied,
+				servicingFeeDeducted: 0,
 				status: "pending",
 				idempotencyKey: `${args.idempotencyKey}:${share.lenderId}`,
 				paymentMethod: resolvedMethod,
@@ -550,6 +553,7 @@ export const createDispersalEntries = internalMutation({
 			obligationId: args.obligationId,
 			mortgageId: args.mortgageId,
 			settledDate: args.settledDate,
+			settledAmount: args.settledAmount,
 			servicingFee: feeCashApplied,
 			entries: entries.map((entry) => ({
 				dispersalEntryId: entry.id,

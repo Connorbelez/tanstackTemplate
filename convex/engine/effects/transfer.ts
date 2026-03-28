@@ -126,39 +126,18 @@ export const publishTransferConfirmed = internalMutation({
 		// ── Pipeline orchestration (post-cash, async-scheduled) ───────
 		// Cash posting is committed above. Pipeline follow-ups are scheduled
 		// asynchronously so failures don't roll back cash ledger entries.
-		// Wrapped in try/catch: in Convex, an unhandled throw rolls back ALL
-		// writes in this mutation — including the settled patch and cash postings.
 		try {
 			await handlePipelineLegConfirmed(ctx, transfer);
-
-			// ── Commitment deposit → offer condition progression (stub) ────
-			if (transfer.transferType === "commitment_deposit_collection") {
-				// TODO(ENG-209): When the offer condition system exists, fire SYSTEM_VERIFIED
-				// on the deposit offer condition to trigger cascadeUnlock. The orchestrator
-				// (`collectCommitmentDeposit`) must be extended to accept `offerConditionId`
-				// and persist it on `transfer.metadata` (e.g. `offerConditionId`) — it is not
-				// written today, so the following pseudocode would no-op until then:
-				//
-				// const conditionId = transfer.metadata?.offerConditionId;
-				// if (conditionId) {
-				//   await ctx.scheduler.runAfter(0, internal.engine.transition.executeTransition, {
-				//     entityType: 'offerCondition',
-				//     entityId: conditionId,
-				//     eventType: 'SYSTEM_VERIFIED',
-				//     source: args.source,
-				//   });
-				// }
-				console.warn(
-					`[publishTransferConfirmed] STUB: Commitment deposit confirmed for transfer ${args.entityId}. ` +
-						"Offer condition progression not wired — offer condition system / metadata not implemented."
-				);
-			}
 		} catch (error) {
+			// Intentionally do not rethrow: pipeline failures must not roll back
+			// settledAt or cash-ledger postings already performed above.
 			console.error(
-				`[publishTransferConfirmed] Pipeline follow-up failed for transfer ${args.entityId}`,
-				error
+				"[publishTransferConfirmed] Pipeline orchestration failed after cash posting",
+				{
+					transferId: args.entityId,
+					error,
+				}
 			);
-			// Intentionally do not rethrow: cash postings and settledAt must remain committed.
 		}
 	},
 });
@@ -360,9 +339,9 @@ export const publishTransferFailed = internalMutation({
 /**
  * Handles pipeline-aware follow-up after a transfer leg fails.
  *
- * - Leg 1 fails: deal stays in fundsTransfer.pending. No Leg 2 created. Admin notified.
+ * - Leg 1 fails: deal stays in fundsTransfer.pending. No Leg 2 created.
  * - Leg 2 fails after Leg 1 confirmed: partial failure — buyer funds held in trust.
- *   Admin notified. Manual resolution required.
+ *   Manual resolution by an admin is required; failure details are logged.
  *
  * Does NOT auto-cancel Leg 1 if Leg 2 fails — funds already received.
  */
@@ -403,6 +382,7 @@ async function handlePipelineLegFailed(
 			},
 		},
 	});
+
 
 	if (transfer.legNumber === 1) {
 		console.error(

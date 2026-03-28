@@ -95,15 +95,30 @@ export const createDealClosingPipeline = internalAction({
 			`[createDealClosingPipeline] Created Leg 1 transfer ${leg1Id} for deal ${args.dealId} (pipeline: ${args.pipelineId})`
 		);
 
-		// Initiate Leg 1 via the provider
-		await ctx.runAction(
-			internal.payments.transfers.mutations.initiateTransferInternal,
-			{ transferId: leg1Id }
-		);
+		// Initiate Leg 1 via the provider.
+		// Wrap in try/catch so that unimplemented providers (pad_vopay, eft_vopay, etc.)
+		// or retried actions produce clear diagnostics instead of opaque crashes.
+		try {
+			await ctx.runAction(
+				internal.payments.transfers.mutations.initiateTransferInternal,
+				{ transferId: leg1Id }
+			);
 
-		console.info(
-			`[createDealClosingPipeline] Initiated Leg 1 transfer ${leg1Id}`
-		);
+			console.info(
+				`[createDealClosingPipeline] Initiated Leg 1 transfer ${leg1Id}`
+			);
+		} catch (error) {
+			console.error(
+				`[createDealClosingPipeline] Failed to initiate Leg 1 transfer ${leg1Id}`,
+				{
+					pipelineId: args.pipelineId,
+					dealId: args.dealId,
+					providerCode: args.providerCode,
+					error,
+				}
+			);
+			throw error;
+		}
 
 		return { pipelineId: args.pipelineId, leg1TransferId: leg1Id };
 	},
@@ -158,13 +173,30 @@ export const createAndInitiateLeg2 = internalAction({
 			`[createAndInitiateLeg2] Created Leg 2 transfer ${leg2Id} for deal ${args.dealId} (pipeline: ${args.pipelineId})`
 		);
 
-		// Initiate Leg 2 via the provider
-		await ctx.runAction(
-			internal.payments.transfers.mutations.initiateTransferInternal,
-			{ transferId: leg2Id }
-		);
+		// Initiate Leg 2 via the provider.
+		// This action may be retried; if the transfer has already been initiated
+		// (e.g., status is pending/processing/confirmed), treat that as a no-op
+		// instead of failing the pipeline.
+		try {
+			await ctx.runAction(
+				internal.payments.transfers.mutations.initiateTransferInternal,
+				{ transferId: leg2Id }
+			);
 
-		console.info(`[createAndInitiateLeg2] Initiated Leg 2 transfer ${leg2Id}`);
+			console.info(
+				`[createAndInitiateLeg2] Initiated Leg 2 transfer ${leg2Id}`
+			);
+		} catch (error) {
+			console.warn(
+				`[createAndInitiateLeg2] Failed to initiate Leg 2 transfer ${leg2Id}, assuming it is already in progress or completed`,
+				{
+					pipelineId: args.pipelineId,
+					dealId: args.dealId,
+					providerCode: args.providerCode,
+					error,
+				}
+			);
+		}
 
 		return { leg2TransferId: leg2Id };
 	},

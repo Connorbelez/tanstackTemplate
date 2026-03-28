@@ -153,8 +153,40 @@ export const createTransferRequest = paymentMutation
 		legNumber: v.optional(legNumberValidator),
 	})
 	.handler(async (ctx, args) => {
-		// 1. Validate inputs (amount, pipeline co-requirement, mock provider guard, counterparty ID)
-		const counterpartyId = validateTransferCreationInput(args);
+		// 1. Validate amount is positive integer (safe-integer cents)
+		if (!Number.isInteger(args.amount) || args.amount <= 0) {
+			throw new ConvexError("Amount must be a positive integer (cents)");
+		}
+
+		// 1a. Pipeline fields must be co-required: both present or both absent
+		const pipelineError = validatePipelineFields(
+			args.pipelineId,
+			args.legNumber
+		);
+		if (pipelineError) {
+			throw new ConvexError(pipelineError);
+		}
+
+		// 1b. Guard against auth-ID / entity-ID confusion (ENG-218).
+		// counterpartyId must stay in domain entity ID space.
+		let counterpartyId: TransferRequestInput["counterpartyId"];
+		try {
+			counterpartyId = toDomainEntityId(args.counterpartyId, "counterpartyId");
+		} catch (error) {
+			if (error instanceof InvalidDomainEntityIdError) {
+				throw new ConvexError(error.message);
+			}
+			throw error;
+		}
+
+		if (
+			(args.providerCode === "mock_pad" || args.providerCode === "mock_eft") &&
+			!areMockTransferProvidersEnabled()
+		) {
+			throw new ConvexError(
+				`Transfer provider "${args.providerCode}" is disabled by default. Set ENABLE_MOCK_PROVIDERS="true" to opt in.`
+			);
+		}
 
 		// 2. Idempotency check
 		const existing = await ctx.db
@@ -519,6 +551,7 @@ export const initiateTransferInternal = internalAction({
 				}
 			)
 		);
+
 
 		const input: TransferRequestInput = {
 			amount: transfer.amount,
