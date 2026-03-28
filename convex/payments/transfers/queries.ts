@@ -222,13 +222,18 @@ export const getPipelineStatus = paymentQuery
 			.withIndex("by_deal", (q) => q.eq("dealId", args.dealId))
 			.collect();
 
-		const pipelineLegs = transfers.filter((t) => t.pipelineId != null);
+		const allPipelineLegs = transfers.filter((t) => t.pipelineId != null);
 
-		if (pipelineLegs.length === 0) {
+		if (allPipelineLegs.length === 0) {
 			return null;
 		}
 
-		const pipelineId = pipelineLegs[0].pipelineId;
+		// Use the first encountered pipelineId and filter legs to only that pipeline,
+		// preventing cross-pipeline contamination if a deal has multiple pipelines.
+		const pipelineId = allPipelineLegs[0].pipelineId;
+		const pipelineLegs = allPipelineLegs.filter(
+			(leg) => leg.pipelineId === pipelineId
+		);
 		const status = computePipelineStatus(pipelineLegs);
 
 		return {
@@ -252,7 +257,9 @@ export const getPipelineStatus = paymentQuery
 // ── getTransfersByPipeline ──────────────────────────────────────────
 /**
  * Returns all transfer legs for a specific pipeline ID.
- * Uses the by_pipeline index for efficient lookup.
+ * Filters by exact pipelineId match via the by_pipeline index
+ * (indexed on [pipelineId, legNumber]) to ensure only legs
+ * belonging to the requested pipeline are returned.
  */
 export const getTransfersByPipeline = paymentQuery
 	.input({
@@ -264,10 +271,16 @@ export const getTransfersByPipeline = paymentQuery
 			.withIndex("by_pipeline", (q) => q.eq("pipelineId", args.pipelineId))
 			.collect();
 
+		// Defensive: ensure all returned legs match the requested pipelineId.
+		// The index guarantees this, but we guard against index misconfiguration.
+		const filteredLegs = legs.filter(
+			(leg) => leg.pipelineId === args.pipelineId
+		);
+
 		return {
 			pipelineId: args.pipelineId,
-			status: computePipelineStatus(legs),
-			legs,
+			status: computePipelineStatus(filteredLegs),
+			legs: filteredLegs,
 		};
 	})
 	.public();
