@@ -897,12 +897,6 @@ export const collectCommitmentDepositAdmin = paymentAction
 		providerCode: v.optional(providerCodeValidator),
 	})
 	.handler(async (ctx, args) => {
-		if (!(args.dealId || args.applicationId)) {
-			throw new ConvexError(
-				"At least one of dealId or applicationId must be provided"
-			);
-		}
-
 		const validationError = getCommitmentDepositValidationError({
 			dealId: args.dealId,
 			applicationId: args.applicationId,
@@ -927,9 +921,10 @@ export const collectCommitmentDepositAdmin = paymentAction
 				throw new ConvexError("mortgageId does not match the deal's mortgage");
 			}
 
-			if (deal.buyerId !== args.borrowerId) {
-				throw new ConvexError("borrowerId must match the deal buyer");
-			}
+			// TODO(ENG-xxx): deal.buyerId is a WorkOS authId (v.string()), but
+			// args.borrowerId is v.id("borrowers"). A proper ownership check needs
+			// to resolve borrower → user → authId before comparing to deal.buyerId.
+			// Skipping this check until the schema is unified. See PR #300 review.
 		}
 
 		const idempotencyKey = buildCommitmentDepositIdempotencyKey(
@@ -965,7 +960,7 @@ export const collectCommitmentDepositAdmin = paymentAction
 
 			if (existing.status !== "initiated") {
 				throw new ConvexError(
-					`A commitment deposit transfer exists in status "${existing.status}" (${existing._id}). Resolve or cancel before retrying.`
+					`A commitment deposit transfer exists in terminal status "${existing.status}" (${existing._id}). This transfer cannot be retried — resolve at the deal level or create a new deposit collection.`
 				);
 			}
 		}
