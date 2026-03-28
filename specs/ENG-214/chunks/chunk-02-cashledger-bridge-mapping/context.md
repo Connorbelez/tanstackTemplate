@@ -55,13 +55,20 @@ Format: `cash-ledger:{entry-type}:{source-type}:{source-id}`
 **File:** `convex/payments/cashLedger/types.ts`
 
 Entry types:
+- `OBLIGATION_ACCRUED` — obligation lifecycle accrual
 - `CASH_RECEIVED` — inbound money
+- `CASH_APPLIED` — cash applied to obligation
+- `LENDER_PAYABLE_CREATED` — lender payable allocation
+- `SERVICING_FEE_RECOGNIZED` — servicing fee allocation
 - `LENDER_PAYOUT_SENT` — outbound to lender
+- `OBLIGATION_WAIVED` — obligation waiver
+- `OBLIGATION_WRITTEN_OFF` — obligation write-off
 - `REVERSAL` — compensating entry
 - `CORRECTION` — manual adjustment
-- `WAIVER` — write-off
+- `SUSPENSE_ESCALATED` — escalated to suspense
+- `SUSPENSE_ROUTED` — routed from suspense
 
-Account families: `TRUST_CASH`, `BORROWER_RECEIVABLE`, `LENDER_PAYABLE`, `CASH_CLEARING`, `UNAPPLIED_CASH`, `SUSPENSE`, `CONTROL`
+Account families: `TRUST_CASH`, `BORROWER_RECEIVABLE`, `LENDER_PAYABLE`, `CASH_CLEARING`, `UNAPPLIED_CASH`, `SERVICING_REVENUE`, `WRITE_OFF`, `SUSPENSE`, `CONTROL`
 
 ## Webhook Pipeline
 
