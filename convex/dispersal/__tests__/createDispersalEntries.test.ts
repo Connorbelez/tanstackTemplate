@@ -1,16 +1,29 @@
+import auditLogTest from "convex-audit-log/test";
 import { convexTest } from "convex-test";
 import { beforeEach, describe, expect, it } from "vitest";
+import workflowSchema from "../../../node_modules/@convex-dev/workflow/dist/component/schema.js";
+import workpoolSchema from "../../../node_modules/@convex-dev/workpool/dist/component/schema.js";
 import type { Doc, Id } from "../../_generated/dataModel";
 import type { MutationCtx } from "../../_generated/server";
+import auditTrailSchema from "../../components/auditTrail/schema";
 import schema from "../../schema";
 import { createDispersalEntries } from "../createDispersalEntries";
 
 const modules = import.meta.glob("/convex/**/*.ts");
+const auditTrailModules = import.meta.glob(
+	"/convex/components/auditTrail/**/*.ts"
+);
+const workflowModules = import.meta.glob(
+	"/node_modules/@convex-dev/workflow/dist/component/**/*.js"
+);
+const workpoolModules = import.meta.glob(
+	"/node_modules/@convex-dev/workpool/dist/component/**/*.js"
+);
 
 const DEFAULT_SOURCE = { type: "system" as const, channel: "test" };
 const NO_ACTIVE_POSITIONS_PATTERN = /no active positions for mortgage/i;
 
-type TestHarness = ReturnType<typeof convexTest>;
+type TestHarness = ReturnType<typeof createHarness>;
 
 type CreateDispersalEntriesResult = Awaited<
 	ReturnType<CreateDispersalEntriesHandler["_handler"]>
@@ -45,7 +58,12 @@ const createDispersalEntriesMutation =
 	createDispersalEntries as unknown as CreateDispersalEntriesHandler;
 
 function createHarness() {
-	return convexTest(schema, modules);
+	const t = convexTest(schema, modules);
+	auditLogTest.register(t, "auditLog");
+	t.registerComponent("auditTrail", auditTrailSchema, auditTrailModules);
+	t.registerComponent("workflow", workflowSchema, workflowModules);
+	t.registerComponent("workflow/workpool", workpoolSchema, workpoolModules);
+	return t;
 }
 
 async function seedDispersalScenario(
@@ -410,6 +428,91 @@ describe("createDispersalEntries", () => {
 				idempotencyKey: "dispersal:test:no-positions",
 			})
 		).rejects.toThrow(NO_ACTIVE_POSITIONS_PATTERN);
+	});
+
+	it("computes lower servicing fee when mortgage principal decreases (ENG-217)", async () => {
+		const seeded = await seedDispersalScenario(t);
+
+		// First dispersal at default principal (10_000_000 cents = $100k)
+		const firstResult = await runCreateDispersal(t, {
+			obligationId: seeded.obligationId,
+			mortgageId: seeded.mortgageId,
+			settledAmount: 100_000,
+			settledDate: "2026-03-01",
+			idempotencyKey: "dispersal:test:principal-sensitivity-1",
+		});
+
+		const firstFeeEntry = await t.run(async (ctx) =>
+			firstResult.servicingFeeEntryId
+				? ctx.db.get(firstResult.servicingFeeEntryId)
+				: null
+		);
+
+		expect(firstFeeEntry).not.toBeNull();
+		expect(firstFeeEntry?.principalBalance).toBe(10_000_000);
+
+		// Reduce mortgage principal to 8_000_000 (simulating principal paydown)
+		await t.run(async (ctx) => {
+			await ctx.db.patch(seeded.mortgageId, { principal: 8_000_000 });
+		});
+
+		// Create a second obligation for the same mortgage
+		const secondObligationId = await t.run(async (ctx) => {
+			const priorObligation = await ctx.db.get(seeded.obligationId);
+			if (!priorObligation) {
+				throw new Error("seeded obligation not found");
+			}
+			return ctx.db.insert("obligations", {
+				status: "settled",
+				mortgageId: seeded.mortgageId,
+				borrowerId: priorObligation.borrowerId,
+				paymentNumber: 2,
+				type: "regular_interest",
+				amount: 100_000,
+				amountSettled: 100_000,
+				dueDate: Date.parse("2026-04-01T00:00:00Z"),
+				gracePeriodEnd: Date.parse("2026-04-01T00:00:00Z"),
+				settledAt: Date.parse("2026-04-01T00:00:00Z"),
+				createdAt: Date.now(),
+			});
+		});
+
+		// Second dispersal at reduced principal (8_000_000 cents = $80k)
+		const secondResult = await runCreateDispersal(t, {
+			obligationId: secondObligationId,
+			mortgageId: seeded.mortgageId,
+			settledAmount: 100_000,
+			settledDate: "2026-04-01",
+			idempotencyKey: "dispersal:test:principal-sensitivity-2",
+		});
+
+		const secondFeeEntry = await t.run(async (ctx) =>
+			secondResult.servicingFeeEntryId
+				? ctx.db.get(secondResult.servicingFeeEntryId)
+				: null
+		);
+
+		expect(secondFeeEntry).not.toBeNull();
+		expect(secondFeeEntry?.principalBalance).toBe(8_000_000);
+
+		if (firstFeeEntry === null || secondFeeEntry === null) {
+			throw new Error("expected servicing fee entries");
+		}
+		if (
+			firstFeeEntry.feeDue === undefined ||
+			secondFeeEntry.feeDue === undefined
+		) {
+			throw new Error("expected feeDue on servicing fee entries");
+		}
+
+		// Fee should decrease proportionally with principal
+		expect(secondFeeEntry.feeDue).toBeLessThan(firstFeeEntry.feeDue);
+
+		// Verify exact values: 0.01 * principal / 12
+		// First: round(0.01 * 10_000_000 / 12) = round(8333.33) = 8333
+		// Second: round(0.01 * 8_000_000 / 12) = round(6666.67) = 6667
+		expect(firstFeeEntry.feeDue).toBe(8333);
+		expect(secondFeeEntry.feeDue).toBe(6667);
 	});
 
 	it("records servicing receivable when the fee exceeds collected cash", async () => {
