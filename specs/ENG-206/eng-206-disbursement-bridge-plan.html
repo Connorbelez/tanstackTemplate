@@ -701,14 +701,16 @@
 					<button type="button" onclick="toggleExpand('sm-wrap')">⤢</button>
 				</div>
 				<div class="mermaid" id="sm">
-					flowchart TD A["pending"] -->|"hold period passes + admin triggers
-					bridge"| B["Bridge Processing"] B -->|"gate OK + transfer created"|
-					C["Transfer Initiated"] B -->|"gate rejects"| A C -->|"provider
-					initiation"| D["Transfer Pending"] C -->|"immediate confirm"| E D
-					-->|"FUNDS_SETTLED"| E["Transfer Confirmed"] D -->|"TRANSFER_FAILED"|
-					F["Transfer Failed"] E -->|"publishTransferConfirmed"| G["disbursed"]
-					F -->|"publishTransferFailed"| H["failed"] H -->|"resetFailedEntry"| A
-					style A fill:#2d4a22,stroke:#5a9060,color:#e6edf3 style G
+					flowchart TD A["pending"] --&gt;|"hold period passes + admin triggers
+					bridge"| B["Bridge Processing"] B --&gt;|"gate OK + transfer created"|
+					C["Transfer Initiated"] B --&gt;|"gate rejects"| A C --&gt;|"provider
+					initiation"| D["Transfer Pending"] C --&gt;|"immediate confirm"| E D
+					--&gt;|"FUNDS_SETTLED"| E["Transfer Confirmed"] D
+					--&gt;|"TRANSFER_FAILED"| F["Transfer Failed"] E
+					--&gt;|"publishTransferConfirmed"| G["disbursed"] F
+					--&gt;|"publishTransferFailed"| H["failed"] H
+					--&gt;|"resetFailedEntry"| A style A
+					fill:#2d4a22,stroke:#5a9060,color:#e6edf3 style G
 					fill:#2d4a22,stroke:#5a9060,color:#e6edf3 style H
 					fill:#4a2222,stroke:#b35757,color:#e6edf3 style B
 					fill:#3a3520,stroke:#d4a843,color:#e6edf3 style C
@@ -738,15 +740,17 @@
 					<button type="button" onclick="toggleExpand('arch-wrap')">⤢</button>
 				</div>
 				<div class="mermaid" id="arch">
-					flowchart LR CRON["09:00 UTC Cron"] -.->|"logs alert"| ADMIN["Admin"]
-					ADMIN -->|"triggers"| BRIDGE["triggerDisbursementBridge"] BRIDGE
-					-->|"1. runQuery"| FIND["findEligibleEntries"] BRIDGE -->|"2. per
-					entry"| PROCESS["processSingleDisbursement"] PROCESS -->|"checks"|
-					GATE["Disbursement Gate"] PROCESS -->|"creates"| TR["TransferRequest"]
-					BRIDGE -->|"3. initiate"| PROVIDER["mock_eft Provider"] PROVIDER
-					-->|"GT transition"| GT["Governed Transition"] GT -->|"effect"|
-					CONFIRM["publishTransferConfirmed"] CONFIRM -->|"posts"| LEDGER["Cash
-					Ledger"] CONFIRM -->|"patches"| ENTRY["Dispersal Entry"] style CRON
+					flowchart LR CRON["09:00 UTC Cron"] -.-&gt;|"logs alert"|
+					ADMIN["Admin"] ADMIN --&gt;|"triggers"|
+					BRIDGE["triggerDisbursementBridge"] BRIDGE --&gt;|"1. runQuery"|
+					FIND["findEligibleEntries"] BRIDGE --&gt;|"2. per entry"|
+					PROCESS["processSingleDisbursement"] PROCESS --&gt;|"checks"|
+					GATE["Disbursement Gate"] PROCESS --&gt;|"creates"|
+					TR["TransferRequest"] BRIDGE --&gt;|"3. initiate"| PROVIDER["mock_eft
+					Provider"] PROVIDER --&gt;|"GT transition"| GT["Governed Transition"]
+					GT --&gt;|"effect"| CONFIRM["publishTransferConfirmed"] CONFIRM
+					--&gt;|"posts"| LEDGER["Cash Ledger"] CONFIRM --&gt;|"patches"|
+					ENTRY["Dispersal Entry"] style CRON
 					fill:#3a3520,stroke:#d4a843,color:#e6edf3 style BRIDGE
 					fill:#3a3520,stroke:#d4a843,color:#e6edf3 style FIND
 					fill:#1c2a3d,stroke:#6ba3c7,color:#e6edf3 style PROCESS
@@ -1278,6 +1282,9 @@
 				html.getAttribute("data-theme") === "dark" ? "light" : "dark"
 			);
 		}
+		window.toggleTheme = _toggleTheme;
+		window.mermaidZoom = _mermaidZoom;
+		window.toggleExpand = _toggleExpand;
 		</script>
 	</body>
 </html>
