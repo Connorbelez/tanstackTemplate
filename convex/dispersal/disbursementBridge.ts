@@ -235,9 +235,13 @@ export const processSingleDisbursement = internalMutation({
 
 		// 2b. Verify calculation details exist (ownership snapshot was recorded)
 		if (
-			!entry.calculationDetails ||
-			typeof entry.calculationDetails.settledAmount !== "number" ||
-			entry.calculationDetails.settledAmount <= 0
+			!(
+				entry.calculationDetails &&
+				Number.isFinite(entry.calculationDetails.settledAmount)
+			) ||
+			entry.calculationDetails.settledAmount <= 0 ||
+			!Number.isFinite(entry.calculationDetails.distributableAmount) ||
+			entry.calculationDetails.distributableAmount < 0
 		) {
 			throw new ConvexError({
 				code: "MISSING_CALCULATION_DETAILS" as const,
