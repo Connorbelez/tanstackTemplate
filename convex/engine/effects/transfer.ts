@@ -130,6 +130,29 @@ export const publishTransferConfirmed = internalMutation({
 		// writes in this mutation — including the settled patch and cash postings.
 		try {
 			await handlePipelineLegConfirmed(ctx, transfer);
+
+			// ── Commitment deposit → offer condition progression (stub) ────
+			if (transfer.transferType === "commitment_deposit_collection") {
+				// TODO(ENG-209): When the offer condition system exists, fire SYSTEM_VERIFIED
+				// on the deposit offer condition to trigger cascadeUnlock. The orchestrator
+				// (`collectCommitmentDeposit`) must be extended to accept `offerConditionId`
+				// and persist it on `transfer.metadata` (e.g. `offerConditionId`) — it is not
+				// written today, so the following pseudocode would no-op until then:
+				//
+				// const conditionId = transfer.metadata?.offerConditionId;
+				// if (conditionId) {
+				//   await ctx.scheduler.runAfter(0, internal.engine.transition.executeTransition, {
+				//     entityType: 'offerCondition',
+				//     entityId: conditionId,
+				//     eventType: 'SYSTEM_VERIFIED',
+				//     source: args.source,
+				//   });
+				// }
+				console.warn(
+					`[publishTransferConfirmed] STUB: Commitment deposit confirmed for transfer ${args.entityId}. ` +
+						"Offer condition progression not wired — offer condition system / metadata not implemented."
+				);
+			}
 		} catch (error) {
 			console.error(
 				`[publishTransferConfirmed] Pipeline follow-up failed for transfer ${args.entityId}`,

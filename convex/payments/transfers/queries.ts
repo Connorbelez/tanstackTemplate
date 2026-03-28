@@ -33,6 +33,19 @@ export const getTransferInternal = internalQuery({
 	},
 });
 
+/** Internal query for idempotency pre-flight (e.g. admin deposit collection). */
+export const getTransferByIdempotencyKeyInternal = internalQuery({
+	args: { idempotencyKey: v.string() },
+	handler: async (ctx, args) => {
+		return ctx.db
+			.query("transferRequests")
+			.withIndex("by_idempotency", (q) =>
+				q.eq("idempotencyKey", args.idempotencyKey)
+			)
+			.first();
+	},
+});
+
 // ── getTransferRequest ─────────────────────────────────────────────
 /** Returns a single transfer request by ID. */
 export const getTransferRequest = paymentQuery

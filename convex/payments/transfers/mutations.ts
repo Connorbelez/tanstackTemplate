@@ -20,6 +20,10 @@ import {
 	paymentRetryMutation,
 } from "../../fluent";
 import type { BankAccountValidationResult } from "../bankAccounts/types";
+import {
+	buildCommitmentDepositIdempotencyKey,
+	getCommitmentDepositValidationError,
+} from "./depositCollection.logic";
 import type { TransferRequestInput } from "./interface";
 import { areMockTransferProvidersEnabled } from "./mockProviders";
 import { buildPipelineIdempotencyKey } from "./pipeline";
@@ -873,5 +877,111 @@ export const confirmManualTransfer = paymentMutation
 			},
 			source,
 		});
+	})
+	.public();
+
+// ── collectCommitmentDepositAdmin ───────────────────────────────────
+/**
+ * Admin-facing action to trigger commitment deposit collection.
+ * Validates deal consistency when `dealId` is set, and returns early with
+ * `alreadyExists` when a non-initiated commitment deposit transfer already
+ * exists for the idempotency key.
+ */
+export const collectCommitmentDepositAdmin = paymentAction
+	.input({
+		dealId: v.optional(v.id("deals")),
+		applicationId: v.optional(v.string()),
+		borrowerId: v.id("borrowers"),
+		mortgageId: v.id("mortgages"),
+		amount: v.number(),
+		providerCode: v.optional(providerCodeValidator),
+	})
+	.handler(async (ctx, args) => {
+		if (!(args.dealId || args.applicationId)) {
+			throw new ConvexError(
+				"At least one of dealId or applicationId must be provided"
+			);
+		}
+
+		const validationError = getCommitmentDepositValidationError({
+			dealId: args.dealId,
+			applicationId: args.applicationId,
+			amount: args.amount,
+		});
+		if (validationError) {
+			throw new ConvexError(validationError);
+		}
+
+		if (args.dealId) {
+			const deal = await ctx.runQuery(internal.deals.queries.getInternalDeal, {
+				dealId: args.dealId,
+			});
+
+			if (deal.status === "confirmed" || deal.status === "failed") {
+				throw new ConvexError(
+					`Cannot collect commitment deposit: deal is in terminal state "${deal.status}"`
+				);
+			}
+
+			if (deal.mortgageId !== args.mortgageId) {
+				throw new ConvexError("mortgageId does not match the deal's mortgage");
+			}
+
+			if (deal.buyerId !== args.borrowerId) {
+				throw new ConvexError("borrowerId must match the deal buyer");
+			}
+		}
+
+		const idempotencyKey = buildCommitmentDepositIdempotencyKey(
+			args.dealId,
+			args.applicationId
+		);
+
+		const existing = await ctx.runQuery(
+			internal.payments.transfers.queries.getTransferByIdempotencyKeyInternal,
+			{ idempotencyKey }
+		);
+
+		if (existing && existing.transferType === "commitment_deposit_collection") {
+			if (
+				existing.status === "confirmed" ||
+				existing.status === "pending" ||
+				existing.status === "processing"
+			) {
+				console.info(
+					`[collectCommitmentDepositAdmin] Commitment deposit transfer already exists (${existing._id}, status=${existing.status}) for idempotency key ${idempotencyKey}`
+				);
+				return {
+					transferId: existing._id,
+					alreadyExists: true,
+				};
+			}
+
+			if (existing.status === "failed") {
+				throw new ConvexError(
+					`A commitment deposit transfer exists but failed (${existing._id}). Use the transfer retry flow or cancel before collecting again.`
+				);
+			}
+
+			if (existing.status !== "initiated") {
+				throw new ConvexError(
+					`A commitment deposit transfer exists in status "${existing.status}" (${existing._id}). Resolve or cancel before retrying.`
+				);
+			}
+		}
+
+		const result = await ctx.runAction(
+			internal.payments.transfers.depositCollection.collectCommitmentDeposit,
+			{
+				dealId: args.dealId,
+				applicationId: args.applicationId,
+				borrowerId: args.borrowerId,
+				mortgageId: args.mortgageId,
+				amount: args.amount,
+				providerCode: args.providerCode,
+			}
+		);
+
+		return { ...result, alreadyExists: false };
 	})
 	.public();
