@@ -10,7 +10,7 @@
  * are tested in integration/e2e tests.
  */
 import { convexTest } from "convex-test";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { getInitialSnapshot, transition } from "xstate";
 import type { Id } from "../../../_generated/dataModel";
 import schema from "../../../schema";
@@ -327,17 +327,114 @@ describe("collectLockingFee effect", () => {
 		expect(transfers).toHaveLength(0);
 	});
 
-	it.skip("happy path: creates inbound locking_fee_collection transfer", () => {
-		// Requires ctx.runMutation(createTransferRequestInternal) and
-		// ctx.runAction(initiateTransferInternal) to work within action
-		// context in convex-test harness. These cross-module internal
-		// calls are not reliably supported.
-		// Tested via integration tests.
+	// ── Mocked ctx tests for happy path ───────────────────────────
+	// These bypass convex-test limitations by mocking the ctx methods
+	// that the handler calls (runQuery, runMutation, runAction).
+
+	it("happy path: creates inbound locking_fee_collection transfer with correct fields", async () => {
+		const fakeDealId = "deals:test-deal-123" as Id<"deals">;
+		const fakeMortgageId = "mortgages:test-mortgage-456" as Id<"mortgages">;
+		const fakeTransferId = "transferRequests:test-transfer-789";
+
+		const runQuery = vi.fn().mockResolvedValue({
+			_id: fakeDealId,
+			buyerId: "buyer-user-1",
+			sellerId: "seller-user-1",
+			mortgageId: fakeMortgageId,
+			lockingFeeAmount: 5000,
+			status: "locked",
+		});
+		const runMutation = vi.fn().mockResolvedValue(fakeTransferId);
+		const runAction = vi.fn().mockResolvedValue(undefined);
+
+		const mockCtx = { runQuery, runMutation, runAction };
+
+		await collectLockingFeeAction._handler(
+			mockCtx,
+			makeEffectArgs(fakeDealId, "collectLockingFee")
+		);
+
+		// Verify createTransferRequestInternal was called with correct fields
+		expect(runMutation).toHaveBeenCalledTimes(1);
+		const mutationArgs = runMutation.mock.calls[0][1];
+		expect(mutationArgs).toMatchObject({
+			direction: "inbound",
+			transferType: "locking_fee_collection",
+			amount: 5000,
+			counterpartyType: "borrower",
+			counterpartyId: "buyer-user-1",
+			mortgageId: fakeMortgageId,
+			dealId: fakeDealId,
+			providerCode: "manual",
+			idempotencyKey: `locking-fee:${fakeDealId}`,
+		});
+
+		// Verify initiateTransferInternal was called with the transfer ID
+		expect(runAction).toHaveBeenCalledTimes(1);
+		const actionArgs = runAction.mock.calls[0][1];
+		expect(actionArgs).toEqual({ transferId: fakeTransferId });
 	});
 
-	it.skip("idempotency: calling twice with same deal produces single transfer", () => {
-		// Requires ctx.runMutation(createTransferRequestInternal) to verify
-		// idempotency key behavior across multiple invocations.
-		// Tested via integration tests.
+	it("idempotency key is deterministic per deal", async () => {
+		const fakeDealId = "deals:test-deal-abc" as Id<"deals">;
+
+		const runQuery = vi.fn().mockResolvedValue({
+			_id: fakeDealId,
+			buyerId: "buyer-1",
+			sellerId: "seller-1",
+			mortgageId: "mortgages:m1",
+			lockingFeeAmount: 3000,
+			status: "locked",
+		});
+		const runMutation = vi.fn().mockResolvedValue("transferRequests:t1");
+		const runAction = vi.fn().mockResolvedValue(undefined);
+
+		const mockCtx = { runQuery, runMutation, runAction };
+
+		// Call twice with same dealId
+		await collectLockingFeeAction._handler(
+			mockCtx,
+			makeEffectArgs(fakeDealId, "collectLockingFee")
+		);
+		await collectLockingFeeAction._handler(
+			mockCtx,
+			makeEffectArgs(fakeDealId, "collectLockingFee")
+		);
+
+		// Both calls should use the same idempotency key
+		const key1 = runMutation.mock.calls[0][1].idempotencyKey;
+		const key2 = runMutation.mock.calls[1][1].idempotencyKey;
+		expect(key1).toBe(`locking-fee:${fakeDealId}`);
+		expect(key2).toBe(key1);
+	});
+
+	it("gracefully handles transfer creation failure without propagating", async () => {
+		const fakeDealId = "deals:test-deal-err" as Id<"deals">;
+
+		const runQuery = vi.fn().mockResolvedValue({
+			_id: fakeDealId,
+			buyerId: "buyer-1",
+			sellerId: "seller-1",
+			mortgageId: "mortgages:m1",
+			lockingFeeAmount: 5000,
+			status: "locked",
+		});
+		const runMutation = vi
+			.fn()
+			.mockRejectedValue(new Error("Provider disabled"));
+		const runAction = vi.fn();
+
+		const mockCtx = { runQuery, runMutation, runAction };
+
+		// Should not throw — the try/catch catches and logs
+		await expect(
+			collectLockingFeeAction._handler(
+				mockCtx,
+				makeEffectArgs(fakeDealId, "collectLockingFee")
+			)
+		).resolves.toBeUndefined();
+
+		// initiateTransferInternal should NOT have been called
+		expect(runAction).not.toHaveBeenCalled();
 	});
 });

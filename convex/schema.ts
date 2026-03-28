@@ -1477,7 +1477,7 @@ export default defineSchema({
 
 		// ── Multi-leg pipeline ──────────────────────────────────────
 		pipelineId: v.optional(v.string()),
-		legNumber: v.optional(v.number()),
+		legNumber: v.optional(v.union(v.literal(1), v.literal(2))),
 
 		// ── Metadata ────────────────────────────────────────────────
 		metadata: v.optional(v.record(v.string(), v.any())),

@@ -5,7 +5,15 @@
  * This avoids a separate `pipelines` table and two-phase write concerns.
  */
 
-import type { Doc } from "../../_generated/dataModel";
+// ── Pipeline Leg Input ──────────────────────────────────────────────
+/**
+ * Minimal interface for pipeline status computation. Decoupled from the
+ * Convex Doc type so the function is easily testable with plain objects.
+ */
+export interface PipelineLegInput {
+	legNumber?: number;
+	status: string;
+}
 
 // ── Pipeline Status ──────────────────────────────────────────────────
 export type PipelineStatus =
@@ -49,6 +57,9 @@ export function extractLeg1Metadata(
 	if (typeof metadata.leg2Amount !== "number") {
 		return null;
 	}
+	if (!Number.isInteger(metadata.leg2Amount) || metadata.leg2Amount <= 0) {
+		return null;
+	}
 	return {
 		pipelineType: "deal_closing",
 		sellerId: metadata.sellerId,
@@ -75,6 +86,33 @@ export function validatePipelineFields(
 
 // ── Pipeline Status Computation ─────────────────────────────────────
 
+const TERMINAL_FAILURE_STATUSES = new Set(["failed", "cancelled", "reversed"]);
+
+/**
+ * Picks the representative transfer for a given leg number.
+ *
+ * When retries create duplicate records for the same (pipelineId, legNumber),
+ * we prefer the non-terminal (active) transfer. If all copies are terminal,
+ * we fall back to the first match.
+ */
+function pickActiveLeg(
+	legs: PipelineLegInput[],
+	legNum: number
+): PipelineLegInput | undefined {
+	const matching = legs.filter((l) => l.legNumber === legNum);
+	if (matching.length === 0) {
+		return undefined;
+	}
+	if (matching.length === 1) {
+		return matching[0];
+	}
+	// Prefer a non-terminal (active) transfer over failed/cancelled/reversed
+	return (
+		matching.find((l) => !TERMINAL_FAILURE_STATUSES.has(l.status)) ??
+		matching[0]
+	);
+}
+
 /**
  * Derives pipeline status from the statuses of its constituent legs.
  *
@@ -84,50 +122,29 @@ export function validatePipelineFields(
  * - Any leg failed (no other leg confirmed) → failed
  * - Leg 1 confirmed, Leg 2 not yet terminal → leg1_confirmed
  * - Otherwise → pending
+ *
+ * When retries exist (duplicate leg numbers), prefers active over terminal transfers.
  */
-
-const TERMINAL_STATUSES = new Set(["failed", "cancelled", "reversed"]);
-
-/**
- * Finds the preferred leg record for a given leg number.
- * After a retry, there may be multiple records (e.g., cancelled original + pending retry).
- * Prefers active (non-terminal) records; falls back to the last terminal record.
- */
-function findPreferredLeg(
-	legs: Pick<Doc<"transferRequests">, "legNumber" | "status">[],
-	legNumber: number
-): Pick<Doc<"transferRequests">, "legNumber" | "status"> | undefined {
-	const matching = legs.filter((l) => l.legNumber === legNumber);
-	if (matching.length === 0) {
-		return undefined;
-	}
-	if (matching.length === 1) {
-		return matching[0];
-	}
-	// Prefer any active (non-terminal) record over terminal ones
-	const active = matching.find((l) => !TERMINAL_STATUSES.has(l.status));
-	return active ?? matching.at(-1);
-}
 
 export function computePipelineStatus(
-	legs: Pick<Doc<"transferRequests">, "legNumber" | "status">[]
+	legs: PipelineLegInput[]
 ): PipelineStatus {
-	// After a retry, there may be multiple records per leg number (e.g., the
-	// cancelled original + the re-initiated retry). Prefer the active (non-terminal)
-	// record for each leg; fall back to the last terminal record if none is active.
-	const leg1 = findPreferredLeg(legs, 1);
-	const leg2 = findPreferredLeg(legs, 2);
+	const leg1 = pickActiveLeg(legs, 1);
+	const leg2 = pickActiveLeg(legs, 2);
 
-	// No legs at all — shouldn't happen, but be safe
+	// No legs at all — data anomaly. Log a warning so callers can investigate.
 	if (!leg1) {
+		if (legs.length > 0) {
+			console.warn(
+				`[computePipelineStatus] ${legs.length} legs found but none with legNumber=1. ` +
+					"This may indicate data corruption."
+			);
+		}
 		return "pending";
 	}
 
 	const leg1Confirmed = leg1.status === "confirmed";
-	const leg1Failed =
-		leg1.status === "failed" ||
-		leg1.status === "cancelled" ||
-		leg1.status === "reversed";
+	const leg1Failed = TERMINAL_FAILURE_STATUSES.has(leg1.status);
 
 	// Leg 1 failed — pipeline failed, no Leg 2 should exist
 	if (leg1Failed) {
@@ -145,10 +162,7 @@ export function computePipelineStatus(
 	}
 
 	const leg2Confirmed = leg2.status === "confirmed";
-	const leg2Failed =
-		leg2.status === "failed" ||
-		leg2.status === "cancelled" ||
-		leg2.status === "reversed";
+	const leg2Failed = TERMINAL_FAILURE_STATUSES.has(leg2.status);
 
 	// Both confirmed — pipeline complete
 	if (leg2Confirmed) {
