@@ -1,6 +1,11 @@
 /**
  * T-008: Webhook simulation → transfer state transition pipeline
- * T-009: Webhook deduplication — same eventId processed twice → zero additional state changes
+ * T-009: Terminal-state idempotency — replaying events on a machine already in
+ *        its target state produces zero transitions and zero side-effect actions.
+ *
+ * NOTE: Real webhook deduplication (provider + providerEventId) lives in
+ * `persistTransferWebhookEvent` and is covered by the integration tests in
+ * `convex/payments/webhooks/__tests__/eftVopayWebhook.test.ts`.
  *
  * Pure unit tests validating the MockTransferProvider webhook flow through
  * the XState transfer machine state transitions.
@@ -348,9 +353,9 @@ describe("T-008: Webhook simulation → transfer state transition pipeline", () 
 	});
 });
 
-// ── T-009: Webhook Deduplication ─────────────────────────────────────────
+// ── T-009: Terminal-State Idempotency ────────────────────────────────────
 
-describe("T-009: Webhook deduplication — same eventId twice → zero additional state changes", () => {
+describe("T-009: Terminal-state idempotency — replayed events on settled machine → zero transitions", () => {
 	describe("same explicit eventId produces identical payloads", () => {
 		it("two simulateWebhook calls with same eventId produce identical eventIds", async () => {
 			const provider = new MockTransferProvider({
@@ -511,8 +516,8 @@ describe("T-009: Webhook deduplication — same eventId twice → zero additiona
 		});
 	});
 
-	describe("end-to-end: mock provider webhook dedup through state machine", () => {
-		it("full pipeline: initiate → webhook(confirmed) → duplicate webhook → no additional effect", async () => {
+	describe("end-to-end: mock provider webhook replay through state machine", () => {
+		it("full pipeline: initiate → webhook(confirmed) → replayed webhook → no additional effect", async () => {
 			const provider = new MockTransferProvider({
 				defaultMode: "async",
 				randomUUID: createDeterministicUUID(),
