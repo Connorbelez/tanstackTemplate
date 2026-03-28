@@ -22,37 +22,37 @@ describe("computePipelineStatus", () => {
 	});
 
 	it("returns 'pending' when Leg 1 is initiated", () => {
-		const legs = [{ legNumber: 1, status: "initiated" }];
+		const legs = [{ legNumber: 1, status: "initiated" }] as const;
 		expect(computePipelineStatus(legs)).toBe("pending");
 	});
 
 	it("returns 'pending' when Leg 1 is pending", () => {
-		const legs = [{ legNumber: 1, status: "pending" }];
+		const legs = [{ legNumber: 1, status: "pending" }] as const;
 		expect(computePipelineStatus(legs)).toBe("pending");
 	});
 
 	it("returns 'pending' when Leg 1 is processing", () => {
-		const legs = [{ legNumber: 1, status: "processing" }];
+		const legs = [{ legNumber: 1, status: "processing" }] as const;
 		expect(computePipelineStatus(legs)).toBe("pending");
 	});
 
 	it("returns 'failed' when Leg 1 fails", () => {
-		const legs = [{ legNumber: 1, status: "failed" }];
+		const legs = [{ legNumber: 1, status: "failed" }] as const;
 		expect(computePipelineStatus(legs)).toBe("failed");
 	});
 
 	it("returns 'failed' when Leg 1 is cancelled", () => {
-		const legs = [{ legNumber: 1, status: "cancelled" }];
+		const legs = [{ legNumber: 1, status: "cancelled" }] as const;
 		expect(computePipelineStatus(legs)).toBe("failed");
 	});
 
 	it("returns 'failed' when Leg 1 is reversed", () => {
-		const legs = [{ legNumber: 1, status: "reversed" }];
+		const legs = [{ legNumber: 1, status: "reversed" }] as const;
 		expect(computePipelineStatus(legs)).toBe("failed");
 	});
 
 	it("returns 'leg1_confirmed' when Leg 1 confirmed but no Leg 2 yet", () => {
-		const legs = [{ legNumber: 1, status: "confirmed" }];
+		const legs = [{ legNumber: 1, status: "confirmed" }] as const;
 		expect(computePipelineStatus(legs)).toBe("leg1_confirmed");
 	});
 
@@ -60,7 +60,7 @@ describe("computePipelineStatus", () => {
 		const legs = [
 			{ legNumber: 1, status: "confirmed" },
 			{ legNumber: 2, status: "initiated" },
-		];
+		] as const;
 		expect(computePipelineStatus(legs)).toBe("leg1_confirmed");
 	});
 
@@ -68,7 +68,7 @@ describe("computePipelineStatus", () => {
 		const legs = [
 			{ legNumber: 1, status: "confirmed" },
 			{ legNumber: 2, status: "pending" },
-		];
+		] as const;
 		expect(computePipelineStatus(legs)).toBe("leg1_confirmed");
 	});
 
@@ -76,7 +76,7 @@ describe("computePipelineStatus", () => {
 		const legs = [
 			{ legNumber: 1, status: "confirmed" },
 			{ legNumber: 2, status: "processing" },
-		];
+		] as const;
 		expect(computePipelineStatus(legs)).toBe("leg1_confirmed");
 	});
 
@@ -84,7 +84,7 @@ describe("computePipelineStatus", () => {
 		const legs = [
 			{ legNumber: 1, status: "confirmed" },
 			{ legNumber: 2, status: "confirmed" },
-		];
+		] as const;
 		expect(computePipelineStatus(legs)).toBe("completed");
 	});
 
@@ -92,7 +92,7 @@ describe("computePipelineStatus", () => {
 		const legs = [
 			{ legNumber: 1, status: "confirmed" },
 			{ legNumber: 2, status: "failed" },
-		];
+		] as const;
 		expect(computePipelineStatus(legs)).toBe("partial_failure");
 	});
 
@@ -100,7 +100,7 @@ describe("computePipelineStatus", () => {
 		const legs = [
 			{ legNumber: 1, status: "confirmed" },
 			{ legNumber: 2, status: "cancelled" },
-		];
+		] as const;
 		expect(computePipelineStatus(legs)).toBe("partial_failure");
 	});
 
@@ -108,7 +108,7 @@ describe("computePipelineStatus", () => {
 		const legs = [
 			{ legNumber: 1, status: "confirmed" },
 			{ legNumber: 2, status: "reversed" },
-		];
+		] as const;
 		expect(computePipelineStatus(legs)).toBe("partial_failure");
 	});
 
@@ -119,7 +119,7 @@ describe("computePipelineStatus", () => {
 		const legs = [
 			{ legNumber: 1, status: "failed" },
 			{ legNumber: 2, status: "initiated" },
-		];
+		] as const;
 		expect(computePipelineStatus(legs)).toBe("failed");
 	});
 
@@ -128,7 +128,7 @@ describe("computePipelineStatus", () => {
 		const legs = [
 			{ legNumber: 2, status: "confirmed" },
 			{ legNumber: 1, status: "confirmed" },
-		];
+		] as const;
 		expect(computePipelineStatus(legs)).toBe("completed");
 	});
 });

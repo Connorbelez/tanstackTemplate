@@ -15,7 +15,8 @@ export type EntityType =
 	| "lenderOnboarding"
 	| "provisionalOffer"
 	| "offerCondition"
-	| "lenderRenewalIntent";
+	| "lenderRenewalIntent"
+	| "dispersalEntry";
 
 // ── Governed Entity Types ──────────────────────────────────────────
 // Subset of EntityType that have XState machine definitions.
@@ -181,4 +182,5 @@ export const ENTITY_TABLE_MAP = {
 	provisionalOffer: "provisionalOffers",
 	offerCondition: "offerConditions",
 	lenderRenewalIntent: "lenderRenewalIntents",
+	dispersalEntry: "dispersalEntries",
 } as const satisfies Record<EntityType, string>;

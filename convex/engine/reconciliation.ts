@@ -105,6 +105,7 @@ async function getEntityStatus(
 		case "provisionalOffer":
 		case "offerCondition":
 		case "lenderRenewalIntent":
+		case "dispersalEntry":
 			return undefined;
 	}
 }

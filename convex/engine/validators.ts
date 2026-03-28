@@ -34,7 +34,8 @@ export const entityTypeValidator = v.union(
 	v.literal("lenderOnboarding"),
 	v.literal("provisionalOffer"),
 	v.literal("offerCondition"),
-	v.literal("lenderRenewalIntent")
+	v.literal("lenderRenewalIntent"),
+	v.literal("dispersalEntry")
 );
 
 export const sourceValidator = v.object({
