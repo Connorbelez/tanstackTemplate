@@ -13,6 +13,7 @@ import { executeTransition } from "../../engine/transition";
 import type { CommandSource, TransitionResult } from "../../engine/types";
 import { sourceValidator } from "../../engine/validators";
 import {
+	adminAction,
 	paymentAction,
 	paymentCancelMutation,
 	paymentMutation,
@@ -21,7 +22,10 @@ import {
 import type { TransferRequestInput } from "./interface";
 import { areMockTransferProvidersEnabled } from "./mockProviders";
 import { validatePipelineFields } from "./pipeline.types";
-import { getTransferProvider } from "./providers/registry";
+import {
+	getTransferProvider,
+	isSupportedProviderCode,
+} from "./providers/registry";
 import {
 	InvalidDomainEntityIdError,
 	type TransferDirection,
@@ -96,6 +100,15 @@ export const createTransferRequest = paymentMutation
 		// 1. Validate amount is positive integer (safe-integer cents)
 		if (!Number.isInteger(args.amount) || args.amount <= 0) {
 			throw new ConvexError("Amount must be a positive integer (cents)");
+		}
+
+		// 1a. Pipeline fields must be co-required: both present or both absent
+		const pipelineError = validatePipelineFields(
+			args.pipelineId,
+			args.legNumber
+		);
+		if (pipelineError) {
+			throw new ConvexError(pipelineError);
 		}
 
 		// 1b. Guard against auth-ID / entity-ID confusion (ENG-218).
@@ -457,7 +470,25 @@ export const initiateTransferInternal = internalAction({
 			throw new ConvexError("Transfer request not found");
 		}
 
+		// Idempotency: if the transfer has already progressed past "initiated",
+		// return a no-op result so pipeline retries don't throw on healthy transfers.
 		if (transfer.status !== "initiated") {
+			const pastInitiated = new Set([
+				"pending",
+				"processing",
+				"confirmed",
+			]);
+			if (pastInitiated.has(transfer.status)) {
+				console.info(
+					`[initiateTransferInternal] Transfer ${args.transferId} already past "initiated" (status: "${transfer.status}") — returning no-op`
+				);
+				return {
+					previousState: transfer.status,
+					newState: transfer.status,
+					reason: `No-op: transfer already in "${transfer.status}" status`,
+				};
+			}
+			// Terminal failure states (failed, cancelled, reversed) are not retryable
 			throw new ConvexError(
 				`Transfer must be in "initiated" status to initiate, currently: "${transfer.status}"`
 			);
@@ -576,7 +607,7 @@ export const fireDealTransitionInternal = internalMutation({
  * Validates the deal is in fundsTransfer.pending, checks idempotency
  * (no existing pipeline for this deal), and kicks off Leg 1.
  */
-export const startDealClosingPipeline = paymentAction
+export const startDealClosingPipeline = adminAction
 	.input({
 		dealId: v.id("deals"),
 		leg1Amount: v.number(),
@@ -618,6 +649,15 @@ export const startDealClosingPipeline = paymentAction
 		const pipelineId = `deal-closing:${args.dealId}`;
 		const leg2Amount = args.leg2Amount ?? args.leg1Amount;
 		const providerCode = args.providerCode ?? "manual";
+
+		// Fail early if the provider code has no concrete implementation —
+		// avoids creating a pipeline that cannot be initiated (Thread #8).
+		if (!isSupportedProviderCode(providerCode)) {
+			throw new ConvexError(
+				`Provider "${providerCode}" is not yet implemented. ` +
+					'Phase 1 supports "manual", "mock_pad", and "mock_eft".'
+			);
+		}
 
 		const result = await ctx.runAction(
 			internal.payments.transfers.pipeline.createDealClosingPipeline,

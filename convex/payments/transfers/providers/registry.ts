@@ -11,6 +11,22 @@ import type { ProviderCode } from "../types";
 import { ManualTransferProvider } from "./manual";
 import { MockTransferProvider } from "./mock";
 
+/**
+ * Provider codes that have a concrete TransferProvider implementation.
+ * Phase 1: manual + mock providers only. Used for early validation in
+ * pipeline entry points so we fail before creating partially-viable pipelines.
+ */
+export const SUPPORTED_PROVIDER_CODES = new Set<ProviderCode>([
+	"manual",
+	"mock_pad",
+	"mock_eft",
+]);
+
+/** Returns true if the given provider code has a concrete implementation. */
+export function isSupportedProviderCode(code: ProviderCode): boolean {
+	return SUPPORTED_PROVIDER_CODES.has(code);
+}
+
 /** Resolves a TransferProvider by canonical provider code.
  *  Phase 1: manual + mock providers are supported. Others throw.
  */
