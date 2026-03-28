@@ -124,9 +124,18 @@ export const publishTransferConfirmed = internalMutation({
 		}
 
 		// ── Pipeline orchestration (post-cash, async-scheduled) ───────
-		// Cash posting is committed above. Pipeline follow-ups are scheduled
-		// asynchronously so failures don't roll back cash ledger entries.
-		await handlePipelineLegConfirmed(ctx, transfer);
+		// Cash posting is committed above. Pipeline follow-ups are wrapped in
+		// try/catch so validation errors (missing dealId, bad metadata, etc.)
+		// don't roll back the settledAt patch or cash-ledger postings above.
+		try {
+			await handlePipelineLegConfirmed(ctx, transfer);
+		} catch (error) {
+			console.error(
+				`[publishTransferConfirmed] Pipeline follow-up failed for transfer ${args.entityId}`,
+				error
+			);
+			// Intentionally do not rethrow: cash postings and settledAt must remain committed.
+		}
 	},
 });
 
