@@ -17,11 +17,50 @@ export const listBankAccountsByOwner = paymentQuery
 		ownerId: v.string(),
 	})
 	.handler(async (ctx, args) => {
-		return ctx.db
+		const accounts = await ctx.db
 			.query("bankAccounts")
 			.withIndex("by_owner", (q) =>
 				q.eq("ownerType", args.ownerType).eq("ownerId", args.ownerId)
 			)
 			.collect();
+
+		// Redact sensitive fields — never expose full accountNumber
+		return accounts.map(
+			({
+				_id,
+				_creationTime,
+				ownerType,
+				ownerId,
+				accountLast4,
+				institutionNumber,
+				transitNumber,
+				country,
+				currency,
+				status,
+				mandateStatus,
+				validationMethod,
+				isDefaultInbound,
+				isDefaultOutbound,
+				createdAt,
+				updatedAt,
+			}) => ({
+				_id,
+				_creationTime,
+				ownerType,
+				ownerId,
+				accountLast4,
+				institutionNumber,
+				transitNumber,
+				country,
+				currency,
+				status,
+				mandateStatus,
+				validationMethod,
+				isDefaultInbound,
+				isDefaultOutbound,
+				createdAt,
+				updatedAt,
+			})
+		);
 	})
 	.public();

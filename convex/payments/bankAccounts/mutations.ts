@@ -1,15 +1,12 @@
 // convex/payments/bankAccounts/mutations.ts
 import { ConvexError, v } from "convex/values";
-import { paymentMutation } from "../../fluent";
-
-// Top-level regex constants (biome/useTopLevelRegex)
-const INSTITUTION_RE = /^\d{3}$/;
-const TRANSIT_RE = /^\d{5}$/;
+import { adminMutation } from "../../fluent";
+import { validateAccountFormat } from "./validation";
 
 /**
  * Admin seed mutation — creates a bank account record for Phase 1 seeding.
  */
-export const seedBankAccount = paymentMutation
+export const seedBankAccount = adminMutation
 	.input({
 		ownerType: v.union(
 			v.literal("borrower"),
@@ -43,18 +40,16 @@ export const seedBankAccount = paymentMutation
 		),
 		isDefaultInbound: v.optional(v.boolean()),
 		isDefaultOutbound: v.optional(v.boolean()),
-		metadata: v.optional(v.any()),
+		metadata: v.optional(v.record(v.string(), v.any())),
 	})
 	.handler(async (ctx, args) => {
-		// Validate format if provided
-		if (
-			args.institutionNumber &&
-			!INSTITUTION_RE.test(args.institutionNumber)
-		) {
-			throw new ConvexError("Institution number must be exactly 3 digits");
-		}
-		if (args.transitNumber && !TRANSIT_RE.test(args.transitNumber)) {
-			throw new ConvexError("Transit number must be exactly 5 digits");
+		// Validate format using shared logic (single source of truth)
+		const formatResult = validateAccountFormat(
+			args.institutionNumber,
+			args.transitNumber
+		);
+		if (!formatResult.valid) {
+			throw new ConvexError(formatResult.errorMessage);
 		}
 
 		const now = Date.now();
@@ -75,5 +70,4 @@ export const seedBankAccount = paymentMutation
 			createdAt: now,
 			metadata: args.metadata,
 		});
-	})
-	.public();
+	});

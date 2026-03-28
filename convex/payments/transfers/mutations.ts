@@ -19,6 +19,7 @@ import {
 	paymentMutation,
 	paymentRetryMutation,
 } from "../../fluent";
+import type { BankAccountValidationResult } from "../bankAccounts/types";
 import type { TransferRequestInput } from "./interface";
 import { areMockTransferProvidersEnabled } from "./mockProviders";
 import { buildPipelineIdempotencyKey } from "./pipeline";
@@ -78,6 +79,18 @@ function validateTransferCreationInput(args: {
 			throw new ConvexError(error.message);
 		}
 		throw error;
+	}
+}
+
+/** Throws a structured ConvexError if the bank-account validation result is invalid. */
+function assertBankValidation(
+	result: BankAccountValidationResult
+): asserts result is { valid: true } {
+	if (!result.valid) {
+		throw new ConvexError({
+			code: result.errorCode,
+			message: result.errorMessage,
+		});
 	}
 }
 
@@ -278,21 +291,17 @@ export const initiateTransfer = paymentAction
 		}
 
 		// ── Bank account validation gate (ENG-205) ────────────────────
-		const bankValidation = await ctx.runQuery(
-			internal.payments.bankAccounts.validation.validateBankAccountForTransfer,
-			{
-				counterpartyType: transfer.counterpartyType,
-				counterpartyId: transfer.counterpartyId,
-				providerCode: transfer.providerCode,
-			}
+		assertBankValidation(
+			await ctx.runQuery(
+				internal.payments.bankAccounts.validation
+					.validateBankAccountForTransfer,
+				{
+					counterpartyType: transfer.counterpartyType,
+					counterpartyId,
+					providerCode: transfer.providerCode,
+				}
+			)
 		);
-		if (!bankValidation.valid) {
-			throw new ConvexError({
-				code: bankValidation.errorCode,
-				message:
-					bankValidation.errorMessage ?? "Bank account validation failed",
-			});
-		}
 
 		const input: TransferRequestInput = {
 			amount: transfer.amount,
@@ -495,21 +504,17 @@ export const initiateTransferInternal = internalAction({
 		}
 
 		// ── Bank account validation gate (ENG-205) ────────────────────
-		const bankValidation = await ctx.runQuery(
-			internal.payments.bankAccounts.validation.validateBankAccountForTransfer,
-			{
-				counterpartyType: transfer.counterpartyType,
-				counterpartyId: transfer.counterpartyId,
-				providerCode: transfer.providerCode,
-			}
+		assertBankValidation(
+			await ctx.runQuery(
+				internal.payments.bankAccounts.validation
+					.validateBankAccountForTransfer,
+				{
+					counterpartyType: transfer.counterpartyType,
+					counterpartyId,
+					providerCode: transfer.providerCode,
+				}
+			)
 		);
-		if (!bankValidation.valid) {
-			throw new ConvexError({
-				code: bankValidation.errorCode,
-				message:
-					bankValidation.errorMessage ?? "Bank account validation failed",
-			});
-		}
 
 		const input: TransferRequestInput = {
 			amount: transfer.amount,
@@ -646,7 +651,7 @@ export const startDealClosingPipeline = paymentAction
 			// Idempotency: check if pipeline already exists for this deal
 			const existingTransfers: Doc<"transferRequests">[] = await ctx.runQuery(
 				internal.payments.transfers.queries.getPipelineLegsInternal,
-				// We query by deal index since pipeline hasn't been created yet
+				// Query by deterministic pipelineId derived from dealId before creating the pipeline
 				{ pipelineId: `deal-closing:${args.dealId}` }
 			);
 

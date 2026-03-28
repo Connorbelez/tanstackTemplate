@@ -107,17 +107,17 @@ export const validateBankAccountForTransfer = internalQuery({
 			return { valid: true };
 		}
 
-		// Step 2-3: look up bank account by owner
-		const bankAccount = await ctx.db
+		// Step 2-3: look up all bank accounts for this owner
+		const bankAccounts = await ctx.db
 			.query("bankAccounts")
 			.withIndex("by_owner", (q) =>
 				q
 					.eq("ownerType", args.counterpartyType)
 					.eq("ownerId", args.counterpartyId)
 			)
-			.first();
+			.collect();
 
-		if (!bankAccount) {
+		if (bankAccounts.length === 0) {
 			return {
 				valid: false,
 				errorCode: "BANK_ACCOUNT_NOT_FOUND",
@@ -125,7 +125,11 @@ export const validateBankAccountForTransfer = internalQuery({
 			};
 		}
 
-		// Steps 4-6: delegate to pure helper
-		return validateBankAccountRecord(bankAccount, args.providerCode);
+		// Steps 4-6: check if ANY account satisfies the provider requirements.
+		// Phase 2+ will resolve the specific account via bankAccountRef.
+		const results = bankAccounts.map((account) =>
+			validateBankAccountRecord(account, args.providerCode)
+		);
+		return results.find((r) => r.valid) ?? results[0];
 	},
 });

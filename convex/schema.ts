@@ -1581,7 +1581,7 @@ export default defineSchema({
 		isDefaultOutbound: v.optional(v.boolean()),
 		createdAt: v.number(),
 		updatedAt: v.optional(v.number()),
-		metadata: v.optional(v.any()),
+		metadata: v.optional(v.record(v.string(), v.any())),
 	})
 		.index("by_owner", ["ownerType", "ownerId"])
 		.index("by_status", ["status"]),
