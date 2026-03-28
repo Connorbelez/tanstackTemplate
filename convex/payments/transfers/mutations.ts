@@ -446,6 +446,8 @@ export const createTransferRequestInternal = internalMutation({
 		legNumber: v.optional(legNumberValidator),
 		// Metadata
 		metadata: v.optional(v.record(v.string(), v.any())),
+		// Optional source override — defaults to PIPELINE_SOURCE when omitted
+		source: v.optional(sourceValidator),
 	},
 	handler: async (ctx, args) => {
 		// Validate inputs (amount, pipeline co-requirement, mock provider guard, counterparty ID)
@@ -483,7 +485,7 @@ export const createTransferRequestInternal = internalMutation({
 			borrowerId: args.borrowerId,
 			providerCode: args.providerCode,
 			idempotencyKey: args.idempotencyKey,
-			source: PIPELINE_SOURCE,
+			source: args.source ?? PIPELINE_SOURCE,
 			pipelineId: args.pipelineId,
 			legNumber: args.legNumber,
 			metadata: args.metadata,
@@ -1043,6 +1045,23 @@ export const returnInvestorPrincipal = paymentAction
 			);
 		}
 
+		// Validate that related entity IDs belong to the loaded deal
+		if (deal.mortgageId !== args.mortgageId) {
+			throw new ConvexError(
+				`Mortgage ${args.mortgageId} does not belong to deal ${args.dealId}. Expected mortgageId: ${deal.mortgageId}.`
+			);
+		}
+		if (deal.sellerId !== args.sellerId) {
+			throw new ConvexError(
+				`Seller ${args.sellerId} does not belong to deal ${args.dealId}. Expected sellerId: ${deal.sellerId}.`
+			);
+		}
+		if (deal.lenderId && deal.lenderId !== args.lenderId) {
+			throw new ConvexError(
+				`Lender ${args.lenderId} does not belong to deal ${args.dealId}. Expected lenderId: ${deal.lenderId}.`
+			);
+		}
+
 		// Check idempotency
 		const idempotencyKey = buildPrincipalReturnIdempotencyKey(
 			args.dealId,
@@ -1067,7 +1086,7 @@ export const returnInvestorPrincipal = paymentAction
 			}
 			if (existing.status !== "initiated") {
 				throw new ConvexError(
-					`A principal return transfer exists in terminal status "${existing.status}" (${existing._id}). This transfer cannot be retried — resolve at the deal level or create a new principal return.`
+					`A principal return transfer exists in terminal status "${existing.status}" (${existing._id}). This transfer cannot be retried or recreated with the same deal and seller — resolve or cancel this transfer at the deal level before initiating any new principal return.`
 				);
 			}
 		}
