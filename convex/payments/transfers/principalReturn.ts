@@ -9,11 +9,22 @@
 import { v } from "convex/values";
 import { internal } from "../../_generated/api";
 import { internalAction } from "../../_generated/server";
+import type { CommandSource } from "../../engine/types";
 import {
 	buildPrincipalReturnIdempotencyKey,
 	computeProrationAdjustedAmount,
 } from "./principalReturn.logic";
 import { providerCodeValidator } from "./validators";
+
+/**
+ * Source stamp for admin-triggered principal return transfers.
+ * Distinguishes these transfers from scheduler-driven pipeline transfers
+ * in the audit trail and ops tooling.
+ */
+const PRINCIPAL_RETURN_SOURCE: CommandSource = {
+	channel: "principal_return",
+	actorType: "system",
+};
 
 /**
  * Internal action to orchestrate investor principal return.
@@ -61,6 +72,7 @@ export const createPrincipalReturn = internalAction({
 				idempotencyKey,
 				pipelineId: args.pipelineId,
 				legNumber: args.legNumber,
+				source: PRINCIPAL_RETURN_SOURCE,
 			}
 		);
 
