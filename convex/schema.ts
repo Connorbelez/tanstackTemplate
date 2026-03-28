@@ -889,6 +889,7 @@ export default defineSchema({
 		sellerId: v.string(),
 		fractionalShare: v.number(),
 		closingDate: v.optional(v.number()),
+		lockingFeeAmount: v.optional(v.number()),
 		lawyerId: v.optional(v.string()),
 		reservationId: v.optional(v.id("ledger_reservations")),
 		lawyerType: v.optional(
@@ -1476,7 +1477,7 @@ export default defineSchema({
 
 		// ── Multi-leg pipeline ──────────────────────────────────────
 		pipelineId: v.optional(v.string()),
-		legNumber: v.optional(v.number()),
+		legNumber: v.optional(v.union(v.literal(1), v.literal(2))),
 
 		// ── Metadata ────────────────────────────────────────────────
 		metadata: v.optional(v.record(v.string(), v.any())),

@@ -81,7 +81,7 @@ export const recordTransferProviderRef = internalMutation({
  * Decision D4 conditional: When collectionAttemptId is set, cash was already
  * posted via the collection attempt path. Only settledAt is patched.
  *
- * Always patches settledAt on the transfer record. Cash ledger reversal only
+ * Always patches settledAt on the transfer record. Cash ledger posting only
  * occurs for non-bridged transfers with a known direction.
  */
 export const publishTransferConfirmed = internalMutation({
@@ -156,7 +156,12 @@ function mapProviderToFundsMethod(
 		case "manual":
 			return "manual";
 		default:
-			// Mock providers and future providers default to "manual"
+			// Mock providers and future providers default to "manual".
+			// Warn so new providers don't silently get the wrong method type.
+			console.warn(
+				`[mapProviderToFundsMethod] Unknown provider code "${providerCode}" — ` +
+					`defaulting to "manual". If this is a new provider, add an explicit mapping.`
+			);
 			return "manual";
 	}
 }
@@ -288,14 +293,20 @@ export const publishTransferFailed = internalMutation({
 	handler: async (ctx, args) => {
 		const transfer = await loadTransfer(ctx, args, "publishTransferFailed");
 
+		const rawErrorCode = args.payload?.errorCode;
+		const rawReason = args.payload?.reason;
 		const errorCode =
-			typeof args.payload?.errorCode === "string"
-				? args.payload.errorCode
-				: "UNKNOWN";
+			typeof rawErrorCode === "string" ? rawErrorCode : "UNKNOWN";
 		const reason =
-			typeof args.payload?.reason === "string"
-				? args.payload.reason
-				: "unknown_failure";
+			typeof rawReason === "string" ? rawReason : "unknown_failure";
+
+		if (typeof rawErrorCode !== "string" || typeof rawReason !== "string") {
+			console.warn(
+				`[publishTransferFailed] Missing or non-string error metadata for transfer ${args.entityId}. ` +
+					`errorCode: ${JSON.stringify(rawErrorCode)}, reason: ${JSON.stringify(rawReason)}. ` +
+					`Defaulting to errorCode="${errorCode}", reason="${reason}".`
+			);
+		}
 
 		await ctx.db.patch(args.entityId, {
 			failedAt: Date.now(),
@@ -308,7 +319,18 @@ export const publishTransferFailed = internalMutation({
 		);
 
 		// ── Pipeline failure handling ─────────────────────────────────
-		await handlePipelineLegFailed(ctx, transfer, reason, errorCode);
+		await handlePipelineLegFailed(
+			ctx,
+			{
+				_id: transfer._id,
+				pipelineId: transfer.pipelineId,
+				legNumber: transfer.legNumber,
+				dealId: transfer.dealId,
+				metadata: transfer.metadata as Record<string, unknown> | undefined,
+			},
+			reason,
+			errorCode
+		);
 	},
 });
 
@@ -322,12 +344,13 @@ export const publishTransferFailed = internalMutation({
  * Does NOT auto-cancel Leg 1 if Leg 2 fails — funds already received.
  */
 async function handlePipelineLegFailed(
-	_ctx: MutationCtx,
+	ctx: MutationCtx,
 	transfer: {
 		_id: Id<"transferRequests">;
 		pipelineId?: string;
 		legNumber?: number;
 		dealId?: Id<"deals">;
+		metadata?: Record<string, unknown>;
 	},
 	reason: string,
 	errorCode: string
@@ -335,6 +358,28 @@ async function handlePipelineLegFailed(
 	if (!transfer.pipelineId || transfer.legNumber == null) {
 		return;
 	}
+
+	const failureType =
+		transfer.legNumber === 2 ? "partial_failure" : "leg1_failure";
+
+	// Durable record: patch pipeline failure context onto the transfer metadata.
+	// This ensures the failure is queryable via getPipelineStatus and admin dashboards
+	// even if ephemeral logs are lost.
+	const existingMetadata = (transfer.metadata ?? {}) as Record<string, unknown>;
+	await ctx.db.patch(transfer._id, {
+		metadata: {
+			...existingMetadata,
+			pipelineFailure: {
+				type: failureType,
+				pipelineId: transfer.pipelineId,
+				legNumber: transfer.legNumber,
+				reason,
+				errorCode,
+				failedAt: Date.now(),
+				requiresAdminResolution: transfer.legNumber === 2,
+			},
+		},
+	});
 
 	if (transfer.legNumber === 1) {
 		console.error(
@@ -352,6 +397,10 @@ async function handlePipelineLegFailed(
 				"Manual resolution required — admin must retry Leg 2 or resolve manually."
 		);
 	}
+
+	// TODO: Replace console.error with structured admin alert system (e.g. Resend email,
+	// adminAlerts table) when notification infrastructure is available. Pipeline failures
+	// represent stranded funds and require prompt human intervention.
 }
 
 /**
@@ -392,8 +441,16 @@ export const publishTransferReversed = internalMutation({
 
 		if (originalEntry) {
 			const effectiveDate = new Date().toISOString().slice(0, 10);
-			const amount =
-				transfer.amount ?? safeBigintToNumber(originalEntry.amount);
+			const journalAmount = safeBigintToNumber(originalEntry.amount);
+			const amount = transfer.amount ?? journalAmount;
+
+			if (transfer.amount != null && transfer.amount !== journalAmount) {
+				console.warn(
+					`[publishTransferReversed] Amount mismatch for transfer ${args.entityId}: ` +
+						`transfer.amount=${transfer.amount}, journal.amount=${journalAmount}. ` +
+						"Using transfer.amount for reversal."
+				);
+			}
 
 			await postTransferReversal(ctx, {
 				transferRequestId: args.entityId,

@@ -36,6 +36,8 @@ export const effectRegistry: Record<
 		internal.engine.effects.dealClosingEffects.archiveSignedDocuments,
 	confirmFundsReceipt:
 		internal.engine.effects.dealClosingEffects.confirmFundsReceipt,
+	collectLockingFee:
+		internal.engine.effects.dealClosingEffects.collectLockingFee,
 	// Deal Closing — reservations (ENG-49/50)
 	reserveShares: internal.engine.effects.dealClosing.reserveShares,
 	commitReservation: internal.engine.effects.dealClosing.commitReservation,

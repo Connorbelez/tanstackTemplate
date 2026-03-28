@@ -20,6 +20,7 @@ import {
 } from "../../fluent";
 import type { TransferRequestInput } from "./interface";
 import { areMockTransferProvidersEnabled } from "./mockProviders";
+import { buildPipelineIdempotencyKey } from "./pipeline";
 import { validatePipelineFields } from "./pipeline.types";
 import { getTransferProvider } from "./providers/registry";
 import {
@@ -30,12 +31,53 @@ import {
 import {
 	counterpartyTypeValidator,
 	directionValidator,
+	legNumberValidator,
 	providerCodeValidator,
 	transferTypeValidator,
 } from "./validators";
 
 export function buildRetryIdempotencyKey(transferId: string) {
 	return `retry:${transferId}`;
+}
+
+// ── Shared validation for transfer creation ────────────────────────
+/**
+ * Validates common transfer input fields shared by both public and internal
+ * creation paths. Throws ConvexError on validation failure.
+ */
+function validateTransferCreationInput(args: {
+	amount: number;
+	pipelineId?: string;
+	legNumber?: number;
+	providerCode: string;
+	counterpartyId: string;
+}): string {
+	if (!Number.isInteger(args.amount) || args.amount <= 0) {
+		throw new ConvexError("Amount must be a positive integer (cents)");
+	}
+
+	const pipelineError = validatePipelineFields(args.pipelineId, args.legNumber);
+	if (pipelineError) {
+		throw new ConvexError(pipelineError);
+	}
+
+	if (
+		(args.providerCode === "mock_pad" || args.providerCode === "mock_eft") &&
+		!areMockTransferProvidersEnabled()
+	) {
+		throw new ConvexError(
+			`Transfer provider "${args.providerCode}" is disabled by default. Set ENABLE_MOCK_PROVIDERS="true" to opt in.`
+		);
+	}
+
+	try {
+		return toDomainEntityId(args.counterpartyId, "counterpartyId");
+	} catch (error) {
+		if (error instanceof InvalidDomainEntityIdError) {
+			throw new ConvexError(error.message);
+		}
+		throw error;
+	}
 }
 
 export function canCancelTransferStatus(status: string) {
@@ -90,43 +132,11 @@ export const createTransferRequest = paymentMutation
 		// Optional metadata
 		metadata: v.optional(v.record(v.string(), v.any())),
 		pipelineId: v.optional(v.string()),
-		legNumber: v.optional(v.number()),
+		legNumber: v.optional(legNumberValidator),
 	})
 	.handler(async (ctx, args) => {
-		// 1. Validate amount is positive integer (safe-integer cents)
-		if (!Number.isInteger(args.amount) || args.amount <= 0) {
-			throw new ConvexError("Amount must be a positive integer (cents)");
-		}
-
-		// 1a. Pipeline fields must be co-required: both present or both absent
-		const pipelineError = validatePipelineFields(
-			args.pipelineId,
-			args.legNumber
-		);
-		if (pipelineError) {
-			throw new ConvexError(pipelineError);
-		}
-
-		// 1b. Guard against auth-ID / entity-ID confusion (ENG-218).
-		// counterpartyId must stay in domain entity ID space.
-		let counterpartyId: TransferRequestInput["counterpartyId"];
-		try {
-			counterpartyId = toDomainEntityId(args.counterpartyId, "counterpartyId");
-		} catch (error) {
-			if (error instanceof InvalidDomainEntityIdError) {
-				throw new ConvexError(error.message);
-			}
-			throw error;
-		}
-
-		if (
-			(args.providerCode === "mock_pad" || args.providerCode === "mock_eft") &&
-			!areMockTransferProvidersEnabled()
-		) {
-			throw new ConvexError(
-				`Transfer provider "${args.providerCode}" is disabled by default. Set ENABLE_MOCK_PROVIDERS="true" to opt in.`
-			);
-		}
+		// 1. Validate inputs (amount, pipeline co-requirement, mock provider guard, counterparty ID)
+		const counterpartyId = validateTransferCreationInput(args);
 
 		// 2. Idempotency check
 		const existing = await ctx.db
@@ -369,42 +379,13 @@ export const createTransferRequestInternal = internalMutation({
 		idempotencyKey: v.string(),
 		// Pipeline
 		pipelineId: v.optional(v.string()),
-		legNumber: v.optional(v.number()),
+		legNumber: v.optional(legNumberValidator),
 		// Metadata
 		metadata: v.optional(v.record(v.string(), v.any())),
 	},
 	handler: async (ctx, args) => {
-		if (!Number.isInteger(args.amount) || args.amount <= 0) {
-			throw new ConvexError("Amount must be a positive integer (cents)");
-		}
-
-		// Pipeline fields must be co-required: both present or both absent
-		const pipelineError = validatePipelineFields(
-			args.pipelineId,
-			args.legNumber
-		);
-		if (pipelineError) {
-			throw new ConvexError(pipelineError);
-		}
-
-		let counterpartyId: string;
-		try {
-			counterpartyId = toDomainEntityId(args.counterpartyId, "counterpartyId");
-		} catch (error) {
-			if (error instanceof InvalidDomainEntityIdError) {
-				throw new ConvexError(error.message);
-			}
-			throw error;
-		}
-
-		if (
-			(args.providerCode === "mock_pad" || args.providerCode === "mock_eft") &&
-			!areMockTransferProvidersEnabled()
-		) {
-			throw new ConvexError(
-				`Transfer provider "${args.providerCode}" is disabled by default. Set ENABLE_MOCK_PROVIDERS="true" to opt in.`
-			);
-		}
+		// Validate inputs (amount, pipeline co-requirement, mock provider guard, counterparty ID)
+		const counterpartyId = validateTransferCreationInput(args);
 
 		// Idempotency check
 		const existing = await ctx.db
@@ -720,7 +701,14 @@ export const retryTransfer = paymentRetryMutation
 		}
 
 		const now = Date.now();
-		const retryIdempotencyKey = buildRetryIdempotencyKey(`${args.transferId}`);
+
+		// Pipeline transfers use a deterministic pipeline-scoped retry key so
+		// computePipelineStatus can identify the retry as the active leg.
+		// Non-pipeline transfers keep the original per-transfer retry key.
+		const retryIdempotencyKey =
+			transfer.pipelineId && transfer.legNumber != null
+				? `${buildPipelineIdempotencyKey(transfer.pipelineId, transfer.legNumber)}:retry:${args.transferId}`
+				: buildRetryIdempotencyKey(`${args.transferId}`);
 
 		const existing = await ctx.db
 			.query("transferRequests")

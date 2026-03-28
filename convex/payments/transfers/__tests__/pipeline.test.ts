@@ -186,17 +186,27 @@ describe("PipelineStatus type", () => {
 	});
 });
 
-// ── Edge: duplicate leg numbers ──────────────────────────────────────
+// ── Edge: duplicate leg numbers (retry scenarios) ──────────────────
 
 describe("computePipelineStatus with duplicate legs (retries)", () => {
-	it("prefers active leg over terminal after retry", () => {
-		// Retry scenario: cancelled original + pending retry
+	it("prefers active leg over terminal after retry (cancelled + pending)", () => {
+		// Retry scenario: cancelled original + pending retry for Leg 1
 		const legs = [
 			{ legNumber: 1, status: "cancelled" },
 			{ legNumber: 1, status: "pending" },
 			{ legNumber: 2, status: "confirmed" },
 		];
 		// Active Leg 1 ("pending") is preferred over cancelled
+		expect(computePipelineStatus(legs)).toBe("pending");
+	});
+
+	it("prefers active leg over failed when retry exists (failed + initiated)", () => {
+		// Retry scenario: original Leg 1 failed, retry Leg 1 is initiated
+		const legs = [
+			{ legNumber: 1, status: "failed" },
+			{ legNumber: 1, status: "initiated" },
+		];
+		// Active Leg 1 ("initiated") is preferred over failed → pending
 		expect(computePipelineStatus(legs)).toBe("pending");
 	});
 
@@ -210,21 +220,33 @@ describe("computePipelineStatus with duplicate legs (retries)", () => {
 		expect(computePipelineStatus(legs)).toBe("completed");
 	});
 
-	it("falls back to last terminal if all are terminal", () => {
+	it("falls back to first terminal if all are terminal", () => {
 		const legs = [
 			{ legNumber: 1, status: "cancelled" },
 			{ legNumber: 1, status: "failed" },
 		];
-		// No active records — falls back to last terminal ("failed")
+		// No active records — both are terminal failures → failed
 		expect(computePipelineStatus(legs)).toBe("failed");
 	});
 
-	it("single record per leg works as before", () => {
+	it("prefers active Leg 2 over failed Leg 2 when retry exists", () => {
 		const legs = [
 			{ legNumber: 1, status: "confirmed" },
-			{ legNumber: 2, status: "confirmed" },
+			{ legNumber: 2, status: "failed" },
+			{ legNumber: 2, status: "initiated" },
 		];
-		expect(computePipelineStatus(legs)).toBe("completed");
+		// Leg 2 retry is in progress → leg1_confirmed
+		expect(computePipelineStatus(legs)).toBe("leg1_confirmed");
+	});
+
+	it("falls back to first when all copies are terminal", () => {
+		const legs = [
+			{ legNumber: 1, status: "confirmed" },
+			{ legNumber: 2, status: "failed" },
+			{ legNumber: 2, status: "cancelled" },
+		];
+		// All Leg 2 copies terminal, first is "failed" → partial_failure
+		expect(computePipelineStatus(legs)).toBe("partial_failure");
 	});
 });
 
@@ -318,6 +340,36 @@ describe("extractLeg1Metadata", () => {
 				pipelineType: "deal_closing",
 				sellerId: "seller-123",
 				leg2Amount: "50000",
+			})
+		).toBeNull();
+	});
+
+	it("returns null for zero leg2Amount", () => {
+		expect(
+			extractLeg1Metadata({
+				pipelineType: "deal_closing",
+				sellerId: "seller-123",
+				leg2Amount: 0,
+			})
+		).toBeNull();
+	});
+
+	it("returns null for negative leg2Amount", () => {
+		expect(
+			extractLeg1Metadata({
+				pipelineType: "deal_closing",
+				sellerId: "seller-123",
+				leg2Amount: -100,
+			})
+		).toBeNull();
+	});
+
+	it("returns null for non-integer leg2Amount", () => {
+		expect(
+			extractLeg1Metadata({
+				pipelineType: "deal_closing",
+				sellerId: "seller-123",
+				leg2Amount: 50.5,
 			})
 		).toBeNull();
 	});

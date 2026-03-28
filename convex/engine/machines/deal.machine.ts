@@ -53,6 +53,7 @@ export const dealMachine = setup({
 		notifyCancellation: noopAction,
 		revokeAllDealAccess: noopAction,
 		revokeLawyerAccess: noopAction,
+		collectLockingFee: noopAction,
 	},
 }).createMachine({
 	id: "deal",
@@ -69,6 +70,7 @@ export const dealMachine = setup({
 						"reserveShares",
 						"notifyAllParties",
 						"createDocumentPackage",
+						"collectLockingFee",
 					],
 				},
 				DEAL_CANCELLED: {

@@ -106,11 +106,11 @@ export const createDealClosingPipeline = internalAction({
 /**
  * Creates and initiates Leg 2 of a deal closing pipeline.
  *
- * Called when Leg 1 is confirmed (scheduled by publishTransferConfirmed).
+ * Called when Leg 1 is confirmed (scheduled by handlePipelineLegConfirmed).
  * Creates an outbound transfer (trust → seller) and initiates it.
  *
- * Reads Leg 2 config from Leg 1's metadata to avoid needing a separate
- * pipeline config table.
+ * Leg 2 config (sellerId, amount) is passed as arguments from the caller,
+ * which extracts them from Leg 1's metadata via extractLeg1Metadata.
  */
 export const createAndInitiateLeg2 = internalAction({
 	args: {

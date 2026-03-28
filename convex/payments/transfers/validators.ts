@@ -66,6 +66,9 @@ export const providerCodeValidator = v.union(
 	v.literal("plaid_transfer")
 );
 
+// ── Pipeline Leg Number ──────────────────────────────────────────────
+export const legNumberValidator = v.union(v.literal(1), v.literal(2));
+
 // ── Transfer Statuses ────────────────────────────────────────────────
 export const transferStatusValidator = v.union(
 	// Machine states
