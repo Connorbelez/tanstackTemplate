@@ -259,7 +259,8 @@ async function applyDealReroutes(
 	mortgageId: Id<"mortgages">,
 	settledDate: string,
 	positions: ActivePosition[]
-) {
+): Promise<number> {
+	let appliedCount = 0;
 	const reroutes = await ctx.db
 		.query("dealReroutes")
 		.withIndex("by_mortgage", (q) => q.eq("mortgageId", mortgageId))
@@ -306,6 +307,7 @@ async function applyDealReroutes(
 
 		fromPosition.units -= reroute.fractionalShare;
 		toPosition.units += reroute.fractionalShare;
+		appliedCount++;
 
 		if (fromPosition.units < 0) {
 			throw new ConvexError(
@@ -313,6 +315,8 @@ async function applyDealReroutes(
 			);
 		}
 	}
+
+	return appliedCount;
 }
 
 async function normalizePositions(
@@ -413,7 +417,7 @@ export const createDispersalEntries = internalMutation({
 			);
 		}
 
-		await applyDealReroutes(
+		const reroutesAppliedCount = await applyDealReroutes(
 			ctx,
 			args.mortgageId,
 			args.settledDate,
@@ -494,6 +498,8 @@ export const createDispersalEntries = internalMutation({
 					sourceObligationType: obligation.type,
 					mortgageFeeId: servicingConfig?.mortgageFeeId,
 					feeCode: servicingConfig?.code,
+					ownershipSnapshotDate: args.settledDate,
+					reroutesAppliedCount,
 				},
 				createdAt,
 			});
