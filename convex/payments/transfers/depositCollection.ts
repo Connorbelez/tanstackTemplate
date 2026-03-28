@@ -59,6 +59,7 @@ export const collectCommitmentDeposit = internalAction({
 				amount: args.amount,
 				counterpartyType: "borrower",
 				counterpartyId: args.borrowerId,
+				borrowerId: args.borrowerId,
 				mortgageId: args.mortgageId,
 				dealId: args.dealId,
 				providerCode,
