@@ -4,7 +4,7 @@
 
 | Chunk | Tasks | Status | Description |
 |-------|-------|--------|-------------|
-| chunk-01-orchestrator | T-001 through T-005 | pending | Deposit collection orchestrator, admin trigger, effect extension, tests |
+| chunk-01-orchestrator | T-001 through T-005 | done | Deposit collection orchestrator, admin trigger, effect extension, tests |
 
 ## Execution Order
 

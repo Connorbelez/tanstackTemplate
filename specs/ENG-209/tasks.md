@@ -9,7 +9,7 @@
   - Accepts config: `{ dealId?, applicationId?, borrowerId, mortgageId, amount, providerCode }`
   - Calls `createTransferRequestInternal` with direction=inbound, transferType=commitment_deposit_collection
   - Calls `initiateTransferInternal` to kick off the provider
-  - Idempotency key: `commitment-deposit:{dealId ?? applicationId}`
+  - Idempotency key: `commitment-deposit:{dealId}` | `commitment-deposit:application:{applicationId}` | `commitment-deposit:{dealId}:application:{applicationId}`
   - Source: `{ actorType: 'system', channel: 'commitment_deposit_collection' }`
   - Stores applicationId in metadata if provided
 

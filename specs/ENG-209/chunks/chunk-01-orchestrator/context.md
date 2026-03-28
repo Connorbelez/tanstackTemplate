@@ -51,7 +51,10 @@ const DEPOSIT_SOURCE: CommandSource = {
  * 1. Creates a transfer request (inbound, commitment_deposit_collection)
  * 2. Initiates the transfer via the resolved provider
  *
- * Idempotent: uses deterministic key `commitment-deposit:{dealId|applicationId}`.
+ * Idempotent: uses deterministic key:
+ *   - `commitment-deposit:{dealId}` when only dealId is provided
+ *   - `commitment-deposit:application:{applicationId}` when only applicationId is provided
+ *   - `commitment-deposit:{dealId}:application:{applicationId}` when both are provided.
  */
 export const collectCommitmentDeposit = internalAction({
   args: {
