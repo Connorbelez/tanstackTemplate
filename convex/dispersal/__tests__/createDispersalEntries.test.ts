@@ -533,17 +533,17 @@ describe("createDispersalEntries", () => {
 			expect(result.created).toBe(true);
 			expect(result.entries).toHaveLength(2);
 
-			const persistedEntries = (
-				await t.run(async (ctx) =>
-					Promise.all(result.entries.map((entry) => ctx.db.get(entry.id)))
-				)
-			).filter((entry) => entry !== null);
+			const persistedEntries = await t.run(async (ctx) =>
+				Promise.all(result.entries.map((entry) => ctx.db.get(entry.id)))
+			);
 
+			expect(persistedEntries).toHaveLength(result.entries.length);
 			for (const entry of persistedEntries) {
-				expect(entry.calculationDetails.ownershipSnapshotDate).toBe(
+				expect(entry).not.toBeNull();
+				expect(entry?.calculationDetails.ownershipSnapshotDate).toBe(
 					"2026-03-15"
 				);
-				expect(entry.calculationDetails.reroutesAppliedCount).toBe(0);
+				expect(entry?.calculationDetails.reroutesAppliedCount).toBe(0);
 			}
 		});
 
@@ -564,15 +564,15 @@ describe("createDispersalEntries", () => {
 
 			expect(result.created).toBe(true);
 
-			const persistedEntries = (
-				await t.run(async (ctx) =>
-					Promise.all(result.entries.map((entry) => ctx.db.get(entry.id)))
-				)
-			).filter((entry) => entry !== null);
+			const persistedEntries = await t.run(async (ctx) =>
+				Promise.all(result.entries.map((entry) => ctx.db.get(entry.id)))
+			);
 
+			expect(persistedEntries).toHaveLength(result.entries.length);
 			for (const entry of persistedEntries) {
-				expect(entry.calculationDetails.reroutesAppliedCount).toBe(1);
-				expect(entry.calculationDetails.ownershipSnapshotDate).toBe(
+				expect(entry).not.toBeNull();
+				expect(entry?.calculationDetails.reroutesAppliedCount).toBe(1);
+				expect(entry?.calculationDetails.ownershipSnapshotDate).toBe(
 					"2026-03-15"
 				);
 			}
