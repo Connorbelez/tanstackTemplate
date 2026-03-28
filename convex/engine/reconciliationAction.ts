@@ -165,6 +165,9 @@ async function lookupStatus(
 				(await ctx.db.get(entityId as Id<"lenderRenewalIntents">))?.status ??
 				null
 			);
+		case "dispersalEntry":
+			// Non-governed entity: explicitly skipped by reconciliation.
+			return undefined;
 		default: {
 			// Log error for any entity type not yet covered — this prevents silent skipping
 			console.error(
