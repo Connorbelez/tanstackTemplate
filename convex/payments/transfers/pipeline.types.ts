@@ -34,6 +34,7 @@ export type PipelineStatus =
  */
 export interface DealClosingLeg1Metadata {
 	leg2Amount: number;
+	lenderId: string | undefined; // Id<"lenders"> serialized — needed for Leg 2 cash posting
 	pipelineType: "deal_closing";
 	sellerId: string;
 }
@@ -60,10 +61,16 @@ export function extractLeg1Metadata(
 	if (!Number.isInteger(metadata.leg2Amount) || metadata.leg2Amount <= 0) {
 		return null;
 	}
+	// lenderId is optional (deals pre-approval may not have it), but if present must be a string
+	const lenderId = metadata.lenderId;
+	if (lenderId !== undefined && typeof lenderId !== "string") {
+		return null;
+	}
 	return {
 		pipelineType: "deal_closing",
 		sellerId: metadata.sellerId,
 		leg2Amount: metadata.leg2Amount,
+		lenderId: lenderId as string | undefined,
 	};
 }
 
@@ -112,7 +119,6 @@ function pickActiveLeg(
 		matching[0]
 	);
 }
-
 
 /**
  * Derives pipeline status from the statuses of its constituent legs.

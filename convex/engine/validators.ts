@@ -7,7 +7,8 @@ export const channelValidator = v.union(
 	v.literal("admin_dashboard"),
 	v.literal("api_webhook"),
 	v.literal("scheduler"),
-	v.literal("simulation")
+	v.literal("simulation"),
+	v.literal("principal_return")
 );
 
 export const actorTypeValidator = v.union(

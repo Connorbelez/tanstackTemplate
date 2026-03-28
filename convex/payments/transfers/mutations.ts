@@ -28,6 +28,7 @@ import type { TransferRequestInput } from "./interface";
 import { areMockTransferProvidersEnabled } from "./mockProviders";
 import { buildPipelineIdempotencyKey } from "./pipeline";
 import { validatePipelineFields } from "./pipeline.types";
+import { buildPrincipalReturnIdempotencyKey } from "./principalReturn.logic";
 import { getTransferProvider } from "./providers/registry";
 import {
 	InvalidDomainEntityIdError,
@@ -445,6 +446,8 @@ export const createTransferRequestInternal = internalMutation({
 		legNumber: v.optional(legNumberValidator),
 		// Metadata
 		metadata: v.optional(v.record(v.string(), v.any())),
+		// Optional source override — defaults to PIPELINE_SOURCE when omitted
+		source: v.optional(sourceValidator),
 	},
 	handler: async (ctx, args) => {
 		// Validate inputs (amount, pipeline co-requirement, mock provider guard, counterparty ID)
@@ -482,7 +485,7 @@ export const createTransferRequestInternal = internalMutation({
 			borrowerId: args.borrowerId,
 			providerCode: args.providerCode,
 			idempotencyKey: args.idempotencyKey,
-			source: PIPELINE_SOURCE,
+			source: args.source ?? PIPELINE_SOURCE,
 			pipelineId: args.pipelineId,
 			legNumber: args.legNumber,
 			metadata: args.metadata,
@@ -551,7 +554,6 @@ export const initiateTransferInternal = internalAction({
 				}
 			)
 		);
-
 
 		const input: TransferRequestInput = {
 			amount: transfer.amount,
@@ -723,6 +725,7 @@ export const startDealClosingPipeline = paymentAction
 					pipelineId,
 					buyerId: deal.buyerId,
 					sellerId: deal.sellerId,
+					lenderId: deal.lenderId,
 					mortgageId: deal.mortgageId,
 					leg1Amount: args.leg1Amount,
 					leg2Amount,
@@ -1007,6 +1010,98 @@ export const collectCommitmentDepositAdmin = paymentAction
 				mortgageId: args.mortgageId,
 				amount: args.amount,
 				providerCode: args.providerCode,
+			}
+		);
+
+		return { ...result, alreadyExists: false };
+	})
+	.public();
+
+// ── returnInvestorPrincipal ─────────────────────────────────────────
+/**
+ * Admin-facing action to trigger investor principal return.
+ * Validates the deal is in a post-close state, checks idempotency,
+ * and delegates to the principalReturn orchestrator.
+ */
+export const returnInvestorPrincipal = paymentAction
+	.input({
+		dealId: v.id("deals"),
+		sellerId: v.string(),
+		lenderId: v.id("lenders"),
+		mortgageId: v.id("mortgages"),
+		principalAmount: v.number(),
+		prorationAdjustment: v.optional(v.number()),
+		providerCode: v.optional(providerCodeValidator),
+		bankAccountRef: v.optional(v.string()),
+	})
+	.handler(async (ctx, args) => {
+		// Validate deal exists and is in a post-close state
+		const deal = await ctx.runQuery(internal.deals.queries.getInternalDeal, {
+			dealId: args.dealId,
+		});
+		if (deal.status !== "confirmed") {
+			throw new ConvexError(
+				`Deal must be in "confirmed" status for principal return, currently: "${deal.status}"`
+			);
+		}
+
+		// Validate that related entity IDs belong to the loaded deal
+		if (deal.mortgageId !== args.mortgageId) {
+			throw new ConvexError(
+				`Mortgage ${args.mortgageId} does not belong to deal ${args.dealId}. Expected mortgageId: ${deal.mortgageId}.`
+			);
+		}
+		if (deal.sellerId !== args.sellerId) {
+			throw new ConvexError(
+				`Seller ${args.sellerId} does not belong to deal ${args.dealId}. Expected sellerId: ${deal.sellerId}.`
+			);
+		}
+		if (deal.lenderId && deal.lenderId !== args.lenderId) {
+			throw new ConvexError(
+				`Lender ${args.lenderId} does not belong to deal ${args.dealId}. Expected lenderId: ${deal.lenderId}.`
+			);
+		}
+
+		// Check idempotency
+		const idempotencyKey = buildPrincipalReturnIdempotencyKey(
+			args.dealId,
+			args.sellerId
+		);
+		const existing = await ctx.runQuery(
+			internal.payments.transfers.queries.getTransferByIdempotencyKeyInternal,
+			{ idempotencyKey }
+		);
+		if (existing && existing.transferType === "lender_principal_return") {
+			if (
+				existing.status === "confirmed" ||
+				existing.status === "pending" ||
+				existing.status === "processing"
+			) {
+				return { transferId: existing._id, alreadyExists: true };
+			}
+			if (existing.status === "failed") {
+				throw new ConvexError(
+					`A principal return transfer exists but failed (${existing._id}). Use the retry flow or cancel before trying again.`
+				);
+			}
+			if (existing.status !== "initiated") {
+				throw new ConvexError(
+					`A principal return transfer exists in terminal status "${existing.status}" (${existing._id}). This transfer cannot be retried or recreated with the same deal and seller — resolve or cancel this transfer at the deal level before initiating any new principal return.`
+				);
+			}
+		}
+
+		const result = await ctx.runAction(
+			internal.payments.transfers.principalReturn.createPrincipalReturn,
+			{
+				dealId: args.dealId,
+				sellerId: args.sellerId,
+				lenderId: args.lenderId,
+				mortgageId: args.mortgageId,
+				principalAmount: args.principalAmount,
+				prorationAdjustment: args.prorationAdjustment ?? 0,
+				providerCode: args.providerCode ?? "manual",
+				bankAccountRef: args.bankAccountRef,
 			}
 		);
 

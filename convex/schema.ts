@@ -896,6 +896,10 @@ export default defineSchema({
 		lawyerType: v.optional(
 			v.union(v.literal("platform_lawyer"), v.literal("guest_lawyer"))
 		),
+
+		// ─── Resolved lender (set on approval) ───
+		lenderId: v.optional(v.id("lenders")),
+
 		createdAt: v.number(),
 		createdBy: v.string(),
 	})

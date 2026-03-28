@@ -9,7 +9,7 @@
  * Leg 2 is NEVER created unless Leg 1 is confirmed (REQ-261).
  */
 
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { internal } from "../../_generated/api";
 import type { Id } from "../../_generated/dataModel";
 import { internalAction } from "../../_generated/server";
@@ -42,6 +42,7 @@ export const createDealClosingPipeline = internalAction({
 		pipelineId: v.string(),
 		buyerId: v.string(),
 		sellerId: v.string(),
+		lenderId: v.optional(v.id("lenders")),
 		mortgageId: v.id("mortgages"),
 		leg1Amount: v.number(),
 		leg2Amount: v.number(),
@@ -87,6 +88,7 @@ export const createDealClosingPipeline = internalAction({
 					pipelineType: "deal_closing",
 					sellerId: args.sellerId,
 					leg2Amount: args.leg2Amount,
+					lenderId: args.lenderId,
 				} satisfies DealClosingLeg1Metadata,
 			}
 		);
@@ -139,6 +141,7 @@ export const createAndInitiateLeg2 = internalAction({
 		pipelineId: v.string(),
 		dealId: v.id("deals"),
 		sellerId: v.string(),
+		lenderId: v.optional(v.id("lenders")),
 		mortgageId: v.id("mortgages"),
 		leg2Amount: v.number(),
 		providerCode: providerCodeValidator,
@@ -147,6 +150,15 @@ export const createAndInitiateLeg2 = internalAction({
 		ctx,
 		args
 	): Promise<{ leg2TransferId: Id<"transferRequests"> }> => {
+		// lenderId is required for outbound deal_seller_payout transfers —
+		// the cash ledger posting step will throw if it is absent. Fail here,
+		// before creating an unpostable transfer record.
+		if (!args.lenderId) {
+			throw new ConvexError(
+				"lenderId is required for Leg 2 deal_seller_payout transfer"
+			);
+		}
+
 		// Create Leg 2: trust → seller (outbound, deal_seller_payout)
 		const leg2Id: Id<"transferRequests"> = await ctx.runMutation(
 			internal.payments.transfers.mutations.createTransferRequestInternal,
@@ -157,6 +169,7 @@ export const createAndInitiateLeg2 = internalAction({
 				currency: "CAD",
 				counterpartyType: "investor",
 				counterpartyId: args.sellerId,
+				lenderId: args.lenderId,
 				mortgageId: args.mortgageId,
 				dealId: args.dealId,
 				providerCode: args.providerCode,
