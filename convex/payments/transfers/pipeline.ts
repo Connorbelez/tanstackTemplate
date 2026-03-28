@@ -11,6 +11,7 @@
 
 import { v } from "convex/values";
 import { internal } from "../../_generated/api";
+import type { Id } from "../../_generated/dataModel";
 import { internalAction } from "../../_generated/server";
 import type { DealClosingLeg1Metadata } from "./pipeline.types";
 import { providerCodeValidator } from "./validators";
@@ -46,7 +47,13 @@ export const createDealClosingPipeline = internalAction({
 		leg2Amount: v.number(),
 		providerCode: providerCodeValidator,
 	},
-	handler: async (ctx, args) => {
+	handler: async (
+		ctx,
+		args
+	): Promise<{
+		pipelineId: string;
+		leg1TransferId: Id<"transferRequests">;
+	}> => {
 		// Validate leg2Amount early — reject before Leg 1 is created to avoid
 		// locking buyer funds when Leg 2 would later fail validation.
 		if (!Number.isInteger(args.leg2Amount) || args.leg2Amount <= 0) {
@@ -61,7 +68,7 @@ export const createDealClosingPipeline = internalAction({
 		}
 
 		// Create Leg 1: buyer → trust (inbound, deal_principal_transfer)
-		const leg1Id = await ctx.runMutation(
+		const leg1Id: Id<"transferRequests"> = await ctx.runMutation(
 			internal.payments.transfers.mutations.createTransferRequestInternal,
 			{
 				direction: "inbound",
@@ -121,9 +128,12 @@ export const createAndInitiateLeg2 = internalAction({
 		leg2Amount: v.number(),
 		providerCode: providerCodeValidator,
 	},
-	handler: async (ctx, args) => {
+	handler: async (
+		ctx,
+		args
+	): Promise<{ leg2TransferId: Id<"transferRequests"> }> => {
 		// Create Leg 2: trust → seller (outbound, deal_seller_payout)
-		const leg2Id = await ctx.runMutation(
+		const leg2Id: Id<"transferRequests"> = await ctx.runMutation(
 			internal.payments.transfers.mutations.createTransferRequestInternal,
 			{
 				direction: "outbound",
