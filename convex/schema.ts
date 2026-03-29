@@ -1900,15 +1900,19 @@ export default defineSchema({
 		isVisible: v.boolean(),
 		displayOrder: v.number(),
 		width: v.optional(v.number()),
-	}).index("by_view", ["viewDefId"]),
+	})
+		.index("by_view", ["viewDefId"])
+		.index("by_field", ["fieldDefId"]),
 
 	viewFilters: defineTable({
 		viewDefId: v.id("viewDefs"),
 		fieldDefId: v.id("fieldDefs"),
 		operator: filterOperatorValidator,
 		value: v.optional(v.string()),
-		logicalOperator: logicalOperatorValidator,
-	}).index("by_view", ["viewDefId"]),
+		logicalOperator: v.optional(logicalOperatorValidator),
+	})
+		.index("by_view", ["viewDefId"])
+		.index("by_field", ["fieldDefId"]),
 
 	viewKanbanGroups: defineTable({
 		viewDefId: v.id("viewDefs"),
@@ -1916,5 +1920,7 @@ export default defineSchema({
 		optionValue: v.string(),
 		displayOrder: v.number(),
 		isCollapsed: v.boolean(),
-	}).index("by_view", ["viewDefId"]),
+	})
+		.index("by_view", ["viewDefId"])
+		.index("by_field", ["fieldDefId"]),
 });
