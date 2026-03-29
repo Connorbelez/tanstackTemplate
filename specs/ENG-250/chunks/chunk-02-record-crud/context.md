@@ -66,7 +66,7 @@ export const createRecord = crmMutation
 ```
 
 Steps:
-1. Get orgId from ctx.viewer.orgId, throw if missing
+1. Get orgId from ctx.viewer.orgId (guaranteed non-null by `requireOrgContext` middleware)
 2. Load objectDef, verify exists + active + orgId matches (REQ-166)
 3. Load active fieldDefs for this object via `by_object` index
 4. Build fieldsByName Map
@@ -161,5 +161,5 @@ Record creation with 10 fields: 1 (records) + 10 (values) + 1 (audit) = 12 write
 
 ## Constraints
 - NEVER use `any` in internal code — `v.any()` for Convex validator is OK, cast to `Record<string, unknown>` internally
-- Use `as never` for the value field in writeValue since type varies by table but is validated upstream
+- In writeValue, use type-specific assertions (e.g., `as string`, `as number`) in each switch case branch after the type is narrowed by `fieldTypeToTable()`
 - Audit action names use dot-notation: `crm.record.created` (matching `crm.object.created` convention)

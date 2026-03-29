@@ -5,7 +5,7 @@ Source: Linear ENG-249, Notion implementation plan
 
 | Chunk | Label | Tasks | Status |
 | ----- | ----- | ----- | ------ |
-| 01 | data-plane-schema | T-001 through T-014 | pending |
+| 01 | data-plane-schema | T-001 through T-014 | complete |
 
 Status values: `pending` | `in-progress` | `complete` | `partial` | `blocked`
 
