@@ -30,4 +30,6 @@ export const calculationDetailsValidator = v.object({
 	ownershipFraction: v.number(),
 	rawAmount: v.number(),
 	roundedAmount: v.number(),
+	ownershipSnapshotDate: v.optional(v.string()), // YYYY-MM-DD: records which date was used for the ownership snapshot
+	reroutesAppliedCount: v.optional(v.number()), // how many reroutes were applied
 });

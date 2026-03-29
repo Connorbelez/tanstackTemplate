@@ -233,6 +233,35 @@ export const processSingleDisbursement = internalMutation({
 			});
 		}
 
+		// 2b. Verify calculation details exist (ownership snapshot was recorded)
+		if (
+			!(
+				entry.calculationDetails &&
+				Number.isFinite(entry.calculationDetails.settledAmount)
+			) ||
+			entry.calculationDetails.settledAmount <= 0 ||
+			!Number.isFinite(entry.calculationDetails.distributableAmount) ||
+			entry.calculationDetails.distributableAmount < 0
+		) {
+			throw new ConvexError({
+				code: "MISSING_CALCULATION_DETAILS" as const,
+				dispersalEntryId: args.dispersalEntryId,
+				message: "Dispersal entry is missing valid calculation details",
+			});
+		}
+
+		// 2c. Verify amount does not exceed distributable amount
+		if (entry.amount > entry.calculationDetails.distributableAmount) {
+			throw new ConvexError({
+				code: "AMOUNT_EXCEEDS_DISTRIBUTABLE" as const,
+				dispersalEntryId: args.dispersalEntryId,
+				amount: entry.amount,
+				distributableAmount: entry.calculationDetails.distributableAmount,
+				message:
+					"Entry amount exceeds the distributable amount from its calculation",
+			});
+		}
+
 		// 3. Validate amount is positive integer (safe-integer cents)
 		if (!Number.isInteger(entry.amount) || entry.amount <= 0) {
 			throw new ConvexError({

@@ -1,7 +1,7 @@
 /**
  * Disbursement Bridge tests — validates helper functions, query logic,
  * mutation behaviour, idempotency, and the disbursement gate integration
- * for ENG-206.
+ * for ENG-206 and ENG-219.
  *
  * The bridge converts pending dispersalEntries into outbound
  * transferRequests of type `lender_dispersal_payout`.
@@ -401,15 +401,15 @@ describe("processSingleDisbursement — disbursement gate", () => {
 	it("rejects entry whose amount exceeds LENDER_PAYABLE balance", async () => {
 		const t = createHarness();
 
-		// Seed with entry amount 45_000 but LENDER_PAYABLE balance only covers
-		// the default seed amount. We override by seeding a very large entry.
+		// Seed with entry amount 70_000 (within distributableAmount of 75_000
+		// so the AMOUNT_EXCEEDS_DISTRIBUTABLE assertion passes).
 		const { dispersalEntryId } = await seedFullScenario(t, {
-			entryAmount: 200_000, // Entry for 200k
+			entryAmount: 70_000,
 			payoutEligibleAfter: "2026-02-28",
 		});
 
-		// The seedFullScenario sets LENDER_PAYABLE credit to entryAmount (200k).
-		// Reduce the credit balance to 50k so the gate rejects the 200k disbursement.
+		// The seedFullScenario sets LENDER_PAYABLE credit to entryAmount (70k).
+		// Reduce the credit balance to 50k so the gate rejects the 70k disbursement.
 		await t.run(async (ctx) => {
 			const accounts = await ctx.db
 				.query("cash_ledger_accounts")
@@ -901,5 +901,149 @@ describe("checkDisbursementsDue", () => {
 			internal.dispersal.disbursementBridge.checkDisbursementsDue,
 			{}
 		);
+	});
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// T-006 / T-007: ENG-219 — effective-date ownership snapshot
+// ═══════════════════════════════════════════════════════════════════════
+
+describe("ENG-219: effective-date ownership snapshot", () => {
+	it("reroute after dispersal calculation but before disbursement does NOT change amount", async () => {
+		const t = createHarness();
+		const seed = await seedFullScenario(t, {
+			entryAmount: 45_000,
+			payoutEligibleAfter: "2026-02-28",
+		});
+
+		// Read original entry to record its amount
+		const originalEntry = await t.run(async (ctx) => {
+			return ctx.db.get(seed.dispersalEntryId);
+		});
+		if (!originalEntry) {
+			throw new Error("Original entry not found");
+		}
+		expect(originalEntry.amount).toBe(45_000);
+
+		// Insert a deal reroute AFTER the dispersal entry was created.
+		// The bridge should still use entry.amount unchanged.
+		await t.run(async (ctx) => {
+			const dealId = await ctx.db.insert("deals", {
+				status: "confirmed",
+				mortgageId: seed.mortgageId,
+				buyerId: "new-buyer-auth",
+				sellerId: "seller-auth",
+				fractionalShare: 3000,
+				closingDate: Date.now(),
+				lawyerId: "test-lawyer",
+				lawyerType: "platform_lawyer",
+				createdAt: Date.now(),
+				createdBy: "test-admin",
+			});
+			await ctx.db.insert("dealReroutes", {
+				dealId,
+				mortgageId: seed.mortgageId,
+				fromOwnerId: "seller-auth",
+				toOwnerId: "new-buyer-auth",
+				fractionalShare: 3000,
+				effectiveAfterDate: "2026-03-01",
+				createdAt: Date.now(),
+			});
+		});
+
+		// Run the disbursement bridge
+		const result = await t.mutation(
+			internal.dispersal.disbursementBridge.processSingleDisbursement,
+			{
+				dispersalEntryId: seed.dispersalEntryId,
+				providerCode: "mock_eft",
+			}
+		);
+
+		expect(result.created).toBe(true);
+
+		// Verify transfer.amount === 45_000 (original, not recomputed)
+		const transfer = (await t.run(async (ctx) => {
+			return ctx.db.get(result.transferId);
+		})) as Doc<"transferRequests"> | null;
+		if (!transfer) {
+			throw new Error("Transfer not found");
+		}
+		expect(transfer.amount).toBe(45_000);
+	});
+
+	it("rejects entry with invalid calculationDetails", async () => {
+		const t = createHarness();
+		const seed = await seedFullScenario(t, {
+			entryAmount: 45_000,
+			payoutEligibleAfter: "2026-02-28",
+		});
+
+		// Patch the entry's calculationDetails to have settledAmount: 0
+		await t.run(async (ctx) => {
+			const entry = await ctx.db.get(seed.dispersalEntryId);
+			if (!entry) {
+				throw new Error("Entry not found");
+			}
+			await ctx.db.patch(seed.dispersalEntryId, {
+				calculationDetails: {
+					...entry.calculationDetails,
+					settledAmount: 0,
+				},
+			});
+		});
+
+		try {
+			await t.mutation(
+				internal.dispersal.disbursementBridge.processSingleDisbursement,
+				{
+					dispersalEntryId: seed.dispersalEntryId,
+					providerCode: "mock_eft",
+				}
+			);
+			expect.unreachable("Expected MISSING_CALCULATION_DETAILS error");
+		} catch (e) {
+			if (!(e instanceof ConvexError)) {
+				throw e;
+			}
+			expect(getConvexErrorCode(e)).toBe("MISSING_CALCULATION_DETAILS");
+		}
+	});
+
+	it("rejects entry whose amount exceeds distributableAmount", async () => {
+		const t = createHarness();
+		const seed = await seedFullScenario(t, {
+			entryAmount: 45_000,
+			payoutEligibleAfter: "2026-02-28",
+		});
+
+		// Patch entry amount to exceed distributableAmount (75_000 from seed).
+		// Also increase LENDER_PAYABLE so the balance gate is not a confounding factor.
+		await t.run(async (ctx) => {
+			await ctx.db.patch(seed.dispersalEntryId, { amount: 100_000 });
+			const accounts = await ctx.db
+				.query("cash_ledger_accounts")
+				.withIndex("by_family", (q) => q.eq("family", "LENDER_PAYABLE"))
+				.collect();
+			for (const acct of accounts) {
+				await ctx.db.patch(acct._id, { cumulativeCredits: 100_000n });
+			}
+		});
+
+		try {
+			await t.mutation(
+				internal.dispersal.disbursementBridge.processSingleDisbursement,
+				{
+					dispersalEntryId: seed.dispersalEntryId,
+					providerCode: "mock_eft",
+				}
+			);
+			expect.unreachable("Expected AMOUNT_EXCEEDS_DISTRIBUTABLE error");
+		} catch (e) {
+			if (!(e instanceof ConvexError)) {
+				throw e;
+			}
+			expect(getConvexErrorCode(e)).toBe("AMOUNT_EXCEEDS_DISTRIBUTABLE");
+		}
 	});
 });

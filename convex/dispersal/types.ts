@@ -9,9 +9,11 @@ export interface CalculationDetails {
 	feeReceivable?: number;
 	mortgageFeeId?: Id<"mortgageFees">;
 	ownershipFraction: number;
+	ownershipSnapshotDate?: string;
 	ownershipUnits: number;
 	policyVersion?: number;
 	rawAmount: number;
+	reroutesAppliedCount?: number;
 	roundedAmount: number;
 	servicingFee: number;
 	settledAmount: number;

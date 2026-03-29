@@ -515,6 +515,70 @@ describe("createDispersalEntries", () => {
 		expect(secondFeeEntry.feeDue).toBe(6667);
 	});
 
+	describe("ENG-219: ownership snapshot metadata", () => {
+		it("records ownershipSnapshotDate in calculationDetails", async () => {
+			const seeded = await seedDispersalScenario(t, {
+				positionUnits: [6000, 4000],
+				settledDate: "2026-03-15",
+			});
+
+			const result = await runCreateDispersal(t, {
+				obligationId: seeded.obligationId,
+				mortgageId: seeded.mortgageId,
+				settledAmount: 100_000,
+				settledDate: "2026-03-15",
+				idempotencyKey: "dispersal:test:snapshot-date",
+			});
+
+			expect(result.created).toBe(true);
+			expect(result.entries).toHaveLength(2);
+
+			const persistedEntries = await t.run(async (ctx) =>
+				Promise.all(result.entries.map((entry) => ctx.db.get(entry.id)))
+			);
+
+			expect(persistedEntries).toHaveLength(result.entries.length);
+			for (const entry of persistedEntries) {
+				expect(entry).not.toBeNull();
+				expect(entry?.calculationDetails.ownershipSnapshotDate).toBe(
+					"2026-03-15"
+				);
+				expect(entry?.calculationDetails.reroutesAppliedCount).toBe(0);
+			}
+		});
+
+		it("records reroutesAppliedCount when reroutes are applied", async () => {
+			const seeded = await seedDispersalScenario(t, {
+				positionUnits: [7000, 3000],
+				includeReroute: true,
+				settledDate: "2026-03-15",
+			});
+
+			const result = await runCreateDispersal(t, {
+				obligationId: seeded.obligationId,
+				mortgageId: seeded.mortgageId,
+				settledAmount: 100_000,
+				settledDate: "2026-03-15",
+				idempotencyKey: "dispersal:test:reroute-count",
+			});
+
+			expect(result.created).toBe(true);
+
+			const persistedEntries = await t.run(async (ctx) =>
+				Promise.all(result.entries.map((entry) => ctx.db.get(entry.id)))
+			);
+
+			expect(persistedEntries).toHaveLength(result.entries.length);
+			for (const entry of persistedEntries) {
+				expect(entry).not.toBeNull();
+				expect(entry?.calculationDetails.reroutesAppliedCount).toBe(1);
+				expect(entry?.calculationDetails.ownershipSnapshotDate).toBe(
+					"2026-03-15"
+				);
+			}
+		});
+	});
+
 	it("records servicing receivable when the fee exceeds collected cash", async () => {
 		const seeded = await seedDispersalScenario(t);
 
