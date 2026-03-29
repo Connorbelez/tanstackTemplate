@@ -35,6 +35,15 @@ import {
 	transferTypeValidator,
 } from "./payments/transfers/validators";
 import { normalizedEventTypeValidator } from "./payments/webhooks/types";
+import {
+	capabilityValidator,
+	cardinalityValidator,
+	fieldTypeValidator,
+	filterOperatorValidator,
+	logicalOperatorValidator,
+	selectOptionValidator,
+	viewTypeValidator,
+} from "./crm/validators";
 
 export default defineSchema({
 	// ══════════════════════════════════════════════════════════
@@ -1804,4 +1813,114 @@ export default defineSchema({
 		currentDate: v.string(), // YYYY-MM-DD
 		startedAt: v.number(), // unix timestamp
 	}).index("by_clockId", ["clockId"]),
+
+	// ══════════════════════════════════════════════════════════
+	// EAV-CRM CONTROL PLANE
+	// ══════════════════════════════════════════════════════════
+
+	objectDefs: defineTable({
+		orgId: v.string(),
+		name: v.string(),
+		singularLabel: v.string(),
+		pluralLabel: v.string(),
+		icon: v.string(),
+		description: v.optional(v.string()),
+		isSystem: v.boolean(),
+		nativeTable: v.optional(v.string()),
+		isActive: v.boolean(),
+		displayOrder: v.number(),
+		createdAt: v.number(),
+		updatedAt: v.number(),
+		createdBy: v.string(),
+	})
+		.index("by_org", ["orgId"])
+		.index("by_org_name", ["orgId", "name"]),
+
+	fieldDefs: defineTable({
+		orgId: v.string(),
+		objectDefId: v.id("objectDefs"),
+		name: v.string(),
+		label: v.string(),
+		fieldType: fieldTypeValidator,
+		description: v.optional(v.string()),
+		isRequired: v.boolean(),
+		isUnique: v.boolean(),
+		isActive: v.boolean(),
+		displayOrder: v.number(),
+		defaultValue: v.optional(v.string()),
+		options: v.optional(v.array(selectOptionValidator)),
+		nativeColumnPath: v.optional(v.string()),
+		nativeReadOnly: v.boolean(),
+		createdAt: v.number(),
+		updatedAt: v.number(),
+	})
+		.index("by_object", ["objectDefId"])
+		.index("by_object_name", ["objectDefId", "name"])
+		.index("by_org", ["orgId"]),
+
+	fieldCapabilities: defineTable({
+		fieldDefId: v.id("fieldDefs"),
+		objectDefId: v.id("objectDefs"),
+		capability: capabilityValidator,
+	})
+		.index("by_field", ["fieldDefId"])
+		.index("by_object_capability", ["objectDefId", "capability"]),
+
+	linkTypeDefs: defineTable({
+		orgId: v.string(),
+		name: v.string(),
+		sourceObjectDefId: v.id("objectDefs"),
+		targetObjectDefId: v.id("objectDefs"),
+		cardinality: cardinalityValidator,
+		isActive: v.boolean(),
+		createdAt: v.number(),
+	})
+		.index("by_org", ["orgId"])
+		.index("by_source_object", ["sourceObjectDefId"])
+		.index("by_target_object", ["targetObjectDefId"]),
+
+	viewDefs: defineTable({
+		orgId: v.string(),
+		objectDefId: v.id("objectDefs"),
+		name: v.string(),
+		viewType: viewTypeValidator,
+		boundFieldId: v.optional(v.id("fieldDefs")),
+		isDefault: v.boolean(),
+		needsRepair: v.boolean(),
+		createdAt: v.number(),
+		updatedAt: v.number(),
+		createdBy: v.string(),
+	})
+		.index("by_object", ["objectDefId"])
+		.index("by_org", ["orgId"]),
+
+	viewFields: defineTable({
+		viewDefId: v.id("viewDefs"),
+		fieldDefId: v.id("fieldDefs"),
+		isVisible: v.boolean(),
+		displayOrder: v.number(),
+		width: v.optional(v.number()),
+	})
+		.index("by_view", ["viewDefId"])
+		.index("by_field", ["fieldDefId"]),
+
+	viewFilters: defineTable({
+		viewDefId: v.id("viewDefs"),
+		fieldDefId: v.id("fieldDefs"),
+		operator: filterOperatorValidator,
+		value: v.optional(v.string()),
+		logicalOperator: v.optional(logicalOperatorValidator),
+	})
+		.index("by_view", ["viewDefId"])
+		.index("by_field", ["fieldDefId"]),
+
+	viewKanbanGroups: defineTable({
+		viewDefId: v.id("viewDefs"),
+		fieldDefId: v.id("fieldDefs"),
+		optionValue: v.string(),
+		displayOrder: v.number(),
+		isCollapsed: v.boolean(),
+	})
+		.index("by_view", ["viewDefId"])
+		.index("by_field", ["fieldDefId"]),
 });

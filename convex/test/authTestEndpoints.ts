@@ -15,6 +15,10 @@ import {
 	borrowerQuery,
 	brokerMutation,
 	brokerQuery,
+	crmAdminMutation,
+	crmAdminQuery,
+	crmMutation,
+	crmQuery,
 	dealMutation,
 	dealQuery,
 	lawyerMutation,
@@ -149,5 +153,23 @@ export const testDispersalQuery = authedQuery
 
 export const testObligationWaiveMutation = authedMutation
 	.use(requirePermission("obligation:waive"))
+	.handler(async () => okResponse())
+	.public();
+
+// ── crm admin (org-scoped admin) ─────────────────────────────────────
+export const testCrmAdminQuery = crmAdminQuery
+	.handler(async () => okResponse())
+	.public();
+
+export const testCrmAdminMutation = crmAdminMutation
+	.handler(async () => okResponse())
+	.public();
+
+// ── crm (any authed user with org context) ───────────────────────────
+export const testCrmQuery = crmQuery
+	.handler(async () => okResponse())
+	.public();
+
+export const testCrmMutation = crmMutation
 	.handler(async () => okResponse())
 	.public();
