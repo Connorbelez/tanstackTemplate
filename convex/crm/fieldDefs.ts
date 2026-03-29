@@ -21,7 +21,10 @@ export const createField = crmAdminMutation
 		nativeReadOnly: v.optional(v.boolean()),
 	})
 	.handler(async (ctx, args) => {
-		const orgId = ctx.viewer.orgId as string;
+		const orgId = ctx.viewer.orgId;
+		if (!orgId) {
+			throw new ConvexError("Org context required for CRM operations");
+		}
 		const now = Date.now();
 
 		// Verify objectDef exists and belongs to org
@@ -142,7 +145,10 @@ export const updateField = crmAdminMutation
 		options: v.optional(v.array(selectOptionValidator)),
 	})
 	.handler(async (ctx, args) => {
-		const orgId = ctx.viewer.orgId as string;
+		const orgId = ctx.viewer.orgId;
+		if (!orgId) {
+			throw new ConvexError("Org context required for CRM operations");
+		}
 
 		const before = await ctx.db.get(args.fieldDefId);
 		if (!before) {
@@ -209,7 +215,10 @@ export const updateField = crmAdminMutation
 export const deactivateField = crmAdminMutation
 	.input({ fieldDefId: v.id("fieldDefs") })
 	.handler(async (ctx, args) => {
-		const orgId = ctx.viewer.orgId as string;
+		const orgId = ctx.viewer.orgId;
+		if (!orgId) {
+			throw new ConvexError("Org context required for CRM operations");
+		}
 
 		const fieldDef = await ctx.db.get(args.fieldDefId);
 		if (!fieldDef) {
@@ -290,7 +299,10 @@ export const reorderFields = crmAdminMutation
 		fieldIds: v.array(v.id("fieldDefs")),
 	})
 	.handler(async (ctx, args) => {
-		const orgId = ctx.viewer.orgId as string;
+		const orgId = ctx.viewer.orgId;
+		if (!orgId) {
+			throw new ConvexError("Org context required for CRM operations");
+		}
 
 		// Verify objectDef belongs to org
 		const objectDef = await ctx.db.get(args.objectDefId);
@@ -319,7 +331,10 @@ export const reorderFields = crmAdminMutation
 export const listFields = crmAdminQuery
 	.input({ objectDefId: v.id("objectDefs") })
 	.handler(async (ctx, args) => {
-		const orgId = ctx.viewer.orgId as string;
+		const orgId = ctx.viewer.orgId;
+		if (!orgId) {
+			throw new ConvexError("Org context required for CRM operations");
+		}
 
 		// Verify objectDef belongs to org
 		const objectDef = await ctx.db.get(args.objectDefId);

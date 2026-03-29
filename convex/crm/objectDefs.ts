@@ -15,7 +15,10 @@ export const createObject = crmAdminMutation
 		nativeTable: v.optional(v.string()),
 	})
 	.handler(async (ctx, args) => {
-		const orgId = ctx.viewer.orgId as string;
+		const orgId = ctx.viewer.orgId;
+		if (!orgId) {
+			throw new ConvexError("Org context required for CRM operations");
+		}
 		const now = Date.now();
 
 		// Validate name uniqueness per org
@@ -88,7 +91,10 @@ export const updateObject = crmAdminMutation
 		description: v.optional(v.string()),
 	})
 	.handler(async (ctx, args) => {
-		const orgId = ctx.viewer.orgId as string;
+		const orgId = ctx.viewer.orgId;
+		if (!orgId) {
+			throw new ConvexError("Org context required for CRM operations");
+		}
 		const before = await ctx.db.get(args.objectDefId);
 		if (!before || before.orgId !== orgId) {
 			throw new ConvexError("Object not found or access denied");
@@ -130,11 +136,15 @@ export const updateObject = crmAdminMutation
 	.public();
 
 // ── deactivateObject ────────────────────────────────────────────────
-// Soft-delete: sets isActive=false and cascades to all views for this object.
+// Soft-delete: sets isActive=false on the objectDef and marks all associated
+// viewDefs as needsRepair=true (viewDefs have no isActive field).
 export const deactivateObject = crmAdminMutation
 	.input({ objectDefId: v.id("objectDefs") })
 	.handler(async (ctx, args) => {
-		const orgId = ctx.viewer.orgId as string;
+		const orgId = ctx.viewer.orgId;
+		if (!orgId) {
+			throw new ConvexError("Org context required for CRM operations");
+		}
 		const objectDef = await ctx.db.get(args.objectDefId);
 		if (!objectDef || objectDef.orgId !== orgId) {
 			throw new ConvexError("Object not found or access denied");
@@ -173,7 +183,10 @@ export const deactivateObject = crmAdminMutation
 // Query active objectDefs by org, ordered by displayOrder.
 export const listObjects = crmAdminQuery
 	.handler(async (ctx) => {
-		const orgId = ctx.viewer.orgId as string;
+		const orgId = ctx.viewer.orgId;
+		if (!orgId) {
+			throw new ConvexError("Org context required for CRM operations");
+		}
 		const objects = await ctx.db
 			.query("objectDefs")
 			.withIndex("by_org", (q) => q.eq("orgId", orgId))
@@ -189,7 +202,10 @@ export const listObjects = crmAdminQuery
 export const getObject = crmAdminQuery
 	.input({ objectDefId: v.id("objectDefs") })
 	.handler(async (ctx, args) => {
-		const orgId = ctx.viewer.orgId as string;
+		const orgId = ctx.viewer.orgId;
+		if (!orgId) {
+			throw new ConvexError("Org context required for CRM operations");
+		}
 		const objectDef = await ctx.db.get(args.objectDefId);
 		if (!objectDef || objectDef.orgId !== orgId) {
 			throw new ConvexError("Object not found or access denied");
