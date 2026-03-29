@@ -11,6 +11,26 @@ type FieldDef = Doc<"fieldDefs">;
 // ── Helpers ──────────────────────────────────────────────────────────
 
 /**
+ * Validates that a value is a non-null plain object suitable for use as a
+ * field-name-to-value map. Throws a `ConvexError` if the value is null,
+ * undefined, an array, or any non-object primitive.
+ */
+function assertPlainObject(
+	value: unknown
+): asserts value is Record<string, unknown> {
+	if (
+		value === null ||
+		value === undefined ||
+		typeof value !== "object" ||
+		Array.isArray(value)
+	) {
+		throw new ConvexError(
+			'"values" must be a non-null plain object mapping field names to values'
+		);
+	}
+}
+
+/**
  * Writes a single field value into the correct typed EAV table.
  * Uses a switch on the resolved table name so Convex sees a literal
  * table name at each insert call-site.
@@ -201,8 +221,9 @@ export const createRecord = crmMutation
 			fieldsByName.set(fd.name, fd);
 		}
 
-		// Cast and validate
-		const values = args.values as Record<string, unknown>;
+		// Validate shape and required fields
+		assertPlainObject(args.values);
+		const values = args.values;
 		validateRequiredFields(activeFieldDefs, values);
 
 		for (const [fieldName, value] of Object.entries(values)) {
@@ -302,8 +323,9 @@ export const updateRecord = crmMutation
 			fieldsByName.set(fd.name, fd);
 		}
 
-		// Cast values
-		const values = args.values as Record<string, unknown>;
+		// Validate shape
+		assertPlainObject(args.values);
+		const values = args.values;
 
 		// Collect before/after for audit diff
 		const beforeValues: Record<string, unknown> = {};
