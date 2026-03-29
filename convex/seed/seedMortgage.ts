@@ -246,6 +246,10 @@ export const seedMortgage = adminMutation
 					createdAt,
 				}));
 
+			if (existingMortgage && !existingMortgage.orgId) {
+				await ctx.db.patch(existingMortgage._id, { orgId: mortgageOrgId });
+			}
+
 			if (existingMortgage) {
 				await attachDefaultFeeSetToMortgage(
 					ctx.db,

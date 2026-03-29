@@ -4,6 +4,7 @@ import { auditLog } from "../../auditLog";
 import { appendAuditJournalEntry } from "../../engine/auditJournal";
 import type { CommandSource } from "../../engine/types";
 import { sourceValidator } from "../../engine/validators";
+import { orgIdFromMortgageId } from "../../lib/orgScope";
 import { postObligationAccrued } from "../cashLedger/integrations";
 
 const FIFTEEN_DAYS_MS = 15 * 24 * 60 * 60 * 1000;
@@ -99,8 +100,10 @@ export const createCorrectiveObligation = internalMutation({
 
 		// 4. Create the corrective obligation with GT fields
 		const now = Date.now();
+		const orgId =
+			original.orgId ?? (await orgIdFromMortgageId(ctx, original.mortgageId));
 		const correctiveId = await ctx.db.insert("obligations", {
-			orgId: original.orgId,
+			orgId,
 			status: "upcoming",
 			lastTransitionAt: now,
 			machineContext: undefined,
@@ -124,7 +127,7 @@ export const createCorrectiveObligation = internalMutation({
 			actorId: source.actorId ?? "system",
 			actorType: source.actorType ?? "system",
 			channel: source.channel,
-			organizationId: original.orgId,
+			organizationId: orgId,
 			entityId: correctiveId,
 			entityType: "obligation",
 			eventType: "CREATED",

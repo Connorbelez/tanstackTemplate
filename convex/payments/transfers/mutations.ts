@@ -845,6 +845,17 @@ export const retryTransfer = paymentRetryMutation
 		}
 
 		const source = buildSource(ctx.viewer, "admin_dashboard");
+		const resolvedOrgId =
+			(await orgIdForTransferRequest(ctx, {
+				mortgageId: transfer.mortgageId,
+				obligationId: transfer.obligationId,
+				dealId: transfer.dealId,
+				dispersalEntryId: transfer.dispersalEntryId,
+				lenderId: transfer.lenderId,
+				borrowerId: transfer.borrowerId,
+				planEntryId: transfer.planEntryId,
+				collectionAttemptId: transfer.collectionAttemptId,
+			})) ?? transfer.orgId;
 		const originalMetadata = transfer.metadata as
 			| Record<string, unknown>
 			| undefined;
@@ -855,7 +866,7 @@ export const retryTransfer = paymentRetryMutation
 		};
 
 		return ctx.db.insert("transferRequests", {
-			orgId: transfer.orgId,
+			orgId: resolvedOrgId,
 			status: "initiated",
 			direction: transfer.direction,
 			transferType: transfer.transferType,

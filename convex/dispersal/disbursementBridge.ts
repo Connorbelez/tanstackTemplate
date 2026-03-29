@@ -317,7 +317,8 @@ export const processSingleDisbursement = internalMutation({
 				: idempotencyKey;
 
 		const now = Date.now();
-		const orgId = await orgIdFromMortgageId(ctx, entry.mortgageId);
+		const orgId =
+			entry.orgId ?? (await orgIdFromMortgageId(ctx, entry.mortgageId));
 		const transferId = await ctx.db.insert("transferRequests", {
 			orgId,
 			status: "initiated",

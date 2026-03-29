@@ -4,6 +4,7 @@ import { components, internal } from "../../_generated/api";
 import type { Id } from "../../_generated/dataModel";
 import type { MutationCtx } from "../../_generated/server";
 import { internalMutation } from "../../_generated/server";
+import { orgIdFromMortgageId } from "../../lib/orgScope";
 import { safeBigintToNumber } from "../../payments/cashLedger/accounts";
 import {
 	postOverpaymentToUnappliedCash,
@@ -161,8 +162,13 @@ export const emitPaymentReceived = internalMutation({
 			const firstOblForBridge = await ctx.db.get(planEntry.obligationIds[0]);
 			if (firstOblForBridge?.borrowerId) {
 				const now = Date.now();
+				const bridgeOrgId =
+					firstOblForBridge.orgId ??
+					(firstOblForBridge.mortgageId
+						? await orgIdFromMortgageId(ctx, firstOblForBridge.mortgageId)
+						: undefined);
 				const bridgeTransferId = await ctx.db.insert("transferRequests", {
-					orgId: firstOblForBridge.orgId,
+					orgId: bridgeOrgId,
 					status: "initiated",
 					direction: "inbound",
 					transferType: obligationTypeToTransferType(firstOblForBridge.type),

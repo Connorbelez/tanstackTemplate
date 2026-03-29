@@ -106,6 +106,11 @@ export const seedBroker = adminMutation
 				fixture.licenseId
 			);
 			if (existingBroker) {
+				if (!existingBroker.orgId) {
+					await ctx.db.patch(existingBroker._id, {
+						orgId: fixture.organization.workosId,
+					});
+				}
 				reusedBrokers += 1;
 				brokerIds.push(existingBroker._id);
 				continue;

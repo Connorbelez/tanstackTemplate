@@ -28,7 +28,14 @@ export async function orgIdFromMortgageId(
 	mortgageId: Id<"mortgages">
 ): Promise<string | undefined> {
 	const mortgage = await ctx.db.get(mortgageId);
-	return mortgage?.orgId;
+	if (!mortgage) {
+		return undefined;
+	}
+	if (mortgage.orgId) {
+		return mortgage.orgId;
+	}
+	const broker = await ctx.db.get(mortgage.brokerOfRecordId);
+	return broker?.orgId;
 }
 
 export interface TransferOrgResolutionRefs {
@@ -119,7 +126,14 @@ async function orgIdFromLender(
 	lenderId: Id<"lenders">
 ): Promise<string | undefined> {
 	const lender = await ctx.db.get(lenderId);
-	return lender?.orgId;
+	if (!lender) {
+		return undefined;
+	}
+	if (lender.orgId) {
+		return lender.orgId;
+	}
+	const broker = await ctx.db.get(lender.brokerId);
+	return broker?.orgId;
 }
 
 async function orgIdFromBorrower(
