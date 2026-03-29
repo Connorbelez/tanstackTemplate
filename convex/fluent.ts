@@ -445,6 +445,20 @@ export const paymentWebhookAction = authedAction.use(
 	requirePermissionAction("payment:webhook_process")
 );
 
+// ── CRM Chains ──────────────────────────────────────────────────────
+// Control Plane mutations (admin + org context)
+export const crmAdminMutation = authedMutation
+	.use(requireOrgContext)
+	.use(requireAdmin);
+
+export const crmAdminQuery = authedQuery
+	.use(requireOrgContext)
+	.use(requireAdmin);
+
+// Data Plane queries (any authed user with org context)
+export const crmQuery = authedQuery.use(requireOrgContext);
+export const crmMutation = authedMutation.use(requireOrgContext);
+
 export const whoAmI = convex
 	.query()
 	.use(authMiddleware)
