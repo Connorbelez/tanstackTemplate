@@ -3,6 +3,7 @@
   "exclude": [
     "node_modules",
     "dist",
+    "convex/**",
     "src/test/**/*",
     "node_modules/**/*",
     "node_modules/*",

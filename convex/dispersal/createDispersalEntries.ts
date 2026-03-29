@@ -471,6 +471,7 @@ export const createDispersalEntries = internalMutation({
 		const createdAt = Date.now();
 		for (const share of shares) {
 			const entryId = await ctx.db.insert("dispersalEntries", {
+				orgId: mortgage.orgId,
 				mortgageId: args.mortgageId,
 				lenderId: share.lenderId,
 				lenderAccountId: share.lenderAccountId,

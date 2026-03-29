@@ -155,6 +155,7 @@ export const seedOnboardingRequest = adminMutation
 				initialState: "pending_review",
 				source: SEED_SOURCE,
 				timestamp: createdAt,
+				organizationId: fixture.request.targetOrganizationId,
 				payload: {
 					userId,
 					requestedRole: fixture.request.requestedRole,
@@ -168,6 +169,7 @@ export const seedOnboardingRequest = adminMutation
 				eventMap: ONBOARDING_EVENT_MAP,
 				source: SEED_SOURCE,
 				startTimestamp: createdAt + 60_000,
+				organizationId: fixture.request.targetOrganizationId,
 			});
 
 			createdRequests += 1;

@@ -127,6 +127,7 @@ export const requestRole = authedMutation
 			actorId: ctx.viewer.authId,
 			actorType: "member",
 			channel: "onboarding_portal",
+			organizationId: targetOrganizationId,
 			entityId: requestId,
 			entityType: "onboardingRequest",
 			eventType: "CREATED",

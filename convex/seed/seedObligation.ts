@@ -226,7 +226,15 @@ export const seedObligation = adminMutation
 							}
 						: undefined;
 
+				const mortgageRow = await ctx.db.get(pair.mortgageId);
+				if (!mortgageRow) {
+					throw new ConvexError(
+						`seedObligation: mortgage not found ${pair.mortgageId}`
+					);
+				}
+
 				const obligationId = await ctx.db.insert("obligations", {
+					orgId: mortgageRow.orgId,
 					status: state,
 					machineContext: undefined,
 					lastTransitionAt:
@@ -247,6 +255,7 @@ export const seedObligation = adminMutation
 					entityType: "obligation",
 					entityId: obligationId,
 					initialState: "upcoming",
+					organizationId: mortgageRow.orgId,
 					source: SEED_SOURCE,
 					timestamp: createdAt,
 					payload: {
@@ -263,6 +272,7 @@ export const seedObligation = adminMutation
 					payloadByTransition,
 					source: SEED_SOURCE,
 					startTimestamp: createdAt + 60_000,
+					organizationId: mortgageRow.orgId,
 				});
 
 				createdObligations += 1;

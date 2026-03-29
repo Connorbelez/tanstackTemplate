@@ -216,7 +216,13 @@ export const seedDeal = adminMutation
 			const finalTransitionAt =
 				createdAt + transitionCount * DEFAULT_JOURNAL_TIME_STEP_MS;
 
+			const mortgageRow = await ctx.db.get(mortgageId);
+			if (!mortgageRow) {
+				throw new ConvexError(`seedDeal: mortgage not found ${mortgageId}`);
+			}
+
 			const dealId = await ctx.db.insert("deals", {
+				orgId: mortgageRow.orgId,
 				status: fixture.status,
 				machineContext: undefined,
 				lastTransitionAt: transitionCount === 0 ? createdAt : finalTransitionAt,
@@ -243,6 +249,7 @@ export const seedDeal = adminMutation
 				initialState: "initiated",
 				source: SEED_SOURCE,
 				timestamp: createdAt,
+				organizationId: mortgageRow.orgId,
 				payload: {
 					mortgageId,
 					buyerId,
@@ -270,6 +277,7 @@ export const seedDeal = adminMutation
 				payloadByTransition,
 				source: SEED_SOURCE,
 				startTimestamp: createdAt + DEFAULT_JOURNAL_TIME_STEP_MS,
+				organizationId: mortgageRow.orgId,
 			});
 
 			createdDeals += 1;

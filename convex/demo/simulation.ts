@@ -2,12 +2,14 @@ import { ConvexError, v } from "convex/values";
 import { internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
+import { FAIRLEND_BROKERAGE_ORG_ID } from "../constants";
 import type { CommandSource, TransitionResult } from "../engine/types";
 import { attachDefaultFeeSetToMortgage } from "../fees/resolver";
 import { adminMutation, authedQuery } from "../fluent";
 import { getAccountLenderId } from "../ledger/accountOwnership";
 import { getAvailableBalance, getPostedBalance } from "../ledger/accounts";
 import { TOTAL_SUPPLY } from "../ledger/constants";
+import { requireOrgIdFromBroker } from "../lib/orgScope";
 import {
 	DEMO_LEDGER_MORTGAGES,
 	ensureDemoLedgerSeeded,
@@ -211,6 +213,7 @@ async function getOrCreateSimulationBorrower(ctx: MutationCtx) {
 	}
 
 	return await ctx.db.insert("borrowers", {
+		orgId: FAIRLEND_BROKERAGE_ORG_ID,
 		userId: user._id,
 		status: "active",
 		lastTransitionAt: Date.now(),
@@ -251,6 +254,7 @@ async function getOrCreateSimulationBroker(ctx: MutationCtx) {
 		status: "active",
 		lastTransitionAt: Date.now(),
 		createdAt: Date.now(),
+		orgId: FAIRLEND_BROKERAGE_ORG_ID,
 	});
 }
 
@@ -258,6 +262,8 @@ async function ensureSimulationLenders(
 	ctx: MutationCtx,
 	brokerId: Id<"brokers">
 ) {
+	const broker = await ctx.db.get(brokerId);
+	const lenderOrgId = requireOrgIdFromBroker(broker);
 	for (const fixture of SIM_LENDER_FIXTURES) {
 		let user = await ctx.db
 			.query("users")
@@ -288,6 +294,7 @@ async function ensureSimulationLenders(
 		}
 
 		await ctx.db.insert("lenders", {
+			orgId: lenderOrgId,
 			userId: user._id,
 			brokerId,
 			accreditationStatus: "accredited",
@@ -698,7 +705,11 @@ export const seedSimulation = adminMutation
 				createdAt: Date.now(),
 			});
 
+			const simulationBroker = await ctx.db.get(brokerId);
+			const mortgageOrgId = requireOrgIdFromBroker(simulationBroker);
+
 			const mortgageId = await ctx.db.insert("mortgages", {
+				orgId: mortgageOrgId,
 				status: "active",
 				machineContext: { missedPayments: 0, lastPaymentAt: 0 },
 				lastTransitionAt: Date.now(),

@@ -106,6 +106,11 @@ export const seedBroker = adminMutation
 				fixture.licenseId
 			);
 			if (existingBroker) {
+				if (!existingBroker.orgId) {
+					await ctx.db.patch(existingBroker._id, {
+						orgId: fixture.organization.workosId,
+					});
+				}
 				reusedBrokers += 1;
 				brokerIds.push(existingBroker._id);
 				continue;
@@ -119,7 +124,7 @@ export const seedBroker = adminMutation
 				licenseId: fixture.licenseId,
 				licenseProvince: "ON",
 				brokerageName: fixture.brokerageName,
-				brokerageOrgId: fixture.organization.workosId,
+				orgId: fixture.organization.workosId,
 				onboardedAt,
 				createdAt,
 			});
@@ -130,10 +135,11 @@ export const seedBroker = adminMutation
 				initialState: "active",
 				source: SEED_SOURCE,
 				timestamp: createdAt,
+				organizationId: fixture.organization.workosId,
 				payload: {
 					licenseId: fixture.licenseId,
 					userId,
-					brokerageOrgId: fixture.organization.workosId,
+					orgId: fixture.organization.workosId,
 				},
 			});
 

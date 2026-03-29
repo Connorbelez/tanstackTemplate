@@ -24,7 +24,7 @@
     "prepare": "husky",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p convex/tsconfig.json",
     "test:coverage": "ALLOW_TEST_AUTH_ENDPOINTS=true DISABLE_GT_HASHCHAIN=true vitest run --coverage",
     "review": "bash scripts/code-review.sh",
     "lint:security": "bun run scripts/lint-security.ts"

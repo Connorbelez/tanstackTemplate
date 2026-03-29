@@ -1,6 +1,7 @@
 import { ConvexError } from "convex/values";
 import type { Id } from "../../_generated/dataModel";
 import type { MutationCtx } from "../../_generated/server";
+import { orgIdFromMortgageId } from "../../lib/orgScope";
 import {
 	getPeriodsPerYear,
 	type PaymentFrequency,
@@ -75,6 +76,8 @@ export async function generateObligationsImpl(
 		maturityDate,
 	} = params;
 
+	const orgId = await orgIdFromMortgageId(ctx, mortgageId);
+
 	// Parse dates (ISO strings -> timestamps)
 	const firstPaymentTs = new Date(firstPaymentDate).getTime();
 	const maturityTs = new Date(maturityDate).getTime();
@@ -112,6 +115,7 @@ export async function generateObligationsImpl(
 		const now = Date.now();
 
 		const id = await ctx.db.insert("obligations", {
+			orgId,
 			status: "upcoming",
 			machineContext: { obligationId: "", paymentsApplied: 0 },
 			lastTransitionAt: now,

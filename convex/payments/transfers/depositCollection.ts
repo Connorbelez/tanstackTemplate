@@ -7,6 +7,7 @@
 
 import { ConvexError, v } from "convex/values";
 import { internal } from "../../_generated/api";
+import type { Id } from "../../_generated/dataModel";
 import { internalAction } from "../../_generated/server";
 import {
 	buildCommitmentDepositIdempotencyKey,
@@ -32,7 +33,10 @@ export const collectCommitmentDeposit = internalAction({
 		amount: v.number(),
 		providerCode: v.optional(providerCodeValidator),
 	},
-	handler: async (ctx, args) => {
+	handler: async (
+		ctx,
+		args
+	): Promise<{ transferId: Id<"transferRequests"> }> => {
 		const validationError = getCommitmentDepositValidationError({
 			dealId: args.dealId,
 			applicationId: args.applicationId,
@@ -51,7 +55,7 @@ export const collectCommitmentDeposit = internalAction({
 			args.providerCode
 		);
 
-		const transferId = await ctx.runMutation(
+		const transferId: Id<"transferRequests"> = await ctx.runMutation(
 			internal.payments.transfers.mutations.createTransferRequestInternal,
 			{
 				direction: "inbound",

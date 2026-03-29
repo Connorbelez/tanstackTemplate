@@ -5,6 +5,7 @@ import { getNextSnapshot } from "xstate";
 import type { TableNames } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 import { auditLog } from "../auditLog";
+import { auditOrganizationIdFromEntityDocument } from "../lib/orgScope";
 import { appendAuditJournalEntry } from "./auditJournal";
 import { effectRegistry } from "./effects/registry";
 import { getMachineVersion, machineRegistry } from "./machines/registry";
@@ -262,6 +263,10 @@ export async function executeTransition(
 		});
 	}
 
+	const organizationId = auditOrganizationIdFromEntityDocument(
+		entity as { orgId?: string; targetOrganizationId?: string }
+	);
+
 	// ── 3. HYDRATE ───────────────────────────────────────────────────────
 	// Cast to a governed record shape — all governed entities share `status` + `machineContext`.
 	const governedEntity = entity as unknown as {
@@ -306,6 +311,7 @@ export async function executeTransition(
 				actorId: source.actorId ?? "system",
 				actorType: source.actorType,
 				channel: source.channel,
+				organizationId,
 				entityId,
 				entityType,
 				eventType,
@@ -353,6 +359,7 @@ export async function executeTransition(
 			actorId: source.actorId ?? "system",
 			actorType: source.actorType,
 			channel: source.channel,
+			organizationId,
 			entityId,
 			entityType,
 			eventType,
@@ -415,6 +422,7 @@ export async function executeTransition(
 		actorId: source.actorId ?? "system",
 		actorType: source.actorType,
 		channel: source.channel,
+		organizationId,
 		entityId,
 		entityType,
 		eventType,

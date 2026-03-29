@@ -20,4 +20,4 @@ Completed: 2026-03-16 14:27:14 EDT
 ## Notes
 - Chunk 1 was implemented by a fresh worker and reviewed in the main thread before the local quality gate.
 - The repo drift around lender audit typing was resolved by adding `"lender"` to GT entity unions and validators.
-- Supporting brokerage organization rows are seeded to match local `brokers.brokerageOrgId` usage.
+- Supporting brokerage organization rows are seeded to match local `brokers.orgId` usage.

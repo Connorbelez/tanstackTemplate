@@ -50,6 +50,8 @@ export interface WriteCreationJournalEntryArgs {
 	entityType: EntityType;
 	eventType?: string;
 	initialState: string;
+	/** WorkOS organization id for org-scoped audit index */
+	organizationId?: string;
 	payload?: Record<string, unknown>;
 	source?: CommandSource;
 	timestamp?: number;
@@ -59,6 +61,7 @@ export interface WriteSyntheticJournalTrailArgs {
 	entityId: string;
 	entityType: EntityType;
 	eventMap?: Readonly<Record<string, string>>;
+	organizationId?: string;
 	payloadByTransition?: Readonly<Record<string, Record<string, unknown>>>;
 	source?: CommandSource;
 	startTimestamp?: number;
@@ -443,6 +446,7 @@ export async function writeCreationJournalEntry(
 		sessionId: source.sessionId || undefined,
 		machineVersion,
 		timestamp: args.timestamp ?? Date.now(),
+		organizationId: args.organizationId,
 	});
 }
 
@@ -484,6 +488,7 @@ export async function writeSyntheticJournalTrail(
 			sessionId: source.sessionId || undefined,
 			machineVersion,
 			timestamp,
+			organizationId: args.organizationId,
 		});
 		entries.push(entryId);
 	}
