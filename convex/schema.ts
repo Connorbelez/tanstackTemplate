@@ -2077,5 +2077,8 @@ export default defineSchema({
 	})
 		.index("by_source", ["sourceKind", "sourceId"])
 		.index("by_target", ["targetKind", "targetId"])
-		.index("by_link_type", ["linkTypeDefId"]),
+		.index("by_link_type", ["linkTypeDefId"])
+		.index("by_org_source", ["orgId", "sourceKind", "sourceId"])
+		.index("by_org_target", ["orgId", "targetKind", "targetId"])
+		.index("by_org", ["orgId"]),
 });
