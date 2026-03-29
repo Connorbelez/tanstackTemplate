@@ -214,6 +214,30 @@ const CHAIN_TESTS: ChainTest[] = [
 		type: "query",
 		allowed: ["FAIRLEND_ADMIN", "BROKER", "LENDER"],
 	},
+	{
+		name: "crmAdminQuery (org-scoped admin only)",
+		queryEndpoint: api.test.authTestEndpoints.testCrmAdminQuery,
+		type: "query",
+		allowed: ["FAIRLEND_ADMIN", "EXTERNAL_ORG_ADMIN"],
+	},
+	{
+		name: "crmAdminMutation (org-scoped admin only)",
+		mutationEndpoint: api.test.authTestEndpoints.testCrmAdminMutation,
+		type: "mutation",
+		allowed: ["FAIRLEND_ADMIN", "EXTERNAL_ORG_ADMIN"],
+	},
+	{
+		name: "crmQuery (any authed user with org context)",
+		queryEndpoint: api.test.authTestEndpoints.testCrmQuery,
+		type: "query",
+		allowed: ALL_IDENTITY_NAMES,
+	},
+	{
+		name: "crmMutation (any authed user with org context)",
+		mutationEndpoint: api.test.authTestEndpoints.testCrmMutation,
+		type: "mutation",
+		allowed: ALL_IDENTITY_NAMES,
+	},
 ];
 
 // ── Test Generation ──────────────────────────────────────────────────
