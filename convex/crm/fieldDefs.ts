@@ -161,6 +161,35 @@ export const updateField = crmAdminMutation
 			throw new ConvexError("Field not found or access denied");
 		}
 
+		// Validate name uniqueness per object when renaming
+		if (args.name !== undefined && args.name !== before.name) {
+			const duplicate = await ctx.db
+				.query("fieldDefs")
+				.withIndex("by_object_name", (q) =>
+					q
+						.eq("objectDefId", before.objectDefId)
+						.eq("name", args.name as string),
+				)
+				.first();
+			if (duplicate) {
+				throw new ConvexError(
+					`Field "${args.name}" already exists on object "${objectDef.name}"`,
+				);
+			}
+		}
+
+		// Validate select/multi_select have options (using effective type and options)
+		const effectiveType = args.fieldType ?? before.fieldType;
+		const effectiveOptions = args.options ?? before.options;
+		if (
+			(effectiveType === "select" || effectiveType === "multi_select") &&
+			(!effectiveOptions || effectiveOptions.length === 0)
+		) {
+			throw new ConvexError(
+				`Field type "${effectiveType}" requires at least one option`,
+			);
+		}
+
 		// Build patch
 		const patch: Record<string, unknown> = { updatedAt: Date.now() };
 		if (args.name !== undefined) patch.name = args.name;
@@ -191,6 +220,23 @@ export const updateField = crmAdminMutation
 					objectDefId: before.objectDefId,
 					capability,
 				});
+			}
+
+			// Flag views that use this field as boundFieldId as needing repair
+			// (field type change may invalidate kanban/group_by configurations)
+			const views = await ctx.db
+				.query("viewDefs")
+				.withIndex("by_object", (q) =>
+					q.eq("objectDefId", before.objectDefId),
+				)
+				.collect();
+			for (const view of views) {
+				if (view.boundFieldId === args.fieldDefId) {
+					await ctx.db.patch(view._id, {
+						needsRepair: true,
+						updatedAt: Date.now(),
+					});
+				}
 			}
 		}
 
@@ -253,7 +299,9 @@ export const deactivateField = crmAdminMutation
 			}
 		}
 
-		// Remove from viewFields
+		// Remove from viewFields, viewFilters, and viewKanbanGroups
+		// Note: viewFilters and viewKanbanGroups only have a by_view index (no by_field),
+		// so we iterate per-view and filter by fieldDefId.
 		for (const view of views) {
 			const viewFields = await ctx.db
 				.query("viewFields")
@@ -262,6 +310,28 @@ export const deactivateField = crmAdminMutation
 			for (const vf of viewFields) {
 				if (vf.fieldDefId === args.fieldDefId) {
 					await ctx.db.delete(vf._id);
+				}
+			}
+
+			// Clean up viewFilters referencing this field
+			const viewFilters = await ctx.db
+				.query("viewFilters")
+				.withIndex("by_view", (q) => q.eq("viewDefId", view._id))
+				.collect();
+			for (const vf of viewFilters) {
+				if (vf.fieldDefId === args.fieldDefId) {
+					await ctx.db.delete(vf._id);
+				}
+			}
+
+			// Clean up viewKanbanGroups referencing this field
+			const viewKanbanGroups = await ctx.db
+				.query("viewKanbanGroups")
+				.withIndex("by_view", (q) => q.eq("viewDefId", view._id))
+				.collect();
+			for (const vkg of viewKanbanGroups) {
+				if (vkg.fieldDefId === args.fieldDefId) {
+					await ctx.db.delete(vkg._id);
 				}
 			}
 		}
@@ -310,19 +380,56 @@ export const reorderFields = crmAdminMutation
 			throw new ConvexError("Object not found or access denied");
 		}
 
-		// Verify all fields belong to the object
-		for (let i = 0; i < args.fieldIds.length; i++) {
-			const field = await ctx.db.get(args.fieldIds[i]);
-			if (!field || field.objectDefId !== args.objectDefId) {
+		// Validate no duplicates in the provided fieldIds
+		const uniqueIds = new Set(args.fieldIds);
+		if (uniqueIds.size !== args.fieldIds.length) {
+			throw new ConvexError(
+				"fieldIds contains duplicate entries — provide each field ID exactly once",
+			);
+		}
+
+		// Fetch all active fields for the object to validate completeness
+		const allFields = await ctx.db
+			.query("fieldDefs")
+			.withIndex("by_object", (q) => q.eq("objectDefId", args.objectDefId))
+			.collect();
+		const activeFieldIds = new Set(
+			allFields.filter((f) => f.isActive).map((f) => f._id),
+		);
+
+		if (uniqueIds.size !== activeFieldIds.size) {
+			throw new ConvexError(
+				`fieldIds must be a complete ordering of all active fields — expected ${activeFieldIds.size} IDs, got ${uniqueIds.size}`,
+			);
+		}
+		for (const id of uniqueIds) {
+			if (!activeFieldIds.has(id)) {
 				throw new ConvexError(
-					`Field ${args.fieldIds[i]} does not belong to object ${args.objectDefId}`,
+					`Field ${id} does not belong to object ${args.objectDefId} or is not active`,
 				);
 			}
+		}
+
+		// Apply new display order
+		for (let i = 0; i < args.fieldIds.length; i++) {
 			await ctx.db.patch(args.fieldIds[i], {
 				displayOrder: i,
 				updatedAt: Date.now(),
 			});
 		}
+
+		// Audit
+		await auditLog.log(ctx, {
+			action: "crm.fields.reordered",
+			actorId: ctx.viewer.authId,
+			resourceType: "objectDefs",
+			resourceId: args.objectDefId,
+			severity: "info",
+			metadata: {
+				fieldIds: args.fieldIds,
+				orgId,
+			},
+		});
 	})
 	.public();
 
