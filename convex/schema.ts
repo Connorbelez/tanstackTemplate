@@ -1,6 +1,15 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 import {
+	capabilityValidator,
+	cardinalityValidator,
+	fieldTypeValidator,
+	filterOperatorValidator,
+	logicalOperatorValidator,
+	selectOptionValidator,
+	viewTypeValidator,
+} from "./crm/validators";
+import {
 	calculationDetailsValidator,
 	dispersalStatusValidator,
 } from "./dispersal/validators";
@@ -35,15 +44,6 @@ import {
 	transferTypeValidator,
 } from "./payments/transfers/validators";
 import { normalizedEventTypeValidator } from "./payments/webhooks/types";
-import {
-	capabilityValidator,
-	cardinalityValidator,
-	fieldTypeValidator,
-	filterOperatorValidator,
-	logicalOperatorValidator,
-	selectOptionValidator,
-	viewTypeValidator,
-} from "./crm/validators";
 
 export default defineSchema({
 	// ══════════════════════════════════════════════════════════
@@ -1964,4 +1964,121 @@ export default defineSchema({
 	})
 		.index("by_view", ["viewDefId"])
 		.index("by_field", ["fieldDefId"]),
+
+	// ══════════════════════════════════════════════════════════
+	// EAV-CRM DATA PLANE
+	// ══════════════════════════════════════════════════════════
+
+	records: defineTable({
+		orgId: v.string(),
+		objectDefId: v.id("objectDefs"),
+		labelValue: v.optional(v.string()),
+		isDeleted: v.boolean(),
+		createdAt: v.number(),
+		updatedAt: v.number(),
+		createdBy: v.string(),
+	})
+		.index("by_object", ["objectDefId"])
+		.index("by_org_object", ["orgId", "objectDefId"])
+		.index("by_org_label", ["orgId", "labelValue"]),
+
+	recordValuesText: defineTable({
+		recordId: v.id("records"),
+		fieldDefId: v.id("fieldDefs"),
+		objectDefId: v.id("objectDefs"),
+		value: v.string(),
+	})
+		.index("by_record", ["recordId"])
+		.index("by_record_field", ["recordId", "fieldDefId"])
+		.index("by_object_field_value", ["objectDefId", "fieldDefId", "value"]),
+
+	recordValuesNumber: defineTable({
+		recordId: v.id("records"),
+		fieldDefId: v.id("fieldDefs"),
+		objectDefId: v.id("objectDefs"),
+		value: v.number(),
+	})
+		.index("by_record", ["recordId"])
+		.index("by_record_field", ["recordId", "fieldDefId"])
+		.index("by_object_field_value", ["objectDefId", "fieldDefId", "value"]),
+
+	recordValuesBoolean: defineTable({
+		recordId: v.id("records"),
+		fieldDefId: v.id("fieldDefs"),
+		objectDefId: v.id("objectDefs"),
+		value: v.boolean(),
+	})
+		.index("by_record", ["recordId"])
+		.index("by_record_field", ["recordId", "fieldDefId"])
+		.index("by_object_field_value", ["objectDefId", "fieldDefId", "value"]),
+
+	recordValuesDate: defineTable({
+		recordId: v.id("records"),
+		fieldDefId: v.id("fieldDefs"),
+		objectDefId: v.id("objectDefs"),
+		value: v.number(),
+	})
+		.index("by_record", ["recordId"])
+		.index("by_record_field", ["recordId", "fieldDefId"])
+		.index("by_object_field_value", ["objectDefId", "fieldDefId", "value"]),
+
+	recordValuesSelect: defineTable({
+		recordId: v.id("records"),
+		fieldDefId: v.id("fieldDefs"),
+		objectDefId: v.id("objectDefs"),
+		value: v.string(),
+	})
+		.index("by_record", ["recordId"])
+		.index("by_record_field", ["recordId", "fieldDefId"])
+		.index("by_object_field_value", ["objectDefId", "fieldDefId", "value"]),
+
+	// EXCEPTION: No by_object_field_value — Convex arrays aren't indexable
+	recordValuesMultiSelect: defineTable({
+		recordId: v.id("records"),
+		fieldDefId: v.id("fieldDefs"),
+		objectDefId: v.id("objectDefs"),
+		value: v.array(v.string()),
+	})
+		.index("by_record", ["recordId"])
+		.index("by_record_field", ["recordId", "fieldDefId"]),
+
+	recordValuesRichText: defineTable({
+		recordId: v.id("records"),
+		fieldDefId: v.id("fieldDefs"),
+		objectDefId: v.id("objectDefs"),
+		value: v.string(),
+	})
+		.index("by_record", ["recordId"])
+		.index("by_record_field", ["recordId", "fieldDefId"])
+		.index("by_object_field_value", ["objectDefId", "fieldDefId", "value"]),
+
+	recordValuesUserRef: defineTable({
+		recordId: v.id("records"),
+		fieldDefId: v.id("fieldDefs"),
+		objectDefId: v.id("objectDefs"),
+		value: v.string(),
+	})
+		.index("by_record", ["recordId"])
+		.index("by_record_field", ["recordId", "fieldDefId"])
+		.index("by_object_field_value", ["objectDefId", "fieldDefId", "value"]),
+
+	recordLinks: defineTable({
+		orgId: v.string(),
+		linkTypeDefId: v.id("linkTypeDefs"),
+		sourceObjectDefId: v.id("objectDefs"),
+		sourceKind: v.union(v.literal("record"), v.literal("native")),
+		sourceId: v.string(),
+		targetObjectDefId: v.id("objectDefs"),
+		targetKind: v.union(v.literal("record"), v.literal("native")),
+		targetId: v.string(),
+		isDeleted: v.boolean(),
+		createdAt: v.number(),
+		createdBy: v.string(),
+	})
+		.index("by_source", ["sourceKind", "sourceId"])
+		.index("by_target", ["targetKind", "targetId"])
+		.index("by_link_type", ["linkTypeDefId"])
+		.index("by_org_source", ["orgId", "sourceKind", "sourceId"])
+		.index("by_org_target", ["orgId", "targetKind", "targetId"])
+		.index("by_org", ["orgId"]),
 });

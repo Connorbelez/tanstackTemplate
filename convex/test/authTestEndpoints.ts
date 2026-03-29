@@ -166,9 +166,7 @@ export const testCrmAdminMutation = crmAdminMutation
 	.public();
 
 // ── crm (any authed user with org context) ───────────────────────────
-export const testCrmQuery = crmQuery
-	.handler(async () => okResponse())
-	.public();
+export const testCrmQuery = crmQuery.handler(async () => okResponse()).public();
 
 export const testCrmMutation = crmMutation
 	.handler(async () => okResponse())

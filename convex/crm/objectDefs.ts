@@ -24,10 +24,14 @@ export const createObject = crmAdminMutation
 		// Validate name uniqueness per org
 		const existing = await ctx.db
 			.query("objectDefs")
-			.withIndex("by_org_name", (q) => q.eq("orgId", orgId).eq("name", args.name))
+			.withIndex("by_org_name", (q) =>
+				q.eq("orgId", orgId).eq("name", args.name)
+			)
 			.first();
 		if (existing) {
-			throw new ConvexError(`Object "${args.name}" already exists in this organization`);
+			throw new ConvexError(
+				`Object "${args.name}" already exists in this organization`
+			);
 		}
 
 		// Count existing objects for displayOrder
@@ -104,19 +108,33 @@ export const updateObject = crmAdminMutation
 		if (args.name && args.name !== before.name) {
 			const duplicate = await ctx.db
 				.query("objectDefs")
-				.withIndex("by_org_name", (q) => q.eq("orgId", orgId).eq("name", args.name as string))
+				.withIndex("by_org_name", (q) =>
+					q.eq("orgId", orgId).eq("name", args.name as string)
+				)
 				.first();
 			if (duplicate) {
-				throw new ConvexError(`Object "${args.name}" already exists in this organization`);
+				throw new ConvexError(
+					`Object "${args.name}" already exists in this organization`
+				);
 			}
 		}
 
 		const patch: Record<string, string | number> = { updatedAt: Date.now() };
-		if (args.name !== undefined) patch.name = args.name;
-		if (args.singularLabel !== undefined) patch.singularLabel = args.singularLabel;
-		if (args.pluralLabel !== undefined) patch.pluralLabel = args.pluralLabel;
-		if (args.icon !== undefined) patch.icon = args.icon;
-		if (args.description !== undefined) patch.description = args.description;
+		if (args.name !== undefined) {
+			patch.name = args.name;
+		}
+		if (args.singularLabel !== undefined) {
+			patch.singularLabel = args.singularLabel;
+		}
+		if (args.pluralLabel !== undefined) {
+			patch.pluralLabel = args.pluralLabel;
+		}
+		if (args.icon !== undefined) {
+			patch.icon = args.icon;
+		}
+		if (args.description !== undefined) {
+			patch.description = args.description;
+		}
 
 		await ctx.db.patch(args.objectDefId, patch);
 		const after = await ctx.db.get(args.objectDefId);

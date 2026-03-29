@@ -37,12 +37,12 @@ export const createField = crmAdminMutation
 		const existing = await ctx.db
 			.query("fieldDefs")
 			.withIndex("by_object_name", (q) =>
-				q.eq("objectDefId", args.objectDefId).eq("name", args.name),
+				q.eq("objectDefId", args.objectDefId).eq("name", args.name)
 			)
 			.first();
 		if (existing) {
 			throw new ConvexError(
-				`Field "${args.name}" already exists on object "${objectDef.name}"`,
+				`Field "${args.name}" already exists on object "${objectDef.name}"`
 			);
 		}
 
@@ -52,7 +52,7 @@ export const createField = crmAdminMutation
 			(!args.options || args.options.length === 0)
 		) {
 			throw new ConvexError(
-				`Field type "${args.fieldType}" requires at least one option`,
+				`Field type "${args.fieldType}" requires at least one option`
 			);
 		}
 
@@ -168,12 +168,12 @@ export const updateField = crmAdminMutation
 				.withIndex("by_object_name", (q) =>
 					q
 						.eq("objectDefId", before.objectDefId)
-						.eq("name", args.name as string),
+						.eq("name", args.name as string)
 				)
 				.first();
 			if (duplicate) {
 				throw new ConvexError(
-					`Field "${args.name}" already exists on object "${objectDef.name}"`,
+					`Field "${args.name}" already exists on object "${objectDef.name}"`
 				);
 			}
 		}
@@ -186,20 +186,36 @@ export const updateField = crmAdminMutation
 			(!effectiveOptions || effectiveOptions.length === 0)
 		) {
 			throw new ConvexError(
-				`Field type "${effectiveType}" requires at least one option`,
+				`Field type "${effectiveType}" requires at least one option`
 			);
 		}
 
 		// Build patch
 		const patch: Record<string, unknown> = { updatedAt: Date.now() };
-		if (args.name !== undefined) patch.name = args.name;
-		if (args.label !== undefined) patch.label = args.label;
-		if (args.fieldType !== undefined) patch.fieldType = args.fieldType;
-		if (args.description !== undefined) patch.description = args.description;
-		if (args.isRequired !== undefined) patch.isRequired = args.isRequired;
-		if (args.isUnique !== undefined) patch.isUnique = args.isUnique;
-		if (args.defaultValue !== undefined) patch.defaultValue = args.defaultValue;
-		if (args.options !== undefined) patch.options = args.options;
+		if (args.name !== undefined) {
+			patch.name = args.name;
+		}
+		if (args.label !== undefined) {
+			patch.label = args.label;
+		}
+		if (args.fieldType !== undefined) {
+			patch.fieldType = args.fieldType;
+		}
+		if (args.description !== undefined) {
+			patch.description = args.description;
+		}
+		if (args.isRequired !== undefined) {
+			patch.isRequired = args.isRequired;
+		}
+		if (args.isUnique !== undefined) {
+			patch.isUnique = args.isUnique;
+		}
+		if (args.defaultValue !== undefined) {
+			patch.defaultValue = args.defaultValue;
+		}
+		if (args.options !== undefined) {
+			patch.options = args.options;
+		}
 
 		await ctx.db.patch(args.fieldDefId, patch);
 
@@ -226,9 +242,7 @@ export const updateField = crmAdminMutation
 			// (field type change may invalidate kanban/group_by configurations)
 			const views = await ctx.db
 				.query("viewDefs")
-				.withIndex("by_object", (q) =>
-					q.eq("objectDefId", before.objectDefId),
-				)
+				.withIndex("by_object", (q) => q.eq("objectDefId", before.objectDefId))
 				.collect();
 			for (const view of views) {
 				if (view.boundFieldId === args.fieldDefId) {
@@ -286,9 +300,7 @@ export const deactivateField = crmAdminMutation
 		// Find all viewDefs where boundFieldId === fieldDefId → set needsRepair=true
 		const views = await ctx.db
 			.query("viewDefs")
-			.withIndex("by_object", (q) =>
-				q.eq("objectDefId", fieldDef.objectDefId),
-			)
+			.withIndex("by_object", (q) => q.eq("objectDefId", fieldDef.objectDefId))
 			.collect();
 		for (const view of views) {
 			if (view.boundFieldId === args.fieldDefId) {
@@ -384,7 +396,7 @@ export const reorderFields = crmAdminMutation
 		const uniqueIds = new Set(args.fieldIds);
 		if (uniqueIds.size !== args.fieldIds.length) {
 			throw new ConvexError(
-				"fieldIds contains duplicate entries — provide each field ID exactly once",
+				"fieldIds contains duplicate entries — provide each field ID exactly once"
 			);
 		}
 
@@ -394,18 +406,18 @@ export const reorderFields = crmAdminMutation
 			.withIndex("by_object", (q) => q.eq("objectDefId", args.objectDefId))
 			.collect();
 		const activeFieldIds = new Set(
-			allFields.filter((f) => f.isActive).map((f) => f._id),
+			allFields.filter((f) => f.isActive).map((f) => f._id)
 		);
 
 		if (uniqueIds.size !== activeFieldIds.size) {
 			throw new ConvexError(
-				`fieldIds must be a complete ordering of all active fields — expected ${activeFieldIds.size} IDs, got ${uniqueIds.size}`,
+				`fieldIds must be a complete ordering of all active fields — expected ${activeFieldIds.size} IDs, got ${uniqueIds.size}`
 			);
 		}
 		for (const id of uniqueIds) {
 			if (!activeFieldIds.has(id)) {
 				throw new ConvexError(
-					`Field ${id} does not belong to object ${args.objectDefId} or is not active`,
+					`Field ${id} does not belong to object ${args.objectDefId} or is not active`
 				);
 			}
 		}
