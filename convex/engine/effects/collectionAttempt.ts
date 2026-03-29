@@ -162,6 +162,7 @@ export const emitPaymentReceived = internalMutation({
 			if (firstOblForBridge?.borrowerId) {
 				const now = Date.now();
 				const bridgeTransferId = await ctx.db.insert("transferRequests", {
+					orgId: firstOblForBridge.orgId,
 					status: "initiated",
 					direction: "inbound",
 					transferType: obligationTypeToTransferType(firstOblForBridge.type),

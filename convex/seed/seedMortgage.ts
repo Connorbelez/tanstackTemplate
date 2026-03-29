@@ -2,6 +2,7 @@ import { ConvexError, v } from "convex/values";
 import type { Doc, Id } from "../_generated/dataModel";
 import { attachDefaultFeeSetToMortgage } from "../fees/resolver";
 import { adminMutation } from "../fluent";
+import { requireOrgIdFromBroker } from "../lib/orgScope";
 import {
 	addMonthsToDateString,
 	ensureMortgageBorrowerLink,
@@ -212,9 +213,12 @@ export const seedMortgage = adminMutation
 				fixture.mortgage.firstPaymentDate,
 				fixture.mortgage.termMonths
 			);
+			const brokerForOrg = await ctx.db.get(brokerOfRecordId);
+			const mortgageOrgId = requireOrgIdFromBroker(brokerForOrg);
 			const mortgageId =
 				existingMortgage?._id ??
 				(await ctx.db.insert("mortgages", {
+					orgId: mortgageOrgId,
 					status: "active",
 					machineContext: {
 						lastPaymentAt: 0,
@@ -256,6 +260,7 @@ export const seedMortgage = adminMutation
 					initialState: "active",
 					source: SEED_SOURCE,
 					timestamp: createdAt,
+					organizationId: mortgageOrgId,
 					payload: {
 						propertyId,
 						borrowerId,

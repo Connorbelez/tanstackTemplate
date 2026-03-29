@@ -19,6 +19,7 @@ import {
 	paymentMutation,
 	paymentRetryMutation,
 } from "../../fluent";
+import { orgIdForTransferRequest } from "../../lib/orgScope";
 import type { BankAccountValidationResult } from "../bankAccounts/types";
 import {
 	buildCommitmentDepositIdempotencyKey,
@@ -153,7 +154,7 @@ export const createTransferRequest = paymentMutation
 		pipelineId: v.optional(v.string()),
 		legNumber: v.optional(legNumberValidator),
 	})
-	.handler(async (ctx, args) => {
+	.handler(async (ctx, args): Promise<Id<"transferRequests">> => {
 		// 1. Validate amount is positive integer (safe-integer cents)
 		if (!Number.isInteger(args.amount) || args.amount <= 0) {
 			throw new ConvexError("Amount must be a positive integer (cents)");
@@ -206,7 +207,18 @@ export const createTransferRequest = paymentMutation
 
 		// 4. Insert transfer record
 		const now = Date.now();
+		const orgId = await orgIdForTransferRequest(ctx, {
+			mortgageId: args.mortgageId,
+			obligationId: args.obligationId,
+			dealId: args.dealId,
+			dispersalEntryId: args.dispersalEntryId,
+			lenderId: args.lenderId,
+			borrowerId: args.borrowerId,
+			planEntryId: args.planEntryId,
+			collectionAttemptId: args.collectionAttemptId,
+		});
 		const transferId = await ctx.db.insert("transferRequests", {
+			orgId,
 			status: "initiated",
 			direction: args.direction,
 			transferType: args.transferType,
@@ -449,7 +461,7 @@ export const createTransferRequestInternal = internalMutation({
 		// Optional source override — defaults to PIPELINE_SOURCE when omitted
 		source: v.optional(sourceValidator),
 	},
-	handler: async (ctx, args) => {
+	handler: async (ctx, args): Promise<Id<"transferRequests">> => {
 		// Validate inputs (amount, pipeline co-requirement, mock provider guard, counterparty ID)
 		const counterpartyId = validateTransferCreationInput(args);
 
@@ -466,7 +478,18 @@ export const createTransferRequestInternal = internalMutation({
 		}
 
 		const now = Date.now();
+		const orgId = await orgIdForTransferRequest(ctx, {
+			mortgageId: args.mortgageId,
+			obligationId: args.obligationId,
+			dealId: args.dealId,
+			dispersalEntryId: args.dispersalEntryId,
+			lenderId: args.lenderId,
+			borrowerId: args.borrowerId,
+			planEntryId: args.planEntryId,
+			collectionAttemptId: args.collectionAttemptId,
+		});
 		return ctx.db.insert("transferRequests", {
+			orgId,
 			status: "initiated",
 			direction: args.direction,
 			transferType: args.transferType,
@@ -522,9 +545,11 @@ export const initiateTransferInternal = internalAction({
 				`[initiateTransferInternal] Transfer ${args.transferId} already in "${transfer.status}" — skipping initiation (retry-safe).`
 			);
 			return {
-				entityId: args.transferId,
-				status: transfer.status,
-			} as TransitionResult;
+				success: true,
+				previousState: transfer.status,
+				newState: transfer.status,
+				reason: "already_initiated_or_beyond",
+			};
 		}
 
 		const provider = getTransferProvider(transfer.providerCode);
@@ -830,6 +855,7 @@ export const retryTransfer = paymentRetryMutation
 		};
 
 		return ctx.db.insert("transferRequests", {
+			orgId: transfer.orgId,
 			status: "initiated",
 			direction: transfer.direction,
 			transferType: transfer.transferType,
@@ -932,89 +958,107 @@ export const collectCommitmentDepositAdmin = paymentAction
 		amount: v.number(),
 		providerCode: v.optional(providerCodeValidator),
 	})
-	.handler(async (ctx, args) => {
-		const validationError = getCommitmentDepositValidationError({
-			dealId: args.dealId,
-			applicationId: args.applicationId,
-			amount: args.amount,
-		});
-		if (validationError) {
-			throw new ConvexError(validationError);
-		}
-
-		if (args.dealId) {
-			const deal = await ctx.runQuery(internal.deals.queries.getInternalDeal, {
-				dealId: args.dealId,
-			});
-
-			if (deal.status === "confirmed" || deal.status === "failed") {
-				throw new ConvexError(
-					`Cannot collect commitment deposit: deal is in terminal state "${deal.status}"`
-				);
-			}
-
-			if (deal.mortgageId !== args.mortgageId) {
-				throw new ConvexError("mortgageId does not match the deal's mortgage");
-			}
-
-			// TODO(ENG-xxx): deal.buyerId is a WorkOS authId (v.string()), but
-			// args.borrowerId is v.id("borrowers"). A proper ownership check needs
-			// to resolve borrower → user → authId before comparing to deal.buyerId.
-			// Skipping this check until the schema is unified. See PR #300 review.
-		}
-
-		const idempotencyKey = buildCommitmentDepositIdempotencyKey(
-			args.dealId,
-			args.applicationId
-		);
-
-		const existing = await ctx.runQuery(
-			internal.payments.transfers.queries.getTransferByIdempotencyKeyInternal,
-			{ idempotencyKey }
-		);
-
-		if (existing && existing.transferType === "commitment_deposit_collection") {
-			if (
-				existing.status === "confirmed" ||
-				existing.status === "pending" ||
-				existing.status === "processing"
-			) {
-				console.info(
-					`[collectCommitmentDepositAdmin] Commitment deposit transfer already exists (${existing._id}, status=${existing.status}) for idempotency key ${idempotencyKey}`
-				);
-				return {
-					transferId: existing._id,
-					alreadyExists: true,
-				};
-			}
-
-			if (existing.status === "failed") {
-				throw new ConvexError(
-					`A commitment deposit transfer exists but failed (${existing._id}). Use the transfer retry flow or cancel before collecting again.`
-				);
-			}
-
-			if (existing.status !== "initiated") {
-				throw new ConvexError(
-					`A commitment deposit transfer exists in terminal status "${existing.status}" (${existing._id}). This transfer cannot be retried — resolve at the deal level or create a new deposit collection.`
-				);
-			}
-		}
-
-		const result = await ctx.runAction(
-			internal.payments.transfers.depositCollection.collectCommitmentDeposit,
-			{
+	.handler(
+		async (
+			ctx,
+			args
+		): Promise<{
+			transferId: Id<"transferRequests">;
+			alreadyExists: boolean;
+		}> => {
+			const validationError = getCommitmentDepositValidationError({
 				dealId: args.dealId,
 				applicationId: args.applicationId,
-				borrowerId: args.borrowerId,
-				mortgageId: args.mortgageId,
 				amount: args.amount,
-				providerCode: args.providerCode,
+			});
+			if (validationError) {
+				throw new ConvexError(validationError);
 			}
-		);
 
-		return { ...result, alreadyExists: false };
-	})
+			if (args.dealId) {
+				const deal: Doc<"deals"> = await ctx.runQuery(
+					internal.deals.queries.getInternalDeal,
+					{
+						dealId: args.dealId,
+					}
+				);
+
+				if (deal.status === "confirmed" || deal.status === "failed") {
+					throw new ConvexError(
+						`Cannot collect commitment deposit: deal is in terminal state "${deal.status}"`
+					);
+				}
+
+				if (deal.mortgageId !== args.mortgageId) {
+					throw new ConvexError(
+						"mortgageId does not match the deal's mortgage"
+					);
+				}
+
+				// TODO(ENG-xxx): deal.buyerId is a WorkOS authId (v.string()), but
+				// args.borrowerId is v.id("borrowers"). A proper ownership check needs
+				// to resolve borrower → user → authId before comparing to deal.buyerId.
+				// Skipping this check until the schema is unified. See PR #300 review.
+			}
+
+			const idempotencyKey = buildCommitmentDepositIdempotencyKey(
+				args.dealId,
+				args.applicationId
+			);
+
+			const existing: Doc<"transferRequests"> | null = await ctx.runQuery(
+				internal.payments.transfers.queries.getTransferByIdempotencyKeyInternal,
+				{ idempotencyKey }
+			);
+
+			if (
+				existing &&
+				existing.transferType === "commitment_deposit_collection"
+			) {
+				if (
+					existing.status === "confirmed" ||
+					existing.status === "pending" ||
+					existing.status === "processing"
+				) {
+					console.info(
+						`[collectCommitmentDepositAdmin] Commitment deposit transfer already exists (${existing._id}, status=${existing.status}) for idempotency key ${idempotencyKey}`
+					);
+					return {
+						transferId: existing._id,
+						alreadyExists: true,
+					};
+				}
+
+				if (existing.status === "failed") {
+					throw new ConvexError(
+						`A commitment deposit transfer exists but failed (${existing._id}). Use the transfer retry flow or cancel before collecting again.`
+					);
+				}
+
+				if (existing.status !== "initiated") {
+					throw new ConvexError(
+						`A commitment deposit transfer exists in terminal status "${existing.status}" (${existing._id}). This transfer cannot be retried — resolve at the deal level or create a new deposit collection.`
+					);
+				}
+			}
+
+			const result: { transferId: Id<"transferRequests"> } =
+				await ctx.runAction(
+					internal.payments.transfers.depositCollection
+						.collectCommitmentDeposit,
+					{
+						dealId: args.dealId,
+						applicationId: args.applicationId,
+						borrowerId: args.borrowerId,
+						mortgageId: args.mortgageId,
+						amount: args.amount,
+						providerCode: args.providerCode,
+					}
+				);
+
+			return { ...result, alreadyExists: false };
+		}
+	)
 	.public();
 
 // ── returnInvestorPrincipal ─────────────────────────────────────────
@@ -1034,77 +1078,89 @@ export const returnInvestorPrincipal = paymentAction
 		providerCode: v.optional(providerCodeValidator),
 		bankAccountRef: v.optional(v.string()),
 	})
-	.handler(async (ctx, args) => {
-		// Validate deal exists and is in a post-close state
-		const deal = await ctx.runQuery(internal.deals.queries.getInternalDeal, {
-			dealId: args.dealId,
-		});
-		if (deal.status !== "confirmed") {
-			throw new ConvexError(
-				`Deal must be in "confirmed" status for principal return, currently: "${deal.status}"`
+	.handler(
+		async (
+			ctx,
+			args
+		): Promise<{
+			transferId: Id<"transferRequests">;
+			alreadyExists: boolean;
+		}> => {
+			// Validate deal exists and is in a post-close state
+			const deal: Doc<"deals"> = await ctx.runQuery(
+				internal.deals.queries.getInternalDeal,
+				{
+					dealId: args.dealId,
+				}
 			);
-		}
-
-		// Validate that related entity IDs belong to the loaded deal
-		if (deal.mortgageId !== args.mortgageId) {
-			throw new ConvexError(
-				`Mortgage ${args.mortgageId} does not belong to deal ${args.dealId}. Expected mortgageId: ${deal.mortgageId}.`
-			);
-		}
-		if (deal.sellerId !== args.sellerId) {
-			throw new ConvexError(
-				`Seller ${args.sellerId} does not belong to deal ${args.dealId}. Expected sellerId: ${deal.sellerId}.`
-			);
-		}
-		if (deal.lenderId && deal.lenderId !== args.lenderId) {
-			throw new ConvexError(
-				`Lender ${args.lenderId} does not belong to deal ${args.dealId}. Expected lenderId: ${deal.lenderId}.`
-			);
-		}
-
-		// Check idempotency
-		const idempotencyKey = buildPrincipalReturnIdempotencyKey(
-			args.dealId,
-			args.sellerId
-		);
-		const existing = await ctx.runQuery(
-			internal.payments.transfers.queries.getTransferByIdempotencyKeyInternal,
-			{ idempotencyKey }
-		);
-		if (existing && existing.transferType === "lender_principal_return") {
-			if (
-				existing.status === "confirmed" ||
-				existing.status === "pending" ||
-				existing.status === "processing"
-			) {
-				return { transferId: existing._id, alreadyExists: true };
-			}
-			if (existing.status === "failed") {
+			if (deal.status !== "confirmed") {
 				throw new ConvexError(
-					`A principal return transfer exists but failed (${existing._id}). Use the retry flow or cancel before trying again.`
+					`Deal must be in "confirmed" status for principal return, currently: "${deal.status}"`
 				);
 			}
-			if (existing.status !== "initiated") {
+
+			// Validate that related entity IDs belong to the loaded deal
+			if (deal.mortgageId !== args.mortgageId) {
 				throw new ConvexError(
-					`A principal return transfer exists in terminal status "${existing.status}" (${existing._id}). This transfer cannot be retried or recreated with the same deal and seller — resolve or cancel this transfer at the deal level before initiating any new principal return.`
+					`Mortgage ${args.mortgageId} does not belong to deal ${args.dealId}. Expected mortgageId: ${deal.mortgageId}.`
 				);
 			}
-		}
-
-		const result = await ctx.runAction(
-			internal.payments.transfers.principalReturn.createPrincipalReturn,
-			{
-				dealId: args.dealId,
-				sellerId: args.sellerId,
-				lenderId: args.lenderId,
-				mortgageId: args.mortgageId,
-				principalAmount: args.principalAmount,
-				prorationAdjustment: args.prorationAdjustment ?? 0,
-				providerCode: args.providerCode ?? "manual",
-				bankAccountRef: args.bankAccountRef,
+			if (deal.sellerId !== args.sellerId) {
+				throw new ConvexError(
+					`Seller ${args.sellerId} does not belong to deal ${args.dealId}. Expected sellerId: ${deal.sellerId}.`
+				);
 			}
-		);
+			if (deal.lenderId && deal.lenderId !== args.lenderId) {
+				throw new ConvexError(
+					`Lender ${args.lenderId} does not belong to deal ${args.dealId}. Expected lenderId: ${deal.lenderId}.`
+				);
+			}
 
-		return { ...result, alreadyExists: false };
-	})
+			// Check idempotency
+			const idempotencyKey = buildPrincipalReturnIdempotencyKey(
+				args.dealId,
+				args.sellerId
+			);
+			const existing: Doc<"transferRequests"> | null = await ctx.runQuery(
+				internal.payments.transfers.queries.getTransferByIdempotencyKeyInternal,
+				{ idempotencyKey }
+			);
+			if (existing && existing.transferType === "lender_principal_return") {
+				if (
+					existing.status === "confirmed" ||
+					existing.status === "pending" ||
+					existing.status === "processing"
+				) {
+					return { transferId: existing._id, alreadyExists: true };
+				}
+				if (existing.status === "failed") {
+					throw new ConvexError(
+						`A principal return transfer exists but failed (${existing._id}). Use the retry flow or cancel before trying again.`
+					);
+				}
+				if (existing.status !== "initiated") {
+					throw new ConvexError(
+						`A principal return transfer exists in terminal status "${existing.status}" (${existing._id}). This transfer cannot be retried or recreated with the same deal and seller — resolve or cancel this transfer at the deal level before initiating any new principal return.`
+					);
+				}
+			}
+
+			const result: { transferId: Id<"transferRequests"> } =
+				await ctx.runAction(
+					internal.payments.transfers.principalReturn.createPrincipalReturn,
+					{
+						dealId: args.dealId,
+						sellerId: args.sellerId,
+						lenderId: args.lenderId,
+						mortgageId: args.mortgageId,
+						principalAmount: args.principalAmount,
+						prorationAdjustment: args.prorationAdjustment ?? 0,
+						providerCode: args.providerCode ?? "manual",
+						bankAccountRef: args.bankAccountRef,
+					}
+				);
+
+			return { ...result, alreadyExists: false };
+		}
+	)
 	.public();

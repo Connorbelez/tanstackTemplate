@@ -2,6 +2,7 @@ import { ConvexError, v } from "convex/values";
 import { internalMutation } from "../_generated/server";
 import { auditLog } from "../auditLog";
 import { appendAuditJournalEntry } from "../engine/auditJournal";
+import { orgIdFromMortgageId } from "../lib/orgScope";
 import { postObligationAccrued } from "../payments/cashLedger/integrations";
 
 /**
@@ -66,8 +67,10 @@ export const createObligation = internalMutation({
 		}
 
 		const createdAt = Date.now();
+		const orgId = await orgIdFromMortgageId(ctx, args.mortgageId);
 
 		const obligationId = await ctx.db.insert("obligations", {
+			orgId,
 			mortgageId: args.mortgageId,
 			borrowerId: args.borrowerId,
 			paymentNumber: args.paymentNumber,
@@ -90,6 +93,7 @@ export const createObligation = internalMutation({
 			actorId: "system",
 			actorType: "system",
 			channel: "scheduler",
+			organizationId: orgId,
 			entityId: obligationId,
 			entityType: "obligation",
 			eventType: "CREATED",

@@ -107,7 +107,8 @@ export default defineSchema({
 		licenseId: v.optional(v.string()),
 		licenseProvince: v.optional(v.string()),
 		brokerageName: v.optional(v.string()),
-		brokerageOrgId: v.optional(v.string()),
+		/** WorkOS organization id for the broker's brokerage (canonical org scope). */
+		orgId: v.optional(v.string()),
 
 		// ─── Lifecycle ───
 		onboardedAt: v.optional(v.number()),
@@ -115,12 +116,17 @@ export default defineSchema({
 	})
 		.index("by_user", ["userId"])
 		.index("by_license", ["licenseId"])
-		.index("by_status", ["status"]),
+		.index("by_status", ["status"])
+		.index("by_org", ["orgId"])
+		.index("by_org_status", ["orgId", "status"]),
 
 	borrowers: defineTable({
 		// ─── GT fields ───
 		status: v.string(),
 		lastTransitionAt: v.optional(v.number()),
+
+		/** WorkOS organization id — org scope for this borrower record. */
+		orgId: v.optional(v.string()),
 
 		// ─── Auth link ───
 		userId: v.id("users"),
@@ -135,11 +141,16 @@ export default defineSchema({
 		createdAt: v.number(),
 	})
 		.index("by_user", ["userId"])
-		.index("by_status", ["status"]),
+		.index("by_status", ["status"])
+		.index("by_org", ["orgId"])
+		.index("by_org_status", ["orgId", "status"]),
 
 	lenders: defineTable({
 		// ─── Auth link ───
 		userId: v.id("users"),
+
+		/** WorkOS organization id — denormalized from broker for indexing. */
+		orgId: v.optional(v.string()),
 
 		// ─── Broker relationship ───
 		brokerId: v.id("brokers"),
@@ -171,7 +182,9 @@ export default defineSchema({
 	})
 		.index("by_user", ["userId"])
 		.index("by_broker", ["brokerId"])
-		.index("by_status", ["status"]),
+		.index("by_status", ["status"])
+		.index("by_org", ["orgId"])
+		.index("by_org_status", ["orgId", "status"]),
 
 	// ══════════════════════════════════════════════════════════
 	// LENDER ECOSYSTEM
@@ -439,6 +452,9 @@ export default defineSchema({
 	}).index("by_appraisal", ["appraisalId"]),
 
 	mortgages: defineTable({
+		/** WorkOS organization id — denormalized from broker of record. */
+		orgId: v.optional(v.string()),
+
 		// ─── Governed Transitions fields ───
 		status: v.string(),
 		// machineContext: { missedPayments: number, lastPaymentAt: number } — guards read across transitions
@@ -498,7 +514,9 @@ export default defineSchema({
 		.index("by_assigned_broker", ["assignedBrokerId"])
 		.index("by_maturity", ["maturityDate"])
 		.index("by_prior_mortgage", ["priorMortgageId"])
-		.index("by_simulation", ["simulationId"]),
+		.index("by_simulation", ["simulationId"])
+		.index("by_org", ["orgId"])
+		.index("by_org_status", ["orgId", "status"]),
 
 	mortgageBorrowers: defineTable({
 		mortgageId: v.id("mortgages"),
@@ -535,6 +553,9 @@ export default defineSchema({
 	}).index("by_property", ["propertyId"]),
 
 	obligations: defineTable({
+		/** WorkOS organization id — denormalized from mortgage. */
+		orgId: v.optional(v.string()),
+
 		// ─── GT fields ───
 		status: v.string(),
 		machineContext: v.optional(v.any()),
@@ -577,7 +598,9 @@ export default defineSchema({
 			"feeCode",
 		])
 		.index("by_borrower", ["borrowerId"])
-		.index("by_source_obligation", ["sourceObligationId"]),
+		.index("by_source_obligation", ["sourceObligationId"])
+		.index("by_org", ["orgId"])
+		.index("by_org_status", ["orgId", "status"]),
 
 	obligationCronMonitoring: defineTable({
 		jobName: v.string(),
@@ -879,6 +902,9 @@ export default defineSchema({
 	// ══════════════════════════════════════════════════════════
 
 	deals: defineTable({
+		/** WorkOS organization id — denormalized from mortgage. */
+		orgId: v.optional(v.string()),
+
 		// ─── Governed Transitions fields ───
 		status: v.string(),
 		machineContext: v.optional(v.any()),
@@ -906,7 +932,9 @@ export default defineSchema({
 		.index("by_status", ["status"])
 		.index("by_mortgage", ["mortgageId"])
 		.index("by_buyer", ["buyerId"])
-		.index("by_seller", ["sellerId"]),
+		.index("by_seller", ["sellerId"])
+		.index("by_org", ["orgId"])
+		.index("by_org_status", ["orgId", "status"]),
 
 	dealAccess: defineTable({
 		userId: v.string(),
@@ -979,6 +1007,9 @@ export default defineSchema({
 	// ══════════════════════════════════════════════════════════
 
 	dispersalEntries: defineTable({
+		/** WorkOS organization id — denormalized from lender or mortgage. */
+		orgId: v.optional(v.string()),
+
 		mortgageId: v.id("mortgages"),
 		lenderId: v.id("lenders"),
 		lenderAccountId: v.id("ledger_accounts"),
@@ -1001,7 +1032,9 @@ export default defineSchema({
 		.index("by_obligation", ["obligationId"])
 		.index("by_status", ["status", "lenderId"])
 		.index("by_idempotency", ["idempotencyKey"])
-		.index("by_eligibility", ["status", "payoutEligibleAfter"]),
+		.index("by_eligibility", ["status", "payoutEligibleAfter"])
+		.index("by_org", ["orgId"])
+		.index("by_org_status", ["orgId", "status"]),
 
 	servicingFeeEntries: defineTable({
 		mortgageId: v.id("mortgages"),
@@ -1162,6 +1195,8 @@ export default defineSchema({
 	// ══════════════════════════════════════════════════════════
 
 	auditJournal: defineTable({
+		/** WorkOS organization id for org-scoped audit queries (optional for legacy rows). */
+		organizationId: v.optional(v.string()),
 		entityType: entityTypeValidator,
 		entityId: v.string(),
 		eventType: v.string(),
@@ -1181,7 +1216,8 @@ export default defineSchema({
 	})
 		.index("by_entity", ["entityType", "entityId", "timestamp"])
 		.index("by_actor", ["actorId", "timestamp"])
-		.index("by_type_and_time", ["entityType", "timestamp"]),
+		.index("by_type_and_time", ["entityType", "timestamp"])
+		.index("by_org_and_time", ["organizationId", "timestamp"]),
 
 	// ══════════════════════════════════════════════════════════
 	// MORTGAGE OWNERSHIP LEDGER
@@ -1427,6 +1463,9 @@ export default defineSchema({
 	// ══════════════════════════════════════════════════════════
 
 	transferRequests: defineTable({
+		/** WorkOS organization id — denormalized from mortgage/obligation/deal/lender graph. */
+		orgId: v.optional(v.string()),
+
 		status: v.union(
 			v.literal("initiated"),
 			v.literal("pending"),
@@ -1510,7 +1549,9 @@ export default defineSchema({
 		.index("by_deal_status", ["dealId", "status", "createdAt"])
 		.index("by_collection_attempt", ["collectionAttemptId"])
 		.index("by_pipeline", ["pipelineId", "legNumber"])
-		.index("by_provider_ref", ["providerCode", "providerRef"]),
+		.index("by_provider_ref", ["providerCode", "providerRef"])
+		.index("by_org", ["orgId"])
+		.index("by_org_status", ["orgId", "status"]),
 
 	/** Durable store for raw webhook payloads — persist before ACKing the provider. */
 	webhookEvents: defineTable({

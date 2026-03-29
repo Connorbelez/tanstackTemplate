@@ -8,13 +8,14 @@
 
 import { v } from "convex/values";
 import { internal } from "../../_generated/api";
+import type { Id } from "../../_generated/dataModel";
 import { internalAction } from "../../_generated/server";
 import type { CommandSource } from "../../engine/types";
 import {
 	buildPrincipalReturnIdempotencyKey,
 	computeProrationAdjustedAmount,
 } from "./principalReturn.logic";
-import { providerCodeValidator } from "./validators";
+import { legNumberValidator, providerCodeValidator } from "./validators";
 
 /**
  * Source stamp for admin-triggered principal return transfers.
@@ -44,9 +45,12 @@ export const createPrincipalReturn = internalAction({
 		providerCode: providerCodeValidator,
 		bankAccountRef: v.optional(v.string()),
 		pipelineId: v.optional(v.string()),
-		legNumber: v.optional(v.number()),
+		legNumber: v.optional(legNumberValidator),
 	},
-	handler: async (ctx, args) => {
+	handler: async (
+		ctx,
+		args
+	): Promise<{ transferId: Id<"transferRequests"> }> => {
 		const amount = computeProrationAdjustedAmount(
 			args.principalAmount,
 			args.prorationAdjustment
@@ -56,7 +60,7 @@ export const createPrincipalReturn = internalAction({
 			args.sellerId
 		);
 
-		const transferId = await ctx.runMutation(
+		const transferId: Id<"transferRequests"> = await ctx.runMutation(
 			internal.payments.transfers.mutations.createTransferRequestInternal,
 			{
 				direction: "outbound",

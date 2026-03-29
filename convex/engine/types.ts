@@ -157,6 +157,8 @@ export interface AuditJournalEntry {
 	ip?: string;
 	machineVersion?: string;
 	newState: string;
+	/** WorkOS organization id for org-scoped audit queries */
+	organizationId?: string;
 	outcome: "transitioned" | "rejected";
 	payload?: Record<string, unknown>;
 	previousState: string;

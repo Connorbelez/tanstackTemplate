@@ -101,7 +101,7 @@ brokers: defineTable({
   licenseId: v.optional(v.string()),
   licenseProvince: v.optional(v.string()),
   brokerageName: v.optional(v.string()),
-  brokerageOrgId: v.optional(v.string()),
+  orgId: v.optional(v.string()),
   onboardedAt: v.optional(v.number()),
   createdAt: v.number(),
 })
@@ -185,7 +185,7 @@ export const entityTypeValidator = v.union(
 - The Notion plan says `seedLender.ts`; that matches the current repo. Do not reintroduce deprecated `seedInvestor.ts` naming.
 - Current schema uses `users._id` document references, not WorkOS auth IDs, for `userId` fields.
 - `borrowers` do **not** currently have a `brokerId` field, so borrower seeding must not invent one. The broker relationship is expressed later through mortgages and `mortgageBorrowers`.
-- `brokers.brokerageOrgId` is optional and stringly typed. If org rows are seeded, treat them as supporting data for realism and referential consistency rather than hard schema requirements.
+- `brokers.orgId` is optional and stringly typed. If org rows are seeded, treat them as supporting data for realism and referential consistency rather than hard schema requirements.
 - `EntityType` / `entityTypeValidator` currently omit `"lender"`. Without fixing that, lender creation journal entries either fail validation or force unsafe casts.
 
 ## Integration Points

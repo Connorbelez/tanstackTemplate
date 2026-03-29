@@ -1,4 +1,5 @@
 import type { Id } from "../_generated/dataModel";
+import { FAIRLEND_STAFF_ORG_ID } from "../constants";
 import { adminMutation } from "../fluent";
 import {
 	ensureUserByEmail,
@@ -221,6 +222,7 @@ export const seedBorrower = adminMutation
 				: undefined;
 
 			const borrowerId = await ctx.db.insert("borrowers", {
+				orgId: FAIRLEND_STAFF_ORG_ID,
 				status: fixture.borrower.status,
 				userId,
 				financialProfile: fixture.borrower.financialProfile,
@@ -236,6 +238,7 @@ export const seedBorrower = adminMutation
 				initialState: fixture.borrower.status,
 				source: SEED_SOURCE,
 				timestamp: createdAt,
+				organizationId: FAIRLEND_STAFF_ORG_ID,
 				payload: {
 					userId,
 					idvStatus: fixture.borrower.idvStatus,

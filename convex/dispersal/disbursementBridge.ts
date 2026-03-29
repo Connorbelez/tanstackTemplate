@@ -27,6 +27,7 @@ import {
 	internalQuery,
 } from "../_generated/server";
 import type { CommandSource } from "../engine/types";
+import { orgIdFromMortgageId } from "../lib/orgScope";
 import { assertDisbursementAllowed } from "../payments/cashLedger/disbursementGate";
 import { areMockTransferProvidersEnabled } from "../payments/transfers/mockProviders";
 import {
@@ -316,7 +317,9 @@ export const processSingleDisbursement = internalMutation({
 				: idempotencyKey;
 
 		const now = Date.now();
+		const orgId = await orgIdFromMortgageId(ctx, entry.mortgageId);
 		const transferId = await ctx.db.insert("transferRequests", {
+			orgId,
 			status: "initiated",
 			direction: "outbound",
 			transferType: "lender_dispersal_payout",

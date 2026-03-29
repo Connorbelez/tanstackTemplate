@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import type { Doc, Id } from "../_generated/dataModel";
 import { adminMutation } from "../fluent";
+import { requireOrgIdFromBroker } from "../lib/orgScope";
 import {
 	ensureUserByEmail,
 	findLenderByUserId,
@@ -131,12 +132,15 @@ export const seedLender = adminMutation
 			}
 
 			const brokerId = brokerPool[index % brokerPool.length];
+			const broker = await ctx.db.get(brokerId);
+			const orgId = requireOrgIdFromBroker(broker);
 			const createdAt = seedTimestamp(14_400_000 + index * 3_600_000);
 			const activatedAt = fixture.lender.activatedAtOffsetMs
 				? createdAt + fixture.lender.activatedAtOffsetMs
 				: undefined;
 
 			const lenderId = await ctx.db.insert("lenders", {
+				orgId,
 				userId,
 				brokerId,
 				accreditationStatus: fixture.lender.accreditationStatus,
@@ -155,6 +159,7 @@ export const seedLender = adminMutation
 				initialState: fixture.lender.status,
 				source: SEED_SOURCE,
 				timestamp: createdAt,
+				organizationId: orgId,
 				payload: {
 					userId,
 					brokerId,

@@ -100,6 +100,7 @@ export const createCorrectiveObligation = internalMutation({
 		// 4. Create the corrective obligation with GT fields
 		const now = Date.now();
 		const correctiveId = await ctx.db.insert("obligations", {
+			orgId: original.orgId,
 			status: "upcoming",
 			lastTransitionAt: now,
 			machineContext: undefined,
@@ -123,6 +124,7 @@ export const createCorrectiveObligation = internalMutation({
 			actorId: source.actorId ?? "system",
 			actorType: source.actorType ?? "system",
 			channel: source.channel,
+			organizationId: original.orgId,
 			entityId: correctiveId,
 			entityType: "obligation",
 			eventType: "CREATED",
