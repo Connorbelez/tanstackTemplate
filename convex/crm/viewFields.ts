@@ -22,6 +22,15 @@ export const setViewFieldVisibility = crmAdminMutation
 			throw new ConvexError("View not found or access denied");
 		}
 
+		// Verify fieldDef exists and belongs to the same object as the view
+		const fieldDef = await ctx.db.get(args.fieldDefId);
+		if (!fieldDef) {
+			throw new ConvexError("Field not found");
+		}
+		if (fieldDef.objectDefId !== viewDef.objectDefId) {
+			throw new ConvexError("Field does not belong to the view's object");
+		}
+
 		// Find existing viewField
 		const existing = await ctx.db
 			.query("viewFields")
@@ -120,7 +129,24 @@ export const reorderViewFields = crmAdminMutation
 			viewFields.map((vf) => [vf.fieldDefId, vf])
 		);
 
+		// Validate all fieldIds exist as viewFields in this view
+		for (const id of args.fieldIds) {
+			if (!fieldToViewField.has(id)) {
+				throw new ConvexError(
+					`Field ${id} does not have a viewField entry in view ${args.viewDefId}`
+				);
+			}
+		}
+
+		// Validate completeness — all viewFields must be included
+		if (args.fieldIds.length !== viewFields.length) {
+			throw new ConvexError(
+				`Expected ${viewFields.length} field IDs but received ${args.fieldIds.length} — all view fields must be included in the reorder`
+			);
+		}
+
 		// Update displayOrder for each fieldId in the provided order
+		// Safety: validated above that every fieldId maps to a viewField
 		for (let i = 0; i < args.fieldIds.length; i++) {
 			const vf = fieldToViewField.get(args.fieldIds[i]);
 			if (vf) {
@@ -150,7 +176,7 @@ export const setViewFieldWidth = crmAdminMutation
 	.input({
 		viewDefId: v.id("viewDefs"),
 		fieldDefId: v.id("fieldDefs"),
-		width: v.number(),
+		width: v.number(), // positive integer pixel width
 	})
 	.handler(async (ctx, args) => {
 		const orgId = ctx.viewer.orgId;
@@ -162,6 +188,11 @@ export const setViewFieldWidth = crmAdminMutation
 		const viewDef = await ctx.db.get(args.viewDefId);
 		if (!viewDef || viewDef.orgId !== orgId) {
 			throw new ConvexError("View not found or access denied");
+		}
+
+		// Validate width is positive
+		if (args.width <= 0) {
+			throw new ConvexError("Column width must be a positive number");
 		}
 
 		// Find viewField

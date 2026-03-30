@@ -26,7 +26,7 @@ export const addViewFilter = crmAdminMutation
 			throw new ConvexError("View not found or access denied");
 		}
 
-		// Verify fieldDef exists
+		// Verify fieldDef exists and is active
 		const fieldDef = await ctx.db.get(args.fieldDefId);
 		if (!fieldDef) {
 			throw new ConvexError("Field not found");
@@ -35,6 +35,11 @@ export const addViewFilter = crmAdminMutation
 		// Verify fieldDef belongs to the same object as the view
 		if (fieldDef.objectDefId !== viewDef.objectDefId) {
 			throw new ConvexError("Field does not belong to the view's object");
+		}
+
+		// Verify fieldDef is active
+		if (!fieldDef.isActive) {
+			throw new ConvexError("Cannot filter on a deactivated field");
 		}
 
 		// Validate operator against field type
@@ -113,7 +118,7 @@ export const updateViewFilter = crmAdminMutation
 		}
 
 		// Build patch
-		const patch: Record<string, string> = {};
+		const patch: Record<string, unknown> = {};
 		if (args.operator !== undefined) {
 			patch.operator = args.operator;
 		}

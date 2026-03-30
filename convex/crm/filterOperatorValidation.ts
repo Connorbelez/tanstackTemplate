@@ -29,16 +29,19 @@ const OPERATOR_MAP: Record<FieldType, readonly FilterOperator[]> = {
 export function getValidOperators(
 	fieldType: FieldType
 ): readonly FilterOperator[] {
-	return OPERATOR_MAP[fieldType] ?? [];
+	const operators = OPERATOR_MAP[fieldType];
+	if (operators === undefined) {
+		throw new Error(
+			`No operators defined for field type "${fieldType}". Update OPERATOR_MAP in filterOperatorValidation.ts.`
+		);
+	}
+	return operators;
 }
 
 export function isValidOperatorForFieldType(
 	operator: FilterOperator,
 	fieldType: FieldType
 ): boolean {
-	const valid = OPERATOR_MAP[fieldType];
-	return (
-		valid !== undefined &&
-		(valid as readonly string[]).includes(operator)
-	);
+	const valid: readonly FilterOperator[] | undefined = OPERATOR_MAP[fieldType];
+	return valid !== undefined && valid.includes(operator);
 }

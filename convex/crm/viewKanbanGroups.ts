@@ -50,6 +50,13 @@ export const reorderKanbanGroups = crmAdminMutation
 			}
 		}
 
+		// Validate completeness — all groups must be included
+		if (args.groupIds.length !== existingGroups.length) {
+			throw new ConvexError(
+				`Expected ${existingGroups.length} group IDs but received ${args.groupIds.length} — all groups must be included in the reorder`
+			);
+		}
+
 		// Update displayOrder for each group
 		for (let i = 0; i < args.groupIds.length; i++) {
 			await ctx.db.patch(args.groupIds[i], { displayOrder: i });

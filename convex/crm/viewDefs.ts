@@ -1,7 +1,84 @@
 import { ConvexError, v } from "convex/values";
+import type { Id } from "../_generated/dataModel";
+import type { MutationCtx } from "../_generated/server";
 import { auditLog } from "../auditLog";
 import { crmAdminMutation, crmAdminQuery } from "../fluent";
 import { viewTypeValidator } from "./validators";
+
+/** Sentinel value for the "No Value" kanban group — items without a value for the bound field. */
+export const KANBAN_NO_VALUE_SENTINEL = "__no_value__";
+
+const MAX_VIEW_NAME_LENGTH = 100;
+
+// ── Shared helpers ──────────────────────────────────────────────────
+
+function validateViewName(name: string): string {
+	const trimmed = name.trim();
+	if (trimmed.length === 0) {
+		throw new ConvexError("View name cannot be empty");
+	}
+	if (trimmed.length > MAX_VIEW_NAME_LENGTH) {
+		throw new ConvexError(
+			`View name must be ${MAX_VIEW_NAME_LENGTH} characters or fewer`
+		);
+	}
+	return trimmed;
+}
+
+async function validateFieldCapability(
+	ctx: { db: MutationCtx["db"] },
+	objectDefId: Id<"objectDefs">,
+	fieldDefId: Id<"fieldDefs">,
+	capability: "kanban" | "calendar",
+): Promise<void> {
+	const cap = await ctx.db
+		.query("fieldCapabilities")
+		.withIndex("by_object_capability", (q) =>
+			q.eq("objectDefId", objectDefId).eq("capability", capability)
+		)
+		.filter((q) => q.eq(q.field("fieldDefId"), fieldDefId))
+		.first();
+	if (!cap) {
+		throw new ConvexError(
+			`Bound field does not have ${capability} capability`
+		);
+	}
+}
+
+async function createKanbanGroupsFromField(
+	ctx: { db: MutationCtx["db"] },
+	viewDefId: Id<"viewDefs">,
+	fieldDefId: Id<"fieldDefs">,
+): Promise<void> {
+	const fieldDef = await ctx.db.get(fieldDefId);
+	if (!fieldDef) {
+		throw new ConvexError(
+			"Bound field no longer exists — it may have been deleted"
+		);
+	}
+	if (!fieldDef.options || fieldDef.options.length === 0) {
+		throw new ConvexError(
+			"Bound field has no select options — kanban views require a field with defined options"
+		);
+	}
+	const options = fieldDef.options;
+	for (let i = 0; i < options.length; i++) {
+		await ctx.db.insert("viewKanbanGroups", {
+			viewDefId,
+			fieldDefId,
+			optionValue: options[i].value,
+			displayOrder: i,
+			isCollapsed: false,
+		});
+	}
+	await ctx.db.insert("viewKanbanGroups", {
+		viewDefId,
+		fieldDefId,
+		optionValue: KANBAN_NO_VALUE_SENTINEL,
+		displayOrder: options.length,
+		isCollapsed: false,
+	});
+}
 
 // ── createView ───────────────────────────────────────────────────────
 // Creates a viewDef + auto-populates viewFields from active fieldDefs
@@ -19,6 +96,7 @@ export const createView = crmAdminMutation
 			throw new ConvexError("Org context required for CRM operations");
 		}
 		const now = Date.now();
+		const name = validateViewName(args.name);
 
 		// Verify objectDef exists and belongs to org
 		const objectDef = await ctx.db.get(args.objectDefId);
@@ -26,57 +104,40 @@ export const createView = crmAdminMutation
 			throw new ConvexError("Object not found or access denied");
 		}
 
-		// Capability validation for kanban
+		// Capability validation for kanban/calendar
 		if (args.viewType === "kanban") {
 			if (!args.boundFieldId) {
 				throw new ConvexError(
 					"Kanban views require a boundFieldId (select or multi_select field)"
 				);
 			}
-			const cap = await ctx.db
-				.query("fieldCapabilities")
-				.withIndex("by_object_capability", (q) =>
-					q
-						.eq("objectDefId", args.objectDefId)
-						.eq("capability", "kanban")
-				)
-				.filter((q) => q.eq(q.field("fieldDefId"), args.boundFieldId))
-				.first();
-			if (!cap) {
-				throw new ConvexError(
-					"Bound field does not have kanban capability"
-				);
-			}
+			await validateFieldCapability(
+				ctx,
+				args.objectDefId,
+				args.boundFieldId,
+				"kanban",
+			);
 		}
 
-		// Capability validation for calendar
 		if (args.viewType === "calendar") {
 			if (!args.boundFieldId) {
 				throw new ConvexError(
 					"Calendar views require a boundFieldId (date or datetime field)"
 				);
 			}
-			const cap = await ctx.db
-				.query("fieldCapabilities")
-				.withIndex("by_object_capability", (q) =>
-					q
-						.eq("objectDefId", args.objectDefId)
-						.eq("capability", "calendar")
-				)
-				.filter((q) => q.eq(q.field("fieldDefId"), args.boundFieldId))
-				.first();
-			if (!cap) {
-				throw new ConvexError(
-					"Bound field does not have calendar capability"
-				);
-			}
+			await validateFieldCapability(
+				ctx,
+				args.objectDefId,
+				args.boundFieldId,
+				"calendar",
+			);
 		}
 
 		// Insert viewDef
 		const viewDefId = await ctx.db.insert("viewDefs", {
 			orgId,
 			objectDefId: args.objectDefId,
-			name: args.name,
+			name,
 			viewType: args.viewType,
 			boundFieldId: args.boundFieldId,
 			isDefault: false,
@@ -108,25 +169,7 @@ export const createView = crmAdminMutation
 
 		// Kanban group auto-creation
 		if (args.viewType === "kanban" && args.boundFieldId) {
-			const fieldDef = await ctx.db.get(args.boundFieldId);
-			const options = fieldDef?.options ?? [];
-			for (let i = 0; i < options.length; i++) {
-				await ctx.db.insert("viewKanbanGroups", {
-					viewDefId,
-					fieldDefId: args.boundFieldId,
-					optionValue: options[i].value,
-					displayOrder: i,
-					isCollapsed: false,
-				});
-			}
-			// "No Value" group always last
-			await ctx.db.insert("viewKanbanGroups", {
-				viewDefId,
-				fieldDefId: args.boundFieldId,
-				optionValue: "__no_value__",
-				displayOrder: options.length,
-				isCollapsed: false,
-			});
+			await createKanbanGroupsFromField(ctx, viewDefId, args.boundFieldId);
 		}
 
 		// Audit
@@ -137,7 +180,7 @@ export const createView = crmAdminMutation
 			resourceId: viewDefId,
 			severity: "info",
 			metadata: {
-				name: args.name,
+				name,
 				viewType: args.viewType,
 				orgId,
 			},
@@ -172,22 +215,12 @@ export const updateView = crmAdminMutation
 			args.boundFieldId !== before.boundFieldId
 		) {
 			if (before.viewType === "kanban") {
-				const cap = await ctx.db
-					.query("fieldCapabilities")
-					.withIndex("by_object_capability", (q) =>
-						q
-							.eq("objectDefId", before.objectDefId)
-							.eq("capability", "kanban")
-					)
-					.filter((q) =>
-						q.eq(q.field("fieldDefId"), args.boundFieldId)
-					)
-					.first();
-				if (!cap) {
-					throw new ConvexError(
-						"Bound field does not have kanban capability"
-					);
-				}
+				await validateFieldCapability(
+					ctx,
+					before.objectDefId,
+					args.boundFieldId,
+					"kanban",
+				);
 
 				// Delete old kanban groups
 				const oldGroups = await ctx.db
@@ -201,53 +234,29 @@ export const updateView = crmAdminMutation
 				}
 
 				// Create new kanban groups from new field's options
-				const fieldDef = await ctx.db.get(args.boundFieldId);
-				const options = fieldDef?.options ?? [];
-				for (let i = 0; i < options.length; i++) {
-					await ctx.db.insert("viewKanbanGroups", {
-						viewDefId: args.viewDefId,
-						fieldDefId: args.boundFieldId,
-						optionValue: options[i].value,
-						displayOrder: i,
-						isCollapsed: false,
-					});
-				}
-				// "No Value" group always last
-				await ctx.db.insert("viewKanbanGroups", {
-					viewDefId: args.viewDefId,
-					fieldDefId: args.boundFieldId,
-					optionValue: "__no_value__",
-					displayOrder: options.length,
-					isCollapsed: false,
-				});
+				await createKanbanGroupsFromField(
+					ctx,
+					args.viewDefId,
+					args.boundFieldId,
+				);
 			}
 
 			if (before.viewType === "calendar") {
-				const cap = await ctx.db
-					.query("fieldCapabilities")
-					.withIndex("by_object_capability", (q) =>
-						q
-							.eq("objectDefId", before.objectDefId)
-							.eq("capability", "calendar")
-					)
-					.filter((q) =>
-						q.eq(q.field("fieldDefId"), args.boundFieldId)
-					)
-					.first();
-				if (!cap) {
-					throw new ConvexError(
-						"Bound field does not have calendar capability"
-					);
-				}
+				await validateFieldCapability(
+					ctx,
+					before.objectDefId,
+					args.boundFieldId,
+					"calendar",
+				);
 			}
 		}
 
 		// Build patch
-		const patch: Record<string, string | number> = {
+		const patch: Record<string, unknown> = {
 			updatedAt: Date.now(),
 		};
 		if (args.name !== undefined) {
-			patch.name = args.name;
+			patch.name = validateViewName(args.name);
 		}
 		if (args.boundFieldId !== undefined) {
 			patch.boundFieldId = args.boundFieldId;
@@ -255,6 +264,11 @@ export const updateView = crmAdminMutation
 
 		await ctx.db.patch(args.viewDefId, patch);
 		const after = await ctx.db.get(args.viewDefId);
+		if (!after) {
+			throw new ConvexError(
+				"View disappeared during update — possible data integrity issue"
+			);
+		}
 
 		// Audit with diff
 		await auditLog.logChange(ctx, {
@@ -349,6 +363,7 @@ export const duplicateView = crmAdminMutation
 			throw new ConvexError("Org context required for CRM operations");
 		}
 		const now = Date.now();
+		const newName = validateViewName(args.newName);
 
 		// Verify source viewDef exists and belongs to org
 		const source = await ctx.db.get(args.viewDefId);
@@ -360,7 +375,7 @@ export const duplicateView = crmAdminMutation
 		const newViewDefId = await ctx.db.insert("viewDefs", {
 			orgId,
 			objectDefId: source.objectDefId,
-			name: args.newName,
+			name: newName,
 			viewType: source.viewType,
 			boundFieldId: source.boundFieldId,
 			isDefault: false,
@@ -424,7 +439,7 @@ export const duplicateView = crmAdminMutation
 			severity: "info",
 			metadata: {
 				sourceViewDefId: args.viewDefId,
-				newName: args.newName,
+				newName,
 				orgId,
 			},
 		});
@@ -454,6 +469,7 @@ export const listViews = crmAdminQuery
 			.withIndex("by_object", (q) =>
 				q.eq("objectDefId", args.objectDefId)
 			)
+			.filter((q) => q.eq(q.field("orgId"), orgId))
 			.collect();
 
 		// Sort: default view first, then by createdAt
