@@ -2,7 +2,10 @@ import { ConvexError, v } from "convex/values";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { QueryCtx } from "../_generated/server";
 import { crmQuery } from "../fluent";
-import { queryNativeRecords } from "./systemAdapters/queryAdapter";
+import {
+	type NativeRecordPage,
+	queryNativeRecords,
+} from "./systemAdapters/queryAdapter";
 import type {
 	LinkedRecord,
 	QueryRecordsResult,
@@ -31,15 +34,16 @@ interface QueryRecordsArgs {
 
 /**
  * Convex enforces 8,192 document reads per query/mutation.
- * Each record requires ~1 record doc + up to ~8 value rows (one per typed table),
- * plus field-def reads. We reserve a safety buffer for non-record reads
- * (objectDef, fieldDefs, etc.) and derive the cap from the hard limit.
+ * Each record requires ~1 record doc read + up to 8 table scans (one per typed table).
+ * Each table scan may return multiple rows. This estimate is conservative for objects
+ * with few fields but may undercount for objects with many fields of the same type.
+ * We reserve a safety buffer for non-record reads (objectDef, fieldDefs, etc.).
  */
 const CONVEX_READ_LIMIT = 8192;
 const SAFETY_BUFFER = 192; // headroom for objectDef + fieldDefs + metadata reads
-const ESTIMATED_VALUE_ROWS_PER_RECORD = 8; // worst case: one value row per typed table
+const ESTIMATED_TABLE_QUERIES_PER_RECORD = 8; // one scan per typed value table
 export const FILTERED_QUERY_CAP = Math.floor(
-	(CONVEX_READ_LIMIT - SAFETY_BUFFER) / (1 + ESTIMATED_VALUE_ROWS_PER_RECORD)
+	(CONVEX_READ_LIMIT - SAFETY_BUFFER) / (1 + ESTIMATED_TABLE_QUERIES_PER_RECORD)
 ); // ≈ 888
 
 // ── Helpers: Value Assembly ──────────────────────────────────────────
@@ -48,8 +52,8 @@ export const FILTERED_QUERY_CAP = Math.floor(
  * Reads ALL value rows for a given record from a specific typed table.
  * Uses `by_record` index — returns all values for this record in one scan.
  *
- * Convex requires compile-time table names, so we use the same switch
- * pattern as `writeValue`/`readExistingValue` in records.ts.
+ * Convex requires compile-time table names, so we use a switch
+ * to dispatch per-table queries.
  */
 export async function readValuesFromTable(
 	ctx: QueryCtx,
@@ -223,8 +227,10 @@ export function matchesFilter(
 			return fieldValue === true;
 		case "is_false":
 			return fieldValue === false;
-		default:
-			return false; // fail-closed: unknown operators never match
+		default: {
+			const _exhaustive: never = operator;
+			throw new Error(`Unknown filter operator: ${String(_exhaustive)}`);
+		}
 	}
 }
 
@@ -237,6 +243,7 @@ export function applyFilters(
 	filters: RecordFilter[],
 	fieldDefsById: Map<string, FieldDef>
 ): UnifiedRecord[] {
+	// No filters = no constraints; return all records (permissive empty case)
 	if (filters.length === 0) {
 		return records;
 	}
@@ -350,7 +357,7 @@ async function collectNativeRecordsForFiltering(
 
 	while (!isDone && records.length <= limit) {
 		const pageSize = limit + 1 - records.length;
-		const nativePage = await queryNativeRecords(
+		const nativePage: NativeRecordPage = await queryNativeRecords(
 			ctx,
 			objectDef,
 			fieldDefs,
@@ -505,7 +512,13 @@ export const queryRecords = crmQuery
 						v.literal("is_true"),
 						v.literal("is_false")
 					),
-					value: v.any(),
+					value: v.union(
+						v.string(),
+						v.number(),
+						v.boolean(),
+						v.array(v.string()),
+						v.null()
+					),
 				})
 			)
 		),
@@ -539,6 +552,13 @@ export const queryRecords = crmQuery
 		}
 
 		const activeFieldDefs = await loadActiveFieldDefs(ctx, args.objectDefId);
+
+		const rawNumItems = args.paginationOpts.numItems;
+		if (!Number.isFinite(rawNumItems) || rawNumItems < 1) {
+			throw new ConvexError(
+				"paginationOpts.numItems must be a positive number"
+			);
+		}
 
 		const fieldDefsById = new Map(
 			activeFieldDefs.map((fd) => [fd._id.toString(), fd])

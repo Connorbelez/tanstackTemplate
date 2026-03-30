@@ -18,7 +18,7 @@ interface NativeTablePage {
 	page: Record<string, unknown>[];
 }
 
-interface NativeRecordPage {
+export interface NativeRecordPage {
 	continueCursor: string | null;
 	isDone: boolean;
 	records: UnifiedRecord[];
