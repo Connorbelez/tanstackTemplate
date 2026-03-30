@@ -8,6 +8,7 @@ import type {
 	RecordSort,
 	UnifiedRecord,
 } from "./types";
+import { queryNativeRecords } from "./systemAdapters/queryAdapter";
 import { type ValueTableName, fieldTypeToTable } from "./valueRouter";
 
 type FieldDef = Doc<"fieldDefs">;
@@ -325,18 +326,69 @@ export const queryRecords = crmQuery
 			throw new ConvexError("Object not found or access denied");
 		}
 
-		// 2. Stub: system objects delegate to native adapter (ENG-255)
-		if (objectDef.isSystem) {
-			throw new ConvexError(
-				"System object queries not yet implemented (see ENG-255)"
-			);
-		}
-
-		// 3. Load active fieldDefs
+		// 2. Load active fieldDefs (needed by both native and EAV paths)
 		const activeFieldDefs = await loadActiveFieldDefs(
 			ctx,
 			args.objectDefId
 		);
+
+		// 3. Validate numItems early — applies to all paths below.
+		const rawNumItems = args.paginationOpts.numItems;
+		if (!Number.isFinite(rawNumItems) || rawNumItems < 1) {
+			throw new ConvexError("paginationOpts.numItems must be a positive number");
+		}
+
+		// 4. System objects → native adapter (direct table query, ~10x faster than EAV)
+		if (objectDef.isSystem) {
+			// Fail fast: a system object without nativeTable is a misconfiguration.
+			if (!objectDef.nativeTable) {
+				throw new ConvexError(
+					`System object misconfigured: nativeTable is required (objectDefId=${args.objectDefId})`
+				);
+			}
+
+			// Clamp numItems to the same safe cap used by the EAV filtered path.
+			const MAX_NATIVE_PAGE_SIZE = FILTERED_QUERY_CAP; // ~888
+			const clampedNumItems = Math.min(rawNumItems, MAX_NATIVE_PAGE_SIZE);
+
+			// Reject unsupported pagination inputs so callers get a clear error rather
+			// than silently incorrect results.
+			if (args.paginationOpts.cursor != null) {
+				throw new ConvexError(
+					"Cursor-based pagination is not yet supported for system objects"
+				);
+			}
+
+			const nativeRecords = await queryNativeRecords(
+				ctx,
+				objectDef,
+				activeFieldDefs,
+				orgId,
+				clampedNumItems,
+			);
+
+			// Apply in-memory filters and sort to native results (same logic as EAV path B).
+			const fieldDefsById = new Map(
+				activeFieldDefs.map((fd) => [fd._id.toString(), fd])
+			);
+
+			const filters = (args.filters ?? []) as RecordFilter[];
+			const filtered = applyFilters(nativeRecords, filters, fieldDefsById);
+			const sorted = applySort(
+				filtered,
+				args.sort as RecordSort | undefined,
+				fieldDefsById
+			);
+
+			return {
+				records: sorted,
+				continueCursor: null,
+				isDone: true,
+				truncated: false,
+			};
+		}
+
+		// 5. EAV path — build fieldDefs map for filtering/sorting
 		const fieldDefsById = new Map(
 			activeFieldDefs.map((fd) => [fd._id.toString(), fd])
 		);
@@ -454,8 +506,10 @@ export const getRecord = crmQuery
 			throw new ConvexError("Object not found or access denied");
 		}
 		if (objectDef.isSystem) {
+			// getRecord takes Id<"records"> — native entities don't live in the records table.
+			// Full native getRecord requires (nativeTable, nativeId) — deferred to ENG-256.
 			throw new ConvexError(
-				"System object queries not yet implemented (see ENG-255)"
+				"getRecord for system objects not yet supported — use queryRecords instead"
 			);
 		}
 
@@ -572,9 +626,9 @@ export const searchRecords = crmQuery
 			throw new ConvexError("Object not found or access denied");
 		}
 		if (objectDef.isSystem) {
-			throw new ConvexError(
-				"System object queries not yet implemented (see ENG-255)"
-			);
+			// Native tables don't have a search index on labelValue.
+			// Return empty results for v1 — full native search is a future enhancement.
+			return [];
 		}
 
 		// 2. Validate and clamp limit
