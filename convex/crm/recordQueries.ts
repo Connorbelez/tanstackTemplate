@@ -277,6 +277,42 @@ async function loadActiveFieldDefs(
 	return allFieldDefs.filter((fd) => fd.isActive);
 }
 
+async function collectNativeRecordsForFiltering(
+	ctx: QueryCtx,
+	objectDef: Doc<"objectDefs">,
+	fieldDefs: FieldDef[],
+	orgId: string,
+	limit: number
+): Promise<{ records: UnifiedRecord[]; truncated: boolean }> {
+	const records: UnifiedRecord[] = [];
+	let cursor: string | null = null;
+	let isDone = false;
+
+	while (!isDone && records.length <= limit) {
+		const pageSize = limit + 1 - records.length;
+		const nativePage = await queryNativeRecords(
+			ctx,
+			objectDef,
+			fieldDefs,
+			orgId,
+			{
+				cursor,
+				numItems: pageSize,
+			}
+		);
+
+		records.push(...nativePage.records);
+		cursor = nativePage.continueCursor;
+		isDone = nativePage.isDone;
+	}
+
+	const truncated = records.length > limit || !isDone;
+	return {
+		records: truncated ? records.slice(0, limit) : records,
+		truncated,
+	};
+}
+
 // ── Query Functions ──────────────────────────────────────────────────
 
 // ── queryRecords ─────────────────────────────────────────────────────

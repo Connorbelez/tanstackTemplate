@@ -1,5 +1,5 @@
-import { v } from "convex/values";
-import type { Doc } from "../../_generated/dataModel";
+import { ConvexError, v } from "convex/values";
+import type { Doc, Id } from "../../_generated/dataModel";
 import type { MutationCtx } from "../../_generated/server";
 import { internalMutation } from "../../_generated/server";
 import { auditLog } from "../../auditLog";
@@ -425,7 +425,10 @@ export const SYSTEM_OBJECT_CONFIGS: readonly SystemObjectConfig[] = [
 // handlers provide a compatible ctx.db.
 
 interface BootstrapResult {
-	created: string[];
+	created: Array<{
+		objectDefId: Id<"objectDefs">;
+		name: string;
+	}>;
 	skipped: string[];
 }
 
@@ -434,7 +437,7 @@ async function bootstrapForOrg(
 	orgId: string,
 	createdBy: string,
 ): Promise<BootstrapResult> {
-	const created: string[] = [];
+	const created: BootstrapResult["created"] = [];
 	const skipped: string[] = [];
 	const now = Date.now();
 
@@ -530,7 +533,7 @@ async function bootstrapForOrg(
 			});
 		}
 
-		created.push(config.name);
+		created.push({ objectDefId, name: config.name });
 	}
 
 	return { created, skipped };
@@ -544,14 +547,18 @@ export const bootstrapSystemObjects = internalMutation({
 	handler: async (ctx, args) => {
 		const result = await bootstrapForOrg(ctx, args.orgId, "system");
 
-		for (const name of result.created) {
+		for (const createdObject of result.created) {
 			await auditLog.log(ctx, {
 				action: "crm.bootstrap.object_created",
 				actorId: "system",
 				resourceType: "objectDefs",
-				resourceId: name,
+				resourceId: createdObject.objectDefId,
 				severity: "info",
-				metadata: { name, orgId: args.orgId, trigger: "internal" },
+				metadata: {
+					name: createdObject.name,
+					orgId: args.orgId,
+					trigger: "internal",
+				},
 			});
 		}
 
@@ -567,21 +574,25 @@ export const adminBootstrap = crmAdminMutation
 		const orgId = ctx.viewer.orgId;
 		const authId = ctx.viewer.authId;
 		if (!orgId || !authId) {
-			throw new Error(
+			throw new ConvexError(
 				"Org context and authenticated user required for bootstrap",
 			);
 		}
 
 		const result = await bootstrapForOrg(ctx, orgId, authId);
 
-		for (const name of result.created) {
+		for (const createdObject of result.created) {
 			await auditLog.log(ctx, {
 				action: "crm.bootstrap.object_created",
 				actorId: authId,
 				resourceType: "objectDefs",
-				resourceId: name,
+				resourceId: createdObject.objectDefId,
 				severity: "info",
-				metadata: { name, orgId, trigger: "admin" },
+				metadata: {
+					name: createdObject.name,
+					orgId,
+					trigger: "admin",
+				},
 			});
 		}
 
