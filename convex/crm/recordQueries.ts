@@ -277,6 +277,42 @@ async function loadActiveFieldDefs(
 	return allFieldDefs.filter((fd) => fd.isActive);
 }
 
+async function collectNativeRecordsForFiltering(
+	ctx: QueryCtx,
+	objectDef: Doc<"objectDefs">,
+	fieldDefs: FieldDef[],
+	orgId: string,
+	limit: number
+): Promise<{ records: UnifiedRecord[]; truncated: boolean }> {
+	const records: UnifiedRecord[] = [];
+	let cursor: string | null = null;
+	let isDone = false;
+
+	while (!isDone && records.length <= limit) {
+		const pageSize = limit + 1 - records.length;
+		const nativePage = await queryNativeRecords(
+			ctx,
+			objectDef,
+			fieldDefs,
+			orgId,
+			{
+				cursor,
+				numItems: pageSize,
+			}
+		);
+
+		records.push(...nativePage.records);
+		cursor = nativePage.continueCursor;
+		isDone = nativePage.isDone;
+	}
+
+	const truncated = records.length > limit || !isDone;
+	return {
+		records: truncated ? records.slice(0, limit) : records,
+		truncated,
+	};
+}
+
 // ── Query Functions ──────────────────────────────────────────────────
 
 // ── queryRecords ─────────────────────────────────────────────────────
@@ -332,63 +368,7 @@ export const queryRecords = crmQuery
 			args.objectDefId
 		);
 
-		// 3. Validate numItems early — applies to all paths below.
-		const rawNumItems = args.paginationOpts.numItems;
-		if (!Number.isFinite(rawNumItems) || rawNumItems < 1) {
-			throw new ConvexError("paginationOpts.numItems must be a positive number");
-		}
-
-		// 4. System objects → native adapter (direct table query, ~10x faster than EAV)
-		if (objectDef.isSystem) {
-			// Fail fast: a system object without nativeTable is a misconfiguration.
-			if (!objectDef.nativeTable) {
-				throw new ConvexError(
-					`System object misconfigured: nativeTable is required (objectDefId=${args.objectDefId})`
-				);
-			}
-
-			// Clamp numItems to the same safe cap used by the EAV filtered path.
-			const MAX_NATIVE_PAGE_SIZE = FILTERED_QUERY_CAP; // ~888
-			const clampedNumItems = Math.min(rawNumItems, MAX_NATIVE_PAGE_SIZE);
-
-			// Reject unsupported pagination inputs so callers get a clear error rather
-			// than silently incorrect results.
-			if (args.paginationOpts.cursor != null) {
-				throw new ConvexError(
-					"Cursor-based pagination is not yet supported for system objects"
-				);
-			}
-
-			const nativeRecords = await queryNativeRecords(
-				ctx,
-				objectDef,
-				activeFieldDefs,
-				orgId,
-				clampedNumItems,
-			);
-
-			// Apply in-memory filters and sort to native results (same logic as EAV path B).
-			const fieldDefsById = new Map(
-				activeFieldDefs.map((fd) => [fd._id.toString(), fd])
-			);
-
-			const filters = (args.filters ?? []) as RecordFilter[];
-			const filtered = applyFilters(nativeRecords, filters, fieldDefsById);
-			const sorted = applySort(
-				filtered,
-				args.sort as RecordSort | undefined,
-				fieldDefsById
-			);
-
-			return {
-				records: sorted,
-				continueCursor: null,
-				isDone: true,
-				truncated: false,
-			};
-		}
-
-		// 5. EAV path — build fieldDefs map for filtering/sorting
+		// 3. Shared filter/sort metadata for both native and EAV paths.
 		const fieldDefsById = new Map(
 			activeFieldDefs.map((fd) => [fd._id.toString(), fd])
 		);
@@ -398,6 +378,34 @@ export const queryRecords = crmQuery
 
 		// ── PATH A: No filters/sort — native Convex pagination (hot path) ──
 		if (!hasFiltersOrSort) {
+			if (objectDef.isSystem && objectDef.nativeTable) {
+				const rawCursor = args.paginationOpts.cursor;
+				const nativeCursor =
+					rawCursor && rawCursor.startsWith("native:")
+						? rawCursor.slice("native:".length)
+						: rawCursor;
+
+				const nativePage = await queryNativeRecords(
+					ctx,
+					objectDef,
+					activeFieldDefs,
+					orgId,
+					{
+						...args.paginationOpts,
+						cursor: nativeCursor,
+					}
+				);
+
+				return {
+					records: nativePage.records,
+					continueCursor: nativePage.isDone
+						? null
+						: `native:${nativePage.continueCursor}`,
+					isDone: nativePage.isDone,
+					truncated: false,
+				};
+			}
+
 			// Parse tagged cursor: strip "native:" prefix if present, pass raw to Convex
 			const rawCursor = args.paginationOpts.cursor;
 			const nativeCursor =
@@ -433,20 +441,33 @@ export const queryRecords = crmQuery
 		}
 
 		// ── PATH B: Filters/sort — collect, assemble, filter, sort, slice ──
-		const allRecords = await ctx.db
-			.query("records")
-			.withIndex("by_org_object", (q) =>
-				q.eq("orgId", orgId).eq("objectDefId", args.objectDefId)
-			)
-			.filter((q) => q.eq(q.field("isDeleted"), false))
-			.take(FILTERED_QUERY_CAP + 1);
+		let assembled: UnifiedRecord[];
+		let truncated: boolean;
+		if (objectDef.isSystem && objectDef.nativeTable) {
+			const nativeResult = await collectNativeRecordsForFiltering(
+				ctx,
+				objectDef,
+				activeFieldDefs,
+				orgId,
+				FILTERED_QUERY_CAP
+			);
+			assembled = nativeResult.records;
+			truncated = nativeResult.truncated;
+		} else {
+			const allRecords = await ctx.db
+				.query("records")
+				.withIndex("by_org_object", (q) =>
+					q.eq("orgId", orgId).eq("objectDefId", args.objectDefId)
+				)
+				.filter((q) => q.eq(q.field("isDeleted"), false))
+				.take(FILTERED_QUERY_CAP + 1);
 
-		const truncated = allRecords.length > FILTERED_QUERY_CAP;
-		const capped = truncated
-			? allRecords.slice(0, FILTERED_QUERY_CAP)
-			: allRecords;
-
-		const assembled = await assembleRecords(ctx, capped, activeFieldDefs);
+			truncated = allRecords.length > FILTERED_QUERY_CAP;
+			const capped = truncated
+				? allRecords.slice(0, FILTERED_QUERY_CAP)
+				: allRecords;
+			assembled = await assembleRecords(ctx, capped, activeFieldDefs);
+		}
 
 		const filters = (args.filters ?? []) as RecordFilter[];
 		const filtered = applyFilters(assembled, filters, fieldDefsById);
@@ -507,7 +528,7 @@ export const getRecord = crmQuery
 		}
 		if (objectDef.isSystem) {
 			// getRecord takes Id<"records"> — native entities don't live in the records table.
-			// Full native getRecord requires (nativeTable, nativeId) — deferred to ENG-256.
+			// Full native getRecord requires (nativeTable, nativeId) — deferred to a follow-up.
 			throw new ConvexError(
 				"getRecord for system objects not yet supported — use queryRecords instead"
 			);

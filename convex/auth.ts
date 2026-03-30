@@ -244,6 +244,12 @@ export const { authKitEvent } = authKit.events({
 	// ── Organization events ───────────────────────────────────────────
 	"organization.created": async (ctx, event) => {
 		await upsertOrganization(ctx, event.data);
+		// Auto-bootstrap system objects for the new org (UC-96)
+		await ctx.scheduler.runAfter(
+			0,
+			internal.crm.systemAdapters.bootstrap.bootstrapSystemObjects,
+			{ orgId: event.data.id },
+		);
 	},
 	"organization.updated": async (ctx, event) => {
 		await upsertOrganization(ctx, event.data);
