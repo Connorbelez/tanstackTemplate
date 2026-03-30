@@ -8,6 +8,7 @@ import type {
 	RecordSort,
 	UnifiedRecord,
 } from "./types";
+import { queryNativeRecords } from "./systemAdapters/queryAdapter";
 import { type ValueTableName, fieldTypeToTable } from "./valueRouter";
 
 type FieldDef = Doc<"fieldDefs">;
@@ -325,18 +326,30 @@ export const queryRecords = crmQuery
 			throw new ConvexError("Object not found or access denied");
 		}
 
-		// 2. Stub: system objects delegate to native adapter (ENG-255)
-		if (objectDef.isSystem) {
-			throw new ConvexError(
-				"System object queries not yet implemented (see ENG-255)"
-			);
-		}
-
-		// 3. Load active fieldDefs
+		// 2. Load active fieldDefs (needed by both native and EAV paths)
 		const activeFieldDefs = await loadActiveFieldDefs(
 			ctx,
 			args.objectDefId
 		);
+
+		// 3. System objects → native adapter (direct table query, ~10x faster than EAV)
+		if (objectDef.isSystem && objectDef.nativeTable) {
+			const nativeRecords = await queryNativeRecords(
+				ctx,
+				objectDef,
+				activeFieldDefs,
+				orgId,
+				args.paginationOpts.numItems,
+			);
+			return {
+				records: nativeRecords,
+				continueCursor: null,
+				isDone: true,
+				truncated: false,
+			};
+		}
+
+		// 4. EAV path — build fieldDefs map for filtering/sorting
 		const fieldDefsById = new Map(
 			activeFieldDefs.map((fd) => [fd._id.toString(), fd])
 		);
@@ -454,8 +467,10 @@ export const getRecord = crmQuery
 			throw new ConvexError("Object not found or access denied");
 		}
 		if (objectDef.isSystem) {
+			// getRecord takes Id<"records"> — native entities don't live in the records table.
+			// Full native getRecord requires (nativeTable, nativeId) — deferred to ENG-256.
 			throw new ConvexError(
-				"System object queries not yet implemented (see ENG-255)"
+				"getRecord for system objects not yet supported — use queryRecords instead"
 			);
 		}
 
@@ -572,9 +587,9 @@ export const searchRecords = crmQuery
 			throw new ConvexError("Object not found or access denied");
 		}
 		if (objectDef.isSystem) {
-			throw new ConvexError(
-				"System object queries not yet implemented (see ENG-255)"
-			);
+			// Native tables don't have a search index on labelValue.
+			// Return empty results for v1 — full native search is a future enhancement.
+			return [];
 		}
 
 		// 2. Validate and clamp limit
