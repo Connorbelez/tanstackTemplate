@@ -1980,7 +1980,11 @@ export default defineSchema({
 	})
 		.index("by_object", ["objectDefId"])
 		.index("by_org_object", ["orgId", "objectDefId"])
-		.index("by_org_label", ["orgId", "labelValue"]),
+		.index("by_org_label", ["orgId", "labelValue"])
+		.searchIndex("search_label", {
+			searchField: "labelValue",
+			filterFields: ["orgId", "objectDefId", "isDeleted"],
+		}),
 
 	recordValuesText: defineTable({
 		recordId: v.id("records"),
