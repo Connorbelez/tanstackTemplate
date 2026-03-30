@@ -332,24 +332,63 @@ export const queryRecords = crmQuery
 			args.objectDefId
 		);
 
-		// 3. System objects → native adapter (direct table query, ~10x faster than EAV)
-		if (objectDef.isSystem && objectDef.nativeTable) {
+		// 3. Validate numItems early — applies to all paths below.
+		const rawNumItems = args.paginationOpts.numItems;
+		if (!Number.isFinite(rawNumItems) || rawNumItems < 1) {
+			throw new ConvexError("paginationOpts.numItems must be a positive number");
+		}
+
+		// 4. System objects → native adapter (direct table query, ~10x faster than EAV)
+		if (objectDef.isSystem) {
+			// Fail fast: a system object without nativeTable is a misconfiguration.
+			if (!objectDef.nativeTable) {
+				throw new ConvexError(
+					`System object misconfigured: nativeTable is required (objectDefId=${args.objectDefId})`
+				);
+			}
+
+			// Clamp numItems to the same safe cap used by the EAV filtered path.
+			const MAX_NATIVE_PAGE_SIZE = FILTERED_QUERY_CAP; // ~888
+			const clampedNumItems = Math.min(rawNumItems, MAX_NATIVE_PAGE_SIZE);
+
+			// Reject unsupported pagination inputs so callers get a clear error rather
+			// than silently incorrect results.
+			if (args.paginationOpts.cursor != null) {
+				throw new ConvexError(
+					"Cursor-based pagination is not yet supported for system objects"
+				);
+			}
+
 			const nativeRecords = await queryNativeRecords(
 				ctx,
 				objectDef,
 				activeFieldDefs,
 				orgId,
-				args.paginationOpts.numItems,
+				clampedNumItems,
 			);
+
+			// Apply in-memory filters and sort to native results (same logic as EAV path B).
+			const fieldDefsById = new Map(
+				activeFieldDefs.map((fd) => [fd._id.toString(), fd])
+			);
+
+			const filters = (args.filters ?? []) as RecordFilter[];
+			const filtered = applyFilters(nativeRecords, filters, fieldDefsById);
+			const sorted = applySort(
+				filtered,
+				args.sort as RecordSort | undefined,
+				fieldDefsById
+			);
+
 			return {
-				records: nativeRecords,
+				records: sorted,
 				continueCursor: null,
 				isDone: true,
 				truncated: false,
 			};
 		}
 
-		// 4. EAV path — build fieldDefs map for filtering/sorting
+		// 5. EAV path — build fieldDefs map for filtering/sorting
 		const fieldDefsById = new Map(
 			activeFieldDefs.map((fd) => [fd._id.toString(), fd])
 		);
