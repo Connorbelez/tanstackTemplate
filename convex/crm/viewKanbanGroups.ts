@@ -40,8 +40,13 @@ export const reorderKanbanGroups = crmAdminMutation
 			.withIndex("by_view", (q) => q.eq("viewDefId", args.viewDefId))
 			.collect();
 
-		// Validate all groupIds belong to this view
+		// Validate completeness — all groups must be included to prevent displayOrder collisions
 		const existingGroupIds = new Set(existingGroups.map((g) => g._id));
+		if (args.groupIds.length !== existingGroups.length) {
+			throw new ConvexError(
+				`Expected ${existingGroups.length} group IDs but received ${args.groupIds.length} — all groups must be included in reorder`
+			);
+		}
 		for (const id of args.groupIds) {
 			if (!existingGroupIds.has(id)) {
 				throw new ConvexError(
