@@ -24,7 +24,7 @@ type FieldDef = Doc<"fieldDefs">;
 const CONVEX_READ_LIMIT = 8192;
 const SAFETY_BUFFER = 192; // headroom for objectDef + fieldDefs + metadata reads
 const ESTIMATED_VALUE_ROWS_PER_RECORD = 8; // worst case: one value row per typed table
-const FILTERED_QUERY_CAP = Math.floor(
+export const FILTERED_QUERY_CAP = Math.floor(
 	(CONVEX_READ_LIMIT - SAFETY_BUFFER) / (1 + ESTIMATED_VALUE_ROWS_PER_RECORD)
 ); // ≈ 888
 
@@ -37,7 +37,7 @@ const FILTERED_QUERY_CAP = Math.floor(
  * Convex requires compile-time table names, so we use the same switch
  * pattern as `writeValue`/`readExistingValue` in records.ts.
  */
-async function readValuesFromTable(
+export async function readValuesFromTable(
 	ctx: QueryCtx,
 	table: ValueTableName,
 	recordId: Id<"records">
@@ -95,7 +95,7 @@ async function readValuesFromTable(
  * Only queries tables that the object's fields actually use
  * (optimization: skip tables with no relevant fields).
  */
-async function assembleRecordFields(
+export async function assembleRecordFields(
 	ctx: QueryCtx,
 	recordId: Id<"records">,
 	fieldDefs: FieldDef[]
@@ -133,7 +133,7 @@ async function assembleRecordFields(
  * Assembles a batch of record docs into UnifiedRecord[].
  * Uses Promise.all for parallel fan-out across records.
  */
-async function assembleRecords(
+export async function assembleRecords(
 	ctx: QueryCtx,
 	records: Doc<"records">[],
 	fieldDefs: FieldDef[]
@@ -152,7 +152,7 @@ async function assembleRecords(
 
 // ── Helpers: Filtering ───────────────────────────────────────────────
 
-function matchesFilter(
+export function matchesFilter(
 	fieldValue: unknown,
 	operator: RecordFilter["operator"],
 	filterValue: unknown
@@ -218,7 +218,7 @@ function matchesFilter(
  * Applies field-level filters in-memory.
  * All filters are AND'd together (every filter must match).
  */
-function applyFilters(
+export function applyFilters(
 	records: UnifiedRecord[],
 	filters: RecordFilter[],
 	fieldDefsById: Map<string, FieldDef>
@@ -237,7 +237,7 @@ function applyFilters(
 
 // ── Helpers: Sorting ─────────────────────────────────────────────────
 
-function applySort(
+export function applySort(
 	records: UnifiedRecord[],
 	sort: RecordSort | undefined,
 	fieldDefsById: Map<string, FieldDef>
@@ -266,7 +266,7 @@ function applySort(
 
 // ── Helpers: Shared ──────────────────────────────────────────────────
 
-async function loadActiveFieldDefs(
+export async function loadActiveFieldDefs(
 	ctx: QueryCtx,
 	objectDefId: Id<"objectDefs">
 ): Promise<FieldDef[]> {
