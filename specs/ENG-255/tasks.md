@@ -47,7 +47,7 @@
 - **Action:** Modify — replace 3 ENG-255 stubs
 - **Details:**
   - In `queryRecords()`: Replace `throw ConvexError("System object queries not yet implemented (see ENG-255)")` with call to `queryNativeRecords(ctx, objectDef, activeFieldDefs, orgId, args.paginationOpts.numItems)`
-  - In `getRecord()`: Keep stub — `getRecord` takes `Id<"records">` which doesn't map to native entities. Update error message to `"getRecord for system objects not yet supported — use queryRecords instead"`. Full native single-record lookup (`getNativeRecord(nativeTable, nativeId)`) is **deferred to ENG-256**.
+  - In `getRecord()`: Keep stub — `getRecord` takes `Id<"records">` which doesn't map to native entities. Update error message to `"getRecord for system objects not yet supported — use queryRecords instead"`. Full native single-record lookup (`getNativeRecord(nativeTable, nativeId)`) is deferred to a follow-up.
   - In `searchRecords()`: Replace stub with basic native search (query by org, filter labelValue in-memory, or return empty for v1 since native records don't have search index)
   - Import queryNativeRecords from ./systemAdapters/queryAdapter
 - **Status:** [ ]
