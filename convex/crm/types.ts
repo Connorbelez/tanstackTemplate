@@ -1,17 +1,17 @@
 import type { Id } from "../_generated/dataModel";
 
 /** Unified shape returned by all record queries — both EAV and native adapter. */
-export type UnifiedRecord = {
+export interface UnifiedRecord {
 	_id: string;
 	_kind: "record" | "native";
-	objectDefId: Id<"objectDefs">;
-	fields: Record<string, unknown>;
 	createdAt: number;
+	fields: Record<string, unknown>;
+	objectDefId: Id<"objectDefs">;
 	updatedAt: number;
-};
+}
 
 /** A single field-level filter condition. */
-export type RecordFilter = {
+export interface RecordFilter {
 	fieldDefId: Id<"fieldDefs">;
 	operator:
 		| "eq"
@@ -25,37 +25,37 @@ export type RecordFilter = {
 		| "is_true"
 		| "is_false";
 	value: unknown;
-};
+}
 
 /** Sort specification for record queries. */
-export type RecordSort = {
-	fieldDefId: Id<"fieldDefs">;
+export interface RecordSort {
 	direction: "asc" | "desc";
-};
+	fieldDefId: Id<"fieldDefs">;
+}
 
 /** Result shape for paginated record queries. */
-export type QueryRecordsResult = {
-	records: UnifiedRecord[];
+export interface QueryRecordsResult {
 	continueCursor: string | null;
 	isDone: boolean;
+	records: UnifiedRecord[];
 	truncated: boolean;
-};
+}
 
 /** Result shape for getRecord with linked entities. */
-export type GetRecordResult = {
-	record: UnifiedRecord;
+export interface GetRecordResult {
 	links: {
 		outbound: LinkedRecord[];
 		inbound: LinkedRecord[];
 	};
-};
+	record: UnifiedRecord;
+}
 
 /** A linked record reference (lightweight, for display in relation sections). */
-export type LinkedRecord = {
+export interface LinkedRecord {
+	labelValue?: string;
 	linkId: string;
 	linkTypeDefId: Id<"linkTypeDefs">;
+	objectDefId: Id<"objectDefs">;
 	recordId: string;
 	recordKind: "record" | "native";
-	objectDefId: Id<"objectDefs">;
-	labelValue?: string;
-};
+}

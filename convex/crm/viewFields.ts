@@ -124,25 +124,25 @@ export const reorderViewFields = crmAdminMutation
 			.withIndex("by_view", (q) => q.eq("viewDefId", args.viewDefId))
 			.collect();
 
+		// Validate completeness — all view fields must be included to prevent displayOrder collisions
+		if (args.fieldIds.length !== viewFields.length) {
+			throw new ConvexError(
+				`Expected ${viewFields.length} field IDs but received ${args.fieldIds.length} — all view fields must be included in reorder`
+			);
+		}
+
 		// Build a lookup from fieldDefId to viewField
 		const fieldToViewField = new Map(
 			viewFields.map((vf) => [vf.fieldDefId, vf])
 		);
 
-		// Validate all fieldIds exist as viewFields in this view
-		for (const id of args.fieldIds) {
-			if (!fieldToViewField.has(id)) {
+		// Validate all fieldIds map to existing viewFields (no unknown IDs)
+		for (const fieldId of args.fieldIds) {
+			if (!fieldToViewField.has(fieldId)) {
 				throw new ConvexError(
-					`Field ${id} does not have a viewField entry in view ${args.viewDefId}`
+					`Field ${fieldId} does not have a viewField entry in view ${args.viewDefId}`
 				);
 			}
-		}
-
-		// Validate completeness — all viewFields must be included
-		if (args.fieldIds.length !== viewFields.length) {
-			throw new ConvexError(
-				`Expected ${viewFields.length} field IDs but received ${args.fieldIds.length} — all view fields must be included in the reorder`
-			);
 		}
 
 		// Update displayOrder for each fieldId in the provided order
@@ -203,7 +203,9 @@ export const setViewFieldWidth = crmAdminMutation
 			.first();
 
 		if (!viewField) {
-			throw new ConvexError("View field not found for this view and field combination");
+			throw new ConvexError(
+				"View field not found for this view and field combination"
+			);
 		}
 
 		await ctx.db.patch(viewField._id, { width: args.width });

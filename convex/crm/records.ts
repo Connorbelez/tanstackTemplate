@@ -35,7 +35,7 @@ function assertPlainObject(
  * Uses a switch on the resolved table name so Convex sees a literal
  * table name at each insert call-site.
  */
-async function writeValue(
+export async function writeValue(
 	ctx: MutationCtx,
 	recordId: Id<"records">,
 	fieldDef: FieldDef,
@@ -108,7 +108,7 @@ async function writeValue(
  * Reads the existing value row for a given record + field, or null.
  * Same switch pattern so Convex resolves table names at compile time.
  */
-async function readExistingValue(
+export async function readExistingValue(
 	ctx: MutationCtx,
 	recordId: Id<"records">,
 	fieldDef: FieldDef

@@ -29,7 +29,7 @@ async function validateFieldCapability(
 	ctx: { db: MutationCtx["db"] },
 	objectDefId: Id<"objectDefs">,
 	fieldDefId: Id<"fieldDefs">,
-	capability: "kanban" | "calendar",
+	capability: "kanban" | "calendar"
 ): Promise<void> {
 	const cap = await ctx.db
 		.query("fieldCapabilities")
@@ -39,16 +39,14 @@ async function validateFieldCapability(
 		.filter((q) => q.eq(q.field("fieldDefId"), fieldDefId))
 		.first();
 	if (!cap) {
-		throw new ConvexError(
-			`Bound field does not have ${capability} capability`
-		);
+		throw new ConvexError(`Bound field does not have ${capability} capability`);
 	}
 }
 
 async function createKanbanGroupsFromField(
 	ctx: { db: MutationCtx["db"] },
 	viewDefId: Id<"viewDefs">,
-	fieldDefId: Id<"fieldDefs">,
+	fieldDefId: Id<"fieldDefs">
 ): Promise<void> {
 	const fieldDef = await ctx.db.get(fieldDefId);
 	if (!fieldDef) {
@@ -115,7 +113,7 @@ export const createView = crmAdminMutation
 				ctx,
 				args.objectDefId,
 				args.boundFieldId,
-				"kanban",
+				"kanban"
 			);
 		}
 
@@ -129,7 +127,7 @@ export const createView = crmAdminMutation
 				ctx,
 				args.objectDefId,
 				args.boundFieldId,
-				"calendar",
+				"calendar"
 			);
 		}
 
@@ -150,9 +148,7 @@ export const createView = crmAdminMutation
 		// Auto-populate viewFields from all active fieldDefs
 		const activeFields = await ctx.db
 			.query("fieldDefs")
-			.withIndex("by_object", (q) =>
-				q.eq("objectDefId", args.objectDefId)
-			)
+			.withIndex("by_object", (q) => q.eq("objectDefId", args.objectDefId))
 			.collect();
 		const sortedActiveFields = activeFields
 			.filter((f) => f.isActive)
@@ -219,15 +215,13 @@ export const updateView = crmAdminMutation
 					ctx,
 					before.objectDefId,
 					args.boundFieldId,
-					"kanban",
+					"kanban"
 				);
 
 				// Delete old kanban groups
 				const oldGroups = await ctx.db
 					.query("viewKanbanGroups")
-					.withIndex("by_view", (q) =>
-						q.eq("viewDefId", args.viewDefId)
-					)
+					.withIndex("by_view", (q) => q.eq("viewDefId", args.viewDefId))
 					.collect();
 				for (const group of oldGroups) {
 					await ctx.db.delete(group._id);
@@ -237,7 +231,7 @@ export const updateView = crmAdminMutation
 				await createKanbanGroupsFromField(
 					ctx,
 					args.viewDefId,
-					args.boundFieldId,
+					args.boundFieldId
 				);
 			}
 
@@ -246,7 +240,7 @@ export const updateView = crmAdminMutation
 					ctx,
 					before.objectDefId,
 					args.boundFieldId,
-					"calendar",
+					"calendar"
 				);
 			}
 		}
@@ -466,16 +460,18 @@ export const listViews = crmAdminQuery
 
 		const views = await ctx.db
 			.query("viewDefs")
-			.withIndex("by_object", (q) =>
-				q.eq("objectDefId", args.objectDefId)
-			)
+			.withIndex("by_object", (q) => q.eq("objectDefId", args.objectDefId))
 			.filter((q) => q.eq(q.field("orgId"), orgId))
 			.collect();
 
 		// Sort: default view first, then by createdAt
 		return views.sort((a, b) => {
-			if (a.isDefault && !b.isDefault) return -1;
-			if (!a.isDefault && b.isDefault) return 1;
+			if (a.isDefault && !b.isDefault) {
+				return -1;
+			}
+			if (!a.isDefault && b.isDefault) {
+				return 1;
+			}
 			return a.createdAt - b.createdAt;
 		});
 	})

@@ -43,5 +43,5 @@ export function isValidOperatorForFieldType(
 	fieldType: FieldType
 ): boolean {
 	const valid: readonly FilterOperator[] | undefined = OPERATOR_MAP[fieldType];
-	return valid !== undefined && valid.includes(operator);
+	return valid?.includes(operator) ?? false;
 }

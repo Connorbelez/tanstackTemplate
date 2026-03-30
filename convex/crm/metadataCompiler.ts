@@ -22,6 +22,8 @@ export function deriveCapabilities(fieldType: FieldType): Capability[] {
 		case "percentage":
 			caps.push("aggregate", "sort");
 			break;
+		default:
+			break;
 	}
 
 	return caps;

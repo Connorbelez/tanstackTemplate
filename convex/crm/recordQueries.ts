@@ -2,16 +2,30 @@ import { ConvexError, v } from "convex/values";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { QueryCtx } from "../_generated/server";
 import { crmQuery } from "../fluent";
+import { queryNativeRecords } from "./systemAdapters/queryAdapter";
 import type {
 	LinkedRecord,
+	QueryRecordsResult,
 	RecordFilter,
 	RecordSort,
 	UnifiedRecord,
 } from "./types";
-import { queryNativeRecords } from "./systemAdapters/queryAdapter";
-import { type ValueTableName, fieldTypeToTable } from "./valueRouter";
+import { fieldTypeToTable, type ValueTableName } from "./valueRouter";
 
 type FieldDef = Doc<"fieldDefs">;
+const OFFSET_CURSOR_PATTERN = /^[0-9]+$/;
+
+interface QueryPaginationOpts {
+	cursor: string | null;
+	numItems: number;
+}
+
+interface QueryRecordsArgs {
+	filters?: RecordFilter[];
+	objectDefId: Id<"objectDefs">;
+	paginationOpts: QueryPaginationOpts;
+	sort?: RecordSort;
+}
 
 // ── Constants ────────────────────────────────────────────────────────
 
@@ -24,7 +38,7 @@ type FieldDef = Doc<"fieldDefs">;
 const CONVEX_READ_LIMIT = 8192;
 const SAFETY_BUFFER = 192; // headroom for objectDef + fieldDefs + metadata reads
 const ESTIMATED_VALUE_ROWS_PER_RECORD = 8; // worst case: one value row per typed table
-const FILTERED_QUERY_CAP = Math.floor(
+export const FILTERED_QUERY_CAP = Math.floor(
 	(CONVEX_READ_LIMIT - SAFETY_BUFFER) / (1 + ESTIMATED_VALUE_ROWS_PER_RECORD)
 ); // ≈ 888
 
@@ -37,7 +51,7 @@ const FILTERED_QUERY_CAP = Math.floor(
  * Convex requires compile-time table names, so we use the same switch
  * pattern as `writeValue`/`readExistingValue` in records.ts.
  */
-async function readValuesFromTable(
+export async function readValuesFromTable(
 	ctx: QueryCtx,
 	table: ValueTableName,
 	recordId: Id<"records">
@@ -95,7 +109,7 @@ async function readValuesFromTable(
  * Only queries tables that the object's fields actually use
  * (optimization: skip tables with no relevant fields).
  */
-async function assembleRecordFields(
+export async function assembleRecordFields(
 	ctx: QueryCtx,
 	recordId: Id<"records">,
 	fieldDefs: FieldDef[]
@@ -133,7 +147,7 @@ async function assembleRecordFields(
  * Assembles a batch of record docs into UnifiedRecord[].
  * Uses Promise.all for parallel fan-out across records.
  */
-async function assembleRecords(
+export async function assembleRecords(
 	ctx: QueryCtx,
 	records: Doc<"records">[],
 	fieldDefs: FieldDef[]
@@ -152,7 +166,7 @@ async function assembleRecords(
 
 // ── Helpers: Filtering ───────────────────────────────────────────────
 
-function matchesFilter(
+export function matchesFilter(
 	fieldValue: unknown,
 	operator: RecordFilter["operator"],
 	filterValue: unknown
@@ -218,17 +232,21 @@ function matchesFilter(
  * Applies field-level filters in-memory.
  * All filters are AND'd together (every filter must match).
  */
-function applyFilters(
+export function applyFilters(
 	records: UnifiedRecord[],
 	filters: RecordFilter[],
 	fieldDefsById: Map<string, FieldDef>
 ): UnifiedRecord[] {
-	if (filters.length === 0) return records;
+	if (filters.length === 0) {
+		return records;
+	}
 
 	return records.filter((record) =>
 		filters.every((filter) => {
 			const fieldDef = fieldDefsById.get(filter.fieldDefId.toString());
-			if (!fieldDef) return false; // fail-closed: unknown fieldDefId never matches
+			if (!fieldDef) {
+				return false; // fail-closed: unknown fieldDefId never matches
+			}
 			const fieldValue = record.fields[fieldDef.name];
 			return matchesFilter(fieldValue, filter.operator, filter.value);
 		})
@@ -237,15 +255,19 @@ function applyFilters(
 
 // ── Helpers: Sorting ─────────────────────────────────────────────────
 
-function applySort(
+export function applySort(
 	records: UnifiedRecord[],
 	sort: RecordSort | undefined,
 	fieldDefsById: Map<string, FieldDef>
 ): UnifiedRecord[] {
-	if (!sort) return records;
+	if (!sort) {
+		return records;
+	}
 
 	const fieldDef = fieldDefsById.get(sort.fieldDefId.toString());
-	if (!fieldDef) return records;
+	if (!fieldDef) {
+		return records;
+	}
 
 	const fieldName = fieldDef.name;
 	const dir = sort.direction === "desc" ? -1 : 1;
@@ -253,20 +275,28 @@ function applySort(
 	return [...records].sort((a, b) => {
 		const va = a.fields[fieldName];
 		const vb = b.fields[fieldName];
-		if (va === vb) return 0;
-		if (va == null) return 1;
-		if (vb == null) return -1;
-		if (typeof va === "number" && typeof vb === "number")
+		if (va === vb) {
+			return 0;
+		}
+		if (va == null) {
+			return 1;
+		}
+		if (vb == null) {
+			return -1;
+		}
+		if (typeof va === "number" && typeof vb === "number") {
 			return (va - vb) * dir;
-		if (typeof va === "string" && typeof vb === "string")
+		}
+		if (typeof va === "string" && typeof vb === "string") {
 			return va.localeCompare(vb) * dir;
+		}
 		return 0;
 	});
 }
 
 // ── Helpers: Shared ──────────────────────────────────────────────────
 
-async function loadActiveFieldDefs(
+export async function loadActiveFieldDefs(
 	ctx: QueryCtx,
 	objectDefId: Id<"objectDefs">
 ): Promise<FieldDef[]> {
@@ -275,6 +305,36 @@ async function loadActiveFieldDefs(
 		.withIndex("by_object", (q) => q.eq("objectDefId", objectDefId))
 		.collect();
 	return allFieldDefs.filter((fd) => fd.isActive);
+}
+
+function hasFiltersOrSort(args: QueryRecordsArgs): boolean {
+	return (args.filters?.length ?? 0) > 0 || args.sort !== undefined;
+}
+
+function stripTaggedCursor(
+	cursor: string | null,
+	tag: "native" | "offset"
+): string | null {
+	const prefix = `${tag}:`;
+	return cursor?.startsWith(prefix) ? cursor.slice(prefix.length) : cursor;
+}
+
+function parseOffsetCursor(cursor: string | null): number {
+	if (cursor == null) {
+		return 0;
+	}
+
+	const cursorBody = stripTaggedCursor(cursor, "offset") ?? cursor;
+	if (!OFFSET_CURSOR_PATTERN.test(cursorBody)) {
+		throw new ConvexError("Invalid pagination cursor");
+	}
+
+	const offset = Number.parseInt(cursorBody, 10);
+	if (!Number.isFinite(offset) || offset < 0) {
+		throw new ConvexError("Invalid pagination cursor");
+	}
+
+	return offset;
 }
 
 async function collectNativeRecordsForFiltering(
@@ -313,6 +373,116 @@ async function collectNativeRecordsForFiltering(
 	};
 }
 
+async function queryNativeRecordPage(
+	ctx: QueryCtx,
+	orgId: string,
+	objectDef: Doc<"objectDefs">,
+	args: QueryRecordsArgs,
+	activeFieldDefs: FieldDef[]
+): Promise<QueryRecordsResult> {
+	const nativeCursor = stripTaggedCursor(args.paginationOpts.cursor, "native");
+
+	if (objectDef.isSystem && objectDef.nativeTable) {
+		const nativePage = await queryNativeRecords(
+			ctx,
+			objectDef,
+			activeFieldDefs,
+			orgId,
+			{
+				...args.paginationOpts,
+				cursor: nativeCursor,
+			}
+		);
+
+		return {
+			records: nativePage.records,
+			continueCursor: nativePage.isDone
+				? null
+				: `native:${nativePage.continueCursor}`,
+			isDone: nativePage.isDone,
+			truncated: false,
+		};
+	}
+
+	const paginationResult = await ctx.db
+		.query("records")
+		.withIndex("by_org_object", (q) =>
+			q.eq("orgId", orgId).eq("objectDefId", args.objectDefId)
+		)
+		.filter((q) => q.eq(q.field("isDeleted"), false))
+		.paginate({
+			...args.paginationOpts,
+			cursor: nativeCursor,
+		});
+
+	const assembled = await assembleRecords(
+		ctx,
+		paginationResult.page,
+		activeFieldDefs
+	);
+
+	return {
+		records: assembled,
+		continueCursor: paginationResult.isDone
+			? null
+			: `native:${paginationResult.continueCursor}`,
+		isDone: paginationResult.isDone,
+		truncated: false,
+	};
+}
+
+async function queryFilteredRecordPage(
+	ctx: QueryCtx,
+	orgId: string,
+	objectDef: Doc<"objectDefs">,
+	args: QueryRecordsArgs,
+	activeFieldDefs: FieldDef[],
+	fieldDefsById: Map<string, FieldDef>
+): Promise<QueryRecordsResult> {
+	let assembled: UnifiedRecord[];
+	let truncated: boolean;
+
+	if (objectDef.isSystem && objectDef.nativeTable) {
+		const nativeResult = await collectNativeRecordsForFiltering(
+			ctx,
+			objectDef,
+			activeFieldDefs,
+			orgId,
+			FILTERED_QUERY_CAP
+		);
+		assembled = nativeResult.records;
+		truncated = nativeResult.truncated;
+	} else {
+		const allRecords = await ctx.db
+			.query("records")
+			.withIndex("by_org_object", (q) =>
+				q.eq("orgId", orgId).eq("objectDefId", args.objectDefId)
+			)
+			.filter((q) => q.eq(q.field("isDeleted"), false))
+			.take(FILTERED_QUERY_CAP + 1);
+
+		truncated = allRecords.length > FILTERED_QUERY_CAP;
+		const capped = truncated
+			? allRecords.slice(0, FILTERED_QUERY_CAP)
+			: allRecords;
+		assembled = await assembleRecords(ctx, capped, activeFieldDefs);
+	}
+
+	const filtered = applyFilters(assembled, args.filters ?? [], fieldDefsById);
+	const sorted = applySort(filtered, args.sort, fieldDefsById);
+	const offset = parseOffsetCursor(args.paginationOpts.cursor);
+	const page = sorted.slice(offset, offset + args.paginationOpts.numItems);
+	const nextOffset = offset + args.paginationOpts.numItems;
+	const isDone = nextOffset >= sorted.length;
+
+	return {
+		records: page,
+		continueCursor: isDone ? null : `offset:${String(nextOffset)}`,
+		isDone,
+		truncated,
+	};
+}
+
 // ── Query Functions ──────────────────────────────────────────────────
 
 // ── queryRecords ─────────────────────────────────────────────────────
@@ -347,7 +517,7 @@ export const queryRecords = crmQuery
 		),
 		paginationOpts: v.object({
 			numItems: v.number(),
-			cursor: v.union(v.string(), v.null_()),
+			cursor: v.union(v.string(), v.null()),
 		}),
 	})
 	.handler(async (ctx, args) => {
@@ -362,147 +532,36 @@ export const queryRecords = crmQuery
 			throw new ConvexError("Object not found or access denied");
 		}
 
-		// 2. Load active fieldDefs (needed by both native and EAV paths)
-		const activeFieldDefs = await loadActiveFieldDefs(
-			ctx,
-			args.objectDefId
-		);
+		if (objectDef.isSystem && !objectDef.nativeTable) {
+			throw new ConvexError(
+				"System object queries not yet implemented (see ENG-255)"
+			);
+		}
 
-		// 3. Shared filter/sort metadata for both native and EAV paths.
+		const activeFieldDefs = await loadActiveFieldDefs(ctx, args.objectDefId);
+
 		const fieldDefsById = new Map(
 			activeFieldDefs.map((fd) => [fd._id.toString(), fd])
 		);
 
-		const hasFiltersOrSort =
-			(args.filters && args.filters.length > 0) || args.sort;
-
-		// ── PATH A: No filters/sort — native Convex pagination (hot path) ──
-		if (!hasFiltersOrSort) {
-			if (objectDef.isSystem && objectDef.nativeTable) {
-				const rawCursor = args.paginationOpts.cursor;
-				const nativeCursor =
-					rawCursor && rawCursor.startsWith("native:")
-						? rawCursor.slice("native:".length)
-						: rawCursor;
-
-				const nativePage = await queryNativeRecords(
-					ctx,
-					objectDef,
-					activeFieldDefs,
-					orgId,
-					{
-						...args.paginationOpts,
-						cursor: nativeCursor,
-					}
-				);
-
-				return {
-					records: nativePage.records,
-					continueCursor: nativePage.isDone
-						? null
-						: `native:${nativePage.continueCursor}`,
-					isDone: nativePage.isDone,
-					truncated: false,
-				};
-			}
-
-			// Parse tagged cursor: strip "native:" prefix if present, pass raw to Convex
-			const rawCursor = args.paginationOpts.cursor;
-			const nativeCursor =
-				rawCursor && rawCursor.startsWith("native:")
-					? rawCursor.slice("native:".length)
-					: rawCursor;
-
-			const paginationResult = await ctx.db
-				.query("records")
-				.withIndex("by_org_object", (q) =>
-					q.eq("orgId", orgId).eq("objectDefId", args.objectDefId)
-				)
-				.filter((q) => q.eq(q.field("isDeleted"), false))
-				.paginate({
-					...args.paginationOpts,
-					cursor: nativeCursor,
-				});
-
-			const assembled = await assembleRecords(
+		if (!hasFiltersOrSort(args)) {
+			return queryNativeRecordPage(
 				ctx,
-				paginationResult.page,
+				orgId,
+				objectDef,
+				args,
 				activeFieldDefs
 			);
-
-			return {
-				records: assembled,
-				continueCursor: paginationResult.isDone
-					? null
-					: `native:${paginationResult.continueCursor}`,
-				isDone: paginationResult.isDone,
-				truncated: false,
-			};
 		}
 
-		// ── PATH B: Filters/sort — collect, assemble, filter, sort, slice ──
-		let assembled: UnifiedRecord[];
-		let truncated: boolean;
-		if (objectDef.isSystem && objectDef.nativeTable) {
-			const nativeResult = await collectNativeRecordsForFiltering(
-				ctx,
-				objectDef,
-				activeFieldDefs,
-				orgId,
-				FILTERED_QUERY_CAP
-			);
-			assembled = nativeResult.records;
-			truncated = nativeResult.truncated;
-		} else {
-			const allRecords = await ctx.db
-				.query("records")
-				.withIndex("by_org_object", (q) =>
-					q.eq("orgId", orgId).eq("objectDefId", args.objectDefId)
-				)
-				.filter((q) => q.eq(q.field("isDeleted"), false))
-				.take(FILTERED_QUERY_CAP + 1);
-
-			truncated = allRecords.length > FILTERED_QUERY_CAP;
-			const capped = truncated
-				? allRecords.slice(0, FILTERED_QUERY_CAP)
-				: allRecords;
-			assembled = await assembleRecords(ctx, capped, activeFieldDefs);
-		}
-
-		const filters = (args.filters ?? []) as RecordFilter[];
-		const filtered = applyFilters(assembled, filters, fieldDefsById);
-		const sorted = applySort(
-			filtered,
-			args.sort as RecordSort | undefined,
+		return queryFilteredRecordPage(
+			ctx,
+			orgId,
+			objectDef,
+			args,
+			activeFieldDefs,
 			fieldDefsById
 		);
-
-		// Offset-based pagination for filtered results — validate cursor
-		const { cursor, numItems: pageSize } = args.paginationOpts;
-		let offset = 0;
-		if (cursor != null) {
-			// Strip "offset:" tag if present
-			const cursorBody = cursor.startsWith("offset:")
-				? cursor.slice("offset:".length)
-				: cursor;
-			if (!/^[0-9]+$/.test(cursorBody)) {
-				throw new ConvexError("Invalid pagination cursor");
-			}
-			offset = Number.parseInt(cursorBody, 10);
-			if (!Number.isFinite(offset) || offset < 0) {
-				throw new ConvexError("Invalid pagination cursor");
-			}
-		}
-		const page = sorted.slice(offset, offset + pageSize);
-		const nextOffset = offset + pageSize;
-		const isDone = nextOffset >= sorted.length;
-
-		return {
-			records: page,
-			continueCursor: isDone ? null : `offset:${String(nextOffset)}`,
-			isDone,
-			truncated,
-		};
 	})
 	.public();
 
@@ -535,17 +594,10 @@ export const getRecord = crmQuery
 		}
 
 		// 3. Load fieldDefs
-		const activeFieldDefs = await loadActiveFieldDefs(
-			ctx,
-			record.objectDefId
-		);
+		const activeFieldDefs = await loadActiveFieldDefs(ctx, record.objectDefId);
 
 		// 4. Assemble field values
-		const fields = await assembleRecordFields(
-			ctx,
-			record._id,
-			activeFieldDefs
-		);
+		const fields = await assembleRecordFields(ctx, record._id, activeFieldDefs);
 
 		const unifiedRecord: UnifiedRecord = {
 			_id: record._id as string,
@@ -590,9 +642,7 @@ export const getRecord = crmQuery
 					const peerRecordId =
 						direction === "outbound" ? link.targetId : link.sourceId;
 					const peerKind =
-						direction === "outbound"
-							? link.targetKind
-							: link.sourceKind;
+						direction === "outbound" ? link.targetKind : link.sourceKind;
 					const peerObjectDefId =
 						direction === "outbound"
 							? link.targetObjectDefId
@@ -600,9 +650,7 @@ export const getRecord = crmQuery
 
 					let labelValue: string | undefined;
 					if (peerKind === "record") {
-						const peerRecord = await ctx.db.get(
-							peerRecordId as Id<"records">
-						);
+						const peerRecord = await ctx.db.get(peerRecordId as Id<"records">);
 						labelValue = peerRecord?.labelValue ?? undefined;
 					}
 
@@ -673,10 +721,7 @@ export const searchRecords = crmQuery
 			.take(limit);
 
 		// 4. Assemble matching records
-		const activeFieldDefs = await loadActiveFieldDefs(
-			ctx,
-			args.objectDefId
-		);
+		const activeFieldDefs = await loadActiveFieldDefs(ctx, args.objectDefId);
 
 		return assembleRecords(ctx, results, activeFieldDefs);
 	})

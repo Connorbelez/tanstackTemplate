@@ -14,20 +14,26 @@ type FieldDef = Doc<"fieldDefs">;
  */
 export function resolveColumnPath(
 	nativeDoc: Record<string, unknown>,
-	fieldDef: FieldDef,
+	fieldDef: FieldDef
 ): unknown {
 	const path = fieldDef.nativeColumnPath;
-	if (!path) return undefined;
+	if (!path) {
+		return undefined;
+	}
 
 	// Navigate nested path (e.g., "terms.interestRate" → doc.terms.interestRate)
 	const segments = path.split(".");
 	let current: unknown = nativeDoc;
 	for (const segment of segments) {
-		if (current == null || typeof current !== "object") return undefined;
+		if (current == null || typeof current !== "object") {
+			return undefined;
+		}
 		current = (current as Record<string, unknown>)[segment];
 	}
 
-	if (current === undefined) return undefined;
+	if (current === undefined) {
+		return undefined;
+	}
 
 	// Type coercion: string dates → unix ms for date/datetime fields
 	// mortgages.maturityDate is v.string() (YYYY-MM-DD) but fieldType "date" expects unix ms

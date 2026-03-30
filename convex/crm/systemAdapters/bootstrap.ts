@@ -11,28 +11,28 @@ import { deriveCapabilities } from "../metadataCompiler";
 type FieldType = Doc<"fieldDefs">["fieldType"];
 
 interface SelectOption {
-	value: string;
-	label: string;
 	color: string;
+	label: string;
 	order: number;
+	value: string;
 }
 
 interface FieldConfig {
-	name: string;
-	label: string;
 	fieldType: FieldType;
+	label: string;
+	name: string;
 	nativeColumnPath: string;
 	options?: SelectOption[];
 }
 
 export interface SystemObjectConfig {
-	name: string;
-	singularLabel: string;
-	pluralLabel: string;
-	icon: string;
 	description: string;
-	nativeTable: string;
 	fields: FieldConfig[];
+	icon: string;
+	name: string;
+	nativeTable: string;
+	pluralLabel: string;
+	singularLabel: string;
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────
@@ -48,7 +48,7 @@ function titleCase(value: string): string {
 /** Build select options from string values with a color map. */
 function opts(
 	values: string[],
-	colorMap: Record<string, string>,
+	colorMap: Record<string, string>
 ): SelectOption[] {
 	return values.map((value, index) => ({
 		value,
@@ -191,7 +191,7 @@ export const SYSTEM_OBJECT_CONFIGS: readonly SystemObjectConfig[] = [
 						"written_off",
 						"matured",
 					],
-					MORTGAGE_STATUS_COLORS,
+					MORTGAGE_STATUS_COLORS
 				),
 			},
 			{
@@ -207,7 +207,7 @@ export const SYSTEM_OBJECT_CONFIGS: readonly SystemObjectConfig[] = [
 				nativeColumnPath: "paymentFrequency",
 				options: opts(
 					["monthly", "bi_weekly", "accelerated_bi_weekly", "weekly"],
-					PAYMENT_FREQUENCY_COLORS,
+					PAYMENT_FREQUENCY_COLORS
 				),
 			},
 			{
@@ -217,7 +217,7 @@ export const SYSTEM_OBJECT_CONFIGS: readonly SystemObjectConfig[] = [
 				nativeColumnPath: "loanType",
 				options: opts(
 					["conventional", "insured", "high_ratio"],
-					LOAN_TYPE_COLORS,
+					LOAN_TYPE_COLORS
 				),
 			},
 		],
@@ -244,7 +244,7 @@ export const SYSTEM_OBJECT_CONFIGS: readonly SystemObjectConfig[] = [
 				nativeColumnPath: "idvStatus",
 				options: opts(
 					["verified", "pending_review", "manual_review_required"],
-					IDV_STATUS_COLORS,
+					IDV_STATUS_COLORS
 				),
 			},
 		],
@@ -264,7 +264,7 @@ export const SYSTEM_OBJECT_CONFIGS: readonly SystemObjectConfig[] = [
 				nativeColumnPath: "accreditationStatus",
 				options: opts(
 					["pending", "accredited", "exempt", "rejected"],
-					ACCREDITATION_COLORS,
+					ACCREDITATION_COLORS
 				),
 			},
 			{
@@ -272,10 +272,7 @@ export const SYSTEM_OBJECT_CONFIGS: readonly SystemObjectConfig[] = [
 				label: "Status",
 				fieldType: "select",
 				nativeColumnPath: "status",
-				options: opts(
-					["active", "pending_activation"],
-					LENDER_STATUS_COLORS,
-				),
+				options: opts(["active", "pending_activation"], LENDER_STATUS_COLORS),
 			},
 			{
 				name: "payoutFrequency",
@@ -284,7 +281,7 @@ export const SYSTEM_OBJECT_CONFIGS: readonly SystemObjectConfig[] = [
 				nativeColumnPath: "payoutFrequency",
 				options: opts(
 					["monthly", "bi_weekly", "weekly", "on_demand"],
-					PAYOUT_FREQUENCY_COLORS,
+					PAYOUT_FREQUENCY_COLORS
 				),
 			},
 		],
@@ -353,7 +350,7 @@ export const SYSTEM_OBJECT_CONFIGS: readonly SystemObjectConfig[] = [
 						"confirmed",
 						"failed",
 					],
-					DEAL_STATUS_COLORS,
+					DEAL_STATUS_COLORS
 				),
 			},
 			{
@@ -384,7 +381,7 @@ export const SYSTEM_OBJECT_CONFIGS: readonly SystemObjectConfig[] = [
 						"late_fee",
 						"principal_repayment",
 					],
-					OBLIGATION_TYPE_COLORS,
+					OBLIGATION_TYPE_COLORS
 				),
 			},
 			{
@@ -413,7 +410,7 @@ export const SYSTEM_OBJECT_CONFIGS: readonly SystemObjectConfig[] = [
 						"settled",
 						"waived",
 					],
-					OBLIGATION_STATUS_COLORS,
+					OBLIGATION_STATUS_COLORS
 				),
 			},
 		],
@@ -435,7 +432,7 @@ interface BootstrapResult {
 async function bootstrapForOrg(
 	ctx: Pick<MutationCtx, "db">,
 	orgId: string,
-	createdBy: string,
+	createdBy: string
 ): Promise<BootstrapResult> {
 	const created: BootstrapResult["created"] = [];
 	const skipped: string[] = [];
@@ -453,7 +450,7 @@ async function bootstrapForOrg(
 		const existing = await ctx.db
 			.query("objectDefs")
 			.withIndex("by_org_name", (q) =>
-				q.eq("orgId", orgId).eq("name", config.name),
+				q.eq("orgId", orgId).eq("name", config.name)
 			)
 			.first();
 
@@ -573,9 +570,9 @@ export const adminBootstrap = crmAdminMutation
 	.handler(async (ctx, _args) => {
 		const orgId = ctx.viewer.orgId;
 		const authId = ctx.viewer.authId;
-		if (!orgId || !authId) {
+		if (!(orgId && authId)) {
 			throw new ConvexError(
-				"Org context and authenticated user required for bootstrap",
+				"Org context and authenticated user required for bootstrap"
 			);
 		}
 

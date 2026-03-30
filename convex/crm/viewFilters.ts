@@ -2,7 +2,10 @@ import { ConvexError, v } from "convex/values";
 import { auditLog } from "../auditLog";
 import { crmAdminMutation, crmAdminQuery } from "../fluent";
 import { isValidOperatorForFieldType } from "./filterOperatorValidation";
-import { filterOperatorValidator, logicalOperatorValidator } from "./validators";
+import {
+	filterOperatorValidator,
+	logicalOperatorValidator,
+} from "./validators";
 
 // ── addViewFilter ────────────────────────────────────────────────────
 // Add a filter to a view with operator-type validation.
