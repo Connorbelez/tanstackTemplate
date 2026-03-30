@@ -36,7 +36,7 @@ export type RecordSort = {
 /** Result shape for paginated record queries. */
 export type QueryRecordsResult = {
 	records: UnifiedRecord[];
-	continueCursor: string;
+	continueCursor: string | null;
 	isDone: boolean;
 	truncated: boolean;
 };

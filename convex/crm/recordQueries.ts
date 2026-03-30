@@ -14,8 +14,18 @@ type FieldDef = Doc<"fieldDefs">;
 
 // ── Constants ────────────────────────────────────────────────────────
 
-/** Hard cap for filtered/sorted queries to stay within Convex's 8,192 read limit. */
-const FILTERED_QUERY_CAP = 500;
+/**
+ * Convex enforces 8,192 document reads per query/mutation.
+ * Each record requires ~1 record doc + up to ~8 value rows (one per typed table),
+ * plus field-def reads. We reserve a safety buffer for non-record reads
+ * (objectDef, fieldDefs, etc.) and derive the cap from the hard limit.
+ */
+const CONVEX_READ_LIMIT = 8192;
+const SAFETY_BUFFER = 192; // headroom for objectDef + fieldDefs + metadata reads
+const ESTIMATED_VALUE_ROWS_PER_RECORD = 8; // worst case: one value row per typed table
+const FILTERED_QUERY_CAP = Math.floor(
+	(CONVEX_READ_LIMIT - SAFETY_BUFFER) / (1 + ESTIMATED_VALUE_ROWS_PER_RECORD)
+); // ≈ 888
 
 // ── Helpers: Value Assembly ──────────────────────────────────────────
 
@@ -185,14 +195,21 @@ function matchesFilter(
 				typeof filterValue === "string" &&
 				fieldValue.toLowerCase().startsWith(filterValue.toLowerCase())
 			);
-		case "is_any_of":
-			return Array.isArray(filterValue) && filterValue.includes(fieldValue);
+		case "is_any_of": {
+			if (!Array.isArray(filterValue)) {
+				return false;
+			}
+			if (Array.isArray(fieldValue)) {
+				return fieldValue.some((value) => filterValue.includes(value));
+			}
+			return filterValue.includes(fieldValue);
+		}
 		case "is_true":
 			return fieldValue === true;
 		case "is_false":
 			return fieldValue === false;
 		default:
-			return true;
+			return false; // fail-closed: unknown operators never match
 	}
 }
 
@@ -210,7 +227,7 @@ function applyFilters(
 	return records.filter((record) =>
 		filters.every((filter) => {
 			const fieldDef = fieldDefsById.get(filter.fieldDefId.toString());
-			if (!fieldDef) return true; // skip unknown fields
+			if (!fieldDef) return false; // fail-closed: unknown fieldDefId never matches
 			const fieldValue = record.fields[fieldDef.name];
 			return matchesFilter(fieldValue, filter.operator, filter.value);
 		})
@@ -269,7 +286,18 @@ export const queryRecords = crmQuery
 			v.array(
 				v.object({
 					fieldDefId: v.id("fieldDefs"),
-					operator: v.string(),
+					operator: v.union(
+						v.literal("eq"),
+						v.literal("gt"),
+						v.literal("lt"),
+						v.literal("gte"),
+						v.literal("lte"),
+						v.literal("contains"),
+						v.literal("starts_with"),
+						v.literal("is_any_of"),
+						v.literal("is_true"),
+						v.literal("is_false")
+					),
 					value: v.any(),
 				})
 			)
@@ -318,13 +346,23 @@ export const queryRecords = crmQuery
 
 		// ── PATH A: No filters/sort — native Convex pagination (hot path) ──
 		if (!hasFiltersOrSort) {
+			// Parse tagged cursor: strip "native:" prefix if present, pass raw to Convex
+			const rawCursor = args.paginationOpts.cursor;
+			const nativeCursor =
+				rawCursor && rawCursor.startsWith("native:")
+					? rawCursor.slice("native:".length)
+					: rawCursor;
+
 			const paginationResult = await ctx.db
 				.query("records")
 				.withIndex("by_org_object", (q) =>
 					q.eq("orgId", orgId).eq("objectDefId", args.objectDefId)
 				)
 				.filter((q) => q.eq(q.field("isDeleted"), false))
-				.paginate(args.paginationOpts);
+				.paginate({
+					...args.paginationOpts,
+					cursor: nativeCursor,
+				});
 
 			const assembled = await assembleRecords(
 				ctx,
@@ -334,7 +372,9 @@ export const queryRecords = crmQuery
 
 			return {
 				records: assembled,
-				continueCursor: paginationResult.continueCursor,
+				continueCursor: paginationResult.isDone
+					? null
+					: `native:${paginationResult.continueCursor}`,
 				isDone: paginationResult.isDone,
 				truncated: false,
 			};
@@ -364,18 +404,29 @@ export const queryRecords = crmQuery
 			fieldDefsById
 		);
 
-		// Offset-based pagination for filtered results
-		const offset = args.paginationOpts.cursor
-			? Number.parseInt(args.paginationOpts.cursor, 10)
-			: 0;
-		const pageSize = args.paginationOpts.numItems;
+		// Offset-based pagination for filtered results — validate cursor
+		const { cursor, numItems: pageSize } = args.paginationOpts;
+		let offset = 0;
+		if (cursor != null) {
+			// Strip "offset:" tag if present
+			const cursorBody = cursor.startsWith("offset:")
+				? cursor.slice("offset:".length)
+				: cursor;
+			if (!/^[0-9]+$/.test(cursorBody)) {
+				throw new ConvexError("Invalid pagination cursor");
+			}
+			offset = Number.parseInt(cursorBody, 10);
+			if (!Number.isFinite(offset) || offset < 0) {
+				throw new ConvexError("Invalid pagination cursor");
+			}
+		}
 		const page = sorted.slice(offset, offset + pageSize);
 		const nextOffset = offset + pageSize;
 		const isDone = nextOffset >= sorted.length;
 
 		return {
 			records: page,
-			continueCursor: isDone ? "done" : String(nextOffset),
+			continueCursor: isDone ? null : `offset:${String(nextOffset)}`,
 			isDone,
 			truncated,
 		};
@@ -397,13 +448,24 @@ export const getRecord = crmQuery
 			throw new ConvexError("Record not found or access denied");
 		}
 
-		// 2. Load fieldDefs
+		// 2. Load + verify objectDef (active, org-scoped, system check)
+		const objectDef = await ctx.db.get(record.objectDefId);
+		if (!objectDef || objectDef.orgId !== orgId || !objectDef.isActive) {
+			throw new ConvexError("Object not found or access denied");
+		}
+		if (objectDef.isSystem) {
+			throw new ConvexError(
+				"System object queries not yet implemented (see ENG-255)"
+			);
+		}
+
+		// 3. Load fieldDefs
 		const activeFieldDefs = await loadActiveFieldDefs(
 			ctx,
 			record.objectDefId
 		);
 
-		// 3. Assemble field values
+		// 4. Assemble field values
 		const fields = await assembleRecordFields(
 			ctx,
 			record._id,
@@ -419,7 +481,7 @@ export const getRecord = crmQuery
 			updatedAt: record.updatedAt,
 		};
 
-		// 4. Load outbound links (this record is source)
+		// 5. Load outbound links (this record is source)
 		const outboundLinks = await ctx.db
 			.query("recordLinks")
 			.withIndex("by_org_source", (q) =>
@@ -431,7 +493,7 @@ export const getRecord = crmQuery
 			.filter((q) => q.eq(q.field("isDeleted"), false))
 			.collect();
 
-		// 5. Load inbound links (this record is target)
+		// 6. Load inbound links (this record is target)
 		const inboundLinks = await ctx.db
 			.query("recordLinks")
 			.withIndex("by_org_target", (q) =>
@@ -443,7 +505,7 @@ export const getRecord = crmQuery
 			.filter((q) => q.eq(q.field("isDeleted"), false))
 			.collect();
 
-		// 6. Resolve link display info (lightweight — labelValue only)
+		// 7. Resolve link display info (lightweight — labelValue only)
 		const resolveLinks = async (
 			links: Doc<"recordLinks">[],
 			direction: "outbound" | "inbound"
@@ -509,10 +571,21 @@ export const searchRecords = crmQuery
 		if (!objectDef || objectDef.orgId !== orgId || !objectDef.isActive) {
 			throw new ConvexError("Object not found or access denied");
 		}
+		if (objectDef.isSystem) {
+			throw new ConvexError(
+				"System object queries not yet implemented (see ENG-255)"
+			);
+		}
 
-		const limit = args.limit ?? 20;
+		// 2. Validate and clamp limit
+		const rawLimit = args.limit ?? 20;
+		if (rawLimit < 1) {
+			throw new ConvexError("Limit must be a positive number");
+		}
+		const MAX_LIMIT = 100;
+		const limit = rawLimit > MAX_LIMIT ? MAX_LIMIT : rawLimit;
 
-		// 2. Search using Convex search index — O(results), not O(all records)
+		// 3. Search using Convex search index — O(results), not O(all records)
 		const results = await ctx.db
 			.query("records")
 			.withSearchIndex("search_label", (q) =>
@@ -524,7 +597,7 @@ export const searchRecords = crmQuery
 			)
 			.take(limit);
 
-		// 3. Assemble matching records
+		// 4. Assemble matching records
 		const activeFieldDefs = await loadActiveFieldDefs(
 			ctx,
 			args.objectDefId
