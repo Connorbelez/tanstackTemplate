@@ -1,6 +1,6 @@
 import { useMutation, useQuery } from "convex/react";
 import { Filter, Plus, X } from "lucide-react";
-import { useMemo, useState } from "react";
+import { type ReactNode, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Badge } from "#/components/ui/badge";
 import { Button } from "#/components/ui/button";
@@ -31,6 +31,11 @@ import {
 // ── Field type helpers ──────────────────────────────────────────────
 
 type ValueInputKind = "text" | "number" | "date" | "select" | "none";
+
+const UNSUPPORTED_OPERATORS = new Set<FilterOperator>(["between", "is_any_of"]);
+const utcDateFormatter = new Intl.DateTimeFormat(undefined, {
+	timeZone: "UTC",
+});
 
 function getValueInputKind(
 	fieldType: FieldType | null,
@@ -78,7 +83,7 @@ function renderValueInput(
 	selectedField:
 		| { fieldType: string; options?: Array<{ value: string; label: string }> }
 		| undefined
-): React.ReactNode {
+): ReactNode {
 	switch (kind) {
 		case "text":
 			return (
@@ -197,7 +202,9 @@ export function FilterBuilder({ viewDefId, objectDefId }: FilterBuilderProps) {
 		? (selectedField.fieldType as FieldType)
 		: null;
 	const availableOperators: readonly FilterOperator[] = selectedFieldType
-		? OPERATOR_MAP[selectedFieldType]
+		? OPERATOR_MAP[selectedFieldType].filter(
+				(operator) => !UNSUPPORTED_OPERATORS.has(operator)
+			)
 		: [];
 	const valueInputKind = getValueInputKind(
 		selectedFieldType,
@@ -307,7 +314,7 @@ export function FilterBuilder({ viewDefId, objectDefId }: FilterBuilderProps) {
 		if (ft === "date" || ft === "datetime") {
 			const ms = Number(value);
 			if (!Number.isNaN(ms)) {
-				return new Date(ms).toLocaleDateString();
+				return utcDateFormatter.format(new Date(ms));
 			}
 		}
 

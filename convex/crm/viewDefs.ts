@@ -49,7 +49,17 @@ async function createKanbanGroupsForField(
 	fieldDefId: Id<"fieldDefs">
 ): Promise<void> {
 	const fieldDef = await ctx.db.get(fieldDefId);
-	const options = fieldDef?.options ?? [];
+	if (!fieldDef) {
+		throw new ConvexError(
+			`Cannot create kanban groups: bound fieldDef ${fieldDefId} does not exist`
+		);
+	}
+	const options = fieldDef.options;
+	if (!Array.isArray(options) || options.length === 0) {
+		throw new ConvexError(
+			`Cannot create kanban groups: bound fieldDef ${fieldDefId} has no options`
+		);
+	}
 	for (let i = 0; i < options.length; i++) {
 		await ctx.db.insert("viewKanbanGroups", {
 			viewDefId,

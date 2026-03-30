@@ -3,12 +3,12 @@ import type { Doc, Id } from "../_generated/dataModel";
 import type { QueryCtx } from "../_generated/server";
 import { crmQuery } from "../fluent";
 import {
-	applyFilters,
 	assembleRecords,
 	FILTERED_QUERY_CAP,
 	loadActiveFieldDefs,
+	matchesFilter,
 } from "./recordQueries";
-import type { RecordFilter, UnifiedRecord } from "./types";
+import type { UnifiedRecord } from "./types";
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -25,6 +25,15 @@ interface CalendarData {
 }
 
 type Granularity = "day" | "week" | "month";
+type FieldDef = Doc<"fieldDefs">;
+type ViewFilter = Doc<"viewFilters">;
+
+interface ParsedViewFilter {
+	fieldDefId: Id<"fieldDefs">;
+	logicalOperator?: ViewFilter["logicalOperator"];
+	operator: ViewFilter["operator"];
+	value: unknown;
+}
 
 // ── Date Truncation Helpers ──────────────────────────────────────────
 
@@ -63,50 +72,11 @@ function truncateDate(unixMs: number, granularity: Granularity): number {
 	}
 }
 
-// ── View Filter → RecordFilter Conversion ────────────────────────────
+// ── View Filter Parsing + Evaluation ─────────────────────────────────
 
-type ViewFilter = Doc<"viewFilters">;
-
-/**
- * Maps viewFilter operators to RecordFilter operators.
- * Returns null for `is_not` (requires negation logic) and `between`
- * (requires two-value decomposition), which are not yet supported
- * in the in-memory filter engine.
- */
-const VIEW_TO_RECORD_OPERATOR: Record<string, RecordFilter["operator"] | null> =
-	{
-		equals: "eq",
-		is: "eq",
-		eq: "eq",
-		gt: "gt",
-		lt: "lt",
-		gte: "gte",
-		lte: "lte",
-		before: "lt",
-		after: "gt",
-		contains: "contains",
-		starts_with: "starts_with",
-		is_any_of: "is_any_of",
-		is_true: "is_true",
-		is_false: "is_false",
-		// Explicitly unsupported — mapped to null so callers can warn
-		is_not: null,
-		between: null,
-	};
-
-function mapViewFilterOperator(
-	viewOp: ViewFilter["operator"]
-): RecordFilter["operator"] | null {
-	return VIEW_TO_RECORD_OPERATOR[viewOp] ?? null;
-}
-
-/**
- * Parses a view filter's string value into the appropriate runtime type
- * based on the target field's type.
- */
-function parseFilterValue(
+function parseScalarFilterValue(
 	rawValue: string | undefined,
-	fieldDef: Doc<"fieldDefs">
+	fieldDef: FieldDef
 ): unknown {
 	if (rawValue === undefined || rawValue === "") {
 		return undefined;
@@ -118,72 +88,217 @@ function parseFilterValue(
 		case "percentage":
 		case "date":
 		case "datetime": {
-			// Filter values arrive as strings; parse to numeric unix ms
-			// to match recordValuesDate's numeric storage format.
 			const n = Number.parseFloat(rawValue);
 			return Number.isFinite(n) ? n : undefined;
 		}
 		case "boolean":
 			return rawValue === "true";
-		case "multi_select":
-		case "select": {
-			// Could be a JSON array for is_any_of, or a plain string
-			try {
-				const parsed: unknown = JSON.parse(rawValue);
-				if (Array.isArray(parsed)) {
-					return parsed;
-				}
-			} catch {
-				// Not valid JSON — treat as plain string for single-value operators
-			}
-			return rawValue;
-		}
 		default:
 			return rawValue;
 	}
 }
 
-/**
- * Converts viewFilter rows into RecordFilter[] suitable for in-memory filtering.
- * Returns both the converted filters and a count of skipped filters so the
- * frontend can surface a warning when filters are silently ignored.
- */
-function convertViewFilters(
+function parseRangeBoundary(value: unknown, fieldDef: FieldDef): unknown {
+	return parseScalarFilterValue(String(value), fieldDef);
+}
+
+function parseBetweenFilterValue(
+	rawValue: string,
+	fieldDef: FieldDef
+): [unknown, unknown] | undefined {
+	try {
+		const parsed: unknown = JSON.parse(rawValue);
+		if (Array.isArray(parsed) && parsed.length === 2) {
+			const start = parseRangeBoundary(parsed[0], fieldDef);
+			const end = parseRangeBoundary(parsed[1], fieldDef);
+			return start !== undefined && end !== undefined
+				? [start, end]
+				: undefined;
+		}
+	} catch {
+		// Fall through to lenient legacy parsing below.
+	}
+
+	const [startRaw, endRaw, ...rest] = rawValue
+		.split(",")
+		.map((part) => part.trim());
+	if (!(startRaw && endRaw) || rest.length > 0) {
+		return undefined;
+	}
+	const start = parseScalarFilterValue(startRaw, fieldDef);
+	const end = parseScalarFilterValue(endRaw, fieldDef);
+	return start !== undefined && end !== undefined ? [start, end] : undefined;
+}
+
+function parseIsAnyOfFilterValue(rawValue: string): unknown[] {
+	try {
+		const parsed: unknown = JSON.parse(rawValue);
+		if (Array.isArray(parsed)) {
+			return parsed;
+		}
+	} catch {
+		// Fall back to a single-value array for leniency.
+	}
+	return [rawValue];
+}
+
+function parseFilterValue(
+	rawValue: string | undefined,
+	fieldDef: FieldDef,
+	operator: ViewFilter["operator"]
+): unknown {
+	if (operator === "is_true" || operator === "is_false") {
+		return undefined;
+	}
+
+	if (operator === "between") {
+		if (rawValue === undefined || rawValue === "") {
+			return undefined;
+		}
+		return parseBetweenFilterValue(rawValue, fieldDef);
+	}
+
+	if (operator === "is_any_of") {
+		if (rawValue === undefined || rawValue === "") {
+			return undefined;
+		}
+		return parseIsAnyOfFilterValue(rawValue);
+	}
+
+	return parseScalarFilterValue(rawValue, fieldDef);
+}
+
+function parseViewFilters(
 	viewFilters: ViewFilter[],
-	fieldDefsById: Map<string, Doc<"fieldDefs">>
-): { filters: RecordFilter[]; skippedCount: number } {
-	const result: RecordFilter[] = [];
+	fieldDefsById: Map<string, FieldDef>
+): { filters: ParsedViewFilter[]; skippedCount: number } {
+	const result: ParsedViewFilter[] = [];
 	let skippedCount = 0;
 
 	for (const vf of viewFilters) {
-		const operator = mapViewFilterOperator(vf.operator);
-		if (operator === null) {
-			skippedCount++;
-			continue;
-		}
-
 		const fieldDef = fieldDefsById.get(vf.fieldDefId.toString());
 		if (!fieldDef) {
 			skippedCount++;
 			continue;
 		}
 
-		// is_true / is_false don't need a value
-		if (operator === "is_true" || operator === "is_false") {
-			result.push({ fieldDefId: vf.fieldDefId, operator, value: undefined });
-			continue;
-		}
-
-		const value = parseFilterValue(vf.value, fieldDef);
-		if (value === undefined) {
+		const value = parseFilterValue(vf.value, fieldDef, vf.operator);
+		if (
+			value === undefined &&
+			vf.operator !== "is_true" &&
+			vf.operator !== "is_false"
+		) {
 			skippedCount++;
 			continue;
 		}
 
-		result.push({ fieldDefId: vf.fieldDefId, operator, value });
+		result.push({
+			fieldDefId: vf.fieldDefId,
+			logicalOperator: vf.logicalOperator,
+			operator: vf.operator,
+			value,
+		});
 	}
 
 	return { filters: result, skippedCount };
+}
+
+function matchesViewFilter(
+	fieldValue: unknown,
+	filter: ParsedViewFilter
+): boolean {
+	switch (filter.operator) {
+		case "equals":
+		case "is": {
+			if (Array.isArray(fieldValue)) {
+				return fieldValue.includes(filter.value);
+			}
+			return matchesFilter(fieldValue, "eq", filter.value);
+		}
+		case "is_not": {
+			if (Array.isArray(fieldValue)) {
+				return !fieldValue.includes(filter.value);
+			}
+			return !matchesFilter(fieldValue, "eq", filter.value);
+		}
+		case "eq":
+			return matchesFilter(fieldValue, "eq", filter.value);
+		case "gt":
+			return matchesFilter(fieldValue, "gt", filter.value);
+		case "lt":
+		case "before":
+			return matchesFilter(fieldValue, "lt", filter.value);
+		case "gte":
+			return matchesFilter(fieldValue, "gte", filter.value);
+		case "lte":
+			return matchesFilter(fieldValue, "lte", filter.value);
+		case "after":
+			return matchesFilter(fieldValue, "gt", filter.value);
+		case "contains":
+			return matchesFilter(fieldValue, "contains", filter.value);
+		case "starts_with":
+			return matchesFilter(fieldValue, "starts_with", filter.value);
+		case "is_any_of":
+			return matchesFilter(fieldValue, "is_any_of", filter.value);
+		case "is_true":
+			return matchesFilter(fieldValue, "is_true", undefined);
+		case "is_false":
+			return matchesFilter(fieldValue, "is_false", undefined);
+		case "between": {
+			if (
+				!Array.isArray(filter.value) ||
+				filter.value.length !== 2 ||
+				typeof fieldValue !== "number"
+			) {
+				return false;
+			}
+			const [start, end] = filter.value;
+			return (
+				typeof start === "number" &&
+				typeof end === "number" &&
+				fieldValue >= start &&
+				fieldValue <= end
+			);
+		}
+		default: {
+			const _exhaustive: never = filter.operator;
+			throw new Error(`Unknown view filter operator: ${String(_exhaustive)}`);
+		}
+	}
+}
+
+function applyViewFilters(
+	records: UnifiedRecord[],
+	filters: ParsedViewFilter[],
+	fieldDefsById: Map<string, FieldDef>
+): UnifiedRecord[] {
+	if (filters.length === 0) {
+		return records;
+	}
+
+	return records.filter((record) => {
+		let combined: boolean | undefined;
+
+		for (const filter of filters) {
+			const fieldDef = fieldDefsById.get(filter.fieldDefId.toString());
+			if (!fieldDef) {
+				return false;
+			}
+
+			const nextMatch = matchesViewFilter(record.fields[fieldDef.name], filter);
+			if (combined === undefined) {
+				combined = nextMatch;
+				continue;
+			}
+
+			combined =
+				filter.logicalOperator === "or"
+					? combined || nextMatch
+					: combined && nextMatch;
+		}
+
+		return combined ?? true;
+	});
 }
 
 // ── Extracted Query Helpers ──────────────────────────────────────────
@@ -355,9 +470,9 @@ export const queryCalendarRecords = crmQuery
 			.withIndex("by_view", (q) => q.eq("viewDefId", args.viewDefId))
 			.collect();
 
-		const { filters: recordFilters, skippedCount: skippedFilters } =
-			convertViewFilters(viewFilterRows, fieldDefsById);
-		const filtered = applyFilters(assembled, recordFilters, fieldDefsById);
+		const { filters: parsedFilters, skippedCount: skippedFilters } =
+			parseViewFilters(viewFilterRows, fieldDefsById);
+		const filtered = applyViewFilters(assembled, parsedFilters, fieldDefsById);
 
 		// Group records by truncated date and sort ascending
 		const granularity: Granularity = args.granularity ?? "day";
