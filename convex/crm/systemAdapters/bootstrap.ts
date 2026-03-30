@@ -565,16 +565,19 @@ export const adminBootstrap = crmAdminMutation
 	.input({})
 	.handler(async (ctx, _args) => {
 		const orgId = ctx.viewer.orgId;
-		if (!orgId) {
-			throw new Error("Org context required for bootstrap");
+		const authId = ctx.viewer.authId;
+		if (!orgId || !authId) {
+			throw new Error(
+				"Org context and authenticated user required for bootstrap",
+			);
 		}
 
-		const result = await bootstrapForOrg(ctx, orgId, ctx.viewer.authId);
+		const result = await bootstrapForOrg(ctx, orgId, authId);
 
 		for (const name of result.created) {
 			await auditLog.log(ctx, {
 				action: "crm.bootstrap.object_created",
-				actorId: ctx.viewer.authId,
+				actorId: authId,
 				resourceType: "objectDefs",
 				resourceId: name,
 				severity: "info",
