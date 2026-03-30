@@ -7,28 +7,28 @@ import { resolveColumnPath } from "./columnResolver";
 type FieldDef = Doc<"fieldDefs">;
 type ObjectDef = Doc<"objectDefs">;
 
-type NativePaginationOptions = {
+interface NativePaginationOptions {
 	cursor: string | null;
 	numItems: number;
-};
+}
 
-type NativeTablePage = {
+interface NativeTablePage {
 	continueCursor: string | null;
 	isDone: boolean;
 	page: Record<string, unknown>[];
-};
+}
 
-type NativeRecordPage = {
+interface NativeRecordPage {
 	continueCursor: string | null;
 	isDone: boolean;
 	records: UnifiedRecord[];
-};
+}
 
 async function paginateNativeTable(
 	ctx: QueryCtx,
 	tableName: string,
 	orgId: string,
-	paginationOpts: NativePaginationOptions,
+	paginationOpts: NativePaginationOptions
 ): Promise<NativeTablePage> {
 	switch (tableName) {
 		case "mortgages":
@@ -88,19 +88,19 @@ export async function queryNativeTable(
 	ctx: QueryCtx,
 	tableName: string,
 	orgId: string,
-	limit: number,
+	limit: number
 ): Promise<Record<string, unknown>[]>;
 export async function queryNativeTable(
 	ctx: QueryCtx,
 	tableName: string,
 	orgId: string,
-	paginationOpts: NativePaginationOptions,
+	paginationOpts: NativePaginationOptions
 ): Promise<NativeTablePage>;
 export async function queryNativeTable(
 	ctx: QueryCtx,
 	tableName: string,
 	orgId: string,
-	paginationOptsOrLimit: NativePaginationOptions | number,
+	paginationOptsOrLimit: NativePaginationOptions | number
 ): Promise<Record<string, unknown>[] | NativeTablePage> {
 	const paginationOpts =
 		typeof paginationOptsOrLimit === "number"
@@ -114,7 +114,7 @@ export async function queryNativeTable(
 		ctx,
 		tableName,
 		orgId,
-		paginationOpts,
+		paginationOpts
 	);
 
 	if (typeof paginationOptsOrLimit === "number") {
@@ -136,21 +136,21 @@ export async function queryNativeRecords(
 	objectDef: ObjectDef,
 	fieldDefs: FieldDef[],
 	orgId: string,
-	limit: number,
+	limit: number
 ): Promise<UnifiedRecord[]>;
 export async function queryNativeRecords(
 	ctx: QueryCtx,
 	objectDef: ObjectDef,
 	fieldDefs: FieldDef[],
 	orgId: string,
-	paginationOpts: NativePaginationOptions,
+	paginationOpts: NativePaginationOptions
 ): Promise<NativeRecordPage>;
 export async function queryNativeRecords(
 	ctx: QueryCtx,
 	objectDef: ObjectDef,
 	fieldDefs: FieldDef[],
 	orgId: string,
-	paginationOptsOrLimit: NativePaginationOptions | number,
+	paginationOptsOrLimit: NativePaginationOptions | number
 ): Promise<NativeRecordPage | UnifiedRecord[]> {
 	if (!objectDef.nativeTable) {
 		throw new ConvexError("System object missing nativeTable");
@@ -168,7 +168,7 @@ export async function queryNativeRecords(
 		ctx,
 		objectDef.nativeTable,
 		orgId,
-		paginationOpts,
+		paginationOpts
 	);
 
 	// Only iterate fieldDefs with nativeColumnPath (skip EAV-only fields)
@@ -177,18 +177,14 @@ export async function queryNativeRecords(
 	const records = nativePage.page.map((doc) => {
 		const fields: Record<string, unknown> = {};
 		for (const fd of nativeFieldDefs) {
-			fields[fd.name] = resolveColumnPath(
-				doc as Record<string, unknown>,
-				fd,
-			);
+			fields[fd.name] = resolveColumnPath(doc as Record<string, unknown>, fd);
 		}
 		return {
 			_id: String(doc._id),
 			_kind: "native" as const,
 			objectDefId: objectDef._id,
 			fields,
-			createdAt:
-				(doc.createdAt as number) ?? (doc._creationTime as number),
+			createdAt: (doc.createdAt as number) ?? (doc._creationTime as number),
 			updatedAt: doc._creationTime as number,
 		};
 	});

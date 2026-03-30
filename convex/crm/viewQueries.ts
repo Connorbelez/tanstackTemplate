@@ -3,14 +3,15 @@ import type { Doc, Id } from "../_generated/dataModel";
 import type { QueryCtx } from "../_generated/server";
 import { auditLog } from "../auditLog";
 import { crmMutation, crmQuery } from "../fluent";
-import { readExistingValue, writeValue } from "./records";
 import {
-	FILTERED_QUERY_CAP,
 	applyFilters,
 	assembleRecords,
+	FILTERED_QUERY_CAP,
 	loadActiveFieldDefs,
 } from "./recordQueries";
+import { readExistingValue, writeValue } from "./records";
 import type { RecordFilter, UnifiedRecord } from "./types";
+import { KANBAN_NO_VALUE_SENTINEL } from "./viewDefs";
 
 // ── OQ-1: Multi-select kanban grouping ────────────────────────────────
 // Decision: Client-side grouping for v1.
@@ -23,49 +24,52 @@ import type { RecordFilter, UnifiedRecord } from "./types";
 // dedicated index table for server-side grouping if perf requires it.
 
 type FieldDef = Doc<"fieldDefs">;
+const OFFSET_CURSOR_PATTERN = /^[0-9]+$/;
 
 // ── Types ────────────────────────────────────────────────────────────
 
-type ColumnDef = {
-	fieldDefId: Id<"fieldDefs">;
-	name: string;
-	label: string;
-	fieldType: string;
-	width: number | undefined;
-	isVisible: boolean;
+interface ColumnDef {
 	displayOrder: number;
-};
+	fieldDefId: Id<"fieldDefs">;
+	fieldType: FieldDef["fieldType"];
+	isVisible: boolean;
+	label: string;
+	name: string;
+	width: number | undefined;
+}
 
-type TableViewResult = {
+interface TableViewResult {
 	columns: ColumnDef[];
+	cursor: string | null;
 	rows: UnifiedRecord[];
 	totalCount: number;
-	cursor: string | null;
-};
+}
 
-type KanbanGroup = {
-	groupId: Id<"viewKanbanGroups">;
-	label: string;
+interface KanbanGroup {
 	color: string;
-	records: UnifiedRecord[];
 	count: number;
+	groupId: Id<"viewKanbanGroups">;
 	isCollapsed: boolean;
-};
+	label: string;
+	records: UnifiedRecord[];
+}
 
-type KanbanViewResult = {
+interface KanbanViewResult {
 	groups: KanbanGroup[];
 	totalCount: number;
-};
+}
 
-type ViewSchemaColumn = ColumnDef & {
+interface ViewSchemaColumn extends ColumnDef {
 	hasSortCapability: boolean;
-};
+}
 
-type ViewSchemaResult = {
+interface ViewSchemaResult {
 	columns: ViewSchemaColumn[];
-	viewType: "table" | "kanban" | "calendar";
 	needsRepair: boolean;
-};
+	viewType: "table" | "kanban" | "calendar";
+}
+
+type KanbanGroupDoc = Doc<"viewKanbanGroups">;
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -93,6 +97,189 @@ function convertViewFiltersToRecordFilters(
 	});
 }
 
+function sanitizeQueryLimit(limit: number | undefined): number {
+	if (typeof limit !== "number" || !Number.isFinite(limit) || limit <= 0) {
+		return 50;
+	}
+
+	const flooredLimit = Math.floor(limit);
+	if (flooredLimit < 1) {
+		return 50;
+	}
+
+	return Math.min(flooredLimit, FILTERED_QUERY_CAP);
+}
+
+function toColumnDef(
+	viewField: Doc<"viewFields">,
+	fieldDef: FieldDef | undefined
+): ColumnDef | null {
+	if (!fieldDef) {
+		return null;
+	}
+
+	return {
+		fieldDefId: viewField.fieldDefId,
+		name: fieldDef.name,
+		label: fieldDef.label,
+		fieldType: fieldDef.fieldType,
+		width: viewField.width,
+		isVisible: viewField.isVisible,
+		displayOrder: viewField.displayOrder,
+	};
+}
+
+async function loadOrderedKanbanGroups(
+	ctx: QueryCtx,
+	viewDefId: Id<"viewDefs">
+): Promise<KanbanGroupDoc[]> {
+	const kanbanGroups = await ctx.db
+		.query("viewKanbanGroups")
+		.withIndex("by_view", (q) => q.eq("viewDefId", viewDefId))
+		.collect();
+
+	kanbanGroups.sort((a, b) => a.displayOrder - b.displayOrder);
+	return kanbanGroups;
+}
+
+async function requireKanbanBoundField(
+	ctx: QueryCtx,
+	viewDef: Doc<"viewDefs">
+): Promise<FieldDef> {
+	if (!viewDef.boundFieldId) {
+		throw new ConvexError("Kanban view requires a bound field (boundFieldId)");
+	}
+
+	const boundFieldDef = await ctx.db.get(viewDef.boundFieldId);
+	if (!boundFieldDef) {
+		throw new ConvexError("Bound field definition not found");
+	}
+
+	return boundFieldDef;
+}
+
+function buildKanbanOptionsLookup(
+	boundFieldDef: FieldDef
+): Map<string, { label: string; color: string }> {
+	const optionsLookup = new Map<string, { label: string; color: string }>();
+	for (const option of boundFieldDef.options ?? []) {
+		optionsLookup.set(option.value, {
+			label: option.label,
+			color: option.color,
+		});
+	}
+	return optionsLookup;
+}
+
+function createKanbanGroupRecordMap(
+	kanbanGroups: KanbanGroupDoc[]
+): Map<string, UnifiedRecord[]> {
+	const groupRecordMap = new Map<string, UnifiedRecord[]>();
+	for (const group of kanbanGroups) {
+		groupRecordMap.set(group.optionValue, []);
+	}
+	groupRecordMap.set(KANBAN_NO_VALUE_SENTINEL, []);
+	return groupRecordMap;
+}
+
+function pushRecordToGroup(
+	groupRecordMap: Map<string, UnifiedRecord[]>,
+	groupValue: string,
+	record: UnifiedRecord
+): boolean {
+	const bucket = groupRecordMap.get(groupValue);
+	if (!bucket) {
+		return false;
+	}
+
+	bucket.push(record);
+	return true;
+}
+
+function placeSingleValueKanbanRecord(
+	value: unknown,
+	kanbanGroups: KanbanGroupDoc[],
+	groupRecordMap: Map<string, UnifiedRecord[]>,
+	record: UnifiedRecord
+): void {
+	for (const group of kanbanGroups) {
+		if (value === group.optionValue) {
+			pushRecordToGroup(groupRecordMap, group.optionValue, record);
+			return;
+		}
+	}
+
+	pushRecordToGroup(groupRecordMap, KANBAN_NO_VALUE_SENTINEL, record);
+}
+
+function placeMultiSelectKanbanRecord(
+	values: string[],
+	kanbanGroups: KanbanGroupDoc[],
+	groupRecordMap: Map<string, UnifiedRecord[]>,
+	record: UnifiedRecord
+): void {
+	let placed = false;
+
+	for (const group of kanbanGroups) {
+		if (values.includes(group.optionValue)) {
+			pushRecordToGroup(groupRecordMap, group.optionValue, record);
+			placed = true;
+		}
+	}
+
+	if (!placed) {
+		pushRecordToGroup(groupRecordMap, KANBAN_NO_VALUE_SENTINEL, record);
+	}
+}
+
+function distributeKanbanRecords(
+	records: UnifiedRecord[],
+	boundFieldDef: FieldDef,
+	kanbanGroups: KanbanGroupDoc[]
+): Map<string, UnifiedRecord[]> {
+	const groupRecordMap = createKanbanGroupRecordMap(kanbanGroups);
+	const isMultiSelect = boundFieldDef.fieldType === "multi_select";
+
+	for (const record of records) {
+		const value = record.fields[boundFieldDef.name];
+
+		if (value === undefined || value === null) {
+			pushRecordToGroup(groupRecordMap, KANBAN_NO_VALUE_SENTINEL, record);
+			continue;
+		}
+
+		if (isMultiSelect && Array.isArray(value)) {
+			placeMultiSelectKanbanRecord(value, kanbanGroups, groupRecordMap, record);
+			continue;
+		}
+
+		placeSingleValueKanbanRecord(value, kanbanGroups, groupRecordMap, record);
+	}
+
+	return groupRecordMap;
+}
+
+function buildKanbanGroups(
+	kanbanGroups: KanbanGroupDoc[],
+	groupRecordMap: Map<string, UnifiedRecord[]>,
+	optionsLookup: Map<string, { label: string; color: string }>
+): KanbanGroup[] {
+	return kanbanGroups.map((group) => {
+		const isNoValue = group.optionValue === KANBAN_NO_VALUE_SENTINEL;
+		const optionInfo = optionsLookup.get(group.optionValue);
+		const records = groupRecordMap.get(group.optionValue) ?? [];
+
+		return {
+			groupId: group._id,
+			label: isNoValue ? "No Value" : (optionInfo?.label ?? group.optionValue),
+			color: optionInfo?.color ?? "",
+			records,
+			count: records.length,
+			isCollapsed: group.isCollapsed,
+		};
+	});
+}
+
 // ── queryTableView (internal helper) ─────────────────────────────────
 
 async function queryTableView(
@@ -109,21 +296,14 @@ async function queryTableView(
 	);
 
 	// Build column definitions from visible viewFields joined with fieldDefs
-	const columns: ColumnDef[] = viewFields
-		.map((vf) => {
-			const fd = fieldDefsById.get(vf.fieldDefId.toString());
-			if (!fd) return null;
-			return {
-				fieldDefId: vf.fieldDefId,
-				name: fd.name,
-				label: fd.label,
-				fieldType: fd.fieldType,
-				width: vf.width,
-				isVisible: vf.isVisible,
-				displayOrder: vf.displayOrder,
-			};
+	const columns = viewFields
+		.flatMap((vf) => {
+			const column = toColumnDef(
+				vf,
+				fieldDefsById.get(vf.fieldDefId.toString())
+			);
+			return column ? [column] : [];
 		})
-		.filter((col): col is ColumnDef => col !== null)
 		.sort((a, b) => a.displayOrder - b.displayOrder);
 
 	// Convert viewFilters to RecordFilter[]
@@ -151,7 +331,7 @@ async function queryTableView(
 		const cursorBody = cursor.startsWith("offset:")
 			? cursor.slice("offset:".length)
 			: cursor;
-		if (!/^[0-9]+$/.test(cursorBody)) {
+		if (!OFFSET_CURSOR_PATTERN.test(cursorBody)) {
 			throw new ConvexError("Invalid pagination cursor");
 		}
 		offset = Number.parseInt(cursorBody, 10);
@@ -198,26 +378,8 @@ async function queryKanbanView(
 	const fieldDefsById = new Map(
 		activeFieldDefs.map((fd) => [fd._id.toString(), fd])
 	);
-
-	// 1. Load kanban groups sorted by displayOrder
-	const kanbanGroups = await ctx.db
-		.query("viewKanbanGroups")
-		.withIndex("by_view", (q) => q.eq("viewDefId", viewDef._id))
-		.collect();
-	kanbanGroups.sort((a, b) => a.displayOrder - b.displayOrder);
-
-	// 2. Load bound field def
-	if (!viewDef.boundFieldId) {
-		throw new ConvexError(
-			"Kanban view requires a bound field (boundFieldId)"
-		);
-	}
-	const boundFieldDef = await ctx.db.get(viewDef.boundFieldId);
-	if (!boundFieldDef) {
-		throw new ConvexError("Bound field definition not found");
-	}
-
-	// 3. Load ALL records for the object
+	const kanbanGroups = await loadOrderedKanbanGroups(ctx, viewDef._id);
+	const boundFieldDef = await requireKanbanBoundField(ctx, viewDef);
 	const orgId = viewDef.orgId;
 	const rawRecords = await ctx.db
 		.query("records")
@@ -227,98 +389,20 @@ async function queryKanbanView(
 		.filter((q) => q.eq(q.field("isDeleted"), false))
 		.take(FILTERED_QUERY_CAP);
 
-	// 4. Assemble ALL records once
 	const assembled = await assembleRecords(ctx, rawRecords, activeFieldDefs);
-
-	// 5. Convert viewFilters and apply
 	const filters = convertViewFiltersToRecordFilters(viewFilters);
 	const filtered = applyFilters(assembled, filters, fieldDefsById);
+	const optionsLookup = buildKanbanOptionsLookup(boundFieldDef);
+	const groupRecordMap = distributeKanbanRecords(
+		filtered,
+		boundFieldDef,
+		kanbanGroups
+	);
 
-	// Build options lookup from boundFieldDef.options
-	const optionsLookup = new Map<
-		string,
-		{ label: string; color: string }
-	>();
-	if (boundFieldDef.options) {
-		for (const opt of boundFieldDef.options) {
-			optionsLookup.set(opt.value, {
-				label: opt.label,
-				color: opt.color,
-			});
-		}
-	}
-
-	// 6-8. Distribute records into groups
-	const isMultiSelect = boundFieldDef.fieldType === "multi_select";
-	const groupRecordMap = new Map<string, UnifiedRecord[]>();
-
-	// Initialize group buckets
-	for (const group of kanbanGroups) {
-		groupRecordMap.set(group.optionValue, []);
-	}
-	// __no_value__ bucket for records with undefined/null bound field
-	groupRecordMap.set("__no_value__", []);
-
-	for (const record of filtered) {
-		const val = record.fields[boundFieldDef.name];
-
-		if (val === undefined || val === null) {
-			const bucket = groupRecordMap.get("__no_value__");
-			if (bucket) bucket.push(record);
-			continue;
-		}
-
-		if (isMultiSelect && Array.isArray(val)) {
-			// Multi-select: record can appear in multiple groups
-			let placed = false;
-			for (const group of kanbanGroups) {
-				if (val.includes(group.optionValue)) {
-					const bucket = groupRecordMap.get(group.optionValue);
-					if (bucket) bucket.push(record);
-					placed = true;
-				}
-			}
-			if (!placed) {
-				const bucket = groupRecordMap.get("__no_value__");
-				if (bucket) bucket.push(record);
-			}
-		} else {
-			// Select: exact match
-			let placed = false;
-			for (const group of kanbanGroups) {
-				if (val === group.optionValue) {
-					const bucket = groupRecordMap.get(group.optionValue);
-					if (bucket) bucket.push(record);
-					placed = true;
-					break;
-				}
-			}
-			if (!placed) {
-				const bucket = groupRecordMap.get("__no_value__");
-				if (bucket) bucket.push(record);
-			}
-		}
-	}
-
-	// Build result groups
-	// Note: __no_value__ group is already in kanbanGroups (created by createView in viewDefs.ts)
-	const groups: KanbanGroup[] = kanbanGroups.map((group) => {
-		const isNoValue = group.optionValue === "__no_value__";
-		const optionInfo = optionsLookup.get(group.optionValue);
-		const records = groupRecordMap.get(group.optionValue) ?? [];
-		return {
-			groupId: group._id,
-			label: isNoValue ? "No Value" : (optionInfo?.label ?? group.optionValue),
-			color: optionInfo?.color ?? "",
-			records,
-			count: records.length,
-			isCollapsed: group.isCollapsed,
-		};
-	});
-
-	const totalCount = filtered.length;
-
-	return { groups, totalCount };
+	return {
+		groups: buildKanbanGroups(kanbanGroups, groupRecordMap, optionsLookup),
+		totalCount: filtered.length,
+	};
 }
 
 // ── queryViewRecords ─────────────────────────────────────────────────
@@ -326,7 +410,7 @@ async function queryKanbanView(
 export const queryViewRecords = crmQuery
 	.input({
 		viewDefId: v.id("viewDefs"),
-		cursor: v.optional(v.union(v.string(), v.null_())),
+		cursor: v.optional(v.union(v.string(), v.null())),
 		limit: v.optional(v.number()),
 	})
 	.handler(async (ctx, args) => {
@@ -360,12 +444,9 @@ export const queryViewRecords = crmQuery
 			.collect();
 
 		// 4. Load active field defs
-		const activeFieldDefs = await loadActiveFieldDefs(
-			ctx,
-			viewDef.objectDefId
-		);
+		const activeFieldDefs = await loadActiveFieldDefs(ctx, viewDef.objectDefId);
 
-		const limit = args.limit ?? 50;
+		const limit = sanitizeQueryLimit(args.limit);
 		const cursor = args.cursor ?? null;
 
 		// 5. Dispatch by viewType
@@ -381,21 +462,12 @@ export const queryViewRecords = crmQuery
 					limit
 				);
 			case "kanban":
-				return queryKanbanView(
-					ctx,
-					viewDef,
-					viewFilters,
-					activeFieldDefs
-				);
+				return queryKanbanView(ctx, viewDef, viewFilters, activeFieldDefs);
 			case "calendar":
-				throw new ConvexError(
-					"Calendar view rendering is not yet implemented"
-				);
+				throw new ConvexError("Calendar view rendering is not yet implemented");
 			default: {
 				const _exhaustive: never = viewDef.viewType;
-				throw new ConvexError(
-					`Unknown view type: ${String(_exhaustive)}`
-				);
+				throw new ConvexError(`Unknown view type: ${String(_exhaustive)}`);
 			}
 		}
 	})
@@ -426,10 +498,7 @@ export const getViewSchema = crmQuery
 			.collect();
 
 		// 3. Load active fieldDefs for the objectDef
-		const activeFieldDefs = await loadActiveFieldDefs(
-			ctx,
-			viewDef.objectDefId
-		);
+		const activeFieldDefs = await loadActiveFieldDefs(ctx, viewDef.objectDefId);
 		const fieldDefsById = new Map(
 			activeFieldDefs.map((fd) => [fd._id.toString(), fd])
 		);
@@ -438,9 +507,7 @@ export const getViewSchema = crmQuery
 		const sortCapabilities = await ctx.db
 			.query("fieldCapabilities")
 			.withIndex("by_object_capability", (q) =>
-				q
-					.eq("objectDefId", viewDef.objectDefId)
-					.eq("capability", "sort")
+				q.eq("objectDefId", viewDef.objectDefId).eq("capability", "sort")
 			)
 			.collect();
 		const sortableFieldIds = new Set(
@@ -448,24 +515,23 @@ export const getViewSchema = crmQuery
 		);
 
 		// 5. Build columns array
-		const columns: ViewSchemaColumn[] = viewFields
-			.map((vf) => {
-				const fd = fieldDefsById.get(vf.fieldDefId.toString());
-				if (!fd) return null;
-				return {
-					fieldDefId: vf.fieldDefId,
-					name: fd.name,
-					label: fd.label,
-					fieldType: fd.fieldType,
-					width: vf.width,
-					isVisible: vf.isVisible,
-					displayOrder: vf.displayOrder,
-					hasSortCapability: sortableFieldIds.has(
-						vf.fieldDefId.toString()
-					),
-				};
+		const columns = viewFields
+			.flatMap((vf) => {
+				const column = toColumnDef(
+					vf,
+					fieldDefsById.get(vf.fieldDefId.toString())
+				);
+				if (!column) {
+					return [];
+				}
+
+				return [
+					{
+						...column,
+						hasSortCapability: sortableFieldIds.has(vf.fieldDefId.toString()),
+					},
+				];
 			})
-			.filter((col): col is ViewSchemaColumn => col !== null)
 			.sort((a, b) => a.displayOrder - b.displayOrder);
 
 		return {
@@ -489,7 +555,9 @@ export const moveKanbanRecord = crmMutation
 	})
 	.handler(async (ctx, args) => {
 		const orgId = ctx.viewer.orgId;
-		if (!orgId) throw new ConvexError("Org context required");
+		if (!orgId) {
+			throw new ConvexError("Org context required");
+		}
 
 		// 1. Load viewDef — verify kanban + org ownership
 		const viewDef = await ctx.db.get(args.viewDefId);
@@ -519,7 +587,7 @@ export const moveKanbanRecord = crmMutation
 		const existingRow = await readExistingValue(
 			ctx,
 			args.recordId,
-			boundFieldDef,
+			boundFieldDef
 		);
 		const beforeValue = existingRow ? existingRow.value : null;
 
@@ -528,14 +596,25 @@ export const moveKanbanRecord = crmMutation
 			await ctx.db.delete(existingRow._id);
 		}
 
-		// 6. Write new value (for __no_value__ target, just delete — leave field empty)
-		if (args.targetGroupValue !== "__no_value__") {
-			await writeValue(
-				ctx,
-				args.recordId,
-				boundFieldDef,
-				args.targetGroupValue,
-			);
+		const existingMultiSelectValues = Array.isArray(beforeValue)
+			? beforeValue.filter(
+					(value): value is string => typeof value === "string"
+				)
+			: [];
+		let afterValue: string[] | string | null;
+		if (args.targetGroupValue === KANBAN_NO_VALUE_SENTINEL) {
+			afterValue = null;
+		} else if (boundFieldDef.fieldType === "multi_select") {
+			afterValue = existingMultiSelectValues.includes(args.targetGroupValue)
+				? existingMultiSelectValues
+				: [...existingMultiSelectValues, args.targetGroupValue];
+		} else {
+			afterValue = args.targetGroupValue;
+		}
+
+		// 6. Write new value (for "No Value", leave the field empty)
+		if (afterValue !== null) {
+			await writeValue(ctx, args.recordId, boundFieldDef, afterValue);
 		}
 
 		// 7. Update record timestamp
@@ -549,10 +628,7 @@ export const moveKanbanRecord = crmMutation
 			resourceId: args.recordId,
 			before: { [boundFieldDef.name]: beforeValue },
 			after: {
-				[boundFieldDef.name]:
-					args.targetGroupValue === "__no_value__"
-						? null
-						: args.targetGroupValue,
+				[boundFieldDef.name]: afterValue,
 			},
 			generateDiff: true,
 			severity: "info",

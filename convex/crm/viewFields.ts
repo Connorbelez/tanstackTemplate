@@ -203,7 +203,9 @@ export const setViewFieldWidth = crmAdminMutation
 			.first();
 
 		if (!viewField) {
-			throw new ConvexError("View field not found for this view and field combination");
+			throw new ConvexError(
+				"View field not found for this view and field combination"
+			);
 		}
 
 		await ctx.db.patch(viewField._id, { width: args.width });

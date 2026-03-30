@@ -23,7 +23,9 @@ export const reorderKanbanGroups = crmAdminMutation
 
 		// Verify viewType is kanban
 		if (viewDef.viewType !== "kanban") {
-			throw new ConvexError("Kanban group reordering is only valid for kanban views");
+			throw new ConvexError(
+				"Kanban group reordering is only valid for kanban views"
+			);
 		}
 
 		// Validate no duplicates
@@ -53,13 +55,6 @@ export const reorderKanbanGroups = crmAdminMutation
 					`Group ${id} does not belong to view ${args.viewDefId}`
 				);
 			}
-		}
-
-		// Validate completeness — all groups must be included
-		if (args.groupIds.length !== existingGroups.length) {
-			throw new ConvexError(
-				`Expected ${existingGroups.length} group IDs but received ${args.groupIds.length} — all groups must be included in the reorder`
-			);
 		}
 
 		// Update displayOrder for each group

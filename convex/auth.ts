@@ -248,7 +248,7 @@ export const { authKitEvent } = authKit.events({
 		await ctx.scheduler.runAfter(
 			0,
 			internal.crm.systemAdapters.bootstrap.bootstrapSystemObjects,
-			{ orgId: event.data.id },
+			{ orgId: event.data.id }
 		);
 	},
 	"organization.updated": async (ctx, event) => {
