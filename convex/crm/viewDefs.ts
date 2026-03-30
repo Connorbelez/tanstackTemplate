@@ -10,7 +10,7 @@ export const KANBAN_NO_VALUE_SENTINEL = "__no_value__";
 
 const MAX_VIEW_NAME_LENGTH = 100;
 
-// ── Shared helpers ──────────────────────────────────────────────────
+// ── Shared Helpers ───────────────────────────────────────────────────
 
 function validateViewName(name: string): string {
 	const trimmed = name.trim();
@@ -25,8 +25,8 @@ function validateViewName(name: string): string {
 	return trimmed;
 }
 
-async function validateFieldCapability(
-	ctx: { db: MutationCtx["db"] },
+async function validateBoundFieldCapability(
+	ctx: MutationCtx,
 	objectDefId: Id<"objectDefs">,
 	fieldDefId: Id<"fieldDefs">,
 	capability: "kanban" | "calendar"
@@ -43,23 +43,13 @@ async function validateFieldCapability(
 	}
 }
 
-async function createKanbanGroupsFromField(
-	ctx: { db: MutationCtx["db"] },
+async function createKanbanGroupsForField(
+	ctx: MutationCtx,
 	viewDefId: Id<"viewDefs">,
 	fieldDefId: Id<"fieldDefs">
 ): Promise<void> {
 	const fieldDef = await ctx.db.get(fieldDefId);
-	if (!fieldDef) {
-		throw new ConvexError(
-			"Bound field no longer exists — it may have been deleted"
-		);
-	}
-	if (!fieldDef.options || fieldDef.options.length === 0) {
-		throw new ConvexError(
-			"Bound field has no select options — kanban views require a field with defined options"
-		);
-	}
-	const options = fieldDef.options;
+	const options = fieldDef?.options ?? [];
 	for (let i = 0; i < options.length; i++) {
 		await ctx.db.insert("viewKanbanGroups", {
 			viewDefId,
@@ -69,6 +59,7 @@ async function createKanbanGroupsFromField(
 			isCollapsed: false,
 		});
 	}
+	// "No Value" group always last
 	await ctx.db.insert("viewKanbanGroups", {
 		viewDefId,
 		fieldDefId,
@@ -109,7 +100,7 @@ export const createView = crmAdminMutation
 					"Kanban views require a boundFieldId (select or multi_select field)"
 				);
 			}
-			await validateFieldCapability(
+			await validateBoundFieldCapability(
 				ctx,
 				args.objectDefId,
 				args.boundFieldId,
@@ -123,7 +114,7 @@ export const createView = crmAdminMutation
 					"Calendar views require a boundFieldId (date or datetime field)"
 				);
 			}
-			await validateFieldCapability(
+			await validateBoundFieldCapability(
 				ctx,
 				args.objectDefId,
 				args.boundFieldId,
@@ -165,7 +156,7 @@ export const createView = crmAdminMutation
 
 		// Kanban group auto-creation
 		if (args.viewType === "kanban" && args.boundFieldId) {
-			await createKanbanGroupsFromField(ctx, viewDefId, args.boundFieldId);
+			await createKanbanGroupsForField(ctx, viewDefId, args.boundFieldId);
 		}
 
 		// Audit
@@ -211,7 +202,7 @@ export const updateView = crmAdminMutation
 			args.boundFieldId !== before.boundFieldId
 		) {
 			if (before.viewType === "kanban") {
-				await validateFieldCapability(
+				await validateBoundFieldCapability(
 					ctx,
 					before.objectDefId,
 					args.boundFieldId,
@@ -228,7 +219,7 @@ export const updateView = crmAdminMutation
 				}
 
 				// Create new kanban groups from new field's options
-				await createKanbanGroupsFromField(
+				await createKanbanGroupsForField(
 					ctx,
 					args.viewDefId,
 					args.boundFieldId
@@ -236,7 +227,7 @@ export const updateView = crmAdminMutation
 			}
 
 			if (before.viewType === "calendar") {
-				await validateFieldCapability(
+				await validateBoundFieldCapability(
 					ctx,
 					before.objectDefId,
 					args.boundFieldId,
