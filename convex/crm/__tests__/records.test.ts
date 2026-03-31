@@ -21,7 +21,7 @@ import {
 	createCrmTestHarness,
 	seedObjectWithFields,
 	seedRecord,
-} from "./helpers";
+} from "./helpers.test";
 
 // ═══════════════════════════════════════════════════════════════════════
 // createRecord

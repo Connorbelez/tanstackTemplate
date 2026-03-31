@@ -24,6 +24,67 @@ export interface NativeRecordPage {
 	records: UnifiedRecord[];
 }
 
+function assembleNativeDoc(
+	objectDef: ObjectDef,
+	fieldDefs: FieldDef[],
+	doc: Record<string, unknown>
+): UnifiedRecord {
+	const fields: Record<string, unknown> = {};
+	for (const fieldDef of fieldDefs.filter((item) => item.nativeColumnPath)) {
+		fields[fieldDef.name] = resolveColumnPath(doc, fieldDef);
+	}
+
+	return {
+		_id: String(doc._id),
+		_kind: "native",
+		objectDefId: objectDef._id,
+		fields,
+		createdAt: (doc.createdAt as number) ?? (doc._creationTime as number),
+		updatedAt:
+			(doc.updatedAt as number) ??
+			(doc._creationTime as number) ??
+			(doc.createdAt as number) ??
+			0,
+	};
+}
+
+async function getNativeTableRecordById(
+	ctx: QueryCtx,
+	tableName: NativeTableName,
+	recordId: string
+): Promise<Record<string, unknown> | null> {
+	switch (tableName) {
+		case "mortgages": {
+			const normalizedId = ctx.db.normalizeId("mortgages", recordId);
+			return normalizedId ? ctx.db.get(normalizedId) : null;
+		}
+		case "borrowers": {
+			const normalizedId = ctx.db.normalizeId("borrowers", recordId);
+			return normalizedId ? ctx.db.get(normalizedId) : null;
+		}
+		case "lenders": {
+			const normalizedId = ctx.db.normalizeId("lenders", recordId);
+			return normalizedId ? ctx.db.get(normalizedId) : null;
+		}
+		case "brokers": {
+			const normalizedId = ctx.db.normalizeId("brokers", recordId);
+			return normalizedId ? ctx.db.get(normalizedId) : null;
+		}
+		case "deals": {
+			const normalizedId = ctx.db.normalizeId("deals", recordId);
+			return normalizedId ? ctx.db.get(normalizedId) : null;
+		}
+		case "obligations": {
+			const normalizedId = ctx.db.normalizeId("obligations", recordId);
+			return normalizedId ? ctx.db.get(normalizedId) : null;
+		}
+		default: {
+			const exhaustiveCheck: never = tableName;
+			throw new ConvexError(`Unknown native table: ${String(exhaustiveCheck)}`);
+		}
+	}
+}
+
 async function paginateNativeTable(
 	ctx: QueryCtx,
 	tableName: string,
@@ -172,22 +233,9 @@ export async function queryNativeRecords(
 	);
 
 	// Only iterate fieldDefs with nativeColumnPath (skip EAV-only fields)
-	const nativeFieldDefs = fieldDefs.filter((fd) => fd.nativeColumnPath);
-
-	const records = nativePage.page.map((doc) => {
-		const fields: Record<string, unknown> = {};
-		for (const fd of nativeFieldDefs) {
-			fields[fd.name] = resolveColumnPath(doc as Record<string, unknown>, fd);
-		}
-		return {
-			_id: String(doc._id),
-			_kind: "native" as const,
-			objectDefId: objectDef._id,
-			fields,
-			createdAt: (doc.createdAt as number) ?? (doc._creationTime as number),
-			updatedAt: doc._creationTime as number,
-		};
-	});
+	const records = nativePage.page.map((doc) =>
+		assembleNativeDoc(objectDef, fieldDefs, doc)
+	);
 
 	if (typeof paginationOptsOrLimit === "number") {
 		return records;
@@ -198,4 +246,28 @@ export async function queryNativeRecords(
 		continueCursor: nativePage.continueCursor,
 		isDone: nativePage.isDone,
 	};
+}
+
+export async function getNativeRecordById(
+	ctx: QueryCtx,
+	objectDef: ObjectDef,
+	fieldDefs: FieldDef[],
+	orgId: string,
+	recordId: string
+): Promise<UnifiedRecord | null> {
+	if (!objectDef.nativeTable) {
+		throw new ConvexError("System object missing nativeTable");
+	}
+
+	const nativeDoc = await getNativeTableRecordById(
+		ctx,
+		objectDef.nativeTable as NativeTableName,
+		recordId
+	);
+
+	if (!nativeDoc || nativeDoc.orgId !== orgId) {
+		return null;
+	}
+
+	return assembleNativeDoc(objectDef, fieldDefs, nativeDoc);
 }
