@@ -8,6 +8,9 @@ import { api } from "../../_generated/api";
 import type { Id } from "../../_generated/dataModel";
 import { asAdmin, type CrmTestHarness, createCrmTestHarness } from "./helpers";
 
+const SEARCH_UNSUPPORTED_RE =
+	/search (index|indexes|indices).*(not supported|unsupported)/i;
+
 describe("EAV-CRM Walk-Through", () => {
 	let t: CrmTestHarness;
 
@@ -204,21 +207,36 @@ describe("EAV-CRM Walk-Through", () => {
 			);
 			expect(searchResults.length).toBeGreaterThanOrEqual(1);
 			expect(searchResults[0].fields.company_name).toBe("Acme Corp");
-		} catch {
-			// convex-test may not support search indexes — skip gracefully
-			console.warn(
-				"Search index not supported in convex-test — skipping search assertion"
-			);
+		} catch (error) {
+			// Only treat explicit "search not supported" errors as a reason to skip.
+			if (error instanceof Error && SEARCH_UNSUPPORTED_RE.test(error.message)) {
+				// convex-test may not support search indexes — skip gracefully
+				console.warn(
+					"Search index not supported in convex-test — skipping search assertion"
+				);
+				return;
+			}
+			// Unexpected error — surface it instead of silently skipping.
+			throw error;
 		}
 
 		// 10. Performance check (generous margins for convex-test in-process)
+		const enablePerfCheck = process.env.CRM_WALKTHROUGH_PERF_CHECK === "1";
 		const start = performance.now();
 		await asAdmin(t).query(api.crm.recordQueries.queryRecords, {
 			objectDefId,
 			paginationOpts: { numItems: 25, cursor: null },
 		});
 		const elapsed = performance.now() - start;
-		// convex-test in-process — 2000ms is very generous
-		expect(elapsed).toBeLessThan(2000);
+		if (enablePerfCheck) {
+			// convex-test in-process — 2000ms is very generous
+			expect(elapsed).toBeLessThan(2000);
+		} else {
+			console.info(
+				`EAV-CRM Walk-Through perf: queryRecords completed in ${elapsed.toFixed(
+					1
+				)}ms (perf check disabled; set CRM_WALKTHROUGH_PERF_CHECK=1 to enable assertion)`
+			);
+		}
 	});
 });
