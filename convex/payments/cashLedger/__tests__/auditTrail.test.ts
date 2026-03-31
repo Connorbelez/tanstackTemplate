@@ -6,6 +6,10 @@ import type { MutationCtx } from "../../../_generated/server";
 import { AuditTrail } from "../../../auditTrailClient";
 import auditTrailSchema from "../../../components/auditTrail/schema";
 import schema from "../../../schema";
+import {
+	convexModules,
+	auditTrailModules as sharedAuditTrailModules,
+} from "../../../test/moduleMaps";
 import { buildCashLedgerAuditArgs } from "../hashChain";
 import type {
 	CashAccountFamily,
@@ -18,10 +22,8 @@ const auditTrail = new AuditTrail(components.auditTrail);
 
 // ── Module globs ────────────────────────────────────────────────────
 
-const modules = import.meta.glob("/convex/**/*.ts");
-const auditTrailModules = import.meta.glob(
-	"/convex/components/auditTrail/**/*.ts"
-);
+const modules = convexModules;
+const auditTrailModules = sharedAuditTrailModules;
 
 // ── Test harness factory ────────────────────────────────────────────
 

@@ -4,6 +4,7 @@ import type { Id } from "../../_generated/dataModel";
 import type { MutationCtx } from "../../_generated/server";
 import type { Viewer } from "../../fluent";
 import schema from "../../schema";
+import { convexModules } from "../../test/moduleMaps";
 import {
 	canAccessAccrual,
 	canAccessApplicationPackage,
@@ -14,7 +15,7 @@ import {
 	canAccessMortgage,
 } from "../resourceChecks";
 
-const modules = import.meta.glob("/convex/**/*.ts");
+const modules = convexModules;
 
 // ── Viewer Factory ──────────────────────────────────────────────────
 

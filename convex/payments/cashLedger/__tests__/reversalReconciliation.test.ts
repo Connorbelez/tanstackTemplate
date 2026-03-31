@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { convexModules } from "../../../test/moduleMaps";
 import { getOrCreateCashAccount } from "../accounts";
 import { postCashEntryInternal } from "../postEntry";
 import {
@@ -8,7 +9,7 @@ import {
 import { buildIdempotencyKey } from "../types";
 import { createHarness, SYSTEM_SOURCE, seedMinimalEntities } from "./testUtils";
 
-const modules = import.meta.glob("/convex/**/*.ts");
+const modules = convexModules;
 
 describe("ENG-172 reversal reconciliation detection", () => {
 	it("T-014: finds reversed obligations with non-zero outstanding balance", async () => {

@@ -3,9 +3,10 @@ import { describe, expect, it } from "vitest";
 import { api } from "../../../_generated/api";
 import { FAIRLEND_STAFF_ORG_ID } from "../../../constants";
 import schema from "../../../schema";
+import { convexModules } from "../../../test/moduleMaps";
 import { getNextCashSequenceNumber } from "../sequenceCounter";
 
-const modules = import.meta.glob("/convex/**/*.ts");
+const modules = convexModules;
 
 const FAIR_LEND_ADMIN_PATTERN = /fair lend admin/i;
 

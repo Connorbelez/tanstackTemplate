@@ -17,9 +17,10 @@ import { commitReservation } from "../../engine/effects/dealClosing";
 import { updatePaymentSchedule } from "../../engine/effects/dealClosingPayments";
 import { prorateAccrualBetweenOwners } from "../../engine/effects/dealClosingProrate";
 import schema from "../../schema";
+import { convexModules } from "../../test/moduleMaps";
 
 // ── Module glob ─────────────────────────────────────────────────────
-const modules = import.meta.glob("/convex/**/*.ts");
+const modules = convexModules;
 
 // ── Identity fixtures ───────────────────────────────────────────────
 const EFFECT_SOURCE = {

@@ -1,9 +1,13 @@
-import auditLogTest from "convex-audit-log/test";
 import { convexTest } from "convex-test";
 import { describe, expect, it, vi } from "vitest";
 import { internal } from "../../../_generated/api";
 import auditTrailSchema from "../../../components/auditTrail/schema";
 import schema from "../../../schema";
+import {
+	convexModules,
+	auditTrailModules as sharedAuditTrailModules,
+} from "../../../test/moduleMaps";
+import { registerAuditLogComponent } from "../../../test/registerAuditLogComponent";
 import {
 	checkOrphanedConfirmedTransfers,
 	checkOrphanedReversedTransfers,
@@ -23,10 +27,8 @@ import {
 	type TestHarness,
 } from "./testUtils";
 
-const modules = import.meta.glob("/convex/**/*.ts");
-const auditTrailModules = import.meta.glob(
-	"/convex/components/auditTrail/**/*.ts"
-);
+const modules = convexModules;
+const auditTrailModules = sharedAuditTrailModules;
 
 /**
  * Creates a harness with auditLog + auditTrail components registered,
@@ -35,7 +37,7 @@ const auditTrailModules = import.meta.glob(
 function createComponentHarness(): TestHarness {
 	process.env.DISABLE_CASH_LEDGER_HASHCHAIN = "true";
 	const t = convexTest(schema, modules);
-	auditLogTest.register(t, "auditLog");
+	registerAuditLogComponent(t, "auditLog");
 	t.registerComponent("auditTrail", auditTrailSchema, auditTrailModules);
 	return t;
 }

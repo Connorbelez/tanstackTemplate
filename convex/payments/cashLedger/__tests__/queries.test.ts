@@ -4,9 +4,10 @@ import { api, internal } from "../../../_generated/api";
 import type { Id } from "../../../_generated/dataModel";
 import { FAIRLEND_STAFF_ORG_ID } from "../../../constants";
 import schema from "../../../schema";
+import { convexModules } from "../../../test/moduleMaps";
 import { getCashAccountBalance, isCreditNormalFamily } from "../accounts";
 
-const modules = import.meta.glob("/convex/**/*.ts");
+const modules = convexModules;
 
 const UNAUTHORIZED_PATTERN = /Unauthorized/;
 const FORBIDDEN_PATTERN = /Forbidden/;

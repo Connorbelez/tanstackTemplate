@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Doc } from "../../../_generated/dataModel";
+import { convexModules } from "../../../test/moduleMaps";
 import { getCashAccountBalance } from "../accounts";
 import { postCashCorrectionForEntry } from "../integrations";
 import { postCashEntryInternal } from "../postEntry";
@@ -11,7 +12,7 @@ import {
 	SYSTEM_SOURCE,
 } from "./testUtils";
 
-const modules = import.meta.glob("/convex/**/*.ts");
+const modules = convexModules;
 
 // ── Regex patterns (top-level for Biome useTopLevelRegex) ───────────
 const CORRECTION_ADMIN_PATTERN = /CORRECTION entries require admin actorType/;

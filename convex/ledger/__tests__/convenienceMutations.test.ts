@@ -13,8 +13,9 @@ import {
 	initCounter,
 	mintAndIssue,
 } from "./testUtils.test";
+import { convexModules } from "../../test/moduleMaps";
 
-const modules = import.meta.glob("/convex/**/*.ts");
+const modules = convexModules;
 
 // ── Auth identity ────────────────────────────────────────────────
 const ADMIN_IDENTITY = {

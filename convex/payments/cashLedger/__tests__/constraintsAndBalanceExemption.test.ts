@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { convexModules } from "../../../test/moduleMaps";
 import { getOrCreateCashAccount } from "../accounts";
 import type { PostCashEntryInput } from "../postEntry";
 import { postCashEntryInternal } from "../postEntry";
@@ -9,7 +10,7 @@ import {
 	type TestHarness,
 } from "./testUtils";
 
-const modules = import.meta.glob("/convex/**/*.ts");
+const modules = convexModules;
 
 const CORRECTION_ADMIN_ACTOR_PATTERN =
 	/CORRECTION entries require admin actorType/;

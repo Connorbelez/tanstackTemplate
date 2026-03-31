@@ -14,11 +14,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { getInitialSnapshot, transition } from "xstate";
 import type { Id } from "../../../_generated/dataModel";
 import schema from "../../../schema";
+import { convexModules } from "../../../test/moduleMaps";
 import { collectLockingFee } from "../../effects/dealClosingEffects";
 import { dealMachine } from "../../machines/deal.machine";
 
 // ── Module glob ─────────────────────────────────────────────────────
-const modules = import.meta.glob("/convex/**/*.ts");
+const modules = convexModules;
 
 // ── Identity fixtures ───────────────────────────────────────────────
 const EFFECT_SOURCE = {

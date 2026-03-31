@@ -1,13 +1,15 @@
 /**
  * Shared test harness and seed helpers for CRM (EAV) integration tests.
  */
-import auditLogTest from "convex-audit-log/test";
+
 import { convexTest } from "convex-test";
 import { api } from "../../_generated/api";
 import type { Doc, Id } from "../../_generated/dataModel";
 import schema from "../../schema";
+import { convexModules } from "../../test/moduleMaps";
+import { registerAuditLogComponent } from "../../test/registerAuditLogComponent";
 
-const modules = import.meta.glob("/convex/**/*.ts");
+const modules = convexModules;
 
 // ── Identity Fixtures ───────────────────────────────────────────────
 
@@ -56,7 +58,7 @@ export type CrmTestHarness = ReturnType<typeof convexTest>;
 
 export function createCrmTestHarness(): CrmTestHarness {
 	const t = convexTest(schema, modules);
-	auditLogTest.register(t, "auditLog");
+	registerAuditLogComponent(t, "auditLog");
 	return t;
 }
 

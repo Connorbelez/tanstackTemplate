@@ -1,4 +1,3 @@
-import auditLogTest from "convex-audit-log/test";
 import { convexTest } from "convex-test";
 import { describe, expect, it, vi } from "vitest";
 import workflowSchema from "../../../../node_modules/@convex-dev/workflow/dist/component/schema.js";
@@ -9,6 +8,13 @@ import auditTrailSchema from "../../../components/auditTrail/schema";
 import { emitPaymentReceived } from "../../../engine/effects/collectionAttempt";
 import { applyPayment } from "../../../engine/effects/obligationPayment";
 import schema from "../../../schema";
+import {
+	convexModules,
+	auditTrailModules as sharedAuditTrailModules,
+	workflowModules as sharedWorkflowModules,
+	workpoolModules as sharedWorkpoolModules,
+} from "../../../test/moduleMaps";
+import { registerAuditLogComponent } from "../../../test/registerAuditLogComponent";
 import { getOrCreateCashAccount } from "../accounts";
 import { postObligationAccrued } from "../integrations";
 import { SYSTEM_SOURCE, seedMinimalEntities } from "./testUtils";
@@ -17,16 +23,10 @@ const CASH_RECEIPT_PREFIX_PATTERN = /^cash-receipt:/;
 
 // ── Module globs ────────────────────────────────────────────────────
 
-const modules = import.meta.glob("/convex/**/*.ts");
-const auditTrailModules = import.meta.glob(
-	"/convex/components/auditTrail/**/*.ts"
-);
-const workflowModules = import.meta.glob(
-	"/node_modules/@convex-dev/workflow/dist/component/**/*.js"
-);
-const workpoolModules = import.meta.glob(
-	"/node_modules/@convex-dev/workpool/dist/component/**/*.js"
-);
+const modules = convexModules;
+const auditTrailModules = sharedAuditTrailModules;
+const workflowModules = sharedWorkflowModules;
+const workpoolModules = sharedWorkpoolModules;
 
 // ── Test harness with components ────────────────────────────────────
 
@@ -34,7 +34,7 @@ type TestHarness = ReturnType<typeof createFullHarness>;
 
 function createFullHarness() {
 	const t = convexTest(schema, modules);
-	auditLogTest.register(t, "auditLog");
+	registerAuditLogComponent(t, "auditLog");
 	t.registerComponent("auditTrail", auditTrailSchema, auditTrailModules);
 	t.registerComponent("workflow", workflowSchema, workflowModules);
 	t.registerComponent("workflow/workpool", workpoolSchema, workpoolModules);

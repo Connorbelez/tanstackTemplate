@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { Id } from "../../../_generated/dataModel";
 import type { MutationCtx } from "../../../_generated/server";
 import { createDispersalEntries } from "../../../dispersal/createDispersalEntries";
+import { convexModules } from "../../../test/moduleMaps";
 import { getCashAccountBalance } from "../accounts";
 import {
 	createHarness,
@@ -10,7 +11,7 @@ import {
 	type TestHarness,
 } from "./testUtils";
 
-const modules = import.meta.glob("/convex/**/*.ts");
+const modules = convexModules;
 
 interface CreateDispersalEntriesHandler {
 	_handler: (

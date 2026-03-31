@@ -6,6 +6,7 @@ import {
 } from "../../../../src/test/auth/helpers";
 import { FAIRLEND_ADMIN } from "../../../../src/test/auth/identities";
 import type { Id } from "../../../_generated/dataModel";
+import { convexModules } from "../../../test/moduleMaps";
 import { getCashAccountBalance } from "../accounts";
 import { postObligationWriteOff } from "../integrations";
 import { buildIdempotencyKey } from "../types";
@@ -16,7 +17,7 @@ import {
 	type TestHarness,
 } from "./testUtils";
 
-const modules = import.meta.glob("/convex/**/*.ts");
+const modules = convexModules;
 
 // ── Module-level regex constants (Biome requires top-level regex) ────
 const EXCEEDS_BALANCE_RE = /exceeds outstanding balance/;

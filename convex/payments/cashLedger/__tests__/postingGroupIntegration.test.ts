@@ -5,6 +5,7 @@ import type { Id } from "../../../_generated/dataModel";
 import type { MutationCtx } from "../../../_generated/server";
 import { FAIRLEND_STAFF_ORG_ID } from "../../../constants";
 import { createDispersalEntries } from "../../../dispersal/createDispersalEntries";
+import { convexModules } from "../../../test/moduleMaps";
 import { getOrCreateCashAccount } from "../accounts";
 import { postSettlementAllocation } from "../integrations";
 import { postCashEntryInternal } from "../postEntry";
@@ -18,7 +19,7 @@ import {
 	seedMinimalEntities,
 } from "./testUtils";
 
-const modules = import.meta.glob("/convex/**/*.ts");
+const modules = convexModules;
 
 interface CreateDispersalEntriesHandler {
 	_handler: (

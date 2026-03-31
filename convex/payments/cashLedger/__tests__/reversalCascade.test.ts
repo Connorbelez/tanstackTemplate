@@ -1,6 +1,7 @@
-import auditLogTest from "convex-audit-log/test";
 import { describe, expect, it } from "vitest";
 import type { Doc, Id } from "../../../_generated/dataModel";
+import { convexModules } from "../../../test/moduleMaps";
+import { registerAuditLogComponent } from "../../../test/registerAuditLogComponent";
 import { findCashAccount, getOrCreateCashAccount } from "../accounts";
 import {
 	postPaymentReversalCascade,
@@ -17,7 +18,7 @@ import {
 	type TestHarness,
 } from "./testUtils";
 
-const modules = import.meta.glob("/convex/**/*.ts");
+const modules = convexModules;
 
 // ── Regex patterns (top-level for Biome useTopLevelRegex) ───────────
 const REVERSAL_EXCEEDS_ORIGINAL_PATTERN = /REVERSAL_EXCEEDS_ORIGINAL/;
@@ -401,7 +402,7 @@ async function postPayoutsForBothLenders(
 describe("T-006: Full reversal cascade", () => {
 	it("reverses cash received + allocation entries with clawbackRequired false", async () => {
 		const t = createHarness(modules);
-		auditLogTest.register(t, "auditLog");
+		registerAuditLogComponent(t, "auditLog");
 		const state = await setupFullSettlementState(t);
 
 		const result = await t.run(async (ctx) => {
@@ -434,7 +435,7 @@ describe("T-006: Full reversal cascade", () => {
 describe("T-007: Cascade with clawback", () => {
 	it("includes payout reversal entries and sets clawbackRequired true", async () => {
 		const t = createHarness(modules);
-		auditLogTest.register(t, "auditLog");
+		registerAuditLogComponent(t, "auditLog");
 		const state = await setupFullSettlementState(t);
 
 		// Post payouts for both lenders
@@ -476,7 +477,7 @@ describe("T-007: Cascade with clawback", () => {
 describe("T-008: Cascade without clawback", () => {
 	it("produces only base reversal entries when no payouts have been sent", async () => {
 		const t = createHarness(modules);
-		auditLogTest.register(t, "auditLog");
+		registerAuditLogComponent(t, "auditLog");
 		const state = await setupFullSettlementState(t);
 
 		const result = await t.run(async (ctx) => {
@@ -510,7 +511,7 @@ describe("T-008: Cascade without clawback", () => {
 describe("T-009: Idempotency", () => {
 	it("returns the same entries on repeated cascade calls", async () => {
 		const t = createHarness(modules);
-		auditLogTest.register(t, "auditLog");
+		registerAuditLogComponent(t, "auditLog");
 		const state = await setupFullSettlementState(t);
 
 		// First call
@@ -557,7 +558,7 @@ describe("T-009: Idempotency", () => {
 describe("T-010: Amount validation via assertReversalAmountValid", () => {
 	it("rejects postTransferReversal when amount exceeds original", async () => {
 		const t = createHarness(modules);
-		auditLogTest.register(t, "auditLog");
+		registerAuditLogComponent(t, "auditLog");
 		const state = await setupFullSettlementState(t);
 
 		// Create a transfer request
@@ -638,7 +639,7 @@ describe("T-010: Amount validation via assertReversalAmountValid", () => {
 describe("T-011: causedBy linkage", () => {
 	it("every reversal entry has causedBy pointing to a valid original entry", async () => {
 		const t = createHarness(modules);
-		auditLogTest.register(t, "auditLog");
+		registerAuditLogComponent(t, "auditLog");
 		const state = await setupFullSettlementState(t);
 
 		const result = await t.run(async (ctx) => {
@@ -687,7 +688,7 @@ describe("T-011: causedBy linkage", () => {
 describe("T-012: Posting group integrity", () => {
 	it("allocation + reversal posting groups net to zero CONTROL:ALLOCATION balance", async () => {
 		const t = createHarness(modules);
-		auditLogTest.register(t, "auditLog");
+		registerAuditLogComponent(t, "auditLog");
 		const state = await setupFullSettlementState(t);
 
 		const result = await t.run(async (ctx) => {
@@ -737,7 +738,7 @@ describe("T-012: Posting group integrity", () => {
 describe("T-013: postTransferReversal single-entry", () => {
 	it("creates a REVERSAL entry with swapped accounts and correct linkage", async () => {
 		const t = createHarness(modules);
-		auditLogTest.register(t, "auditLog");
+		registerAuditLogComponent(t, "auditLog");
 		const state = await setupFullSettlementState(t);
 
 		// Create a transfer request linked to the cash received entry

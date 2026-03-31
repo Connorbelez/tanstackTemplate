@@ -3,6 +3,7 @@ import type { Id } from "../../../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../../../_generated/server";
 import { createDispersalEntries } from "../../../dispersal/createDispersalEntries";
 import { applyPayment } from "../../../engine/effects/obligationPayment";
+import { convexModules } from "../../../test/moduleMaps";
 import { getOrCreateCashAccount } from "../accounts";
 import { postObligationAccrued } from "../integrations";
 import { postLenderPayout } from "../mutations";
@@ -10,7 +11,7 @@ import { postCashEntryInternal } from "../postEntry";
 import { reconcileObligationSettlementProjectionInternal } from "../reconciliation";
 import { createHarness, SYSTEM_SOURCE, type TestHarness } from "./testUtils";
 
-const modules = import.meta.glob("/convex/**/*.ts");
+const modules = convexModules;
 
 const NEGATIVE_BALANCE_PATTERN = /negative/i;
 const POSITIVE_SAFE_INTEGER_PATTERN = /positive safe integer/;

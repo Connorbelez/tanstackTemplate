@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Id } from "../../../_generated/dataModel";
+import { convexModules } from "../../../test/moduleMaps";
 import type { PostCashEntryInput } from "../postEntry";
 import {
 	detectMissingSequences,
@@ -15,7 +16,7 @@ import {
 	type TestHarness,
 } from "./testUtils";
 
-const modules = import.meta.glob("/convex/**/*.ts");
+const modules = convexModules;
 
 // ── Typed account reader (avoids union-type issue with ctx.db.get) ───
 

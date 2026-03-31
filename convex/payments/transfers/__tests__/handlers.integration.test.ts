@@ -1,14 +1,15 @@
-import auditLogTest from "convex-audit-log/test";
 import { convexTest } from "convex-test";
 import { describe, expect, it, vi } from "vitest";
 import { api } from "../../../_generated/api";
 import type { Id } from "../../../_generated/dataModel";
 import { FAIRLEND_STAFF_ORG_ID } from "../../../constants";
 import schema from "../../../schema";
+import { convexModules } from "../../../test/moduleMaps";
+import { registerAuditLogComponent } from "../../../test/registerAuditLogComponent";
 import { getOrCreateCashAccount } from "../../cashLedger/accounts";
 import { postObligationAccrued } from "../../cashLedger/integrations";
 
-const modules = import.meta.glob("/convex/**/*.ts");
+const modules = convexModules;
 
 const PAYMENT_HANDLER_IDENTITY = {
 	subject: "test-transfer-handler-user",
@@ -46,7 +47,7 @@ function createHarness() {
 	process.env.DISABLE_GT_HASHCHAIN = "true";
 	process.env.DISABLE_CASH_LEDGER_HASHCHAIN = "true";
 	const t = convexTest(schema, modules);
-	auditLogTest.register(t, "auditLog");
+	registerAuditLogComponent(t, "auditLog");
 	return t;
 }
 

@@ -1,21 +1,23 @@
 import { makeFunctionReference } from "convex/server";
-import auditLogTest from "convex-audit-log/test";
 import { convexTest } from "convex-test";
 import { describe, expect, it, vi } from "vitest";
 import type { Id } from "../../_generated/dataModel";
 import type { QueryCtx } from "../../_generated/server";
 import auditTrailSchema from "../../components/auditTrail/schema";
 import schema from "../../schema";
+import {
+	convexModules,
+	auditTrailModules as sharedAuditTrailModules,
+} from "../../test/moduleMaps";
+import { registerAuditLogComponent } from "../../test/registerAuditLogComponent";
 import { findSettledWithoutDispersals } from "../selfHealing";
 import type { HealingCandidate } from "../selfHealingTypes";
 
 // ---------------------------------------------------------------------------
 // Module globs
 // ---------------------------------------------------------------------------
-const modules = import.meta.glob("/convex/**/*.ts");
-const auditTrailModules = import.meta.glob(
-	"/convex/components/auditTrail/**/*.ts"
-);
+const modules = convexModules;
+const auditTrailModules = sharedAuditTrailModules;
 
 // ---------------------------------------------------------------------------
 // Function references for mutations that use ctx.scheduler
@@ -57,7 +59,7 @@ type TestHarness = ReturnType<typeof convexTest>;
 
 function createHarness(): TestHarness {
 	const t = convexTest(schema, modules);
-	auditLogTest.register(t, "auditLog");
+	registerAuditLogComponent(t, "auditLog");
 	t.registerComponent("auditTrail", auditTrailSchema, auditTrailModules);
 	return t;
 }

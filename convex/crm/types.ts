@@ -59,3 +59,44 @@ export interface LinkedRecord {
 	recordId: string;
 	recordKind: "record" | "native";
 }
+
+// ── Activity Timeline Types ─────────────────────────────────────────
+
+/** A single activity event for the timeline display. */
+export interface ActivityEvent {
+	_id: string;
+	/** The raw audit action string (e.g. "crm.record.created", "crm.link.created") */
+	action: string;
+	/** Actor info */
+	actor: {
+		id: string;
+		name: string;
+		avatarUrl?: string;
+	};
+	/** Human-readable description */
+	description: string;
+	/** Optional before/after diff for field changes */
+	diff?: {
+		before?: Record<string, unknown>;
+		after?: Record<string, unknown>;
+	};
+	/** Event category for icon/color selection */
+	eventType:
+		| "created"
+		| "field_updated"
+		| "linked"
+		| "unlinked"
+		| "status_changed"
+		| "other";
+	/** Optional metadata from the audit event */
+	metadata?: Record<string, unknown>;
+	/** Unix timestamp ms */
+	timestamp: number;
+}
+
+/** Result shape for paginated activity queries. */
+export interface ActivityQueryResult {
+	continueCursor: string | null;
+	events: ActivityEvent[];
+	isDone: boolean;
+}

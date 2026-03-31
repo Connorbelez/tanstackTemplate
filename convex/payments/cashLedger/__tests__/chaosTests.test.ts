@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { QueryCtx } from "../../../_generated/server";
+import { convexModules } from "../../../test/moduleMaps";
 import { findCashAccount, getCashAccountBalance } from "../accounts";
 import {
 	postCashReceiptForObligation,
@@ -22,7 +23,7 @@ import {
 	seedMinimalEntities,
 } from "./testUtils";
 
-const modules = import.meta.glob("/convex/**/*.ts");
+const modules = convexModules;
 
 // ── Chaos Tests ──────────────────────────────────────────────────────
 // Verify the cash ledger behaves correctly under out-of-order, duplicate,

@@ -1,10 +1,11 @@
-import auditLogTest from "convex-audit-log/test";
 import { convexTest } from "convex-test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { api } from "../../../_generated/api";
 import type { Id } from "../../../_generated/dataModel";
 import { FAIRLEND_STAFF_ORG_ID } from "../../../constants";
 import schema from "../../../schema";
+import { convexModules } from "../../../test/moduleMaps";
+import { registerAuditLogComponent } from "../../../test/registerAuditLogComponent";
 import { getCashAccountBalance } from "../accounts";
 import { postObligationWaiver } from "../integrations";
 import { buildIdempotencyKey } from "../types";
@@ -15,12 +16,12 @@ import {
 	seedMinimalEntities,
 } from "./testUtils";
 
-const modules = import.meta.glob("/convex/**/*.ts");
+const modules = convexModules;
 
 /** Admin waiver API + GT transitions use auditLog — register the component for those tests. */
 function createHarnessWithAudit() {
 	const t = convexTest(schema, modules);
-	auditLogTest.register(t, "auditLog");
+	registerAuditLogComponent(t, "auditLog");
 	return t;
 }
 

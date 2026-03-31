@@ -5,6 +5,7 @@ import { api } from "../../../_generated/api";
 import type { Id } from "../../../_generated/dataModel";
 import type { QueryCtx } from "../../../_generated/server";
 import { FAIRLEND_STAFF_ORG_ID } from "../../../constants";
+import { convexModules } from "../../../test/moduleMaps";
 import {
 	createHarness,
 	createTestAccount,
@@ -13,7 +14,7 @@ import {
 import { MINIMUM_PAYOUT_CENTS } from "../config";
 import { getEligibleDispersalEntries } from "../queries";
 
-const modules = import.meta.glob("/convex/**/*.ts");
+const modules = convexModules;
 
 const YYYY_MM_DD_RE = /^\d{4}-\d{2}-\d{2}$/;
 const NOT_FOUND_OR_INACTIVE_RE = /not found or not active/;

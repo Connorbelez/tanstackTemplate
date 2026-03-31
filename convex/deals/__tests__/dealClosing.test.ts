@@ -19,9 +19,10 @@ import {
 	voidReservation,
 } from "../../engine/effects/dealClosing";
 import schema from "../../schema";
+import { convexModules } from "../../test/moduleMaps";
 
 // ── Module glob ─────────────────────────────────────────────────────
-const modules = import.meta.glob("/convex/**/*.ts");
+const modules = convexModules;
 
 // ── Identity fixtures ───────────────────────────────────────────────
 const EFFECT_SOURCE = {

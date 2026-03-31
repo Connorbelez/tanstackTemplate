@@ -2,9 +2,10 @@ import { convexTest } from "convex-test";
 import { describe, expect, it } from "vitest";
 import type { MutationCtx } from "../../_generated/server";
 import schema from "../../schema";
+import { convexModules } from "../../test/moduleMaps";
 import { orgIdForTransferRequest } from "../orgScope";
 
-const modules = import.meta.glob("/convex/**/*.ts");
+const modules = convexModules;
 
 const WORKOS_ORG = "org_workos_test_001";
 

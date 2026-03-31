@@ -1,5 +1,6 @@
 import { ConvexError } from "convex/values";
 import { describe, expect, it } from "vitest";
+import { convexModules } from "../../../test/moduleMaps";
 import { getOrCreateCashAccount } from "../accounts";
 import { postCashEntryInternal } from "../postEntry";
 import {
@@ -15,7 +16,7 @@ import {
 	seedMinimalEntities,
 } from "./testUtils";
 
-const modules = import.meta.glob("/convex/**/*.ts");
+const modules = convexModules;
 
 // ── T-007: Unit tests for postingGroups.ts ──────────────────────────
 

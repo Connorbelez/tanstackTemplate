@@ -6,6 +6,7 @@ import {
 } from "../../../../src/test/auth/helpers";
 import { FAIRLEND_ADMIN } from "../../../../src/test/auth/identities";
 import type { Id } from "../../../_generated/dataModel";
+import { convexModules } from "../../../test/moduleMaps";
 import { getCashAccountBalance } from "../accounts";
 import { postSuspenseResolution } from "../integrations";
 import { buildIdempotencyKey } from "../types";
@@ -19,7 +20,7 @@ import {
 	type TestHarness,
 } from "./testUtils";
 
-const modules = import.meta.glob("/convex/**/*.ts");
+const modules = convexModules;
 
 // ── Module-level regex constants (Biome requires top-level regex) ────
 const INSUFFICIENT_SUSPENSE_RE = /Insufficient suspense balance/;
