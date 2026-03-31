@@ -47,6 +47,11 @@ function sanitizeRecordValues(
 				return trimmed ? [[field.name, trimmed]] : [];
 			}
 
+			// Filter NaN for numeric fields (defensive — backend rejects NaN)
+			if (typeof rawValue === "number" && Number.isNaN(rawValue)) {
+				return [];
+			}
+
 			return [[field.name, rawValue]];
 		})
 	);

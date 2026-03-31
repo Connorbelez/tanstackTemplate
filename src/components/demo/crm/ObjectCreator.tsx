@@ -63,7 +63,10 @@ export function ObjectCreator({ onCreated }: ObjectCreatorProps) {
 					!(field.label.trim() && field.name.trim()) ||
 					((field.fieldType === "select" ||
 						field.fieldType === "multi_select") &&
-						field.options.length === 0)
+						(field.options.length === 0 ||
+							field.options.some(
+								(option) => !(option.label.trim() && option.value.trim())
+							)))
 			)
 		) {
 			toast.error("Complete each field definition before saving the object.");

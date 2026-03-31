@@ -51,7 +51,8 @@ export function FieldInput({ field, value, onChange }: FieldInputProps) {
 				<Input
 					onChange={(event) => {
 						const nextValue = event.target.value;
-						onChange(nextValue === "" ? undefined : Number(nextValue));
+						const parsed = nextValue === "" ? undefined : Number(nextValue);
+						onChange(Number.isNaN(parsed) ? undefined : parsed);
 					}}
 					placeholder={field.description ?? field.label}
 					step="0.01"

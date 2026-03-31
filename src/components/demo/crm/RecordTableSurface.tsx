@@ -83,9 +83,11 @@ export function RecordTableSurface({
 		useCrmDemoMetrics();
 	const startedAtRef = useRef(performance.now());
 
-	if (preview === undefined) {
-		startedAtRef.current = performance.now();
-	}
+	useEffect(() => {
+		if (trackMetrics && tablePreview && fields) {
+			startedAtRef.current = performance.now();
+		}
+	}, [trackMetrics, tablePreview, fields]);
 
 	useEffect(() => {
 		if (!(trackMetrics && tablePreview && fields)) {

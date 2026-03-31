@@ -43,6 +43,7 @@ export function ObjectInventoryCard({
 					const isActive = objectDef._id === selectedObjectId;
 					return (
 						<button
+							aria-pressed={isActive}
 							className={cn(
 								"w-full rounded-2xl border px-4 py-3 text-left transition-colors",
 								isActive
