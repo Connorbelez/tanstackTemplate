@@ -12,10 +12,11 @@
  */
 import { ConvexError } from "convex/values";
 import { beforeEach, describe, expect, it } from "vitest";
-import { api } from "../../_generated/api";
+import { api, components } from "../../_generated/api";
 import {
 	asAdmin,
 	asDifferentOrg,
+	CRM_ADMIN_IDENTITY,
 	type CrmTestHarness,
 	createCrmTestHarness,
 	seedObjectWithFields,
@@ -53,6 +54,17 @@ describe("Record CRUD", () => {
 			});
 			expect(textValues).toHaveLength(1);
 			expect(textValues[0].value).toBe("Hello World");
+
+			// Audit: verify crm.record.created event was logged
+			const auditEntries = await t.query(
+				components.auditLog.lib.queryByResource,
+				{ resourceType: "records", resourceId: recordId }
+			);
+			const createEntry = auditEntries.find(
+				(e: { action: string }) => e.action === "crm.record.created"
+			);
+			expect(createEntry).toBeDefined();
+			expect(createEntry?.actorId).toBe(CRM_ADMIN_IDENTITY.subject);
 		});
 
 		it("creates record with number field and routes to recordValuesNumber", async () => {
@@ -493,6 +505,17 @@ describe("Record CRUD", () => {
 			});
 			expect(numRows).toHaveLength(1);
 			expect(numRows[0].value).toBe(10);
+
+			// Audit: verify crm.record.updated event was logged
+			const auditEntries = await t.query(
+				components.auditLog.lib.queryByResource,
+				{ resourceType: "records", resourceId: recordId }
+			);
+			const updateEntry = auditEntries.find(
+				(e: { action: string }) => e.action === "crm.record.updated"
+			);
+			expect(updateEntry).toBeDefined();
+			expect(updateEntry?.actorId).toBe(CRM_ADMIN_IDENTITY.subject);
 		});
 
 		it("updates labelValue when first text field changes", async () => {
@@ -558,6 +581,18 @@ describe("Record CRUD", () => {
 			});
 			expect(textValues).toHaveLength(1);
 			expect(textValues[0].value).toBe("To Delete");
+
+			// Audit: verify crm.record.deleted event was logged
+			const auditEntries = await t.query(
+				components.auditLog.lib.queryByResource,
+				{ resourceType: "records", resourceId: recordId }
+			);
+			const deleteEntry = auditEntries.find(
+				(e: { action: string }) => e.action === "crm.record.deleted"
+			);
+			expect(deleteEntry).toBeDefined();
+			expect(deleteEntry?.actorId).toBe(CRM_ADMIN_IDENTITY.subject);
+			expect(deleteEntry?.severity).toBe("warning");
 		});
 
 		it("deleted record not returned by queryRecords", async () => {
