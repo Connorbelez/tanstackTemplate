@@ -1,5 +1,5 @@
 import { ConvexError, v } from "convex/values";
-import type { Doc, Id } from "../_generated/dataModel";
+import type { Doc } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 import { auditLog } from "../auditLog";
 import { crmMutation } from "../fluent";
@@ -27,18 +27,30 @@ async function getNativeEntity(
 	entityId: string
 ): Promise<{ orgId?: string } | null> {
 	switch (tableName) {
-		case "mortgages":
-			return ctx.db.get(entityId as Id<"mortgages">);
-		case "borrowers":
-			return ctx.db.get(entityId as Id<"borrowers">);
-		case "lenders":
-			return ctx.db.get(entityId as Id<"lenders">);
-		case "brokers":
-			return ctx.db.get(entityId as Id<"brokers">);
-		case "deals":
-			return ctx.db.get(entityId as Id<"deals">);
-		case "obligations":
-			return ctx.db.get(entityId as Id<"obligations">);
+		case "mortgages": {
+			const id = ctx.db.normalizeId("mortgages", entityId);
+			return id ? ctx.db.get(id) : null;
+		}
+		case "borrowers": {
+			const id = ctx.db.normalizeId("borrowers", entityId);
+			return id ? ctx.db.get(id) : null;
+		}
+		case "lenders": {
+			const id = ctx.db.normalizeId("lenders", entityId);
+			return id ? ctx.db.get(id) : null;
+		}
+		case "brokers": {
+			const id = ctx.db.normalizeId("brokers", entityId);
+			return id ? ctx.db.get(id) : null;
+		}
+		case "deals": {
+			const id = ctx.db.normalizeId("deals", entityId);
+			return id ? ctx.db.get(id) : null;
+		}
+		case "obligations": {
+			const id = ctx.db.normalizeId("obligations", entityId);
+			return id ? ctx.db.get(id) : null;
+		}
 		default: {
 			const _exhaustive: never = tableName;
 			throw new ConvexError(`Unknown native table: ${String(_exhaustive)}`);
@@ -64,7 +76,11 @@ async function validateEntityExists(
 	objectDef: Doc<"objectDefs">
 ): Promise<void> {
 	if (kind === "record") {
-		const record = await ctx.db.get(entityId as Id<"records">);
+		const recordId = ctx.db.normalizeId("records", entityId);
+		if (!recordId) {
+			throw new ConvexError("Record not found or access denied");
+		}
+		const record = await ctx.db.get(recordId);
 		if (!record || record.isDeleted || record.orgId !== orgId) {
 			console.error(
 				`[validateEntityExists] Record ${entityId} not found, deleted, or org mismatch (org: ${orgId})`
@@ -164,7 +180,7 @@ export const createLink = crmMutation
 			targetObjectDef
 		);
 
-		// 6. Load existing links for source and target (used for duplicate + cardinality checks)
+		// 6. Load existing active links of this type for source and target
 		const existingSourceLinks = await ctx.db
 			.query("recordLinks")
 			.withIndex("by_org_source", (q) =>
@@ -173,6 +189,8 @@ export const createLink = crmMutation
 					.eq("sourceKind", args.sourceKind)
 					.eq("sourceId", args.sourceId)
 			)
+			.filter((q) => q.eq(q.field("isDeleted"), false))
+			.filter((q) => q.eq(q.field("linkTypeDefId"), args.linkTypeDefId))
 			.collect();
 
 		const existingTargetLinks = await ctx.db
@@ -183,14 +201,14 @@ export const createLink = crmMutation
 					.eq("targetKind", args.targetKind)
 					.eq("targetId", args.targetId)
 			)
+			.filter((q) => q.eq(q.field("isDeleted"), false))
+			.filter((q) => q.eq(q.field("linkTypeDefId"), args.linkTypeDefId))
 			.collect();
 
 		// 7. Duplicate detection: check both directions
+		// Forward: A→B already exists (queries are pre-filtered by linkTypeDefId + isDeleted)
 		const forwardDuplicate = existingSourceLinks.find(
-			(link) =>
-				link.targetId === args.targetId &&
-				link.linkTypeDefId === args.linkTypeDefId &&
-				!link.isDeleted
+			(link) => link.targetId === args.targetId
 		);
 		if (forwardDuplicate) {
 			throw new ConvexError(
@@ -198,15 +216,22 @@ export const createLink = crmMutation
 			);
 		}
 
-		const reverseDuplicate = existingTargetLinks.find(
-			(link) =>
-				link.sourceId === args.sourceId &&
-				link.linkTypeDefId === args.linkTypeDefId &&
-				!link.isDeleted
-		);
-		if (reverseDuplicate) {
+		// Reverse: B→A already exists (source=target, target=source)
+		const reverseLink = await ctx.db
+			.query("recordLinks")
+			.withIndex("by_org_source", (q) =>
+				q
+					.eq("orgId", orgId)
+					.eq("sourceKind", args.targetKind)
+					.eq("sourceId", args.targetId)
+			)
+			.filter((q) => q.eq(q.field("targetId"), args.sourceId))
+			.filter((q) => q.eq(q.field("linkTypeDefId"), args.linkTypeDefId))
+			.filter((q) => q.eq(q.field("isDeleted"), false))
+			.first();
+		if (reverseLink) {
 			throw new ConvexError(
-				"A link of this type already exists between these entities"
+				"A link of this type already exists between these entities (reverse direction)"
 			);
 		}
 
@@ -218,34 +243,62 @@ export const createLink = crmMutation
 
 		if (cardinality === "one_to_one") {
 			// Source must not have any active outbound link of this type
-			const sourceHasLink = existingSourceLinks.some(
-				(link) => link.linkTypeDefId === args.linkTypeDefId && !link.isDeleted
-			);
-			if (sourceHasLink) {
+			if (existingSourceLinks.length > 0) {
 				throw new ConvexError(
 					"Cardinality violation: source already has a link of this type (one-to-one)"
 				);
 			}
 
 			// Target must not have any active inbound link of this type
-			const targetHasLink = existingTargetLinks.some(
-				(link) => link.linkTypeDefId === args.linkTypeDefId && !link.isDeleted
-			);
-			if (targetHasLink) {
+			if (existingTargetLinks.length > 0) {
 				throw new ConvexError(
 					"Cardinality violation: target already has a link of this type (one-to-one)"
 				);
 			}
-		} else if (cardinality === "one_to_many") {
-			// Target (the "one" side) must not already have an inbound link of this type
-			const targetHasLink = existingTargetLinks.some(
-				(link) => link.linkTypeDefId === args.linkTypeDefId && !link.isDeleted
-			);
-			if (targetHasLink) {
+
+			// Source must not already appear as a target for this link type
+			const sourceAsTarget = await ctx.db
+				.query("recordLinks")
+				.withIndex("by_org_target", (q) =>
+					q
+						.eq("orgId", orgId)
+						.eq("targetKind", args.sourceKind)
+						.eq("targetId", args.sourceId)
+				)
+				.filter((q) => q.eq(q.field("linkTypeDefId"), args.linkTypeDefId))
+				.filter((q) => q.eq(q.field("isDeleted"), false))
+				.first();
+			if (sourceAsTarget) {
 				throw new ConvexError(
-					"Cardinality violation: target already has an inbound link of this type (one-to-many)"
+					"Cardinality violation: source already participates as a target in a link of this type (one-to-one)"
 				);
 			}
+
+			// Target must not already appear as a source for this link type
+			const targetAsSource = await ctx.db
+				.query("recordLinks")
+				.withIndex("by_org_source", (q) =>
+					q
+						.eq("orgId", orgId)
+						.eq("sourceKind", args.targetKind)
+						.eq("sourceId", args.targetId)
+				)
+				.filter((q) => q.eq(q.field("linkTypeDefId"), args.linkTypeDefId))
+				.filter((q) => q.eq(q.field("isDeleted"), false))
+				.first();
+			if (targetAsSource) {
+				throw new ConvexError(
+					"Cardinality violation: target already participates as a source in a link of this type (one-to-one)"
+				);
+			}
+		} else if (
+			cardinality === "one_to_many" &&
+			existingTargetLinks.length > 0
+		) {
+			// Target (the "one" side) must not already have an inbound link of this type
+			throw new ConvexError(
+				"Cardinality violation: target already has an inbound link of this type (one-to-many)"
+			);
 		}
 		// many_to_many: no cardinality check needed
 
