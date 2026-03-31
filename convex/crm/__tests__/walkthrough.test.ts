@@ -6,11 +6,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { api } from "../../_generated/api";
 import type { Id } from "../../_generated/dataModel";
-import {
-	asAdmin,
-	type CrmTestHarness,
-	createCrmTestHarness,
-} from "./helpers.test";
+import { asAdmin, type CrmTestHarness, createCrmTestHarness } from "./helpers";
 
 const SEARCH_UNSUPPORTED_RE =
 	/search (index|indexes|indices).*(not supported|unsupported)/i;

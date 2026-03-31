@@ -18,7 +18,7 @@ import {
 	createCrmTestHarness,
 	seedObjectWithFields,
 	seedRecord,
-} from "./helpers.test";
+} from "./helpers";
 
 // ── Helper: build a minimal fieldDef-like object for resolveColumnPath ──
 

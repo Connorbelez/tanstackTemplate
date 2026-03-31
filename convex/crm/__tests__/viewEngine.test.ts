@@ -8,7 +8,7 @@ import {
 	createCrmTestHarness,
 	seedObjectWithFields,
 	seedRecord,
-} from "./helpers.test";
+} from "./helpers";
 
 // ── Shared fixture builder ───────────────────────────────────────────
 

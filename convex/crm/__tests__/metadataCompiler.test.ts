@@ -17,7 +17,7 @@ import {
 	type CrmTestHarness,
 	createCrmTestHarness,
 	seedObjectWithFields,
-} from "./helpers.test";
+} from "./helpers";
 
 // ═══════════════════════════════════════════════════════════════════════
 // PURE FUNCTION TESTS
