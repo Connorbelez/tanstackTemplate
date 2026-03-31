@@ -640,7 +640,7 @@ describe("View Engine", () => {
 			expect(rows[0].fields.company_name).toBe("Small Deal");
 		});
 
-		it("gte/lte filter: inclusive numeric range", async () => {
+		it("gte filter: inclusive numeric range", async () => {
 			const fixture = await seedLeadFixture(t);
 
 			await seedRecord(t, fixture.objectDefId, {
@@ -881,13 +881,13 @@ describe("View Engine", () => {
 			);
 			expect(movedRecord?.fields.status).toBe("contacted");
 
-			// Audit: verify crm.record.updated event was emitted
+			// Audit: verify crm.record.fieldUpdated event was emitted
 			const auditEntries = await t.query(
 				components.auditLog.lib.queryByResource,
 				{ resourceType: "records", resourceId: recordId }
 			);
 			const updateEntry = auditEntries.find(
-				(e: { action: string }) => e.action === "crm.record.updated"
+				(e: { action: string }) => e.action === "crm.record.fieldUpdated"
 			);
 			expect(updateEntry).toBeDefined();
 		});

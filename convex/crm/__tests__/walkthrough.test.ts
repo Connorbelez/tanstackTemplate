@@ -210,14 +210,14 @@ describe("EAV-CRM Walk-Through", () => {
 		} catch (error) {
 			// Only treat explicit "search not supported" errors as a reason to skip.
 			if (error instanceof Error && SEARCH_UNSUPPORTED_RE.test(error.message)) {
-				// convex-test may not support search indexes — skip gracefully
+				// convex-test may not support search indexes — warn and continue
 				console.warn(
 					"Search index not supported in convex-test — skipping search assertion"
 				);
-				return;
+			} else {
+				// Unexpected error — surface it instead of silently skipping.
+				throw error;
 			}
-			// Unexpected error — surface it instead of silently skipping.
-			throw error;
 		}
 
 		// 10. Performance check (generous margins for convex-test in-process)
