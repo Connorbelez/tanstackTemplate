@@ -378,6 +378,75 @@ describe("duplicate detection", () => {
 		).rejects.toThrow("already exists");
 	});
 
+	it("rejects reverse-direction duplicate (B→A after A→B)", async () => {
+		const t = createTest();
+		const asUser = t.withIdentity(USER_A);
+
+		// Self-referential link type so both A→B and B→A are structurally valid
+		const fixture = await t.run(async (ctx) => {
+			const now = Date.now();
+			const objectDefId = await ctx.db.insert("objectDefs", {
+				orgId: ORG_A,
+				name: "Person",
+				singularLabel: "Person",
+				pluralLabel: "People",
+				icon: "user",
+				isSystem: false,
+				isActive: true,
+				displayOrder: 0,
+				createdAt: now,
+				updatedAt: now,
+				createdBy: "test",
+			});
+			const linkTypeDefId = await ctx.db.insert("linkTypeDefs", {
+				orgId: ORG_A,
+				name: "Knows",
+				sourceObjectDefId: objectDefId,
+				targetObjectDefId: objectDefId,
+				cardinality: "many_to_many",
+				isActive: true,
+				createdAt: now,
+			});
+			const recordA = await ctx.db.insert("records", {
+				orgId: ORG_A,
+				objectDefId,
+				isDeleted: false,
+				createdAt: now,
+				updatedAt: now,
+				createdBy: "test",
+			});
+			const recordB = await ctx.db.insert("records", {
+				orgId: ORG_A,
+				objectDefId,
+				isDeleted: false,
+				createdAt: now,
+				updatedAt: now,
+				createdBy: "test",
+			});
+			return { linkTypeDefId, recordA, recordB };
+		});
+
+		// Create forward link: A → B
+		await asUser.mutation(api.crm.recordLinks.createLink, {
+			linkTypeDefId: fixture.linkTypeDefId,
+			sourceKind: "record",
+			sourceId: fixture.recordA as string,
+			targetKind: "record",
+			targetId: fixture.recordB as string,
+		});
+
+		// Attempt reverse link: B → A — should be rejected as duplicate
+		await expect(
+			asUser.mutation(api.crm.recordLinks.createLink, {
+				linkTypeDefId: fixture.linkTypeDefId,
+				sourceKind: "record",
+				sourceId: fixture.recordB as string,
+				targetKind: "record",
+				targetId: fixture.recordA as string,
+			})
+		).rejects.toThrow("already exists");
+	});
+
 	it("allows same entities with different linkTypeDefId", async () => {
 		const t = createTest();
 		const asUser = t.withIdentity(USER_A);
