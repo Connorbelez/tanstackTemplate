@@ -89,6 +89,7 @@ import { Route as DemoRbacBrokerRouteRouteImport } from './routes/demo/rbac/brok
 import { Route as DemoRbacBorrowerRouteRouteImport } from './routes/demo/rbac/borrower/route'
 import { Route as DemoRbacAdminRouteRouteImport } from './routes/demo/rbac/admin/route'
 import { Route as DemoDocumentEngineDesignerTemplateIdRouteImport } from './routes/demo/document-engine/designer.$templateId'
+import { Route as DemoCrmObjectDefIdRecordIdRouteImport } from './routes/demo/crm/$objectDefId.$recordId'
 import { Route as DemoRbacAdminUnderwritingRouteRouteImport } from './routes/demo/rbac/admin/underwriting/route'
 
 const UnauthorizedRoute = UnauthorizedRouteImport.update({
@@ -513,6 +514,12 @@ const DemoDocumentEngineDesignerTemplateIdRoute =
     path: '/designer/$templateId',
     getParentRoute: () => DemoDocumentEngineRouteRoute,
   } as any)
+const DemoCrmObjectDefIdRecordIdRoute =
+  DemoCrmObjectDefIdRecordIdRouteImport.update({
+    id: '/$objectDefId/$recordId',
+    path: '/$objectDefId/$recordId',
+    getParentRoute: () => DemoCrmRouteRoute,
+  } as any)
 const DemoRbacAdminUnderwritingRouteRoute =
   DemoRbacAdminUnderwritingRouteRouteImport.update({
     id: '/underwriting',
@@ -601,6 +608,7 @@ export interface FileRoutesByFullPath {
   '/demo/rbac-auth/': typeof DemoRbacAuthIndexRoute
   '/demo/rbac/': typeof DemoRbacIndexRoute
   '/demo/rbac/admin/underwriting': typeof DemoRbacAdminUnderwritingRouteRoute
+  '/demo/crm/$objectDefId/$recordId': typeof DemoCrmObjectDefIdRecordIdRoute
   '/demo/document-engine/designer/$templateId': typeof DemoDocumentEngineDesignerTemplateIdRoute
 }
 export interface FileRoutesByTo {
@@ -678,6 +686,7 @@ export interface FileRoutesByTo {
   '/demo/rbac-auth': typeof DemoRbacAuthIndexRoute
   '/demo/rbac': typeof DemoRbacIndexRoute
   '/demo/rbac/admin/underwriting': typeof DemoRbacAdminUnderwritingRouteRoute
+  '/demo/crm/$objectDefId/$recordId': typeof DemoCrmObjectDefIdRecordIdRoute
   '/demo/document-engine/designer/$templateId': typeof DemoDocumentEngineDesignerTemplateIdRoute
 }
 export interface FileRoutesById {
@@ -762,6 +771,7 @@ export interface FileRoutesById {
   '/demo/rbac-auth/': typeof DemoRbacAuthIndexRoute
   '/demo/rbac/': typeof DemoRbacIndexRoute
   '/demo/rbac/admin/underwriting': typeof DemoRbacAdminUnderwritingRouteRoute
+  '/demo/crm/$objectDefId/$recordId': typeof DemoCrmObjectDefIdRecordIdRoute
   '/demo/document-engine/designer/$templateId': typeof DemoDocumentEngineDesignerTemplateIdRoute
 }
 export interface FileRouteTypes {
@@ -847,6 +857,7 @@ export interface FileRouteTypes {
     | '/demo/rbac-auth/'
     | '/demo/rbac/'
     | '/demo/rbac/admin/underwriting'
+    | '/demo/crm/$objectDefId/$recordId'
     | '/demo/document-engine/designer/$templateId'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -924,6 +935,7 @@ export interface FileRouteTypes {
     | '/demo/rbac-auth'
     | '/demo/rbac'
     | '/demo/rbac/admin/underwriting'
+    | '/demo/crm/$objectDefId/$recordId'
     | '/demo/document-engine/designer/$templateId'
   id:
     | '__root__'
@@ -1007,6 +1019,7 @@ export interface FileRouteTypes {
     | '/demo/rbac-auth/'
     | '/demo/rbac/'
     | '/demo/rbac/admin/underwriting'
+    | '/demo/crm/$objectDefId/$recordId'
     | '/demo/document-engine/designer/$templateId'
   fileRoutesById: FileRoutesById
 }
@@ -1623,6 +1636,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DemoDocumentEngineDesignerTemplateIdRouteImport
       parentRoute: typeof DemoDocumentEngineRouteRoute
     }
+    '/demo/crm/$objectDefId/$recordId': {
+      id: '/demo/crm/$objectDefId/$recordId'
+      path: '/$objectDefId/$recordId'
+      fullPath: '/demo/crm/$objectDefId/$recordId'
+      preLoaderRoute: typeof DemoCrmObjectDefIdRecordIdRouteImport
+      parentRoute: typeof DemoCrmRouteRoute
+    }
     '/demo/rbac/admin/underwriting': {
       id: '/demo/rbac/admin/underwriting'
       path: '/underwriting'
@@ -1675,12 +1695,14 @@ interface DemoCrmRouteRouteChildren {
   DemoCrmLinksRoute: typeof DemoCrmLinksRoute
   DemoCrmSystemRoute: typeof DemoCrmSystemRoute
   DemoCrmIndexRoute: typeof DemoCrmIndexRoute
+  DemoCrmObjectDefIdRecordIdRoute: typeof DemoCrmObjectDefIdRecordIdRoute
 }
 
 const DemoCrmRouteRouteChildren: DemoCrmRouteRouteChildren = {
   DemoCrmLinksRoute: DemoCrmLinksRoute,
   DemoCrmSystemRoute: DemoCrmSystemRoute,
   DemoCrmIndexRoute: DemoCrmIndexRoute,
+  DemoCrmObjectDefIdRecordIdRoute: DemoCrmObjectDefIdRecordIdRoute,
 }
 
 const DemoCrmRouteRouteWithChildren = DemoCrmRouteRoute._addFileChildren(
@@ -1838,3 +1860,13 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}

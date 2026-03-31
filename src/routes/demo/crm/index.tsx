@@ -11,9 +11,8 @@ import {
 } from "#/components/demo/crm/functionRefs";
 import { ObjectCreator } from "#/components/demo/crm/ObjectCreator";
 import { ObjectInventoryCard } from "#/components/demo/crm/ObjectInventoryCard";
-import { RecordDetailCard } from "#/components/demo/crm/RecordDetailCard";
+import { useRecordSidebar } from "#/components/demo/crm/RecordSidebarProvider";
 import { RecordTableSurface } from "#/components/demo/crm/RecordTableSurface";
-import type { CrmDemoRecordKind } from "#/components/demo/crm/types";
 import { extractCrmErrorMessage } from "#/components/demo/crm/utils";
 import { Badge } from "#/components/ui/badge";
 import { Button } from "#/components/ui/button";
@@ -40,10 +39,7 @@ function CrmCustomObjectsPage() {
 	const [refreshKey, setRefreshKey] = useState(0);
 	const [isSeeding, setIsSeeding] = useState(false);
 	const [isResetting, setIsResetting] = useState(false);
-	const [selectedRecord, setSelectedRecord] = useState<{
-		recordId: string;
-		recordKind: CrmDemoRecordKind;
-	}>();
+	const { currentRecord, openRecord } = useRecordSidebar();
 
 	const customObjects = useMemo(
 		() => (objects ?? []).filter((objectDef) => !objectDef.isSystem),
@@ -73,7 +69,6 @@ function CrmCustomObjectsPage() {
 		try {
 			const result = await seedLeadPipeline();
 			setSelectedObjectId(result.demoObjectId);
-			setSelectedRecord(undefined);
 			setRefreshKey((current) => current + 1);
 			toast.success(
 				result.seeded
@@ -92,7 +87,6 @@ function CrmCustomObjectsPage() {
 		try {
 			const result = await resetCrmDemo({});
 			setSelectedObjectId(undefined);
-			setSelectedRecord(undefined);
 			setRefreshKey((current) => current + 1);
 			toast.success(
 				`Removed ${result.deletedObjects} demo objects and ${result.deletedRecords} records.`
@@ -122,7 +116,6 @@ function CrmCustomObjectsPage() {
 				<ObjectCreator
 					onCreated={({ objectDefId }) => {
 						setSelectedObjectId(objectDefId);
-						setSelectedRecord(undefined);
 						setRefreshKey((current) => current + 1);
 					}}
 				/>
@@ -134,8 +127,12 @@ function CrmCustomObjectsPage() {
 					metricNote="Custom-object preview uses the default table view and estimates EAV reads from active typed value tables."
 					metricSource="eav"
 					objectDef={selectedObject}
-					onSelectRecord={setSelectedRecord}
-					selectedRecordId={selectedRecord?.recordId}
+					onSelectRecord={openRecord}
+					selectedRecordId={
+						currentRecord && currentRecord.objectDefId === selectedObject?._id
+							? currentRecord.recordId
+							: undefined
+					}
 				/>
 			</div>
 
@@ -146,7 +143,6 @@ function CrmCustomObjectsPage() {
 					objects={customObjects}
 					onSelect={(id) => {
 						setSelectedObjectId(id);
-						setSelectedRecord(undefined);
 					}}
 					selectedObjectId={selectedObjectId}
 					title="Object inventory"
@@ -157,15 +153,8 @@ function CrmCustomObjectsPage() {
 					objectDefId={selectedObjectId}
 					objectLabel={selectedObject?.singularLabel}
 					onRecordCreated={() => {
-						setSelectedRecord(undefined);
 						setRefreshKey((current) => current + 1);
 					}}
-				/>
-
-				<RecordDetailCard
-					objectDef={selectedObject}
-					recordId={selectedRecord?.recordId}
-					recordKind={selectedRecord?.recordKind}
 				/>
 			</div>
 		</div>
