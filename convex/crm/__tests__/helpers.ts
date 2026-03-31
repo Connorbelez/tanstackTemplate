@@ -4,7 +4,7 @@
 import auditLogTest from "convex-audit-log/test";
 import { convexTest } from "convex-test";
 import { api } from "../../_generated/api";
-import type { Id } from "../../_generated/dataModel";
+import type { Doc, Id } from "../../_generated/dataModel";
 import schema from "../../schema";
 
 const modules = import.meta.glob("/convex/**/*.ts");
@@ -78,21 +78,7 @@ export function asDifferentOrg(t: CrmTestHarness) {
 // ── Seed Config Types ───────────────────────────────────────────────
 
 export interface FieldSeedConfig {
-	fieldType:
-		| "text"
-		| "number"
-		| "boolean"
-		| "date"
-		| "datetime"
-		| "select"
-		| "multi_select"
-		| "email"
-		| "phone"
-		| "url"
-		| "currency"
-		| "percentage"
-		| "rich_text"
-		| "user_ref";
+	fieldType: Doc<"fieldDefs">["fieldType"];
 	isRequired?: boolean;
 	name: string;
 	options?: Array<{
