@@ -675,7 +675,7 @@ export const getRecord = crmQuery
 					}
 
 					return {
-						linkId: link._id as string,
+						linkId: link._id,
 						linkTypeDefId: link.linkTypeDefId,
 						recordId: peerRecordId,
 						recordKind: peerKind,

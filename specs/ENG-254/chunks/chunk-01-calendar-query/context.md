@@ -32,6 +32,7 @@ queryCalendarRecords({
         .lte("value", rangeEnd)
      ).collect()
    ```
+4a. Limit results to `FILTERED_QUERY_CAP + 1` records. If `CAP + 1` results are returned, set `truncated = true` and drop the last result so only `FILTERED_QUERY_CAP` records are processed. This matches the truncation pattern used in `recordQueries.ts`.
 5. Collect unique recordIds from results
 6. For each record: fan-out assembly (reuse pattern from `recordQueries.ts`)
 7. Load view-level filters from viewFilters table and apply as second pass
@@ -46,6 +47,8 @@ type CalendarData = {
     records: UnifiedRecord[];
   }>;
   range: { start: number; end: number };
+  skippedFilters: number;    // Count of filters that couldn't be applied
+  truncated: boolean;         // Whether results hit FILTERED_QUERY_CAP
 };
 ```
 

@@ -53,7 +53,7 @@ export interface GetRecordResult {
 /** A linked record reference (lightweight, for display in relation sections). */
 export interface LinkedRecord {
 	labelValue?: string;
-	linkId: string;
+	linkId: Id<"recordLinks">;
 	linkTypeDefId: Id<"linkTypeDefs">;
 	objectDefId: Id<"objectDefs">;
 	recordId: string;

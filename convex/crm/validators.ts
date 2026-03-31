@@ -35,6 +35,12 @@ export const viewTypeValidator = v.union(
 	v.literal("calendar")
 );
 
+// ── Entity Kinds ──
+export const entityKindValidator = v.union(
+	v.literal("record"),
+	v.literal("native")
+);
+
 // ── Link Cardinalities (3 types) ──
 export const cardinalityValidator = v.union(
 	v.literal("one_to_one"),
