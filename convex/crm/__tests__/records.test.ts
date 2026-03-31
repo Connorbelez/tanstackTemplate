@@ -12,7 +12,7 @@
  */
 import { ConvexError } from "convex/values";
 import { beforeEach, describe, expect, it } from "vitest";
-import { api, components } from "../../_generated/api";
+import { api, components, internal } from "../../_generated/api";
 import {
 	asAdmin,
 	asDifferentOrg,
@@ -630,5 +630,113 @@ describe("Record CRUD", () => {
 			);
 			expect(afterResult.records).toHaveLength(0);
 		});
+	});
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// getRecordReference
+// ═══════════════════════════════════════════════════════════════════════
+
+describe("getRecordReference", () => {
+	let t: CrmTestHarness;
+
+	beforeEach(() => {
+		t = createCrmTestHarness();
+	});
+
+	it("returns EAV record with record kind and empty links", async () => {
+		const fixture = await seedObjectWithFields(t, {
+			name: "ref_test",
+			fields: [{ name: "title", fieldType: "text" }],
+		});
+
+		const recordId = await seedRecord(t, fixture.objectDefId, {
+			title: "Reference Test Record",
+		});
+
+		const result = await asAdmin(t).query(
+			api.crm.recordQueries.getRecordReference,
+			{
+				objectDefId: fixture.objectDefId,
+				recordId: recordId as string,
+				recordKind: "record",
+			}
+		);
+
+		expect(result.record._kind).toBe("record");
+		expect(result.record.objectDefId).toBe(fixture.objectDefId);
+		expect(result.record.fields.title).toBe("Reference Test Record");
+		expect(result.links).toHaveProperty("inbound");
+		expect(result.links).toHaveProperty("outbound");
+	});
+
+	it("returns native record with native kind", async () => {
+		// Bootstrap system objects including borrower
+		await t.mutation(
+			internal.crm.systemAdapters.bootstrap.bootstrapSystemObjects,
+			{ orgId: CRM_ADMIN_IDENTITY.org_id }
+		);
+
+		const borrowerObjDef = await t.run(async (ctx) => {
+			return ctx.db
+				.query("objectDefs")
+				.withIndex("by_org_name", (q) =>
+					q.eq("orgId", CRM_ADMIN_IDENTITY.org_id).eq("name", "borrower")
+				)
+				.first();
+		});
+		expect(borrowerObjDef).not.toBeNull();
+		if (!borrowerObjDef) {
+			throw new Error("Borrower system object not found");
+		}
+
+		const result = await asAdmin(t).query(
+			api.crm.recordQueries.getRecordReference,
+			{
+				objectDefId: borrowerObjDef._id,
+				recordId: (borrowerObjDef._id as string).replace("borrower:", ""),
+				recordKind: "native",
+			}
+		);
+
+		expect(result.record._kind).toBe("native");
+		expect(result.record.objectDefId).toBe(borrowerObjDef._id);
+		expect(result.links).toHaveProperty("inbound");
+		expect(result.links).toHaveProperty("outbound");
+	});
+
+	it("throws for record in wrong org", async () => {
+		const fixture = await seedObjectWithFields(t, {
+			name: "org_record",
+			fields: [{ name: "name", fieldType: "text" }],
+		});
+
+		const recordId = await seedRecord(t, fixture.objectDefId, {
+			name: "Private Record",
+		});
+
+		await expect(
+			asDifferentOrg(t).query(api.crm.recordQueries.getRecordReference, {
+				objectDefId: fixture.objectDefId,
+				recordId: recordId as string,
+				recordKind: "record",
+			})
+		).rejects.toThrow();
+	});
+
+	it("throws ConvexError for unknown recordKind", async () => {
+		const fixture = await seedObjectWithFields(t, {
+			name: "kind_test",
+			fields: [{ name: "x", fieldType: "text" }],
+		});
+
+		// @ts-expect-error — invalid recordKind for type testing
+		await expect(
+			asAdmin(t).query(api.crm.recordQueries.getRecordReference, {
+				objectDefId: fixture.objectDefId,
+				recordId: "any-id",
+				recordKind: "unknown",
+			})
+		).rejects.toThrow();
 	});
 });
