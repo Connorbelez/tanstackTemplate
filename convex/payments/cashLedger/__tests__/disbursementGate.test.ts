@@ -2,6 +2,7 @@ import { ConvexError } from "convex/values";
 import { describe, expect, it } from "vitest";
 import type { Id } from "../../../_generated/dataModel";
 import type { MutationCtx } from "../../../_generated/server";
+import { convexModules } from "../../../test/moduleMaps";
 import {
 	assertDisbursementAllowed,
 	validateDisbursementAmount,
@@ -15,7 +16,7 @@ import {
 	seedMinimalEntities,
 } from "./testUtils";
 
-const modules = import.meta.glob("/convex/**/*.ts");
+const modules = convexModules;
 
 interface PostLenderPayoutHandler {
 	_handler: (

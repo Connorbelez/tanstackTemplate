@@ -3,6 +3,7 @@ import type { Id } from "../../../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../../../_generated/server";
 import { calculateProRataShares } from "../../../accrual/interestMath";
 import { createDispersalEntries } from "../../../dispersal/createDispersalEntries";
+import { convexModules } from "../../../test/moduleMaps";
 import { findCashAccount, getCashAccountBalance } from "../accounts";
 import {
 	postCashCorrectionForEntry,
@@ -33,7 +34,7 @@ import {
 	seedMinimalEntities,
 } from "./testUtils";
 
-const modules = import.meta.glob("/convex/**/*.ts");
+const modules = convexModules;
 
 // ── Handler type casts ──────────────────────────────────────────────
 // Internal mutations cannot be called directly in convex-test; we access

@@ -13,9 +13,10 @@ import { describe, expect, it } from "vitest";
 import { internal } from "../../_generated/api";
 import type { Doc, Id } from "../../_generated/dataModel";
 import schema from "../../schema";
+import { convexModules } from "../../test/moduleMaps";
 import { buildDisbursementIdempotencyKey } from "../disbursementBridge";
 
-const modules = import.meta.glob("/convex/**/*.ts");
+const modules = convexModules;
 
 const DISBURSEMENT_PREFIX_RE = /^disbursement:/;
 

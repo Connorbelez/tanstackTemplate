@@ -1,24 +1,26 @@
 import { ConvexError } from "convex/values";
-import auditLogTest from "convex-audit-log/test";
 import { convexTest } from "convex-test";
 import { describe, expect, it } from "vitest";
 import { internal } from "../../../_generated/api";
 import auditTrailSchema from "../../../components/auditTrail/schema";
 import schema from "../../../schema";
 import {
+	convexModules,
+	auditTrailModules as sharedAuditTrailModules,
+} from "../../../test/moduleMaps";
+import { registerAuditLogComponent } from "../../../test/registerAuditLogComponent";
+import {
 	SYSTEM_SOURCE,
 	seedMinimalEntities,
 } from "../../cashLedger/__tests__/testUtils";
 
-const modules = import.meta.glob("/convex/**/*.ts");
-const auditTrailModules = import.meta.glob(
-	"/convex/components/auditTrail/**/*.ts"
-);
+const modules = convexModules;
+const auditTrailModules = sharedAuditTrailModules;
 
 function createTestHarness() {
 	process.env.DISABLE_CASH_LEDGER_HASHCHAIN = "true";
 	const t = convexTest(schema, modules);
-	auditLogTest.register(t, "auditLog");
+	registerAuditLogComponent(t, "auditLog");
 	t.registerComponent("auditTrail", auditTrailSchema, auditTrailModules);
 	return t;
 }

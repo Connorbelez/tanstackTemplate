@@ -1,4 +1,3 @@
-import auditLogTest from "convex-audit-log/test";
 import { convexTest } from "convex-test";
 import { describe, expect, it, vi } from "vitest";
 import workflowSchema from "../../../../node_modules/@convex-dev/workflow/dist/component/schema.js";
@@ -10,6 +9,13 @@ import { emitPaymentReversed } from "../../../engine/effects/collectionAttempt";
 import type { CommandSource } from "../../../engine/types";
 import schema from "../../../schema";
 import {
+	convexModules,
+	auditTrailModules as sharedAuditTrailModules,
+	workflowModules as sharedWorkflowModules,
+	workpoolModules as sharedWorkpoolModules,
+} from "../../../test/moduleMaps";
+import { registerAuditLogComponent } from "../../../test/registerAuditLogComponent";
+import {
 	postCashReceiptForObligation,
 	postObligationAccrued,
 } from "../integrations";
@@ -17,16 +23,10 @@ import { SYSTEM_SOURCE, seedMinimalEntities } from "./testUtils";
 
 // ── Module globs ────────────────────────────────────────────────────
 
-const modules = import.meta.glob("/convex/**/*.ts");
-const auditTrailModules = import.meta.glob(
-	"/convex/components/auditTrail/**/*.ts"
-);
-const workflowModules = import.meta.glob(
-	"/node_modules/@convex-dev/workflow/dist/component/**/*.js"
-);
-const workpoolModules = import.meta.glob(
-	"/node_modules/@convex-dev/workpool/dist/component/**/*.js"
-);
+const modules = convexModules;
+const auditTrailModules = sharedAuditTrailModules;
+const workflowModules = sharedWorkflowModules;
+const workpoolModules = sharedWorkpoolModules;
 
 // ── Test harness with components ────────────────────────────────────
 
@@ -37,7 +37,7 @@ function createFullHarness() {
 	// doesn't fully work in convex-test's synchronous environment.
 	process.env.DISABLE_CASH_LEDGER_HASHCHAIN = "true";
 	const t = convexTest(schema, modules);
-	auditLogTest.register(t, "auditLog");
+	registerAuditLogComponent(t, "auditLog");
 	t.registerComponent("auditTrail", auditTrailSchema, auditTrailModules);
 	t.registerComponent("workflow", workflowSchema, workflowModules);
 	t.registerComponent("workflow/workpool", workpoolSchema, workpoolModules);

@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
+import { convexModules } from "../../../test/moduleMaps";
 import { getOrCreateCashAccount } from "../accounts";
 import { postCashEntryInternal } from "../postEntry";
 import { ADMIN_SOURCE, createHarness, SYSTEM_SOURCE } from "./testUtils";
 
-const modules = import.meta.glob("/convex/**/*.ts");
+const modules = convexModules;
 
 // ── Top-level regex patterns for rejection tests ─────────────────────
 const ACCRUED_WRONG_DEBIT = /OBLIGATION_ACCRUED cannot debit family TRUST_CASH/;

@@ -6,16 +6,18 @@ import type { MutationCtx, QueryCtx } from "../../../_generated/server";
 import auditTrailSchema from "../../../components/auditTrail/schema";
 import schema from "../../../schema";
 import {
+	convexModules,
+	auditTrailModules as sharedAuditTrailModules,
+} from "../../../test/moduleMaps";
+import {
 	createHarness,
 	seedMinimalEntities,
 } from "../../cashLedger/__tests__/testUtils";
 import { markEntriesDisbursed } from "../mutations";
 import { getActiveLenders, getEligibleDispersalEntries } from "../queries";
 
-const modules = import.meta.glob("/convex/**/*.ts");
-const auditTrailModules = import.meta.glob(
-	"/convex/components/auditTrail/**/*.ts"
-);
+const modules = convexModules;
+const auditTrailModules = sharedAuditTrailModules;
 const EXPECTED_PENDING_ERROR = /expected "pending"/;
 
 // ── Type wrappers for _handler access ────────────────────────────────

@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { api, internal } from "../../_generated/api";
 import { FAIRLEND_STAFF_ORG_ID } from "../../constants";
 import schema from "../../schema";
+import { convexModules } from "../../test/moduleMaps";
 import { calculatePeriodAccrual } from "../interestMath";
 import {
 	buildDailyAccrualBreakdown,
@@ -11,7 +12,7 @@ import {
 	buildPortfolioAccrualBreakdown,
 } from "../queryHelpers";
 
-const modules = import.meta.glob("/convex/**/*.ts");
+const modules = convexModules;
 
 const LEDGER_TEST_IDENTITY = {
 	subject: "test-ledger-user",

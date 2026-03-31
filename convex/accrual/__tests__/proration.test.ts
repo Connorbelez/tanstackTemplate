@@ -4,6 +4,7 @@ import { api, internal } from "../../_generated/api";
 import type { Id } from "../../_generated/dataModel";
 import { FAIRLEND_STAFF_ORG_ID } from "../../constants";
 import schema from "../../schema";
+import { convexModules } from "../../test/moduleMaps";
 import {
 	calculateAccrualForPeriods,
 	calculatePeriodAccrual,
@@ -11,7 +12,7 @@ import {
 import { getOwnershipPeriods } from "../ownershipPeriods";
 import type { OwnershipPeriod } from "../types";
 
-const modules = import.meta.glob("/convex/**/*.ts");
+const modules = convexModules;
 
 // ---------------------------------------------------------------------------
 // Test identity and harness

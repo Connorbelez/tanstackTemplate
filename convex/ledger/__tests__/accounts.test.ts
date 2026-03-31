@@ -12,8 +12,9 @@ import {
 	getWorldAccount,
 	initializeWorldAccount,
 } from "../accounts";
+import { convexModules } from "../../test/moduleMaps";
 
-const modules = import.meta.glob("/convex/**/*.ts");
+const modules = convexModules;
 
 const LEDGER_TEST_IDENTITY = {
 	subject: "test-ledger-user",

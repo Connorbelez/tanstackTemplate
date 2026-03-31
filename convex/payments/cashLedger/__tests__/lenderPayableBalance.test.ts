@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Id } from "../../../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../../../_generated/server";
+import { convexModules } from "../../../test/moduleMaps";
 import { getCashAccountBalance } from "../accounts";
 import { postLenderPayout } from "../mutations";
 import { postCashEntryInternal } from "../postEntry";
@@ -12,7 +13,7 @@ import {
 	seedMinimalEntities,
 } from "./testUtils";
 
-const modules = import.meta.glob("/convex/**/*.ts");
+const modules = convexModules;
 
 interface PostLenderPayoutHandler {
 	_handler: (

@@ -4,6 +4,7 @@ import type { Id } from "../../../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../../../_generated/server";
 import { createDispersalEntries } from "../../../dispersal/createDispersalEntries";
 import schema from "../../../schema";
+import { convexModules } from "../../../test/moduleMaps";
 import {
 	getControlAccountsBySubaccount,
 	getOrCreateCashAccount,
@@ -15,7 +16,7 @@ import {
 } from "../reconciliation";
 import { ENTRY_TYPE_CONTROL_SUBACCOUNT, TRANSIENT_SUBACCOUNTS } from "../types";
 
-const modules = import.meta.glob("/convex/**/*.ts");
+const modules = convexModules;
 
 const SYSTEM_SOURCE = {
 	channel: "scheduler" as const,

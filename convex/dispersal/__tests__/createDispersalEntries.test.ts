@@ -1,4 +1,3 @@
-import auditLogTest from "convex-audit-log/test";
 import { convexTest } from "convex-test";
 import { beforeEach, describe, expect, it } from "vitest";
 import workflowSchema from "../../../node_modules/@convex-dev/workflow/dist/component/schema.js";
@@ -7,18 +6,19 @@ import type { Doc, Id } from "../../_generated/dataModel";
 import type { MutationCtx } from "../../_generated/server";
 import auditTrailSchema from "../../components/auditTrail/schema";
 import schema from "../../schema";
+import {
+	convexModules,
+	auditTrailModules as sharedAuditTrailModules,
+	workflowModules as sharedWorkflowModules,
+	workpoolModules as sharedWorkpoolModules,
+} from "../../test/moduleMaps";
+import { registerAuditLogComponent } from "../../test/registerAuditLogComponent";
 import { createDispersalEntries } from "../createDispersalEntries";
 
-const modules = import.meta.glob("/convex/**/*.ts");
-const auditTrailModules = import.meta.glob(
-	"/convex/components/auditTrail/**/*.ts"
-);
-const workflowModules = import.meta.glob(
-	"/node_modules/@convex-dev/workflow/dist/component/**/*.js"
-);
-const workpoolModules = import.meta.glob(
-	"/node_modules/@convex-dev/workpool/dist/component/**/*.js"
-);
+const modules = convexModules;
+const auditTrailModules = sharedAuditTrailModules;
+const workflowModules = sharedWorkflowModules;
+const workpoolModules = sharedWorkpoolModules;
 
 const DEFAULT_SOURCE = { type: "system" as const, channel: "test" };
 const NO_ACTIVE_POSITIONS_PATTERN = /no active positions for mortgage/i;
@@ -59,7 +59,7 @@ const createDispersalEntriesMutation =
 
 function createHarness() {
 	const t = convexTest(schema, modules);
-	auditLogTest.register(t, "auditLog");
+	registerAuditLogComponent(t, "auditLog");
 	t.registerComponent("auditTrail", auditTrailSchema, auditTrailModules);
 	t.registerComponent("workflow", workflowSchema, workflowModules);
 	t.registerComponent("workflow/workpool", workpoolSchema, workpoolModules);

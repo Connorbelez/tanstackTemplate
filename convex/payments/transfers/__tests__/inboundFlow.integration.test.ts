@@ -18,7 +18,6 @@
  * in application code.
  */
 
-import auditLogTest from "convex-audit-log/test";
 import { convexTest } from "convex-test";
 import { afterAll, describe, expect, it, vi } from "vitest";
 import workflowSchema from "../../../../node_modules/@convex-dev/workflow/dist/component/schema.js";
@@ -30,20 +29,21 @@ import { emitPaymentReceived } from "../../../engine/effects/collectionAttempt";
 import { publishTransferConfirmed } from "../../../engine/effects/transfer";
 import type { CommandSource } from "../../../engine/types";
 import schema from "../../../schema";
+import {
+	convexModules,
+	auditTrailModules as sharedAuditTrailModules,
+	workflowModules as sharedWorkflowModules,
+	workpoolModules as sharedWorkpoolModules,
+} from "../../../test/moduleMaps";
+import { registerAuditLogComponent } from "../../../test/registerAuditLogComponent";
 import { postObligationAccrued } from "../../cashLedger/integrations";
 
 // ── Module globs ────────────────────────────────────────────────────
 
-const modules = import.meta.glob("/convex/**/*.ts");
-const auditTrailModules = import.meta.glob(
-	"/convex/components/auditTrail/**/*.ts"
-);
-const workflowModules = import.meta.glob(
-	"/node_modules/@convex-dev/workflow/dist/component/**/*.js"
-);
-const workpoolModules = import.meta.glob(
-	"/node_modules/@convex-dev/workpool/dist/component/**/*.js"
-);
+const modules = convexModules;
+const auditTrailModules = sharedAuditTrailModules;
+const workflowModules = sharedWorkflowModules;
+const workpoolModules = sharedWorkpoolModules;
 
 // Enable fake timers for the entire file. Required for
 // finishAllScheduledFunctions in T-011.
@@ -60,7 +60,7 @@ type TestHarness = ReturnType<typeof createFullHarness>;
 
 function createFullHarness() {
 	const t = convexTest(schema, modules);
-	auditLogTest.register(t, "auditLog");
+	registerAuditLogComponent(t, "auditLog");
 	t.registerComponent("auditTrail", auditTrailSchema, auditTrailModules);
 	t.registerComponent("workflow", workflowSchema, workflowModules);
 	t.registerComponent("workflow/workpool", workpoolSchema, workpoolModules);

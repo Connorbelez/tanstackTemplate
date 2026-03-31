@@ -13,9 +13,10 @@ import {
 	daysBetween,
 } from "../../accrual/interestMath";
 import schema from "../../schema";
+import { convexModules } from "../../test/moduleMaps";
 import { createDispersalEntries } from "../createDispersalEntries";
 
-const modules = import.meta.glob("/convex/**/*.ts");
+const modules = convexModules;
 
 const DEFAULT_SOURCE = { type: "system" as const, channel: "test" } as const;
 

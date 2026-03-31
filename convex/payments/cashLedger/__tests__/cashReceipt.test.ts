@@ -1,7 +1,8 @@
-import auditLogTest from "convex-audit-log/test";
 import { describe, expect, it } from "vitest";
 import { components } from "../../../_generated/api";
 import type { Id } from "../../../_generated/dataModel";
+import { convexModules } from "../../../test/moduleMaps";
+import { registerAuditLogComponent } from "../../../test/registerAuditLogComponent";
 import { getOrCreateCashAccount } from "../accounts";
 import {
 	postCashReceiptForObligation,
@@ -15,7 +16,7 @@ import {
 	type TestHarness,
 } from "./testUtils";
 
-const modules = import.meta.glob("/convex/**/*.ts");
+const modules = convexModules;
 
 const OVERPAYMENT_REASON_PATTERN = /Overpayment/;
 
@@ -222,7 +223,7 @@ describe("postCashReceiptForObligation", () => {
 
 	it("returns null when no BORROWER_RECEIVABLE account exists (no accrual)", async () => {
 		const t = createHarness(modules);
-		auditLogTest.register(t, "auditLog");
+		registerAuditLogComponent(t, "auditLog");
 		const seeded = await seedMinimalEntities(t);
 		const obligationId = await createDueObligation(t, {
 			mortgageId: seeded.mortgageId,

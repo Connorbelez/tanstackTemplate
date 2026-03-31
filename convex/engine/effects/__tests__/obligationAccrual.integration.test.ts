@@ -7,6 +7,7 @@ import {
 	seedMinimalEntities,
 	type TestHarness,
 } from "../../../payments/cashLedger/__tests__/testUtils";
+import { convexModules } from "../../../test/moduleMaps";
 import { accrueObligation } from "../obligationAccrual";
 
 interface AccrueObligationHandler {
@@ -27,7 +28,7 @@ interface AccrueObligationHandler {
 const accrueObligationMutation =
 	accrueObligation as unknown as AccrueObligationHandler;
 
-const modules = import.meta.glob("/convex/**/*.ts");
+const modules = convexModules;
 
 function buildEffectArgs(obligationId: Id<"obligations">) {
 	return {

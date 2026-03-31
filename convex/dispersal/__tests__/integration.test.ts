@@ -7,9 +7,10 @@ import type { MutationCtx } from "../../_generated/server";
 import { calculatePeriodAccrual } from "../../accrual/interestMath";
 import { FAIRLEND_STAFF_ORG_ID } from "../../constants";
 import schema from "../../schema";
+import { convexModules } from "../../test/moduleMaps";
 import { createDispersalEntries } from "../createDispersalEntries";
 
-const modules = import.meta.glob("/convex/**/*.ts");
+const modules = convexModules;
 
 // ---------------------------------------------------------------------------
 // Types

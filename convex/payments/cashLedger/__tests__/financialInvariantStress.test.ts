@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Doc } from "../../../_generated/dataModel";
 import type { QueryCtx } from "../../../_generated/server";
+import { convexModules } from "../../../test/moduleMaps";
 import { getCashAccountBalance } from "../accounts";
 import {
 	postCashReceiptForObligation,
@@ -18,7 +19,7 @@ import {
 	type TestHarness,
 } from "./testUtils";
 
-const modules = import.meta.glob("/convex/**/*.ts");
+const modules = convexModules;
 
 type CashLedgerAccountDoc = Doc<"cash_ledger_accounts">;
 

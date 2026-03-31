@@ -2,8 +2,9 @@ import { convexTest } from "convex-test";
 import { describe, expect, it } from "vitest";
 import { internal } from "../../_generated/api";
 import schema from "../../schema";
+import { convexModules } from "../../test/moduleMaps";
 
-const modules = import.meta.glob("/convex/**/*.ts");
+const modules = convexModules;
 
 // ---------------------------------------------------------------------------
 // Constants (mirror the implementation)

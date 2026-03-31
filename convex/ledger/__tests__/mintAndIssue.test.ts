@@ -3,8 +3,9 @@ import { describe, expect, it } from "vitest";
 import { api } from "../../_generated/api";
 import { FAIRLEND_STAFF_ORG_ID } from "../../constants";
 import schema from "../../schema";
+import { convexModules } from "../../test/moduleMaps";
 
-const modules = import.meta.glob("/convex/**/*.ts");
+const modules = convexModules;
 
 // ── Auth identity for ledger tests ──────────────────────────────
 const LEDGER_TEST_IDENTITY = {

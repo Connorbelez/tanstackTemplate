@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { convexModules } from "../../../test/moduleMaps";
 import { getOrCreateCashAccount } from "../accounts";
 import { type PostCashEntryInput, postCashEntryInternal } from "../postEntry";
 import {
@@ -10,7 +11,7 @@ import {
 	type TestHarness,
 } from "./testUtils";
 
-const modules = import.meta.glob("/convex/**/*.ts");
+const modules = convexModules;
 
 // ── Regex patterns (top-level for Biome useTopLevelRegex) ───────────
 const POSITIVE_SAFE_INTEGER_PATTERN = /positive safe integer/;

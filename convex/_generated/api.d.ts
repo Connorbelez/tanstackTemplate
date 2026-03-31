@@ -25,6 +25,8 @@ import type * as auth_internal from "../auth/internal.js";
 import type * as auth_resourceChecks from "../auth/resourceChecks.js";
 import type * as brokers_migrations from "../brokers/migrations.js";
 import type * as constants from "../constants.js";
+import type * as crm___tests___helpers from "../crm/__tests__/helpers.js";
+import type * as crm_activityQueries from "../crm/activityQueries.js";
 import type * as crm_calendarQuery from "../crm/calendarQuery.js";
 import type * as crm_fieldDefs from "../crm/fieldDefs.js";
 import type * as crm_fieldValidation from "../crm/fieldValidation.js";
@@ -251,6 +253,8 @@ import type * as seed_seedObligationStates from "../seed/seedObligationStates.js
 import type * as seed_seedOnboardingRequest from "../seed/seedOnboardingRequest.js";
 import type * as seed_seedPaymentData from "../seed/seedPaymentData.js";
 import type * as test_authTestEndpoints from "../test/authTestEndpoints.js";
+import type * as test_moduleMaps from "../test/moduleMaps.js";
+import type * as test_registerAuditLogComponent from "../test/registerAuditLogComponent.js";
 import type * as todos from "../todos.js";
 
 import type {
@@ -277,6 +281,8 @@ declare const fullApi: ApiFromModules<{
   "auth/resourceChecks": typeof auth_resourceChecks;
   "brokers/migrations": typeof brokers_migrations;
   constants: typeof constants;
+  "crm/__tests__/helpers": typeof crm___tests___helpers;
+  "crm/activityQueries": typeof crm_activityQueries;
   "crm/calendarQuery": typeof crm_calendarQuery;
   "crm/fieldDefs": typeof crm_fieldDefs;
   "crm/fieldValidation": typeof crm_fieldValidation;
@@ -503,6 +509,8 @@ declare const fullApi: ApiFromModules<{
   "seed/seedOnboardingRequest": typeof seed_seedOnboardingRequest;
   "seed/seedPaymentData": typeof seed_seedPaymentData;
   "test/authTestEndpoints": typeof test_authTestEndpoints;
+  "test/moduleMaps": typeof test_moduleMaps;
+  "test/registerAuditLogComponent": typeof test_registerAuditLogComponent;
   todos: typeof todos;
 }>;
 

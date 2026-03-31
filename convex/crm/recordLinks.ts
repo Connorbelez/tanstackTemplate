@@ -58,6 +58,96 @@ async function getNativeEntity(
 	}
 }
 
+async function getEntityAuditResourceType(
+	ctx: MutationCtx,
+	kind: "record" | "native",
+	objectDefId: Doc<"objectDefs">["_id"]
+): Promise<string> {
+	if (kind === "record") {
+		return "records";
+	}
+
+	const objectDef = await ctx.db.get(objectDefId);
+	if (!objectDef?.nativeTable) {
+		throw new ConvexError("Native object type is missing its native table");
+	}
+
+	return objectDef.nativeTable;
+}
+
+interface MirrorActivityEventArgs {
+	action: "crm.link.created" | "crm.link.deleted";
+	actorId: string;
+	linkId: string;
+	linkTypeDefId: string;
+	linkTypeName?: string;
+	orgId: string;
+	severity: "info" | "warning";
+	sourceId: string;
+	sourceKind: "record" | "native";
+	sourceObjectDefId: Doc<"objectDefs">["_id"];
+	targetId: string;
+	targetKind: "record" | "native";
+	targetObjectDefId: Doc<"objectDefs">["_id"];
+}
+
+async function logMirrorActivityEvents(
+	ctx: MutationCtx,
+	args: MirrorActivityEventArgs
+): Promise<void> {
+	const [sourceResourceType, targetResourceType] = await Promise.all([
+		getEntityAuditResourceType(ctx, args.sourceKind, args.sourceObjectDefId),
+		getEntityAuditResourceType(ctx, args.targetKind, args.targetObjectDefId),
+	]);
+
+	const mirrorTargets = [
+		{
+			direction: "outbound",
+			peerId: args.targetId,
+			peerKind: args.targetKind,
+			resourceId: args.sourceId,
+			resourceType: sourceResourceType,
+		},
+		{
+			direction: "inbound",
+			peerId: args.sourceId,
+			peerKind: args.sourceKind,
+			resourceId: args.targetId,
+			resourceType: targetResourceType,
+		},
+	] as const;
+
+	const dedupedTargets = new Map<string, (typeof mirrorTargets)[number]>();
+	for (const target of mirrorTargets) {
+		dedupedTargets.set(`${target.resourceType}:${target.resourceId}`, target);
+	}
+
+	await Promise.all(
+		[...dedupedTargets.values()].map((target) =>
+			auditLog.log(ctx, {
+				action: args.action,
+				actorId: args.actorId,
+				resourceType: target.resourceType,
+				resourceId: target.resourceId,
+				severity: args.severity,
+				metadata: {
+					direction: target.direction,
+					linkId: args.linkId,
+					linkTypeDefId: args.linkTypeDefId,
+					linkTypeName: args.linkTypeName,
+					orgId: args.orgId,
+					peerId: target.peerId,
+					peerKind: target.peerKind,
+					sourceId: args.sourceId,
+					sourceKind: args.sourceKind,
+					targetId: args.targetId,
+					targetKind: args.targetKind,
+				},
+			})
+		)
+	);
+}
+
 /**
  * Validates that an entity exists, belongs to the given org, and (for records)
  * matches the expected objectDef. Throws ConvexError on any failure.
@@ -334,6 +424,22 @@ export const createLink = crmMutation
 			},
 		});
 
+		await logMirrorActivityEvents(ctx, {
+			action: "crm.link.created",
+			actorId: ctx.viewer.authId,
+			linkId,
+			linkTypeDefId: `${args.linkTypeDefId}`,
+			linkTypeName: linkTypeDef.name,
+			orgId,
+			severity: "info",
+			sourceId: args.sourceId,
+			sourceKind: args.sourceKind,
+			sourceObjectDefId: linkTypeDef.sourceObjectDefId,
+			targetId: args.targetId,
+			targetKind: args.targetKind,
+			targetObjectDefId: linkTypeDef.targetObjectDefId,
+		});
+
 		return linkId;
 	})
 	.public();
@@ -359,6 +465,7 @@ export const deleteLink = crmMutation
 			throw new ConvexError("Link is already deleted");
 		}
 
+		const linkTypeDef = await ctx.db.get(link.linkTypeDefId);
 		await ctx.db.patch(args.linkId, { isDeleted: true });
 
 		await auditLog.log(ctx, {
@@ -375,6 +482,22 @@ export const deleteLink = crmMutation
 				targetId: link.targetId,
 				orgId,
 			},
+		});
+
+		await logMirrorActivityEvents(ctx, {
+			action: "crm.link.deleted",
+			actorId: ctx.viewer.authId,
+			linkId: `${args.linkId}`,
+			linkTypeDefId: `${link.linkTypeDefId}`,
+			linkTypeName: linkTypeDef?.name,
+			orgId,
+			severity: "warning",
+			sourceId: link.sourceId,
+			sourceKind: link.sourceKind,
+			sourceObjectDefId: link.sourceObjectDefId,
+			targetId: link.targetId,
+			targetKind: link.targetKind,
+			targetObjectDefId: link.targetObjectDefId,
 		});
 	})
 	.public();

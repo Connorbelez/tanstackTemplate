@@ -28,9 +28,10 @@ import {
 	reserveShares,
 	voidReservation,
 } from "../mutations";
+import { convexModules } from "../../test/moduleMaps";
 
 // ── Glob for convex-test module loader ───────────────────────────
-const modules = import.meta.glob("/convex/**/*.ts");
+const modules = convexModules;
 
 // ── Auth identity ────────────────────────────────────────────────
 

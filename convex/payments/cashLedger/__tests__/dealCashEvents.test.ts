@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Id } from "../../../_generated/dataModel";
+import { convexModules } from "../../../test/moduleMaps";
 import { getOrCreateCashAccount } from "../accounts";
 import {
 	postCommitmentDepositReceived,
@@ -10,7 +11,7 @@ import {
 import { postCashEntryInternal } from "../postEntry";
 import { createHarness, SYSTEM_SOURCE, seedMinimalEntities } from "./testUtils";
 
-const modules = import.meta.glob("/convex/**/*.ts");
+const modules = convexModules;
 
 const DEAL_NOT_FOUND_PATTERN = /Deal not found/;
 

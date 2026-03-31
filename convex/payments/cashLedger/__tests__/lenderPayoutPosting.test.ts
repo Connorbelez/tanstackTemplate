@@ -2,6 +2,7 @@ import { ConvexError } from "convex/values";
 import { describe, expect, it } from "vitest";
 import type { Id } from "../../../_generated/dataModel";
 import type { MutationCtx } from "../../../_generated/server";
+import { convexModules } from "../../../test/moduleMaps";
 import { getCashAccountBalance } from "../accounts";
 import { postLenderPayout } from "../mutations";
 import {
@@ -11,7 +12,7 @@ import {
 	seedMinimalEntities,
 } from "./testUtils";
 
-const modules = import.meta.glob("/convex/**/*.ts");
+const modules = convexModules;
 
 const NEGATIVE_RE = /negative/i;
 const TRUST_CASH_NEGATIVE_RE = /TRUST_CASH.*negative/i;

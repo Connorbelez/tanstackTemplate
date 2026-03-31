@@ -1,7 +1,8 @@
-import auditLogTest from "convex-audit-log/test";
 import { describe, expect, it } from "vitest";
 import { internal } from "../../../_generated/api";
 import type { Id } from "../../../_generated/dataModel";
+import { convexModules } from "../../../test/moduleMaps";
+import { registerAuditLogComponent } from "../../../test/registerAuditLogComponent";
 import {
 	createHarness,
 	SYSTEM_SOURCE,
@@ -18,7 +19,7 @@ import {
 	postSettlementAllocation,
 } from "../../cashLedger/integrations";
 
-const modules = import.meta.glob("/convex/**/*.ts");
+const modules = convexModules;
 
 // ── Amount constants ────────────────────────────────────────────────
 const TOTAL_AMOUNT = 100_000;
@@ -217,7 +218,7 @@ describe("Reversal webhook integration: GT transition (confirmed → reversed)",
 	// ── T-101: Confirmed attempt transitions to reversed ─────────
 	it("T-101: processReversalCascade transitions confirmed attempt to reversed", async () => {
 		const t = createHarness(modules);
-		auditLogTest.register(t, "auditLog");
+		registerAuditLogComponent(t, "auditLog");
 		const state = await seedConfirmedAttemptPipeline(t);
 
 		// Verify attempt is in confirmed state before reversal
@@ -251,7 +252,7 @@ describe("Reversal webhook integration: GT transition (confirmed → reversed)",
 	// ── T-102: getAttemptByProviderRef look-up ───────────────────
 	it("T-102: getAttemptByProviderRef returns the seeded attempt", async () => {
 		const t = createHarness(modules);
-		auditLogTest.register(t, "auditLog");
+		registerAuditLogComponent(t, "auditLog");
 		const state = await seedConfirmedAttemptPipeline(t);
 
 		const found = await t.query(
@@ -266,7 +267,7 @@ describe("Reversal webhook integration: GT transition (confirmed → reversed)",
 
 	it("T-102b: getAttemptByProviderRef returns null for unknown ref", async () => {
 		const t = createHarness(modules);
-		auditLogTest.register(t, "auditLog");
+		registerAuditLogComponent(t, "auditLog");
 		await seedConfirmedAttemptPipeline(t);
 
 		const found = await t.query(
@@ -286,7 +287,7 @@ describe("Reversal webhook integration: duplicate/idempotent handling", () => {
 	// ── T-103: Second reversal on already-reversed attempt ──────
 	it("T-103: second processReversalCascade on reversed attempt is rejected (GT rejects PAYMENT_REVERSED in reversed state)", async () => {
 		const t = createHarness(modules);
-		auditLogTest.register(t, "auditLog");
+		registerAuditLogComponent(t, "auditLog");
 		const state = await seedConfirmedAttemptPipeline(t);
 
 		// First reversal succeeds
@@ -323,7 +324,7 @@ describe("Reversal webhook integration: duplicate/idempotent handling", () => {
 	// We simulate this by checking the attempt status after first reversal.
 	it("T-104: after reversal, attempt status is 'reversed' enabling idempotent return path", async () => {
 		const t = createHarness(modules);
-		auditLogTest.register(t, "auditLog");
+		registerAuditLogComponent(t, "auditLog");
 		const state = await seedConfirmedAttemptPipeline(t);
 
 		await t.mutation(
@@ -355,7 +356,7 @@ describe("Reversal webhook integration: out-of-order rejection", () => {
 	// ── T-105: Reversal on initiated (pre-confirmed) attempt ────
 	it("T-105: PAYMENT_REVERSED rejected on 'initiated' attempt (not yet confirmed)", async () => {
 		const t = createHarness(modules);
-		auditLogTest.register(t, "auditLog");
+		registerAuditLogComponent(t, "auditLog");
 
 		// Seed minimal entities but create an attempt in "initiated" state (no providerRef)
 		const { borrowerId, mortgageId } = await seedMinimalEntities(t);
@@ -423,7 +424,7 @@ describe("Reversal webhook integration: out-of-order rejection", () => {
 	// ── T-106: Reversal on pending attempt ──────────────────────
 	it("T-106: PAYMENT_REVERSED rejected on 'pending' attempt", async () => {
 		const t = createHarness(modules);
-		auditLogTest.register(t, "auditLog");
+		registerAuditLogComponent(t, "auditLog");
 
 		const { borrowerId, mortgageId } = await seedMinimalEntities(t);
 
@@ -503,7 +504,7 @@ describe("Reversal webhook integration: emitPaymentReversed journal entries", ()
 	// ── T-107: executeReversalCascadeStep creates REVERSAL journal entries ──
 	it("T-107: executeReversalCascadeStep posts reversal journal entries for each obligation", async () => {
 		const t = createHarness(modules);
-		auditLogTest.register(t, "auditLog");
+		registerAuditLogComponent(t, "auditLog");
 		const state = await seedConfirmedAttemptPipeline(t);
 
 		// Transition to reversed first (so the attempt is in the correct state)
@@ -566,7 +567,7 @@ describe("Reversal webhook integration: emitPaymentReversed journal entries", ()
 	// ── T-108: Cash balances return to pre-receipt state after reversal ──
 	it("T-108: TRUST_CASH balance returns to zero after reversal cascade", async () => {
 		const t = createHarness(modules);
-		auditLogTest.register(t, "auditLog");
+		registerAuditLogComponent(t, "auditLog");
 		const state = await seedConfirmedAttemptPipeline(t);
 
 		// Verify TRUST_CASH has a non-zero balance before reversal
@@ -650,7 +651,7 @@ describe("Reversal webhook integration: emitPaymentReversed journal entries", ()
 	// ── T-109: Reversal posting group contains all expected entries ──
 	it("T-109: reversal entries share a single postingGroupId", async () => {
 		const t = createHarness(modules);
-		auditLogTest.register(t, "auditLog");
+		registerAuditLogComponent(t, "auditLog");
 		const state = await seedConfirmedAttemptPipeline(t);
 
 		// Transition + execute cascade step
