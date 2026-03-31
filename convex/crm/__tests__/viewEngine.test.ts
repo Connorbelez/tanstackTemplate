@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { api, components } from "../../_generated/api";
+import { api, components, internal } from "../../_generated/api";
 import { KANBAN_NO_VALUE_SENTINEL } from "../viewDefs";
 import {
 	asAdmin,
+	CRM_ADMIN_IDENTITY,
 	type CrmTestFixture,
 	type CrmTestHarness,
 	createCrmTestHarness,
@@ -931,5 +932,88 @@ describe("View Engine", () => {
 			// After moving to No Value, the status field should be undefined (cleared)
 			expect(clearedRecord?.fields.status).toBeUndefined();
 		});
+	});
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// System object view queries
+// ═══════════════════════════════════════════════════════════════════════
+
+describe("System object view queries", () => {
+	let t: CrmTestHarness;
+
+	beforeEach(() => {
+		t = createCrmTestHarness();
+	});
+
+	it("queryViewRecords with system object returns UnifiedRecord with _kind=native", async () => {
+		// Bootstrap system objects (creates objectDefs for all native tables including borrower)
+		await t.mutation(
+			internal.crm.systemAdapters.bootstrap.bootstrapSystemObjects,
+			{ orgId: CRM_ADMIN_IDENTITY.org_id }
+		);
+
+		const borrowerObjDef = await t.run(async (ctx) => {
+			return ctx.db
+				.query("objectDefs")
+				.withIndex("by_org_name", (q) =>
+					q.eq("orgId", CRM_ADMIN_IDENTITY.org_id).eq("name", "borrower")
+				)
+				.first();
+		});
+		expect(borrowerObjDef).not.toBeNull();
+		if (!borrowerObjDef) {
+			throw new Error("Borrower system object not found");
+		}
+		expect(borrowerObjDef.isSystem).toBe(true);
+		expect(borrowerObjDef.nativeTable).toBeTruthy();
+
+		// Create a default view for the borrower object
+		const viewDefId = await asAdmin(t).mutation(api.crm.viewDefs.createView, {
+			objectDefId: borrowerObjDef._id,
+			name: "All Borrowers",
+			viewType: "table",
+		});
+
+		const result = await asAdmin(t).query(
+			api.crm.viewQueries.queryViewRecords,
+			{
+				viewDefId,
+				cursor: null,
+				limit: 25,
+			}
+		);
+
+		// Should return UnifiedRecords with _kind=native for system objects
+		expect(result.rows).toBeDefined();
+		expect(result.rows.length).toBeGreaterThan(0);
+		expect(result.rows[0]._kind).toBe("native");
+		// UnifiedRecord contract: all expected top-level keys present
+		expect(result.rows[0]).toHaveProperty("_id");
+		expect(result.rows[0]).toHaveProperty("objectDefId");
+		expect(result.rows[0]).toHaveProperty("fields");
+		expect(result.rows[0]).toHaveProperty("createdAt");
+		expect(result.rows[0]).toHaveProperty("updatedAt");
+	});
+
+	it("queryViewRecords with non-system object returns _kind=record", async () => {
+		const fixture = await seedLeadFixture(t);
+		await seedRecord(t, fixture.objectDefId, {
+			company_name: "Acme",
+			status: "new",
+		});
+
+		const result = await asAdmin(t).query(
+			api.crm.viewQueries.queryViewRecords,
+			{
+				viewDefId: fixture.defaultViewId,
+				cursor: null,
+				limit: 25,
+			}
+		);
+
+		expect(result.rows).toBeDefined();
+		expect(result.rows.length).toBeGreaterThan(0);
+		expect(result.rows[0]._kind).toBe("record");
 	});
 });

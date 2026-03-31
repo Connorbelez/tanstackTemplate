@@ -10,6 +10,7 @@ import {
 	loadActiveFieldDefs,
 } from "./recordQueries";
 import { readExistingValue, writeValue } from "./records";
+import { queryNativeRecords } from "./systemAdapters/queryAdapter";
 import type { RecordFilter, UnifiedRecord } from "./types";
 import { KANBAN_NO_VALUE_SENTINEL } from "./viewDefs";
 
@@ -156,6 +157,37 @@ async function requireKanbanBoundField(
 	}
 
 	return boundFieldDef;
+}
+
+async function loadViewRecords(
+	ctx: QueryCtx,
+	viewDef: Doc<"viewDefs">,
+	activeFieldDefs: FieldDef[]
+): Promise<UnifiedRecord[]> {
+	const objectDef = await ctx.db.get(viewDef.objectDefId);
+	if (!objectDef || objectDef.orgId !== viewDef.orgId || !objectDef.isActive) {
+		throw new ConvexError("Object not found or access denied");
+	}
+
+	if (objectDef.isSystem && objectDef.nativeTable) {
+		return queryNativeRecords(
+			ctx,
+			objectDef,
+			activeFieldDefs,
+			viewDef.orgId,
+			FILTERED_QUERY_CAP
+		);
+	}
+
+	const rawRecords = await ctx.db
+		.query("records")
+		.withIndex("by_org_object", (q) =>
+			q.eq("orgId", viewDef.orgId).eq("objectDefId", viewDef.objectDefId)
+		)
+		.filter((q) => q.eq(q.field("isDeleted"), false))
+		.take(FILTERED_QUERY_CAP);
+
+	return assembleRecords(ctx, rawRecords, activeFieldDefs);
 }
 
 function buildKanbanOptionsLookup(
@@ -308,19 +340,7 @@ async function queryTableView(
 
 	// Convert viewFilters to RecordFilter[]
 	const filters = convertViewFiltersToRecordFilters(viewFilters);
-
-	// Load records via index
-	const orgId = viewDef.orgId;
-	const rawRecords = await ctx.db
-		.query("records")
-		.withIndex("by_org_object", (q) =>
-			q.eq("orgId", orgId).eq("objectDefId", viewDef.objectDefId)
-		)
-		.filter((q) => q.eq(q.field("isDeleted"), false))
-		.take(FILTERED_QUERY_CAP);
-
-	// Assemble records with field values
-	const assembled = await assembleRecords(ctx, rawRecords, activeFieldDefs);
+	const assembled = await loadViewRecords(ctx, viewDef, activeFieldDefs);
 
 	// Apply filters
 	const filtered = applyFilters(assembled, filters, fieldDefsById);
@@ -380,16 +400,7 @@ async function queryKanbanView(
 	);
 	const kanbanGroups = await loadOrderedKanbanGroups(ctx, viewDef._id);
 	const boundFieldDef = await requireKanbanBoundField(ctx, viewDef);
-	const orgId = viewDef.orgId;
-	const rawRecords = await ctx.db
-		.query("records")
-		.withIndex("by_org_object", (q) =>
-			q.eq("orgId", orgId).eq("objectDefId", viewDef.objectDefId)
-		)
-		.filter((q) => q.eq(q.field("isDeleted"), false))
-		.take(FILTERED_QUERY_CAP);
-
-	const assembled = await assembleRecords(ctx, rawRecords, activeFieldDefs);
+	const assembled = await loadViewRecords(ctx, viewDef, activeFieldDefs);
 	const filters = convertViewFiltersToRecordFilters(viewFilters);
 	const filtered = applyFilters(assembled, filters, fieldDefsById);
 	const optionsLookup = buildKanbanOptionsLookup(boundFieldDef);

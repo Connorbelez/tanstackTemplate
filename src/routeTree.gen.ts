@@ -53,6 +53,7 @@ import { Route as DemoRbacAuthRouteRouteImport } from './routes/demo/rbac-auth/r
 import { Route as DemoRbacRouteRouteImport } from './routes/demo/rbac/route'
 import { Route as DemoGovernedTransitionsRouteRouteImport } from './routes/demo/governed-transitions/route'
 import { Route as DemoDocumentEngineRouteRouteImport } from './routes/demo/document-engine/route'
+import { Route as DemoCrmRouteRouteImport } from './routes/demo/crm/route'
 import { Route as DemoAuditTraceabilityRouteRouteImport } from './routes/demo/audit-traceability/route'
 import { Route as AdminUnderwritingRouteRouteImport } from './routes/admin/underwriting/route'
 import { Route as AdminDealsRouteRouteImport } from './routes/admin/deals/route'
@@ -60,6 +61,7 @@ import { Route as DemoRbacIndexRouteImport } from './routes/demo/rbac/index'
 import { Route as DemoRbacAuthIndexRouteImport } from './routes/demo/rbac-auth/index'
 import { Route as DemoGovernedTransitionsIndexRouteImport } from './routes/demo/governed-transitions/index'
 import { Route as DemoDocumentEngineIndexRouteImport } from './routes/demo/document-engine/index'
+import { Route as DemoCrmIndexRouteImport } from './routes/demo/crm/index'
 import { Route as DemoAuditTraceabilityIndexRouteImport } from './routes/demo/audit-traceability/index'
 import { Route as DemoRbacAuthRolesRouteImport } from './routes/demo/rbac-auth/roles'
 import { Route as DemoRbacAuthOnboardingRouteImport } from './routes/demo/rbac-auth/onboarding'
@@ -74,6 +76,8 @@ import { Route as DemoDocumentEngineTemplatesRouteImport } from './routes/demo/d
 import { Route as DemoDocumentEngineLibraryRouteImport } from './routes/demo/document-engine/library'
 import { Route as DemoDocumentEngineGroupsRouteImport } from './routes/demo/document-engine/groups'
 import { Route as DemoDocumentEngineGenerateRouteImport } from './routes/demo/document-engine/generate'
+import { Route as DemoCrmSystemRouteImport } from './routes/demo/crm/system'
+import { Route as DemoCrmLinksRouteImport } from './routes/demo/crm/links'
 import { Route as DemoAuditTraceabilityReportRouteImport } from './routes/demo/audit-traceability/report'
 import { Route as DemoAuditTraceabilityPipelineRouteImport } from './routes/demo/audit-traceability/pipeline'
 import { Route as DemoAuditTraceabilityHashChainRouteImport } from './routes/demo/audit-traceability/hash-chain'
@@ -312,6 +316,11 @@ const DemoDocumentEngineRouteRoute = DemoDocumentEngineRouteRouteImport.update({
   path: '/demo/document-engine',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DemoCrmRouteRoute = DemoCrmRouteRouteImport.update({
+  id: '/demo/crm',
+  path: '/demo/crm',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const DemoAuditTraceabilityRouteRoute =
   DemoAuditTraceabilityRouteRouteImport.update({
     id: '/demo/audit-traceability',
@@ -348,6 +357,11 @@ const DemoDocumentEngineIndexRoute = DemoDocumentEngineIndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => DemoDocumentEngineRouteRoute,
+} as any)
+const DemoCrmIndexRoute = DemoCrmIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => DemoCrmRouteRoute,
 } as any)
 const DemoAuditTraceabilityIndexRoute =
   DemoAuditTraceabilityIndexRouteImport.update({
@@ -428,6 +442,16 @@ const DemoDocumentEngineGenerateRoute =
     path: '/generate',
     getParentRoute: () => DemoDocumentEngineRouteRoute,
   } as any)
+const DemoCrmSystemRoute = DemoCrmSystemRouteImport.update({
+  id: '/system',
+  path: '/system',
+  getParentRoute: () => DemoCrmRouteRoute,
+} as any)
+const DemoCrmLinksRoute = DemoCrmLinksRouteImport.update({
+  id: '/links',
+  path: '/links',
+  getParentRoute: () => DemoCrmRouteRoute,
+} as any)
 const DemoAuditTraceabilityReportRoute =
   DemoAuditTraceabilityReportRouteImport.update({
     id: '/report',
@@ -513,6 +537,7 @@ export interface FileRoutesByFullPath {
   '/admin/deals': typeof AdminDealsRouteRoute
   '/admin/underwriting': typeof AdminUnderwritingRouteRoute
   '/demo/audit-traceability': typeof DemoAuditTraceabilityRouteRouteWithChildren
+  '/demo/crm': typeof DemoCrmRouteRouteWithChildren
   '/demo/document-engine': typeof DemoDocumentEngineRouteRouteWithChildren
   '/demo/governed-transitions': typeof DemoGovernedTransitionsRouteRouteWithChildren
   '/demo/rbac': typeof DemoRbacRouteRouteWithChildren
@@ -554,6 +579,8 @@ export interface FileRoutesByFullPath {
   '/demo/audit-traceability/hash-chain': typeof DemoAuditTraceabilityHashChainRoute
   '/demo/audit-traceability/pipeline': typeof DemoAuditTraceabilityPipelineRoute
   '/demo/audit-traceability/report': typeof DemoAuditTraceabilityReportRoute
+  '/demo/crm/links': typeof DemoCrmLinksRoute
+  '/demo/crm/system': typeof DemoCrmSystemRoute
   '/demo/document-engine/generate': typeof DemoDocumentEngineGenerateRoute
   '/demo/document-engine/groups': typeof DemoDocumentEngineGroupsRoute
   '/demo/document-engine/library': typeof DemoDocumentEngineLibraryRoute
@@ -568,6 +595,7 @@ export interface FileRoutesByFullPath {
   '/demo/rbac-auth/onboarding': typeof DemoRbacAuthOnboardingRoute
   '/demo/rbac-auth/roles': typeof DemoRbacAuthRolesRoute
   '/demo/audit-traceability/': typeof DemoAuditTraceabilityIndexRoute
+  '/demo/crm/': typeof DemoCrmIndexRoute
   '/demo/document-engine/': typeof DemoDocumentEngineIndexRoute
   '/demo/governed-transitions/': typeof DemoGovernedTransitionsIndexRoute
   '/demo/rbac-auth/': typeof DemoRbacAuthIndexRoute
@@ -628,6 +656,8 @@ export interface FileRoutesByTo {
   '/demo/audit-traceability/hash-chain': typeof DemoAuditTraceabilityHashChainRoute
   '/demo/audit-traceability/pipeline': typeof DemoAuditTraceabilityPipelineRoute
   '/demo/audit-traceability/report': typeof DemoAuditTraceabilityReportRoute
+  '/demo/crm/links': typeof DemoCrmLinksRoute
+  '/demo/crm/system': typeof DemoCrmSystemRoute
   '/demo/document-engine/generate': typeof DemoDocumentEngineGenerateRoute
   '/demo/document-engine/groups': typeof DemoDocumentEngineGroupsRoute
   '/demo/document-engine/library': typeof DemoDocumentEngineLibraryRoute
@@ -642,6 +672,7 @@ export interface FileRoutesByTo {
   '/demo/rbac-auth/onboarding': typeof DemoRbacAuthOnboardingRoute
   '/demo/rbac-auth/roles': typeof DemoRbacAuthRolesRoute
   '/demo/audit-traceability': typeof DemoAuditTraceabilityIndexRoute
+  '/demo/crm': typeof DemoCrmIndexRoute
   '/demo/document-engine': typeof DemoDocumentEngineIndexRoute
   '/demo/governed-transitions': typeof DemoGovernedTransitionsIndexRoute
   '/demo/rbac-auth': typeof DemoRbacAuthIndexRoute
@@ -667,6 +698,7 @@ export interface FileRoutesById {
   '/admin/deals': typeof AdminDealsRouteRoute
   '/admin/underwriting': typeof AdminUnderwritingRouteRoute
   '/demo/audit-traceability': typeof DemoAuditTraceabilityRouteRouteWithChildren
+  '/demo/crm': typeof DemoCrmRouteRouteWithChildren
   '/demo/document-engine': typeof DemoDocumentEngineRouteRouteWithChildren
   '/demo/governed-transitions': typeof DemoGovernedTransitionsRouteRouteWithChildren
   '/demo/rbac': typeof DemoRbacRouteRouteWithChildren
@@ -708,6 +740,8 @@ export interface FileRoutesById {
   '/demo/audit-traceability/hash-chain': typeof DemoAuditTraceabilityHashChainRoute
   '/demo/audit-traceability/pipeline': typeof DemoAuditTraceabilityPipelineRoute
   '/demo/audit-traceability/report': typeof DemoAuditTraceabilityReportRoute
+  '/demo/crm/links': typeof DemoCrmLinksRoute
+  '/demo/crm/system': typeof DemoCrmSystemRoute
   '/demo/document-engine/generate': typeof DemoDocumentEngineGenerateRoute
   '/demo/document-engine/groups': typeof DemoDocumentEngineGroupsRoute
   '/demo/document-engine/library': typeof DemoDocumentEngineLibraryRoute
@@ -722,6 +756,7 @@ export interface FileRoutesById {
   '/demo/rbac-auth/onboarding': typeof DemoRbacAuthOnboardingRoute
   '/demo/rbac-auth/roles': typeof DemoRbacAuthRolesRoute
   '/demo/audit-traceability/': typeof DemoAuditTraceabilityIndexRoute
+  '/demo/crm/': typeof DemoCrmIndexRoute
   '/demo/document-engine/': typeof DemoDocumentEngineIndexRoute
   '/demo/governed-transitions/': typeof DemoGovernedTransitionsIndexRoute
   '/demo/rbac-auth/': typeof DemoRbacAuthIndexRoute
@@ -748,6 +783,7 @@ export interface FileRouteTypes {
     | '/admin/deals'
     | '/admin/underwriting'
     | '/demo/audit-traceability'
+    | '/demo/crm'
     | '/demo/document-engine'
     | '/demo/governed-transitions'
     | '/demo/rbac'
@@ -789,6 +825,8 @@ export interface FileRouteTypes {
     | '/demo/audit-traceability/hash-chain'
     | '/demo/audit-traceability/pipeline'
     | '/demo/audit-traceability/report'
+    | '/demo/crm/links'
+    | '/demo/crm/system'
     | '/demo/document-engine/generate'
     | '/demo/document-engine/groups'
     | '/demo/document-engine/library'
@@ -803,6 +841,7 @@ export interface FileRouteTypes {
     | '/demo/rbac-auth/onboarding'
     | '/demo/rbac-auth/roles'
     | '/demo/audit-traceability/'
+    | '/demo/crm/'
     | '/demo/document-engine/'
     | '/demo/governed-transitions/'
     | '/demo/rbac-auth/'
@@ -863,6 +902,8 @@ export interface FileRouteTypes {
     | '/demo/audit-traceability/hash-chain'
     | '/demo/audit-traceability/pipeline'
     | '/demo/audit-traceability/report'
+    | '/demo/crm/links'
+    | '/demo/crm/system'
     | '/demo/document-engine/generate'
     | '/demo/document-engine/groups'
     | '/demo/document-engine/library'
@@ -877,6 +918,7 @@ export interface FileRouteTypes {
     | '/demo/rbac-auth/onboarding'
     | '/demo/rbac-auth/roles'
     | '/demo/audit-traceability'
+    | '/demo/crm'
     | '/demo/document-engine'
     | '/demo/governed-transitions'
     | '/demo/rbac-auth'
@@ -901,6 +943,7 @@ export interface FileRouteTypes {
     | '/admin/deals'
     | '/admin/underwriting'
     | '/demo/audit-traceability'
+    | '/demo/crm'
     | '/demo/document-engine'
     | '/demo/governed-transitions'
     | '/demo/rbac'
@@ -942,6 +985,8 @@ export interface FileRouteTypes {
     | '/demo/audit-traceability/hash-chain'
     | '/demo/audit-traceability/pipeline'
     | '/demo/audit-traceability/report'
+    | '/demo/crm/links'
+    | '/demo/crm/system'
     | '/demo/document-engine/generate'
     | '/demo/document-engine/groups'
     | '/demo/document-engine/library'
@@ -956,6 +1001,7 @@ export interface FileRouteTypes {
     | '/demo/rbac-auth/onboarding'
     | '/demo/rbac-auth/roles'
     | '/demo/audit-traceability/'
+    | '/demo/crm/'
     | '/demo/document-engine/'
     | '/demo/governed-transitions/'
     | '/demo/rbac-auth/'
@@ -979,6 +1025,7 @@ export interface RootRouteChildren {
   SignUpRoute: typeof SignUpRoute
   UnauthorizedRoute: typeof UnauthorizedRoute
   DemoAuditTraceabilityRouteRoute: typeof DemoAuditTraceabilityRouteRouteWithChildren
+  DemoCrmRouteRoute: typeof DemoCrmRouteRouteWithChildren
   DemoDocumentEngineRouteRoute: typeof DemoDocumentEngineRouteRouteWithChildren
   DemoGovernedTransitionsRouteRoute: typeof DemoGovernedTransitionsRouteRouteWithChildren
   DemoRbacRouteRoute: typeof DemoRbacRouteRouteWithChildren
@@ -1324,6 +1371,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DemoDocumentEngineRouteRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/demo/crm': {
+      id: '/demo/crm'
+      path: '/demo/crm'
+      fullPath: '/demo/crm'
+      preLoaderRoute: typeof DemoCrmRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/demo/audit-traceability': {
       id: '/demo/audit-traceability'
       path: '/demo/audit-traceability'
@@ -1372,6 +1426,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/demo/document-engine/'
       preLoaderRoute: typeof DemoDocumentEngineIndexRouteImport
       parentRoute: typeof DemoDocumentEngineRouteRoute
+    }
+    '/demo/crm/': {
+      id: '/demo/crm/'
+      path: '/'
+      fullPath: '/demo/crm/'
+      preLoaderRoute: typeof DemoCrmIndexRouteImport
+      parentRoute: typeof DemoCrmRouteRoute
     }
     '/demo/audit-traceability/': {
       id: '/demo/audit-traceability/'
@@ -1470,6 +1531,20 @@ declare module '@tanstack/react-router' {
       fullPath: '/demo/document-engine/generate'
       preLoaderRoute: typeof DemoDocumentEngineGenerateRouteImport
       parentRoute: typeof DemoDocumentEngineRouteRoute
+    }
+    '/demo/crm/system': {
+      id: '/demo/crm/system'
+      path: '/system'
+      fullPath: '/demo/crm/system'
+      preLoaderRoute: typeof DemoCrmSystemRouteImport
+      parentRoute: typeof DemoCrmRouteRoute
+    }
+    '/demo/crm/links': {
+      id: '/demo/crm/links'
+      path: '/links'
+      fullPath: '/demo/crm/links'
+      preLoaderRoute: typeof DemoCrmLinksRouteImport
+      parentRoute: typeof DemoCrmRouteRoute
     }
     '/demo/audit-traceability/report': {
       id: '/demo/audit-traceability/report'
@@ -1596,6 +1671,22 @@ const DemoAuditTraceabilityRouteRouteWithChildren =
     DemoAuditTraceabilityRouteRouteChildren,
   )
 
+interface DemoCrmRouteRouteChildren {
+  DemoCrmLinksRoute: typeof DemoCrmLinksRoute
+  DemoCrmSystemRoute: typeof DemoCrmSystemRoute
+  DemoCrmIndexRoute: typeof DemoCrmIndexRoute
+}
+
+const DemoCrmRouteRouteChildren: DemoCrmRouteRouteChildren = {
+  DemoCrmLinksRoute: DemoCrmLinksRoute,
+  DemoCrmSystemRoute: DemoCrmSystemRoute,
+  DemoCrmIndexRoute: DemoCrmIndexRoute,
+}
+
+const DemoCrmRouteRouteWithChildren = DemoCrmRouteRoute._addFileChildren(
+  DemoCrmRouteRouteChildren,
+)
+
 interface DemoDocumentEngineRouteRouteChildren {
   DemoDocumentEngineGenerateRoute: typeof DemoDocumentEngineGenerateRoute
   DemoDocumentEngineGroupsRoute: typeof DemoDocumentEngineGroupsRoute
@@ -1708,6 +1799,7 @@ const rootRouteChildren: RootRouteChildren = {
   SignUpRoute: SignUpRoute,
   UnauthorizedRoute: UnauthorizedRoute,
   DemoAuditTraceabilityRouteRoute: DemoAuditTraceabilityRouteRouteWithChildren,
+  DemoCrmRouteRoute: DemoCrmRouteRouteWithChildren,
   DemoDocumentEngineRouteRoute: DemoDocumentEngineRouteRouteWithChildren,
   DemoGovernedTransitionsRouteRoute:
     DemoGovernedTransitionsRouteRouteWithChildren,
@@ -1746,13 +1838,3 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}

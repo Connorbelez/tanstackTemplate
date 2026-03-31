@@ -3,6 +3,7 @@ import type { Doc, Id } from "../_generated/dataModel";
 import type { QueryCtx } from "../_generated/server";
 import { crmQuery } from "../fluent";
 import {
+	getNativeRecordById,
 	type NativeRecordPage,
 	queryNativeRecords,
 } from "./systemAdapters/queryAdapter";
@@ -13,6 +14,7 @@ import type {
 	RecordSort,
 	UnifiedRecord,
 } from "./types";
+import { entityKindValidator } from "./validators";
 import { fieldTypeToTable, type ValueTableName } from "./valueRouter";
 
 type FieldDef = Doc<"fieldDefs">;
@@ -312,6 +314,75 @@ export async function loadActiveFieldDefs(
 		.withIndex("by_object", (q) => q.eq("objectDefId", objectDefId))
 		.collect();
 	return allFieldDefs.filter((fd) => fd.isActive);
+}
+
+async function resolveLinkedRecords(
+	ctx: QueryCtx,
+	links: Doc<"recordLinks">[],
+	direction: "outbound" | "inbound"
+): Promise<LinkedRecord[]> {
+	return Promise.all(
+		links.map(async (link) => {
+			const peerRecordId =
+				direction === "outbound" ? link.targetId : link.sourceId;
+			const peerKind =
+				direction === "outbound" ? link.targetKind : link.sourceKind;
+			const peerObjectDefId =
+				direction === "outbound"
+					? link.targetObjectDefId
+					: link.sourceObjectDefId;
+
+			let labelValue: string | undefined;
+			if (peerKind === "record") {
+				const peerRecord = await ctx.db.get(peerRecordId as Id<"records">);
+				labelValue = peerRecord?.labelValue ?? undefined;
+			}
+
+			return {
+				linkId: link._id,
+				linkTypeDefId: link.linkTypeDefId,
+				recordId: peerRecordId,
+				recordKind: peerKind,
+				objectDefId: peerObjectDefId,
+				labelValue,
+			};
+		})
+	);
+}
+
+async function loadLinksForReference(
+	ctx: QueryCtx,
+	orgId: string,
+	recordKind: "record" | "native",
+	recordId: string
+): Promise<{ inbound: LinkedRecord[]; outbound: LinkedRecord[] }> {
+	const [outboundLinks, inboundLinks] = await Promise.all([
+		ctx.db
+			.query("recordLinks")
+			.withIndex("by_org_source", (q) =>
+				q
+					.eq("orgId", orgId)
+					.eq("sourceKind", recordKind)
+					.eq("sourceId", recordId)
+			)
+			.filter((q) => q.eq(q.field("isDeleted"), false))
+			.collect(),
+		ctx.db
+			.query("recordLinks")
+			.withIndex("by_org_target", (q) =>
+				q
+					.eq("orgId", orgId)
+					.eq("targetKind", recordKind)
+					.eq("targetId", recordId)
+			)
+			.filter((q) => q.eq(q.field("isDeleted"), false))
+			.collect(),
+	]);
+
+	return {
+		outbound: await resolveLinkedRecords(ctx, outboundLinks, "outbound"),
+		inbound: await resolveLinkedRecords(ctx, inboundLinks, "inbound"),
+	};
 }
 
 function hasFiltersOrSort(args: QueryRecordsArgs): boolean {
@@ -692,6 +763,80 @@ export const getRecord = crmQuery
 				outbound: await resolveLinks(outboundLinks, "outbound"),
 				inbound: await resolveLinks(inboundLinks, "inbound"),
 			},
+		};
+	})
+	.public();
+
+export const getRecordReference = crmQuery
+	.input({
+		objectDefId: v.id("objectDefs"),
+		recordId: v.string(),
+		recordKind: entityKindValidator,
+	})
+	.handler(async (ctx, args) => {
+		const orgId = ctx.viewer.orgId;
+		if (!orgId) {
+			throw new ConvexError("Org context required");
+		}
+
+		const objectDef = await ctx.db.get(args.objectDefId);
+		if (!objectDef || objectDef.orgId !== orgId || !objectDef.isActive) {
+			throw new ConvexError("Object not found or access denied");
+		}
+
+		const activeFieldDefs = await loadActiveFieldDefs(ctx, args.objectDefId);
+		let record: UnifiedRecord;
+
+		if (args.recordKind === "record") {
+			const normalizedId = ctx.db.normalizeId("records", args.recordId);
+			if (!normalizedId) {
+				throw new ConvexError("Record not found or access denied");
+			}
+
+			const recordDoc = await ctx.db.get(normalizedId);
+			if (
+				!recordDoc ||
+				recordDoc.orgId !== orgId ||
+				recordDoc.isDeleted ||
+				recordDoc.objectDefId !== args.objectDefId
+			) {
+				throw new ConvexError("Record not found or access denied");
+			}
+
+			record = {
+				_id: recordDoc._id as string,
+				_kind: "record",
+				objectDefId: recordDoc.objectDefId,
+				fields: await assembleRecordFields(ctx, recordDoc._id, activeFieldDefs),
+				createdAt: recordDoc.createdAt,
+				updatedAt: recordDoc.updatedAt,
+			};
+		} else {
+			if (!(objectDef.isSystem && objectDef.nativeTable)) {
+				throw new ConvexError("Native record detail requires a system object");
+			}
+
+			const nativeRecord = await getNativeRecordById(
+				ctx,
+				objectDef,
+				activeFieldDefs,
+				orgId,
+				args.recordId
+			);
+			if (!nativeRecord) {
+				throw new ConvexError("Record not found or access denied");
+			}
+			record = nativeRecord;
+		}
+
+		return {
+			record,
+			links: await loadLinksForReference(
+				ctx,
+				orgId,
+				args.recordKind,
+				args.recordId
+			),
 		};
 	})
 	.public();
