@@ -47,7 +47,7 @@ type CalendarData = {
     records: UnifiedRecord[];
   }>;
   range: { start: number; end: number };
-  skippedFilters: string[];  // Filters that couldn't be applied
+  skippedFilters: number;    // Count of filters that couldn't be applied
   truncated: boolean;         // Whether results hit FILTERED_QUERY_CAP
 };
 ```
