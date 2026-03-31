@@ -249,8 +249,10 @@ export function FilterBuilder({ viewDefId, objectDefId }: FilterBuilderProps) {
 			if (!needsValue) {
 				encodedValue = undefined;
 			} else if (valueInputKind === "date") {
-				// Convert date string (yyyy-mm-dd) to unix ms
-				const ms = new Date(filterValue).getTime();
+				// Convert date string (yyyy-mm-dd) to unix ms using explicit UTC
+				// parsing to avoid cross-browser timezone inconsistencies.
+				const [year, month, day] = filterValue.split("-").map(Number);
+				const ms = Date.UTC(year, month - 1, day);
 				if (Number.isNaN(ms)) {
 					toast.error("Invalid date value");
 					setSubmitting(false);

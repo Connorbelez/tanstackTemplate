@@ -107,4 +107,9 @@ recordLinks: defineTable({
 - Use `crmAdminMutation` for control-plane mutations (admin-only)
 - Always validate org ownership: `entity.orgId !== orgId`
 - Run `bun check` BEFORE manually fixing lint
-- Cardinality convention: for one_to_many, source = "one" side, target = "many" side. Document this in the createLinkType handler.
+- Cardinality convention: for one_to_many, source = "one" side, target = "many" side.
+  - Example: Customer (source) `one_to_many` Orders (target) — one Customer can link to many Orders, but each Order can only be linked by one Customer.
+  - For `many_to_one`, invert: Orders (source) `many_to_one` Customer (target).
+  - For `one_to_one`: both sides are singular — e.g., User (source) ↔ Profile (target).
+  - For `many_to_many`: no cardinality restriction — e.g., Student (source) ↔ Course (target).
+  - Document this convention prominently in the `createLinkType` handler so implementers have unambiguous guidance on how cardinality maps to validation logic.

@@ -110,9 +110,13 @@ if (!record || record.isDeleted || record.orgId !== orgId) {
 4. Cardinality enforcement — one_to_one/one_to_many checks
 
 ## Cardinality Rules
-- `one_to_one`: Neither source NOR target may have an existing active link of this type
-- `one_to_many`: Source (the "one" side) may not have an existing active link of this type. Target (the "many" side) can have multiple.
+- `one_to_one`: Neither source NOR target may have an existing active link of this type (as either source or target)
+  - Example: User ↔ Profile (each User has exactly one Profile, each Profile belongs to exactly one User)
+- `one_to_many`: Source may appear in multiple links as SOURCE; Target may appear only once as TARGET.
+  - Example: Customer → Order (one Customer can have many Orders, but each Order belongs to one Customer)
+  - Validation: Check if target already has an active link of this type where it is the target
 - `many_to_many`: No cardinality check needed
+  - Example: Student ↔ Course
 
 ## Key Rules
 - NEVER use `any` type
