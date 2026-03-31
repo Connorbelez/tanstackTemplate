@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { api } from "../../_generated/api";
+import { api, components } from "../../_generated/api";
 import { KANBAN_NO_VALUE_SENTINEL } from "../viewDefs";
 import {
 	asAdmin,
@@ -541,6 +541,215 @@ describe("View Engine", () => {
 			expect(totalCount).toBe(1);
 			expect(rows[0].fields.is_active).toBe(true);
 		});
+
+		it("is_false filter: boolean field", async () => {
+			const fixture = await seedLeadFixture(t);
+
+			await seedRecord(t, fixture.objectDefId, {
+				company_name: "Active Corp",
+				is_active: true,
+			});
+			await seedRecord(t, fixture.objectDefId, {
+				company_name: "Inactive Corp",
+				is_active: false,
+			});
+
+			await t.run(async (ctx) => {
+				await ctx.db.insert("viewFilters", {
+					viewDefId: fixture.defaultViewId,
+					fieldDefId: fixture.fieldDefs.is_active,
+					operator: "is_false",
+				});
+			});
+
+			const result = await asAdmin(t).query(
+				api.crm.viewQueries.queryViewRecords,
+				{ viewDefId: fixture.defaultViewId, limit: 25 }
+			);
+			const { rows, totalCount } = result as {
+				rows: Array<{ fields: Record<string, unknown> }>;
+				totalCount: number;
+			};
+			expect(totalCount).toBe(1);
+			expect(rows[0].fields.is_active).toBe(false);
+		});
+
+		it("gt filter: numeric range on currency field", async () => {
+			const fixture = await seedLeadFixture(t);
+
+			await seedRecord(t, fixture.objectDefId, {
+				company_name: "Small Deal",
+				deal_value: 100_000,
+			});
+			await seedRecord(t, fixture.objectDefId, {
+				company_name: "Big Deal",
+				deal_value: 500_000,
+			});
+
+			await t.run(async (ctx) => {
+				await ctx.db.insert("viewFilters", {
+					viewDefId: fixture.defaultViewId,
+					fieldDefId: fixture.fieldDefs.deal_value,
+					operator: "gt",
+					value: JSON.stringify(200_000),
+				});
+			});
+
+			const result = await asAdmin(t).query(
+				api.crm.viewQueries.queryViewRecords,
+				{ viewDefId: fixture.defaultViewId, limit: 25 }
+			);
+			const { rows, totalCount } = result as {
+				rows: Array<{ fields: Record<string, unknown> }>;
+				totalCount: number;
+			};
+			expect(totalCount).toBe(1);
+			expect(rows[0].fields.company_name).toBe("Big Deal");
+		});
+
+		it("lt filter: numeric range on currency field", async () => {
+			const fixture = await seedLeadFixture(t);
+
+			await seedRecord(t, fixture.objectDefId, {
+				company_name: "Small Deal",
+				deal_value: 100_000,
+			});
+			await seedRecord(t, fixture.objectDefId, {
+				company_name: "Big Deal",
+				deal_value: 500_000,
+			});
+
+			await t.run(async (ctx) => {
+				await ctx.db.insert("viewFilters", {
+					viewDefId: fixture.defaultViewId,
+					fieldDefId: fixture.fieldDefs.deal_value,
+					operator: "lt",
+					value: JSON.stringify(200_000),
+				});
+			});
+
+			const result = await asAdmin(t).query(
+				api.crm.viewQueries.queryViewRecords,
+				{ viewDefId: fixture.defaultViewId, limit: 25 }
+			);
+			const { rows, totalCount } = result as {
+				rows: Array<{ fields: Record<string, unknown> }>;
+				totalCount: number;
+			};
+			expect(totalCount).toBe(1);
+			expect(rows[0].fields.company_name).toBe("Small Deal");
+		});
+
+		it("gte/lte filter: inclusive numeric range", async () => {
+			const fixture = await seedLeadFixture(t);
+
+			await seedRecord(t, fixture.objectDefId, {
+				company_name: "Exact",
+				deal_value: 200_000,
+			});
+			await seedRecord(t, fixture.objectDefId, {
+				company_name: "Below",
+				deal_value: 100_000,
+			});
+			await seedRecord(t, fixture.objectDefId, {
+				company_name: "Above",
+				deal_value: 300_000,
+			});
+
+			await t.run(async (ctx) => {
+				await ctx.db.insert("viewFilters", {
+					viewDefId: fixture.defaultViewId,
+					fieldDefId: fixture.fieldDefs.deal_value,
+					operator: "gte",
+					value: JSON.stringify(200_000),
+				});
+			});
+
+			const result = await asAdmin(t).query(
+				api.crm.viewQueries.queryViewRecords,
+				{ viewDefId: fixture.defaultViewId, limit: 25 }
+			);
+			const { totalCount } = result as { totalCount: number };
+			expect(totalCount).toBe(2); // Exact + Above
+		});
+
+		it("starts_with filter: text prefix match", async () => {
+			const fixture = await seedLeadFixture(t);
+
+			await seedRecord(t, fixture.objectDefId, {
+				company_name: "Acme Corp",
+				status: "new",
+			});
+			await seedRecord(t, fixture.objectDefId, {
+				company_name: "Beta Inc",
+				status: "new",
+			});
+			await seedRecord(t, fixture.objectDefId, {
+				company_name: "Acme Solutions",
+				status: "new",
+			});
+
+			await t.run(async (ctx) => {
+				await ctx.db.insert("viewFilters", {
+					viewDefId: fixture.defaultViewId,
+					fieldDefId: fixture.fieldDefs.company_name,
+					operator: "starts_with",
+					value: "Acme",
+				});
+			});
+
+			const result = await asAdmin(t).query(
+				api.crm.viewQueries.queryViewRecords,
+				{ viewDefId: fixture.defaultViewId, limit: 25 }
+			);
+			const { rows, totalCount } = result as {
+				rows: Array<{ fields: Record<string, unknown> }>;
+				totalCount: number;
+			};
+			expect(totalCount).toBe(2);
+			for (const row of rows) {
+				expect(String(row.fields.company_name).startsWith("Acme")).toBe(true);
+			}
+		});
+
+		it("is_any_of filter: array membership on select field", async () => {
+			const fixture = await seedLeadFixture(t);
+
+			await seedRecord(t, fixture.objectDefId, {
+				company_name: "A",
+				status: "new",
+			});
+			await seedRecord(t, fixture.objectDefId, {
+				company_name: "B",
+				status: "contacted",
+			});
+			await seedRecord(t, fixture.objectDefId, {
+				company_name: "C",
+				status: "qualified",
+			});
+
+			await t.run(async (ctx) => {
+				await ctx.db.insert("viewFilters", {
+					viewDefId: fixture.defaultViewId,
+					fieldDefId: fixture.fieldDefs.status,
+					operator: "is_any_of",
+					value: JSON.stringify(["new", "qualified"]),
+				});
+			});
+
+			const result = await asAdmin(t).query(
+				api.crm.viewQueries.queryViewRecords,
+				{ viewDefId: fixture.defaultViewId, limit: 25 }
+			);
+			const { rows, totalCount } = result as {
+				rows: Array<{ fields: Record<string, unknown> }>;
+				totalCount: number;
+			};
+			expect(totalCount).toBe(2);
+			for (const row of rows) {
+				expect(["new", "qualified"]).toContain(row.fields.status);
+			}
+		});
 	});
 
 	// ── View schema ─────────────────────────────────────────────────
@@ -671,6 +880,16 @@ describe("View Engine", () => {
 				(r: { _id: string }) => r._id === (recordId as string)
 			);
 			expect(movedRecord?.fields.status).toBe("contacted");
+
+			// Audit: verify crm.record.updated event was emitted
+			const auditEntries = await t.query(
+				components.auditLog.lib.queryByResource,
+				{ resourceType: "records", resourceId: recordId }
+			);
+			const updateEntry = auditEntries.find(
+				(e: { action: string }) => e.action === "crm.record.updated"
+			);
+			expect(updateEntry).toBeDefined();
 		});
 
 		it("moving to No Value group clears the field value", async () => {
