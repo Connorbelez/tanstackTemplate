@@ -438,7 +438,7 @@ describe("View Engine", () => {
 					viewDefId: fixture.defaultViewId,
 					fieldDefId: fixture.fieldDefs.status,
 					operator: "eq",
-					value: JSON.stringify("new"),
+					value: "new",
 				});
 			});
 
