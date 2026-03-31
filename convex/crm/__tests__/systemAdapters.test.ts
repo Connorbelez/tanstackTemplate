@@ -317,6 +317,77 @@ describe("queryNativeTable", () => {
 		expect(result.records).toHaveLength(1);
 		expect(result.records[0].fields.principal).toBe(300_000);
 	});
+
+	it("returns documents from borrowers table via queryRecords", async () => {
+		// Seed a user + borrower for the default org
+		await t.run(async (ctx) => {
+			const userId = await ctx.db.insert("users", {
+				authId: "test-user-borrower",
+				email: "borrower@test.ca",
+				firstName: "Alice",
+				lastName: "Borrower",
+			});
+			await ctx.db.insert("borrowers", {
+				status: "active",
+				userId,
+				orgId: ORG_ID,
+				createdAt: Date.now(),
+			});
+		});
+
+		// Bootstrap system objects (creates objectDefs for all native tables)
+		await t.mutation(
+			internal.crm.systemAdapters.bootstrap.bootstrapSystemObjects,
+			{ orgId: ORG_ID }
+		);
+
+		const borrowerObjDef = await t.run(async (ctx) => {
+			return ctx.db
+				.query("objectDefs")
+				.withIndex("by_org_name", (q) =>
+					q.eq("orgId", ORG_ID).eq("name", "borrower")
+				)
+				.first();
+		});
+		expect(borrowerObjDef).not.toBeNull();
+		if (!borrowerObjDef) {
+			throw new Error("unreachable");
+		}
+
+		const result = await asAdmin(t).query(api.crm.recordQueries.queryRecords, {
+			objectDefId: borrowerObjDef._id,
+			paginationOpts: { numItems: 10, cursor: null },
+		});
+
+		expect(result.records).toHaveLength(1);
+		expect(result.records[0]._kind).toBe("native");
+	});
+
+	it("throws for unknown native table names", async () => {
+		// Insert a fake objectDef with an unknown nativeTable value
+		const fakeObjectDefId = await t.run(async (ctx) => {
+			return ctx.db.insert("objectDefs", {
+				orgId: ORG_ID,
+				name: "fake_entity",
+				singularLabel: "Fake",
+				pluralLabel: "Fakes",
+				icon: "x",
+				isSystem: true,
+				nativeTable: "nonexistent_native_table",
+				isActive: true,
+				displayOrder: 999,
+				updatedAt: Date.now(),
+				createdBy: CRM_ADMIN_IDENTITY.subject,
+			});
+		});
+
+		await expect(
+			asAdmin(t).query(api.crm.recordQueries.queryRecords, {
+				objectDefId: fakeObjectDefId,
+				paginationOpts: { numItems: 5, cursor: null },
+			})
+		).rejects.toThrow();
+	});
 });
 
 // ═══════════════════════════════════════════════════════════════════════
