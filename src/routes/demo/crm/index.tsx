@@ -58,8 +58,10 @@ function CrmCustomObjectsPage() {
 			return;
 		}
 
-		const nextObjectId = seedState?.demoObjectId ?? customObjects[0]?._id;
-		setSelectedObjectId(nextObjectId);
+		const nextObjectId = seedState?.demoObjectId;
+		if (nextObjectId) {
+			setSelectedObjectId(nextObjectId);
+		}
 	}, [customObjects, seedState?.demoObjectId, selectedObjectId]);
 
 	const selectedObject = customObjects.find(
@@ -142,7 +144,10 @@ function CrmCustomObjectsPage() {
 					description="Every object below is backed by the same CRM object and field metadata that the admin shell will consume later."
 					emptyMessage="No sandbox objects yet. Seed the demo pipeline or create one from the object studio."
 					objects={customObjects}
-					onSelect={setSelectedObjectId}
+					onSelect={(id) => {
+						setSelectedObjectId(id);
+						setSelectedRecord(undefined);
+					}}
 					selectedObjectId={selectedObjectId}
 					title="Object inventory"
 				/>
@@ -228,7 +233,7 @@ function ControlPlaneCard({
 					</div>
 
 					<div className="grid gap-3">
-						<Button disabled={isSeeding} onClick={onSeed}>
+						<Button disabled={isSeeding || isResetting} onClick={onSeed}>
 							{isSeeding ? (
 								<LoaderCircle className="size-4 animate-spin" />
 							) : (
@@ -236,7 +241,11 @@ function ControlPlaneCard({
 							)}
 							Seed lead pipeline
 						</Button>
-						<Button disabled={isResetting} onClick={onReset} variant="outline">
+						<Button
+							disabled={isSeeding || isResetting}
+							onClick={onReset}
+							variant="outline"
+						>
 							{isResetting ? (
 								<LoaderCircle className="size-4 animate-spin" />
 							) : (
