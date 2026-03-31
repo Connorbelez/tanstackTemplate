@@ -331,7 +331,11 @@ export const seedLeadPipeline = authedAction
 			});
 		}
 
-		for (const values of DEMO_RECORDS) {
+		for (const record of DEMO_RECORDS) {
+			const values = {
+				...record,
+				next_followup: Date.parse(record.next_followup as string),
+			};
 			await ctx.runMutation(api.crm.records.createRecord, {
 				objectDefId,
 				values,
