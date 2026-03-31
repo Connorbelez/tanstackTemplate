@@ -97,6 +97,7 @@ export const deactivateLinkType = crmAdminMutation
 			.withIndex("by_link_type", (q) =>
 				q.eq("linkTypeDefId", args.linkTypeDefId)
 			)
+			.filter((q) => q.eq(q.field("orgId"), orgId))
 			.filter((q) => q.eq(q.field("isDeleted"), false))
 			.first();
 
