@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import {
 	capabilityValidator,
 	cardinalityValidator,
+	entityKindValidator,
 	fieldTypeValidator,
 	filterOperatorValidator,
 	logicalOperatorValidator,
@@ -1918,7 +1919,9 @@ export default defineSchema({
 	})
 		.index("by_org", ["orgId"])
 		.index("by_source_object", ["sourceObjectDefId"])
-		.index("by_target_object", ["targetObjectDefId"]),
+		.index("by_target_object", ["targetObjectDefId"])
+		.index("by_org_source_object", ["orgId", "sourceObjectDefId"])
+		.index("by_org_target_object", ["orgId", "targetObjectDefId"]),
 
 	viewDefs: defineTable({
 		orgId: v.string(),
@@ -2070,10 +2073,10 @@ export default defineSchema({
 		orgId: v.string(),
 		linkTypeDefId: v.id("linkTypeDefs"),
 		sourceObjectDefId: v.id("objectDefs"),
-		sourceKind: v.union(v.literal("record"), v.literal("native")),
+		sourceKind: entityKindValidator,
 		sourceId: v.string(),
 		targetObjectDefId: v.id("objectDefs"),
-		targetKind: v.union(v.literal("record"), v.literal("native")),
+		targetKind: entityKindValidator,
 		targetId: v.string(),
 		isDeleted: v.boolean(),
 		createdAt: v.number(),

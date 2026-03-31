@@ -33,6 +33,16 @@ import {
 type ValueInputKind = "text" | "number" | "date" | "select" | "none";
 
 const UNSUPPORTED_OPERATORS = new Set<FilterOperator>(["between", "is_any_of"]);
+
+/** Parse a yyyy-mm-dd string to UTC milliseconds, or null if invalid. */
+function parseDateToUtcMs(value: string): number | null {
+	const [year, month, day] = value.split("-").map(Number);
+	if (!year || month < 1 || month > 12 || day < 1 || day > 31) {
+		return null;
+	}
+	const ms = Date.UTC(year, month - 1, day);
+	return Number.isNaN(ms) ? null : ms;
+}
 const utcDateFormatter = new Intl.DateTimeFormat(undefined, {
 	timeZone: "UTC",
 });
@@ -249,11 +259,8 @@ export function FilterBuilder({ viewDefId, objectDefId }: FilterBuilderProps) {
 			if (!needsValue) {
 				encodedValue = undefined;
 			} else if (valueInputKind === "date") {
-				// Convert date string (yyyy-mm-dd) to unix ms using explicit UTC
-				// parsing to avoid cross-browser timezone inconsistencies.
-				const [year, month, day] = filterValue.split("-").map(Number);
-				const ms = Date.UTC(year, month - 1, day);
-				if (Number.isNaN(ms)) {
+				const ms = parseDateToUtcMs(filterValue);
+				if (ms === null) {
 					toast.error("Invalid date value");
 					setSubmitting(false);
 					return;

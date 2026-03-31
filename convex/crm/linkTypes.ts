@@ -21,6 +21,9 @@ export const createLinkType = crmAdminMutation
 		// Validate source objectDef exists, is active, and belongs to caller's org
 		const sourceObjectDef = await ctx.db.get(args.sourceObjectDefId);
 		if (!sourceObjectDef || sourceObjectDef.orgId !== orgId) {
+			console.error(
+				`[createLinkType] Source objectDef ${args.sourceObjectDefId} not found or org mismatch (org: ${orgId})`
+			);
 			throw new ConvexError("Source object not found or access denied");
 		}
 		if (!sourceObjectDef.isActive) {
@@ -30,6 +33,9 @@ export const createLinkType = crmAdminMutation
 		// Validate target objectDef exists, is active, and belongs to caller's org
 		const targetObjectDef = await ctx.db.get(args.targetObjectDefId);
 		if (!targetObjectDef || targetObjectDef.orgId !== orgId) {
+			console.error(
+				`[createLinkType] Target objectDef ${args.targetObjectDefId} not found or org mismatch (org: ${orgId})`
+			);
 			throw new ConvexError("Target object not found or access denied");
 		}
 		if (!targetObjectDef.isActive) {
@@ -67,7 +73,8 @@ export const createLinkType = crmAdminMutation
 	.public();
 
 // ── deactivateLinkType ─────────────────────────────────────────────
-// Soft-deactivates a linkTypeDef. Refuses if any non-deleted recordLinks exist.
+// Soft-deactivates a linkTypeDef by setting isActive=false. Throws if
+// any non-deleted recordLinks reference this type.
 export const deactivateLinkType = crmAdminMutation
 	.input({ linkTypeDefId: v.id("linkTypeDefs") })
 	.handler(async (ctx, args) => {
@@ -78,6 +85,9 @@ export const deactivateLinkType = crmAdminMutation
 
 		const linkTypeDef = await ctx.db.get(args.linkTypeDefId);
 		if (!linkTypeDef || linkTypeDef.orgId !== orgId) {
+			console.error(
+				`[deactivateLinkType] linkTypeDef ${args.linkTypeDefId} not found or org mismatch (org: ${orgId})`
+			);
 			throw new ConvexError("Link type not found or access denied");
 		}
 

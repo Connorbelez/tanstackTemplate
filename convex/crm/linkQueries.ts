@@ -3,19 +3,22 @@ import type { Doc, Id } from "../_generated/dataModel";
 import type { QueryCtx } from "../_generated/server";
 import { crmQuery } from "../fluent";
 import type { LinkedRecord } from "./types";
+import { entityKindValidator } from "./validators";
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
 /**
  * Resolves a batch of recordLink docs into LinkedRecord[], picking the
- * peer side based on direction.
+ * peer side based on direction. For "record" peers, fetches labelValue
+ * from the records table; native entities do not carry a label. Links
+ * pointing to deleted or missing records are filtered out with a warning.
  */
 async function resolveLinkedRecords(
 	ctx: QueryCtx,
 	links: Doc<"recordLinks">[],
 	direction: "outbound" | "inbound"
 ): Promise<LinkedRecord[]> {
-	return Promise.all(
+	const results = await Promise.all(
 		links.map(async (link) => {
 			const peerRecordId =
 				direction === "outbound" ? link.targetId : link.sourceId;
@@ -29,19 +32,28 @@ async function resolveLinkedRecords(
 			let labelValue: string | undefined;
 			if (peerKind === "record") {
 				const peerRecord = await ctx.db.get(peerRecordId as Id<"records">);
-				labelValue = peerRecord?.labelValue ?? undefined;
+				if (!peerRecord || peerRecord.isDeleted) {
+					console.warn(
+						`[resolveLinkedRecords] Peer record ${peerRecordId} not found or deleted for link ${link._id} — skipping`
+					);
+					return null;
+				}
+				labelValue = peerRecord.labelValue ?? undefined;
 			}
 
-			return {
-				linkId: link._id as string,
+			const result: LinkedRecord = {
+				linkId: link._id,
 				linkTypeDefId: link.linkTypeDefId,
 				recordId: peerRecordId,
 				recordKind: peerKind,
 				objectDefId: peerObjectDefId,
 				labelValue,
 			};
+			return result;
 		})
 	);
+
+	return results.filter((r): r is NonNullable<typeof r> => r !== null);
 }
 
 // ── Grouped link result shape ────────────────────────────────────────
@@ -54,11 +66,12 @@ interface LinkGroup {
 }
 
 // ── getLinkedRecords ─────────────────────────────────────────────────
-// Returns linked records for a given entity, grouped by linkTypeDef.
+// Returns linked records for a given record or native entity, grouped
+// by linkTypeDef and direction.
 export const getLinkedRecords = crmQuery
 	.input({
 		recordId: v.string(),
-		recordKind: v.union(v.literal("record"), v.literal("native")),
+		recordKind: entityKindValidator,
 		direction: v.optional(
 			v.union(v.literal("outbound"), v.literal("inbound"), v.literal("both"))
 		),
@@ -149,6 +162,9 @@ export const getLinkedRecords = crmQuery
 		for (const [typeId, links] of outboundByType) {
 			const def = linkTypeDefsById.get(typeId);
 			if (!def) {
+				console.warn(
+					`[getLinkedRecords] linkTypeDef ${typeId} referenced by ${links.length} recordLinks but not found — skipping group (org: ${orgId})`
+				);
 				continue;
 			}
 			const resolved = await resolveLinkedRecords(ctx, links, "outbound");
@@ -164,6 +180,9 @@ export const getLinkedRecords = crmQuery
 		for (const [typeId, links] of inboundByType) {
 			const def = linkTypeDefsById.get(typeId);
 			if (!def) {
+				console.warn(
+					`[getLinkedRecords] linkTypeDef ${typeId} referenced by ${links.length} recordLinks but not found — skipping group (org: ${orgId})`
+				);
 				continue;
 			}
 			const resolved = await resolveLinkedRecords(ctx, links, "inbound");
@@ -196,23 +215,23 @@ export const getLinkTypesForObject = crmQuery
 			throw new ConvexError("Object not found or access denied");
 		}
 
-		// Query where this object is source
+		// Query where this object is source (org-scoped index)
 		const asSource = await ctx.db
 			.query("linkTypeDefs")
-			.withIndex("by_source_object", (q) =>
-				q.eq("sourceObjectDefId", args.objectDefId)
+			.withIndex("by_org_source_object", (q) =>
+				q.eq("orgId", orgId).eq("sourceObjectDefId", args.objectDefId)
 			)
 			.collect();
 
-		// Query where this object is target
+		// Query where this object is target (org-scoped index)
 		const asTarget = await ctx.db
 			.query("linkTypeDefs")
-			.withIndex("by_target_object", (q) =>
-				q.eq("targetObjectDefId", args.objectDefId)
+			.withIndex("by_org_target_object", (q) =>
+				q.eq("orgId", orgId).eq("targetObjectDefId", args.objectDefId)
 			)
 			.collect();
 
-		// Combine, deduplicate by _id, filter active + org-scoped
+		// Combine, deduplicate by _id, filter active
 		const seen = new Set<string>();
 		const combined: Doc<"linkTypeDefs">[] = [];
 
@@ -222,7 +241,7 @@ export const getLinkTypesForObject = crmQuery
 				continue;
 			}
 			seen.add(id);
-			if (def.isActive && def.orgId === orgId) {
+			if (def.isActive) {
 				combined.push(def);
 			}
 		}
