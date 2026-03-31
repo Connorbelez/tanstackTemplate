@@ -192,6 +192,20 @@ export function RecordTableSurface({
 												recordKind: row._kind,
 											})
 										}
+										onKeyDown={(event) => {
+											if (
+												onSelectRecord &&
+												(event.key === "Enter" || event.key === " ")
+											) {
+												event.preventDefault();
+												onSelectRecord({
+													recordId: row._id,
+													recordKind: row._kind,
+												});
+											}
+										}}
+										role={onSelectRecord ? "button" : undefined}
+										tabIndex={onSelectRecord ? 0 : undefined}
 									>
 										<TableCell className="font-medium">
 											<div>
