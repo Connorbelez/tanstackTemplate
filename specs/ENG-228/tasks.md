@@ -1,0 +1,6 @@
+- [x] T-001 Create a typed admin entity registry that centralizes entity metadata, domain groupings, and navigation helpers for the admin shell.
+- [x] T-002 Add a canonical `AdminLayout` that composes the shared sidebar, header, breadcrumb trail, user menu, and content outlet.
+- [x] T-003 Refactor `AdminNavigation` to render grouped, active-aware sidebar sections from the registry instead of placeholder demo data.
+- [x] T-004 Refactor `AdminBreadcrumbs` to resolve admin entity labels from the registry while preserving generic fallback handling for non-entity routes.
+- [x] T-005 Update `/admin` route integration to use the canonical shell while preserving `admin:access` gating and admin search validation.
+- [ ] T-006 Run `bunx convex codegen`, `bun check`, `bun typecheck`, and `coderabbit review --plain`, then capture the results.
