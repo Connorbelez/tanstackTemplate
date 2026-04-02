@@ -167,7 +167,7 @@ Sample JWT Payload:
 Long term maintainability is a core priority. If you add new functionality, first check if there are shared logic that can be extracted to a separate module. Duplicate logic across mulitple files is a code smell and should be avoided. Don't be afraid to change existing code. Don't take shortcuts by just adding local logic to solve a problem.
 
 ## Context 
-We're building a greenfield project; there is no existing prod data or deployment. Feel free to suggest sweeping changes to the schema, architecture, etc., but ask your human first. 
+We're building a greenfield project; there is no existing production data or deployment. Feel free to suggest sweeping changes to the schema, architecture, etc., but ask your human first. 
 
 ## What we're building
 We're building a back-office loan management system with an integrated ledger and accounting system, plus an attached marketplace for fractional mortgage deal closings. 
