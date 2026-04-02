@@ -36,20 +36,28 @@ export function AdminDetailSheet({ entityType }: AdminDetailSheetProps) {
 							detailOpen
 						</code>{" "}
 						and{" "}
-						<Link
-							params={{
-								entitytype: entityType,
-								recordid: recordId ?? "",
-							}}
-							search={{
-								detailOpen: false,
-								entityType: undefined,
-								recordId: undefined,
-							}}
-							to="/admin/$entitytype/$recordid"
-						>
-							View record
-						</Link>
+						<code className="rounded bg-muted px-1 py-0.5 text-xs">
+							recordId
+						</code>
+						{recordId ? (
+							<>
+								.{" "}
+								<Link
+									params={{
+										entitytype: entityType,
+										recordid: recordId,
+									}}
+									search={{
+										detailOpen: false,
+										entityType: undefined,
+										recordId: undefined,
+									}}
+									to="/admin/$entitytype/$recordid"
+								>
+									View record
+								</Link>
+							</>
+						) : null}
 					</SheetDescription>
 				</SheetHeader>
 				<div className="text-sm">

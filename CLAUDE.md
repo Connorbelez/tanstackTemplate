@@ -160,17 +160,17 @@ Sample JWT Payload:
 ## Workflow 
 - DO NOT try to fix linting/formatting errors BEFORE running `bun check`. Always run `bun check` first as this command also auto formats and fixes some linting errors.
 - After Completing a Major unit of work like a full SPEC run `coderabbit review --plain` to get a code review summary and check for any potential issues or improvements. 
-- This is an early stage project, feel free to suggest sweeping changes to the schema, architecture etc, but ask your human first. 
+- This is an early stage project, feel free to suggest sweeping changes to the schema, architecture, etc., but ask your human first. 
 
 ## Maintainability
 
 Long term maintainability is a core priority. If you add new functionality, first check if there are shared logic that can be extracted to a separate module. Duplicate logic across mulitple files is a code smell and should be avoided. Don't be afraid to change existing code. Don't take shortcuts by just adding local logic to solve a problem.
 
 ## Context 
-We're building a GREENFIELD project there is not existing prod data or deployment. Feel free to suggest sweeping changes to the schema, architecture etc, but ask your human first. 
+We're building a greenfield project; there is no existing prod data or deployment. Feel free to suggest sweeping changes to the schema, architecture, etc., but ask your human first. 
 
 ## What we're building
-We're building a backoffice Loan Management System with an integrated ledger and accounting system with an attached marketplace for fractional mortgage deal closing. 
+We're building a back-office loan management system with an integrated ledger and accounting system, plus an attached marketplace for fractional mortgage deal closings. 
 
 ## Toolkit 
 

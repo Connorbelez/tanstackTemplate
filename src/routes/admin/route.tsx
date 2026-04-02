@@ -4,9 +4,7 @@ import { parseAdminDetailSearch } from "#/lib/admin-detail-search";
 import { guardPermission } from "#/lib/auth";
 
 export const Route = createFileRoute("/admin")({
-	beforeLoad: () => {
-		guardPermission("admin:access");
-	},
+	beforeLoad: guardPermission("admin:access"),
 	validateSearch: (search: Record<string, unknown>) =>
 		parseAdminDetailSearch(search),
 	component: AdminPage,

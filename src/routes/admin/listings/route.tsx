@@ -1,23 +1,22 @@
+import { useSuspenseQuery } from "@tanstack/react-query";
 import { createFileRoute, Outlet, useMatch } from "@tanstack/react-router";
-
-import EntityTable, { columns } from "#/components/admin/shell/EntityTable.tsx";
+import { AdminDetailSheet } from "#/components/admin/shell/AdminDetailSheet";
+import EntityTable from "#/components/admin/shell/EntityTable";
+import { adminEntityTableColumns } from "#/components/admin/shell/entity-table-columns";
 import { useAdminDetailSheet } from "#/hooks/useAdminDetailSheet";
+import { adminEntityRowsQueryOptions } from "#/lib/admin-entity-queries";
 
 export const Route = createFileRoute("/admin/listings")({
 	component: EntityList,
-	loader: async () => {
-		const fakeData = Array.from({ length: 10 }, (_, index) => ({
-			id: index,
-			name: `Listing ${index}`,
-			amount: Math.random() * 1000,
-		}));
-
-		return { fakeData };
+	loader: async ({ context }) => {
+		await context.queryClient.ensureQueryData(
+			adminEntityRowsQueryOptions("listings")
+		);
 	},
 });
 
 function EntityList() {
-	const { fakeData } = Route.useLoaderData();
+	const { data } = useSuspenseQuery(adminEntityRowsQueryOptions("listings"));
 	const { open } = useAdminDetailSheet();
 	const recordId = useMatch({
 		from: "/admin/listings/$recordid",
@@ -30,10 +29,13 @@ function EntityList() {
 	}
 
 	return (
-		<EntityTable
-			columns={columns}
-			data={fakeData}
-			onRowClick={(row) => open(String(row.id))}
-		/>
+		<>
+			<EntityTable
+				columns={adminEntityTableColumns}
+				data={data}
+				onRowClick={(row) => open(row.id)}
+			/>
+			<AdminDetailSheet entityType="listings" />
+		</>
 	);
 }

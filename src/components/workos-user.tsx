@@ -1,7 +1,7 @@
 import { Link, useLocation } from "@tanstack/react-router";
 import { useAuth } from "@workos/authkit-tanstack-react-start/client";
 import { buildSignInRedirect, buildSignUpRedirect } from "#/lib/auth-redirect";
-import { isRouterTeardownSignOutError } from "#/lib/workos-auth";
+import { handleWorkosSignOut } from "#/lib/workos-sign-out";
 
 export default function SignInButton({ large }: { large?: boolean }) {
 	const { user, signOut } = useAuth();
@@ -31,16 +31,7 @@ export default function SignInButton({ large }: { large?: boolean }) {
 				<button
 					className={buttonClasses}
 					onClick={() => {
-						void signOut().catch((error) => {
-							// AuthKitProvider's post-signOut navigate() crashes when
-							// the router context tears down. Session is already cleared
-							// server-side — just force a full page reload.
-							if (isRouterTeardownSignOutError(error)) {
-								window.location.href = "/";
-								return;
-							}
-							console.error("Sign out failed:", error);
-						});
+						void handleWorkosSignOut(signOut);
 					}}
 					type="button"
 				>

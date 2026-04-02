@@ -16,6 +16,7 @@ import type * as accrual_interestMath from "../accrual/interestMath.js";
 import type * as accrual_ownershipPeriods from "../accrual/ownershipPeriods.js";
 import type * as accrual_queryHelpers from "../accrual/queryHelpers.js";
 import type * as accrual_types from "../accrual/types.js";
+import type * as admin_queries from "../admin/queries.js";
 import type * as audit_queries from "../audit/queries.js";
 import type * as auditLog from "../auditLog.js";
 import type * as auditTrailClient from "../auditTrailClient.js";
@@ -272,6 +273,7 @@ declare const fullApi: ApiFromModules<{
   "accrual/ownershipPeriods": typeof accrual_ownershipPeriods;
   "accrual/queryHelpers": typeof accrual_queryHelpers;
   "accrual/types": typeof accrual_types;
+  "admin/queries": typeof admin_queries;
   "audit/queries": typeof audit_queries;
   auditLog: typeof auditLog;
   auditTrailClient: typeof auditTrailClient;

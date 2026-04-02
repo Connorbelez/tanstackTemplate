@@ -25,8 +25,8 @@ import { NavProjects } from "./nav-projects";
 import { NavUser } from "./nav-user";
 import { TeamSwitcher } from "./team-switcher";
 
-//
-// ToDo: All this is placeholder!!! Do not go live with this, the sidebar items are basically just lorus ipsum.
+// TODO: This navigation content is placeholder data and should be replaced
+// before the admin shell is considered production-ready.
 const data = {
 	user: {
 		name: "shadcn",

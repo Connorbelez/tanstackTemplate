@@ -64,7 +64,7 @@ export function AdminBreadcrumbs() {
 					return (
 						<Fragment key={href}>
 							<BreadcrumbItem>
-								{isCurrentPage || index === 0 ? (
+								{isCurrentPage ? (
 									<BreadcrumbPage>{label}</BreadcrumbPage>
 								) : (
 									<BreadcrumbLink asChild>

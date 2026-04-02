@@ -1,3 +1,4 @@
+import { useAuth } from "@workos/authkit-tanstack-react-start/client";
 import {
 	BadgeCheck,
 	Bell,
@@ -6,7 +7,6 @@ import {
 	LogOut,
 	Sparkles,
 } from "lucide-react";
-
 import { Avatar, AvatarFallback, AvatarImage } from "#/components/ui/avatar";
 import {
 	DropdownMenu,
@@ -23,6 +23,7 @@ import {
 	SidebarMenuItem,
 	useSidebar,
 } from "#/components/ui/sidebar";
+import { handleWorkosSignOut } from "#/lib/workos-sign-out";
 
 export function NavUser({
 	user,
@@ -34,6 +35,7 @@ export function NavUser({
 	};
 }) {
 	const { isMobile } = useSidebar();
+	const { signOut } = useAuth();
 
 	return (
 		<SidebarMenu>
@@ -96,7 +98,11 @@ export function NavUser({
 							</DropdownMenuItem>
 						</DropdownMenuGroup>
 						<DropdownMenuSeparator />
-						<DropdownMenuItem>
+						<DropdownMenuItem
+							onSelect={() => {
+								void handleWorkosSignOut(signOut);
+							}}
+						>
 							<LogOut />
 							Log out
 						</DropdownMenuItem>
