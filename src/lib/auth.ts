@@ -15,6 +15,39 @@ export const ISLAND_PERMISSIONS = {
 export type IslandPermission =
 	(typeof ISLAND_PERMISSIONS)[keyof typeof ISLAND_PERMISSIONS];
 
+export function hasPermission(
+	permissions: readonly string[],
+	permission: IslandPermission
+): boolean {
+	return permissions.includes(permission);
+}
+
+export function hasAnyPermission(
+	permissions: readonly string[],
+	requiredPermissions: readonly IslandPermission[]
+): boolean {
+	return requiredPermissions.some((permission) =>
+		hasPermission(permissions, permission)
+	);
+}
+
+export function canAccessAdminPath(
+	pathname: string,
+	permissions: readonly string[]
+): boolean {
+	if (hasPermission(permissions, "admin:access")) {
+		return true;
+	}
+
+	if (pathname === "/admin/underwriting") {
+		return hasPermission(permissions, "underwriter:access");
+	}
+
+	return pathname.startsWith("/admin/underwriting/")
+		? hasPermission(permissions, "underwriter:access")
+		: false;
+}
+
 /** Auth context returned by the root beforeLoad and available to all child routes. */
 export interface RouteAuthContext {
 	orgId: string | null;
@@ -57,6 +90,25 @@ export function guardPermission(permission: IslandPermission) {
 			throw redirect(buildSignInRedirect(location.href));
 		}
 		if (!context.permissions.includes(permission)) {
+			throw redirect({ to: "/unauthorized" });
+		}
+	};
+}
+
+export function guardAnyPermission(
+	requiredPermissions: readonly IslandPermission[]
+) {
+	return ({
+		context,
+		location,
+	}: {
+		context: RouteAuthContext;
+		location: { href: string };
+	}) => {
+		if (!context.userId) {
+			throw redirect(buildSignInRedirect(location.href));
+		}
+		if (!hasAnyPermission(context.permissions, requiredPermissions)) {
 			throw redirect({ to: "/unauthorized" });
 		}
 	};

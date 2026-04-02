@@ -46,12 +46,14 @@ export default function SignInButton({ large }: { large?: boolean }) {
 			<Link
 				className="rounded-md bg-foreground px-4 py-2 text-background"
 				{...buildSignInRedirect(href)}
+				viewTransition
 			>
 				Sign in
 			</Link>
 			<Link
 				className="rounded-md bg-foreground px-4 py-2 text-background"
 				{...buildSignUpRedirect(href)}
+				viewTransition
 			>
 				Sign up
 			</Link>

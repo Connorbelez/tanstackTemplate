@@ -1,6 +1,7 @@
 import { useSuspenseQuery } from "@tanstack/react-query";
 import { createFileRoute, Outlet, useMatch } from "@tanstack/react-router";
 import { AdminDetailSheet } from "#/components/admin/shell/AdminDetailSheet";
+import { AdminNotFoundState } from "#/components/admin/shell/AdminRouteStates";
 import EntityTable from "#/components/admin/shell/EntityTable";
 import { adminEntityTableColumns } from "#/components/admin/shell/entity-table-columns";
 import { useAdminDetailSheet } from "#/hooks/useAdminDetailSheet";
@@ -23,11 +24,7 @@ function EntityList() {
 	const { entitytype } = Route.useParams();
 
 	if (!isAdminEntityType(entitytype)) {
-		return (
-			<div className="p-6 text-muted-foreground text-sm">
-				Unknown admin entity type: {entitytype}
-			</div>
-		);
+		return <AdminNotFoundState entityType={entitytype} variant="entity" />;
 	}
 
 	return <TypedEntityList entityType={entitytype} />;
