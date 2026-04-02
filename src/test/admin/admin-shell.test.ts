@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+	buildAdminPreviewRecords,
+	getAdminPreviewRecord,
+} from "#/components/admin/shell/admin-preview-records";
+import {
 	getAdminNavigationSections,
 	isAdminRouteActive,
 } from "#/components/admin/shell/entity-registry";
@@ -96,5 +100,23 @@ describe("admin shell helpers", () => {
 		expect(isAdminPathname("/admin/listings")).toBe(true);
 		expect(isAdminPathname("/administrator")).toBe(false);
 		expect(isAdminPathname("/about")).toBe(false);
+	});
+
+	it("builds deterministic preview records only for registered entities", () => {
+		expect(buildAdminPreviewRecords("listings")).toHaveLength(10);
+		expect(buildAdminPreviewRecords("ghost")).toEqual([]);
+		expect(buildAdminPreviewRecords("listings")[0]).toMatchObject({
+			id: 0,
+			name: "Listing 1",
+		});
+	});
+
+	it("finds preview records by string route id and returns undefined when absent", () => {
+		expect(getAdminPreviewRecord("mortgages", "4")).toMatchObject({
+			id: 4,
+			name: "Mortgage 5",
+		});
+		expect(getAdminPreviewRecord("mortgages", "99")).toBeUndefined();
+		expect(getAdminPreviewRecord("ghost", "1")).toBeUndefined();
 	});
 });
