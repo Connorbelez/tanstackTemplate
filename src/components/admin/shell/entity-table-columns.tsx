@@ -2,6 +2,7 @@
 
 import type { ColumnDef } from "@tanstack/react-table";
 import { MoreHorizontal } from "lucide-react";
+import { useAdminDetailSheet } from "#/hooks/useAdminDetailSheet";
 import { Button } from "@/components/ui/button";
 import {
 	DropdownMenu,
@@ -18,6 +19,44 @@ export interface AdminEntityTableRow {
 	subtitle: string;
 	title: string;
 	updatedAt?: number;
+}
+
+function AdminEntityActionsCell({ rowData }: { rowData: AdminEntityTableRow }) {
+	const { open } = useAdminDetailSheet();
+
+	return (
+		<div className="text-right">
+			<DropdownMenu>
+				<DropdownMenuTrigger asChild>
+					<Button
+						className="h-8 w-8 p-0"
+						onClick={(event) => event.stopPropagation()}
+						type="button"
+						variant="ghost"
+					>
+						<span className="sr-only">Open menu</span>
+						<MoreHorizontal className="h-4 w-4" />
+					</Button>
+				</DropdownMenuTrigger>
+				<DropdownMenuContent align="end">
+					<DropdownMenuLabel>Actions</DropdownMenuLabel>
+					<DropdownMenuItem
+						onClick={() => navigator.clipboard.writeText(rowData.id)}
+					>
+						Copy record ID
+					</DropdownMenuItem>
+					<DropdownMenuSeparator />
+					<DropdownMenuItem
+						onSelect={() => {
+							open(rowData.id);
+						}}
+					>
+						View record details
+					</DropdownMenuItem>
+				</DropdownMenuContent>
+			</DropdownMenu>
+		</div>
+	);
 }
 
 function compareNullableStrings(
@@ -115,35 +154,7 @@ export const adminEntityTableColumns: ColumnDef<AdminEntityTableRow>[] = [
 	{
 		id: "actions",
 		cell: ({ row }) => {
-			const rowData = row.original;
-
-			return (
-				<div className="text-right">
-					<DropdownMenu>
-						<DropdownMenuTrigger asChild>
-							<Button
-								className="h-8 w-8 p-0"
-								onClick={(event) => event.stopPropagation()}
-								type="button"
-								variant="ghost"
-							>
-								<span className="sr-only">Open menu</span>
-								<MoreHorizontal className="h-4 w-4" />
-							</Button>
-						</DropdownMenuTrigger>
-						<DropdownMenuContent align="end">
-							<DropdownMenuLabel>Actions</DropdownMenuLabel>
-							<DropdownMenuItem
-								onClick={() => navigator.clipboard.writeText(rowData.id)}
-							>
-								Copy record ID
-							</DropdownMenuItem>
-							<DropdownMenuSeparator />
-							<DropdownMenuItem>View record details</DropdownMenuItem>
-						</DropdownMenuContent>
-					</DropdownMenu>
-				</div>
-			);
+			return <AdminEntityActionsCell rowData={row.original} />;
 		},
 	},
 ];

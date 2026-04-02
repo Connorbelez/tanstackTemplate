@@ -29,7 +29,8 @@ function parseRecordIdParam(value: unknown): string | undefined {
 		try {
 			const parsed: unknown = JSON.parse(trimmed);
 			if (typeof parsed === "string") {
-				return parsed.length > 0 ? parsed : undefined;
+				const normalized = parsed.trim();
+				return normalized.length > 0 ? normalized : undefined;
 			}
 			if (typeof parsed === "number" && Number.isFinite(parsed)) {
 				return String(parsed);
@@ -40,6 +41,15 @@ function parseRecordIdParam(value: unknown): string | undefined {
 	}
 
 	return trimmed;
+}
+
+function parseEntityTypeParam(value: unknown): string | undefined {
+	if (typeof value !== "string") {
+		return undefined;
+	}
+
+	const trimmed = value.trim();
+	return trimmed.length > 0 ? trimmed : undefined;
 }
 
 function parseBooleanParam(value: unknown): boolean {
@@ -67,10 +77,11 @@ export function parseAdminDetailSearch(
 	raw: Record<string, unknown>
 ): AdminDetailSearch {
 	const recordId = parseRecordIdParam(raw.recordId);
+	const entityType = parseEntityTypeParam(raw.entityType);
 
 	return {
 		detailOpen: parseBooleanParam(raw.detailOpen),
-		entityType: raw.entityType as string | undefined,
+		entityType,
 		recordId,
 	};
 }

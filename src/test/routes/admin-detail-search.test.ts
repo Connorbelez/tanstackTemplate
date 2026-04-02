@@ -19,6 +19,7 @@ describe("parseAdminDetailSearch", () => {
 		);
 		expect(parseAdminDetailSearch({ recordId: '"42"' }).recordId).toBe("42");
 		expect(parseAdminDetailSearch({ recordId: 42 }).recordId).toBe("42");
+		expect(parseAdminDetailSearch({ recordId: '"   "' }).recordId).toBeUndefined();
 	});
 
 	it("treats empty or unsupported record IDs as undefined", () => {
@@ -39,5 +40,11 @@ describe("parseAdminDetailSearch", () => {
 			entityType: "mortgages",
 			recordId: "abc123",
 		});
+	});
+
+	it("treats blank entityType as undefined", () => {
+		expect(parseAdminDetailSearch({ entityType: "   " }).entityType).toBeUndefined();
+		expect(parseAdminDetailSearch({ entityType: null }).entityType).toBeUndefined();
+		expect(parseAdminDetailSearch({ entityType: 123 }).entityType).toBeUndefined();
 	});
 });
