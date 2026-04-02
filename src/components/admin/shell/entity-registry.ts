@@ -143,15 +143,15 @@ export const STATIC_ADMIN_NAV_ITEMS = [
 
 export type StaticAdminRoute = (typeof STATIC_ADMIN_NAV_ITEMS)[number]["route"];
 
-export type AdminNavigationRoute = AdminEntityRoute | StaticAdminRoute;
+export type AdminNavigationRoute = `/admin${string}`;
 
 interface AdminEntityNavigationItem {
 	readonly domain: AdminEntityDomain;
-	readonly entityType: AdminEntity["entityType"];
-	readonly iconName: AdminEntity["iconName"];
+	readonly entityType: string;
+	readonly iconName: string;
 	readonly kind: "entity";
 	readonly label: string;
-	readonly route: AdminEntityRoute;
+	readonly route: AdminEntityDefinition["route"];
 }
 
 interface AdminStaticNavigationItem {
@@ -223,7 +223,10 @@ export function isAdminRouteActive(
 	return pathname === route || pathname.startsWith(`${route}/`);
 }
 
-export function getAdminNavigationSections(): AdminNavigationSection[] {
+export function getAdminNavigationSections(
+	entities: readonly AdminEntityDefinition[] = ADMIN_ENTITIES,
+	staticItems: readonly AdminStaticNavigationItem[] = STATIC_ADMIN_NAV_ITEMS
+): AdminNavigationSection[] {
 	const groupedItems = new Map<AdminEntityDomain, AdminNavigationItem[]>(
 		Object.keys(ADMIN_DOMAIN_DEFINITIONS).map((domain) => [
 			domain as AdminEntityDomain,
@@ -231,13 +234,13 @@ export function getAdminNavigationSections(): AdminNavigationSection[] {
 		])
 	);
 
-	for (const item of STATIC_ADMIN_NAV_ITEMS) {
+	for (const item of staticItems) {
 		const items = groupedItems.get(item.domain) ?? [];
 		items.push(item);
 		groupedItems.set(item.domain, items);
 	}
 
-	for (const entity of ADMIN_ENTITIES) {
+	for (const entity of entities) {
 		if ("isHiddenFromNavigation" in entity && entity.isHiddenFromNavigation) {
 			continue;
 		}
