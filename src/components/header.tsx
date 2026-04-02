@@ -14,6 +14,7 @@ const demoSections: DemoSection[] = [
 		links: [
 			{ to: "/demo/tanstack-query", label: "TanStack Query" },
 			{ to: "/demo/table", label: "TanStack Table" },
+			{ to: "/demo/listings", label: "Listings" },
 			{ to: "/demo/form/simple", label: "Simple Form" },
 			{ to: "/demo/form/address", label: "Address Form" },
 			{ to: "/demo/storybook", label: "Storybook" },
