@@ -1,0 +1,42 @@
+import { createFileRoute, Outlet, useMatch } from "@tanstack/react-router";
+import { AdminDetailSheet } from "#/components/admin/shell/AdminDetailSheet";
+import EntityTable, { columns } from "#/components/admin/shell/EntityTable.tsx";
+import { useAdminDetailSheet } from "#/hooks/useAdminDetailSheet";
+
+export const Route = createFileRoute("/admin/mortgages")({
+	component: EntityList,
+	loader: async () => {
+		const fakeData = Array.from({ length: 10 }, (_, index) => ({
+			id: index,
+			name: `Mortgage ${index}`,
+			amount: Math.random() * 1000,
+		}));
+
+		return { fakeData };
+	},
+});
+
+function EntityList() {
+	const { fakeData } = Route.useLoaderData();
+	const { open } = useAdminDetailSheet();
+	const recordId = useMatch({
+		from: "/admin/mortgages/$recordid",
+		select: (match) => match.params.recordid,
+		shouldThrow: false,
+	});
+
+	if (recordId) {
+		return <Outlet />;
+	}
+
+	return (
+		<>
+			<EntityTable
+				columns={columns}
+				data={fakeData}
+				onRowClick={(row) => open(String(row.id))}
+			/>
+			<AdminDetailSheet entityType="mortgages" />
+		</>
+	);
+}
