@@ -9,6 +9,7 @@ import {
 	crmGetLinkedRecords,
 	crmListLinkTypes,
 } from "#/components/demo/crm/functionRefs";
+import { useRecordSidebar } from "#/components/demo/crm/RecordSidebarProvider";
 import { RecordTableSurface } from "#/components/demo/crm/RecordTableSurface";
 import type { CrmDemoRecordKind } from "#/components/demo/crm/types";
 import { extractCrmErrorMessage } from "#/components/demo/crm/utils";
@@ -44,6 +45,7 @@ function CrmLinksPage() {
 	const linkTypes = useQuery(crmListLinkTypes, {});
 	const createLinkType = useMutation(crmCreateLinkType);
 	const createLink = useMutation(crmCreateRecordLink);
+	const { openRecord } = useRecordSidebar();
 	const [sourceObjectId, setSourceObjectId] = useState<Id<"objectDefs">>();
 	const [targetObjectId, setTargetObjectId] = useState<Id<"objectDefs">>();
 	const [selectedSourceRecord, setSelectedSourceRecord] = useState<{
@@ -351,9 +353,18 @@ function CrmLinksPage() {
 							</div>
 							<div className="mt-3 grid gap-2">
 								{group.links.map((link) => (
-									<div
-										className="rounded-xl border border-border/60 bg-background/80 px-3 py-2"
+									<button
+										className="rounded-xl border border-border/60 bg-background/80 px-3 py-2 text-left transition-colors hover:bg-background"
 										key={link.linkId}
+										onClick={() =>
+											openRecord({
+												labelValue: link.labelValue,
+												objectDefId: link.objectDefId,
+												recordId: link.recordId,
+												recordKind: link.recordKind,
+											})
+										}
+										type="button"
 									>
 										<p className="font-medium text-sm">
 											{link.labelValue ?? link.recordId}
@@ -361,7 +372,7 @@ function CrmLinksPage() {
 										<p className="text-muted-foreground text-xs">
 											{link.recordKind} · {link.recordId}
 										</p>
-									</div>
+									</button>
 								))}
 							</div>
 						</div>

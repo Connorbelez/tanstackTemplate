@@ -1,7 +1,9 @@
-import { useQuery } from "convex/react";
-import { LoaderCircle, Rows3 } from "lucide-react";
-import { useEffect, useMemo, useRef } from "react";
+import { useMutation, useQuery } from "convex/react";
+import { KanbanSquare, LoaderCircle, Rows3 } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
 import { Badge } from "#/components/ui/badge";
+import { Button } from "#/components/ui/button";
 import {
 	Card,
 	CardContent,
@@ -9,49 +11,301 @@ import {
 	CardHeader,
 	CardTitle,
 } from "#/components/ui/card";
-import { Separator } from "#/components/ui/separator";
-import {
-	Table,
-	TableBody,
-	TableCell,
-	TableHead,
-	TableHeader,
-	TableRow,
-} from "#/components/ui/table";
-import { cn } from "#/lib/utils";
 import { api } from "../../../../convex/_generated/api";
 import type { Doc } from "../../../../convex/_generated/dataModel";
+import { renderEmptyRecordState } from "./cell-renderers";
+import { KanbanView } from "./KanbanView";
 import { useCrmDemoMetrics } from "./MetricsProvider";
-import type { CrmDemoMetricSource, CrmDemoRecordKind } from "./types";
+import { RecordTable } from "./RecordTable";
+import type {
+	CrmDemoKanbanResult,
+	CrmDemoMetricSource,
+	CrmDemoRecordReference,
+	CrmDemoTableResult,
+	RecordViewMode,
+} from "./types";
 import {
 	estimateEavReadCount,
-	formatFieldValue,
+	extractCrmErrorMessage,
 	hasUnifiedRecordShape,
 } from "./utils";
+import { ViewToggle } from "./ViewToggle";
 
 type ObjectDef = Doc<"objectDefs">;
 type FieldDef = Doc<"fieldDefs">;
+const RECORD_PAGE_SIZE = 50;
 
 interface RecordTableSurfaceProps {
 	emptyDescription: string;
 	emptyTitle: string;
+	enableKanban?: boolean;
 	metricNote: string;
 	metricSource: CrmDemoMetricSource;
 	objectDef?: ObjectDef;
-	onSelectRecord?: (record: {
-		recordId: string;
-		recordKind: CrmDemoRecordKind;
-	}) => void;
+	onDataLoaded?: (rows: CrmDemoTableResult["rows"]) => void;
+	onSelectRecord?: (record: CrmDemoRecordReference) => void;
 	selectedRecordId?: string;
 	trackMetrics?: boolean;
+}
+
+function buildTableView(views: Doc<"viewDefs">[] | undefined) {
+	return (
+		views?.find((view) => view.isDefault && view.viewType === "table") ??
+		views?.find((view) => view.viewType === "table")
+	);
+}
+
+function buildKanbanRows(groups: CrmDemoKanbanResult | undefined) {
+	return groups?.groups.flatMap((group) => group.records) ?? [];
+}
+
+function RecordSurfaceLoading() {
+	return (
+		<div className="flex items-center gap-2 text-muted-foreground text-sm">
+			<LoaderCircle className="size-4 animate-spin" />
+			Loading views and records...
+		</div>
+	);
+}
+
+function RecordSurfaceHeader({
+	canCreateKanban,
+	canUseKanban,
+	enableKanban,
+	handleCreateKanbanView,
+	objectDef,
+	viewMode,
+	setViewMode,
+}: {
+	canCreateKanban: boolean;
+	canUseKanban: boolean;
+	enableKanban: boolean;
+	handleCreateKanbanView: () => void;
+	objectDef: ObjectDef;
+	setViewMode: (mode: RecordViewMode) => void;
+	viewMode: RecordViewMode;
+}) {
+	return (
+		<div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+			<div>
+				<CardTitle className="flex items-center gap-2 text-lg">
+					{viewMode === "kanban" ? (
+						<KanbanSquare className="size-4" />
+					) : (
+						<Rows3 className="size-4" />
+					)}
+					{viewMode === "kanban" ? "Kanban validation" : "Record surface"}
+				</CardTitle>
+				<CardDescription>
+					{viewMode === "kanban"
+						? `Grouping ${objectDef.pluralLabel} through crm.viewQueries.queryViewRecords with a kanban view.`
+						: `Rendering ${objectDef.pluralLabel} through the shared record table surface.`}
+				</CardDescription>
+			</div>
+
+			<div className="flex flex-wrap items-center gap-2">
+				{enableKanban ? (
+					<ViewToggle
+						canUseKanban={canUseKanban}
+						mode={viewMode}
+						onModeChange={setViewMode}
+					/>
+				) : null}
+				{canCreateKanban ? (
+					<Button onClick={handleCreateKanbanView} size="sm" variant="outline">
+						Create kanban view
+					</Button>
+				) : null}
+			</div>
+		</div>
+	);
+}
+
+function RecordSurfaceBody({
+	emptyDescription,
+	emptyTitle,
+	fields,
+	kanbanPreview,
+	metricSource,
+	objectDef,
+	onSelectRecord,
+	onNextTablePage,
+	onPreviousTablePage,
+	selectedRecordId,
+	tablePreview,
+	tablePageIndex,
+	viewMode,
+}: {
+	emptyDescription: string;
+	emptyTitle: string;
+	fields: FieldDef[] | undefined;
+	kanbanPreview: CrmDemoKanbanResult | undefined;
+	metricSource: CrmDemoMetricSource;
+	objectDef: ObjectDef;
+	onSelectRecord?: (record: CrmDemoRecordReference) => void;
+	onNextTablePage: () => void;
+	onPreviousTablePage: () => void;
+	selectedRecordId?: string;
+	tablePreview: CrmDemoTableResult | undefined;
+	tablePageIndex: number;
+	viewMode: RecordViewMode;
+}) {
+	const activePreview = viewMode === "kanban" ? kanbanPreview : tablePreview;
+	const activeRows =
+		viewMode === "kanban"
+			? buildKanbanRows(kanbanPreview)
+			: (tablePreview?.rows ?? []);
+
+	if (fields === undefined || activePreview === undefined) {
+		return <RecordSurfaceLoading />;
+	}
+
+	const tablePageCount = Math.max(
+		1,
+		Math.ceil((tablePreview?.totalCount ?? 0) / RECORD_PAGE_SIZE)
+	);
+	const visibleRangeStart =
+		activeRows.length === 0 ? 0 : tablePageIndex * RECORD_PAGE_SIZE + 1;
+	const visibleRangeEnd = tablePageIndex * RECORD_PAGE_SIZE + activeRows.length;
+
+	return (
+		<>
+			<div className="flex flex-wrap items-center gap-2">
+				<Badge variant="secondary">
+					{viewMode === "kanban"
+						? `${kanbanPreview?.totalCount ?? 0} grouped records`
+						: `${tablePreview?.totalCount ?? 0} records`}
+				</Badge>
+				<Badge variant="outline">{fields.length} fields</Badge>
+				<Badge variant="outline">
+					{metricSource === "native" ? "Native Adapter" : "EAV Storage"}
+				</Badge>
+			</div>
+
+			{activeRows.length === 0 ? (
+				<div className="rounded-2xl border border-border/70 border-dashed px-4 py-8">
+					{renderEmptyRecordState(emptyDescription, emptyTitle)}
+				</div>
+			) : null}
+
+			{viewMode === "table" ? (
+				<RecordTable
+					fields={fields}
+					objectDef={objectDef}
+					onSelectRecord={onSelectRecord}
+					rows={tablePreview?.rows ?? []}
+					selectedRecordId={selectedRecordId}
+					viewColumns={tablePreview?.columns ?? []}
+				/>
+			) : null}
+
+			{viewMode === "kanban" && kanbanPreview ? (
+				<KanbanView
+					fields={fields}
+					groups={kanbanPreview.groups}
+					objectDef={objectDef}
+					onSelectRecord={onSelectRecord}
+					selectedRecordId={selectedRecordId}
+					viewColumns={tablePreview?.columns ?? []}
+				/>
+			) : null}
+
+			{viewMode === "table" &&
+			(tablePreview?.totalCount ?? 0) > RECORD_PAGE_SIZE ? (
+				<div className="flex flex-col gap-3 rounded-2xl border border-border/70 bg-muted/10 px-4 py-3 text-sm lg:flex-row lg:items-center lg:justify-between">
+					<div className="space-y-1">
+						<p className="font-medium">
+							Server page {tablePageIndex + 1} of {tablePageCount}
+						</p>
+						<p className="text-muted-foreground">
+							Showing records {visibleRangeStart}-{visibleRangeEnd} of{" "}
+							{tablePreview?.totalCount ?? 0}.
+						</p>
+					</div>
+					<div className="flex items-center gap-2">
+						<Button
+							disabled={tablePageIndex === 0}
+							onClick={onPreviousTablePage}
+							size="sm"
+							variant="outline"
+						>
+							Previous 50
+						</Button>
+						<Button
+							disabled={!tablePreview?.cursor}
+							onClick={onNextTablePage}
+							size="sm"
+							variant="outline"
+						>
+							Next 50
+						</Button>
+					</div>
+				</div>
+			) : null}
+		</>
+	);
+}
+
+function useRecordSurfaceMetrics({
+	activeRows,
+	fields,
+	metricNote,
+	metricSource,
+	onDataLoaded,
+	trackMetrics,
+}: {
+	activeRows: CrmDemoTableResult["rows"];
+	fields: FieldDef[] | undefined;
+	metricNote: string;
+	metricSource: CrmDemoMetricSource;
+	onDataLoaded?: (rows: CrmDemoTableResult["rows"]) => void;
+	trackMetrics: boolean;
+}) {
+	const { setMetricNotes, setReadCount, setRenderTime, setUnifiedShapeMatch } =
+		useCrmDemoMetrics();
+	const startedAtRef = useRef<number | null>(null);
+
+	useEffect(() => {
+		if (!(trackMetrics && fields)) {
+			return;
+		}
+
+		if (startedAtRef.current === null) {
+			startedAtRef.current = performance.now();
+		}
+
+		setReadCount(
+			metricSource,
+			metricSource === "eav"
+				? estimateEavReadCount(fields, activeRows.length)
+				: 4 + activeRows.length
+		);
+		setRenderTime(Math.round(performance.now() - startedAtRef.current));
+		setMetricNotes(metricNote);
+		setUnifiedShapeMatch(activeRows.every(hasUnifiedRecordShape));
+		onDataLoaded?.(activeRows);
+	}, [
+		activeRows,
+		fields,
+		metricNote,
+		metricSource,
+		onDataLoaded,
+		setMetricNotes,
+		setReadCount,
+		setRenderTime,
+		setUnifiedShapeMatch,
+		trackMetrics,
+	]);
 }
 
 export function RecordTableSurface({
 	emptyDescription,
 	emptyTitle,
+	enableKanban = true,
 	metricNote,
 	metricSource,
 	objectDef,
+	onDataLoaded,
 	onSelectRecord,
 	selectedRecordId,
 	trackMetrics = true,
@@ -60,60 +314,156 @@ export function RecordTableSurface({
 		api.crm.viewDefs.listViews,
 		objectDef ? { objectDefId: objectDef._id } : "skip"
 	);
-	const defaultView = useMemo(
-		() => views?.find((view) => view.isDefault) ?? views?.[0],
-		[views]
-	);
-	const preview = useQuery(
-		api.crm.viewQueries.queryViewRecords,
-		defaultView
-			? {
-					viewDefId: defaultView._id,
-					cursor: null,
-					limit: 25,
-				}
-			: "skip"
-	);
 	const fields = useQuery(
 		api.crm.fieldDefs.listFields,
 		objectDef ? { objectDefId: objectDef._id } : "skip"
 	);
-	const tablePreview = preview && "rows" in preview ? preview : undefined;
-	const { setMetricNotes, setReadCount, setRenderTime, setUnifiedShapeMatch } =
-		useCrmDemoMetrics();
-	const startedAtRef = useRef(performance.now());
+	const createView = useMutation(api.crm.viewDefs.createView);
+	const [viewMode, setViewMode] = useState<RecordViewMode>("table");
+	const [pendingKanbanViewId, setPendingKanbanViewId] = useState<
+		Doc<"viewDefs">["_id"] | null
+	>(null);
+	const [tableCursorHistory, setTableCursorHistory] = useState<
+		Array<string | null>
+	>([null]);
+	const [tablePageIndex, setTablePageIndex] = useState(0);
 
+	const tableView = useMemo(() => buildTableView(views), [views]);
+	const kanbanView = useMemo(
+		() => views?.find((view) => view.viewType === "kanban"),
+		[views]
+	);
+	const tableCursor = tableCursorHistory[tablePageIndex] ?? null;
+	const objectDefId = objectDef?._id;
+	const tableViewId = tableView?._id;
+
+	const prevObjectDefId = useRef(objectDefId);
+	const prevTableViewId = useRef(tableViewId);
 	useEffect(() => {
-		if (trackMetrics && tablePreview && fields) {
-			startedAtRef.current = performance.now();
+		if (prevObjectDefId.current !== objectDefId) {
+			prevObjectDefId.current = objectDefId;
+			setViewMode("table");
+			setPendingKanbanViewId(null);
+			setTableCursorHistory([null]);
+			setTablePageIndex(0);
 		}
-	}, [trackMetrics, tablePreview, fields]);
+	}, [objectDefId]);
 
 	useEffect(() => {
-		if (!(trackMetrics && tablePreview && fields)) {
+		if (prevTableViewId.current === tableViewId) {
 			return;
 		}
 
-		setReadCount(
-			metricSource,
-			metricSource === "eav"
-				? estimateEavReadCount(fields, tablePreview.rows.length)
-				: 4 + tablePreview.rows.length
-		);
-		setRenderTime(Math.round(performance.now() - startedAtRef.current));
-		setMetricNotes(metricNote);
-		setUnifiedShapeMatch(tablePreview.rows.every(hasUnifiedRecordShape));
-	}, [
+		prevTableViewId.current = tableViewId;
+		setTableCursorHistory([null]);
+		setTablePageIndex(0);
+	}, [tableViewId]);
+
+	useEffect(() => {
+		if (
+			pendingKanbanViewId &&
+			views?.some((view) => view._id === pendingKanbanViewId)
+		) {
+			setPendingKanbanViewId(null);
+		}
+	}, [pendingKanbanViewId, views]);
+
+	useEffect(() => {
+		if (viewMode === "table" && !tableView && kanbanView && enableKanban) {
+			setViewMode("kanban");
+			return;
+		}
+
+		if (viewMode === "kanban" && !kanbanView && !pendingKanbanViewId) {
+			setViewMode("table");
+		}
+	}, [enableKanban, kanbanView, pendingKanbanViewId, tableView, viewMode]);
+
+	const tablePreview = useQuery(
+		api.crm.viewQueries.queryViewRecords,
+		tableView
+			? {
+					cursor: tableCursor,
+					limit: RECORD_PAGE_SIZE,
+					viewDefId: tableView._id,
+				}
+			: "skip"
+	) as CrmDemoTableResult | undefined;
+
+	const kanbanPreview = useQuery(
+		api.crm.viewQueries.queryViewRecords,
+		viewMode === "kanban" && kanbanView
+			? {
+					cursor: null,
+					limit: RECORD_PAGE_SIZE,
+					viewDefId: kanbanView._id,
+				}
+			: "skip"
+	) as CrmDemoKanbanResult | undefined;
+
+	const firstKanbanField = useMemo(
+		() =>
+			(fields ?? []).find((field) =>
+				["select", "multi_select"].includes(field.fieldType)
+			),
+		[fields]
+	);
+	const activeRows =
+		viewMode === "kanban"
+			? buildKanbanRows(kanbanPreview)
+			: (tablePreview?.rows ?? []);
+	const canUseKanban = enableKanban && Boolean(kanbanView);
+	const canCreateKanban =
+		enableKanban &&
+		!objectDef?.isSystem &&
+		!kanbanView &&
+		Boolean(firstKanbanField);
+
+	useRecordSurfaceMetrics({
+		activeRows,
 		fields,
 		metricNote,
 		metricSource,
-		setMetricNotes,
-		setReadCount,
-		setRenderTime,
-		setUnifiedShapeMatch,
-		tablePreview,
+		onDataLoaded,
 		trackMetrics,
-	]);
+	});
+
+	async function handleCreateKanbanView() {
+		if (!(objectDef && firstKanbanField)) {
+			return;
+		}
+
+		try {
+			const nextKanbanViewId = await createView({
+				boundFieldId: firstKanbanField._id,
+				name: `${objectDef.pluralLabel} Pipeline`,
+				objectDefId: objectDef._id,
+				viewType: "kanban",
+			});
+			setPendingKanbanViewId(nextKanbanViewId);
+			setViewMode("kanban");
+			toast.success(`Created kanban view bound to ${firstKanbanField.label}.`);
+		} catch (error) {
+			toast.error(extractCrmErrorMessage(error));
+		}
+	}
+
+	function handleNextTablePage() {
+		if (!tablePreview?.cursor) {
+			return;
+		}
+
+		setTableCursorHistory((current) =>
+			current[tablePageIndex + 1] === tablePreview.cursor
+				? current
+				: [...current, tablePreview.cursor]
+		);
+		setTablePageIndex((current) => current + 1);
+	}
+
+	function handlePreviousTablePage() {
+		setTablePageIndex((current) => Math.max(current - 1, 0));
+	}
 
 	if (!objectDef) {
 		return (
@@ -129,135 +479,34 @@ export function RecordTableSurface({
 	return (
 		<Card className="border-border/70 shadow-sm">
 			<CardHeader>
-				<div className="flex items-start justify-between gap-4">
-					<div>
-						<CardTitle className="flex items-center gap-2 text-lg">
-							<Rows3 className="size-4" />
-							Live record preview
-						</CardTitle>
-						<CardDescription>
-							Querying `{defaultView?.name ?? "default view"}` for{" "}
-							{objectDef.pluralLabel}.
-						</CardDescription>
-					</div>
-					{defaultView ? (
-						<Badge variant="outline">{defaultView.viewType}</Badge>
-					) : null}
-				</div>
+				<RecordSurfaceHeader
+					canCreateKanban={canCreateKanban}
+					canUseKanban={canUseKanban}
+					enableKanban={enableKanban}
+					handleCreateKanbanView={handleCreateKanbanView}
+					objectDef={objectDef}
+					setViewMode={setViewMode}
+					viewMode={viewMode}
+				/>
 			</CardHeader>
+
 			<CardContent className="space-y-4">
-				{tablePreview === undefined || fields === undefined ? (
-					<div className="flex items-center gap-2 text-muted-foreground text-sm">
-						<LoaderCircle className="size-4 animate-spin" />
-						Loading records and view schema...
-					</div>
-				) : null}
-
-				{tablePreview &&
-				tablePreview.rows.length > 0 &&
-				fields &&
-				fields.length > 0 ? (
-					<>
-						<div className="flex items-center justify-between gap-3">
-							<div className="flex items-center gap-2">
-								<Badge variant="secondary">
-									{tablePreview.totalCount} records
-								</Badge>
-								<Badge variant="outline">{fields.length} fields</Badge>
-							</div>
-							<p className="text-muted-foreground text-xs">
-								UnifiedRecord rows from `crm.viewQueries.queryViewRecords`
-							</p>
-						</div>
-						<Table>
-							<TableHeader>
-								<TableRow>
-									<TableHead className="w-[180px]">Record</TableHead>
-									{fields.map((field) => (
-										<TableHead key={field._id}>{field.label}</TableHead>
-									))}
-								</TableRow>
-							</TableHeader>
-							<TableBody>
-								{tablePreview.rows.map((row) => (
-									<TableRow
-										className={cn(
-											onSelectRecord && "cursor-pointer",
-											row._id === selectedRecordId && "bg-muted/40"
-										)}
-										key={row._id}
-										onClick={() =>
-											onSelectRecord?.({
-												recordId: row._id,
-												recordKind: row._kind,
-											})
-										}
-										onKeyDown={(event) => {
-											if (
-												onSelectRecord &&
-												(event.key === "Enter" || event.key === " ")
-											) {
-												event.preventDefault();
-												onSelectRecord({
-													recordId: row._id,
-													recordKind: row._kind,
-												});
-											}
-										}}
-										role={onSelectRecord ? "button" : undefined}
-										tabIndex={onSelectRecord ? 0 : undefined}
-									>
-										<TableCell className="font-medium">
-											<div>
-												<p>{row._kind}</p>
-												<p className="text-muted-foreground text-xs">
-													{row._id}
-												</p>
-											</div>
-										</TableCell>
-										{fields.map((field: FieldDef) => (
-											<TableCell key={`${row._id}-${field._id}`}>
-												{formatFieldValue(field, row.fields[field.name])}
-											</TableCell>
-										))}
-									</TableRow>
-								))}
-							</TableBody>
-						</Table>
-					</>
-				) : null}
-
-				{tablePreview && tablePreview.rows.length === 0 ? (
-					<div className="rounded-2xl border border-border/70 border-dashed px-4 py-8 text-center">
-						<p className="font-medium text-sm">No records yet</p>
-						<p className="mt-1 text-muted-foreground text-sm">
-							{emptyDescription}
-						</p>
-					</div>
-				) : null}
-
-				<Separator />
-
-				<div className="grid gap-3 md:grid-cols-3">
-					<PreviewCallout label="View source" value="viewDefs.listViews" />
-					<PreviewCallout
-						label="Query source"
-						value="viewQueries.queryViewRecords"
-					/>
-					<PreviewCallout label="Contract" value="UnifiedRecord[]" />
-				</div>
+				<RecordSurfaceBody
+					emptyDescription={emptyDescription}
+					emptyTitle={emptyTitle}
+					fields={fields as FieldDef[] | undefined}
+					kanbanPreview={kanbanPreview}
+					metricSource={metricSource}
+					objectDef={objectDef}
+					onNextTablePage={handleNextTablePage}
+					onPreviousTablePage={handlePreviousTablePage}
+					onSelectRecord={onSelectRecord}
+					selectedRecordId={selectedRecordId}
+					tablePageIndex={tablePageIndex}
+					tablePreview={tablePreview}
+					viewMode={viewMode}
+				/>
 			</CardContent>
 		</Card>
-	);
-}
-
-function PreviewCallout({ label, value }: { label: string; value: string }) {
-	return (
-		<div className="rounded-2xl border border-border/70 bg-muted/20 px-4 py-3">
-			<p className="font-medium text-muted-foreground text-xs uppercase tracking-[0.16em]">
-				{label}
-			</p>
-			<p className="mt-1 font-medium text-sm">{value}</p>
-		</div>
 	);
 }

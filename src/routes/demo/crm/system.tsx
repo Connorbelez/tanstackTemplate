@@ -3,9 +3,8 @@ import { useQuery } from "convex/react";
 import { Database, ServerCog } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { ObjectInventoryCard } from "#/components/demo/crm/ObjectInventoryCard";
-import { RecordDetailCard } from "#/components/demo/crm/RecordDetailCard";
-import { RecordTableSurface } from "#/components/demo/crm/RecordTableSurface";
-import type { CrmDemoRecordKind } from "#/components/demo/crm/types";
+import { useRecordSidebar } from "#/components/demo/crm/RecordSidebarProvider";
+import { SystemAdapterTab } from "#/components/demo/crm/SystemAdapterTab";
 import { Badge } from "#/components/ui/badge";
 import {
 	Card,
@@ -22,12 +21,13 @@ export const Route = createFileRoute("/demo/crm/system")({
 });
 
 function CrmSystemAdaptersPage() {
+	return <CrmSystemAdaptersContent />;
+}
+
+function CrmSystemAdaptersContent() {
 	const objects = useQuery(api.crm.objectDefs.listObjects, {});
 	const [selectedObjectId, setSelectedObjectId] = useState<Id<"objectDefs">>();
-	const [selectedRecord, setSelectedRecord] = useState<{
-		recordId: string;
-		recordKind: CrmDemoRecordKind;
-	}>();
+	const { currentRecord, openRecord } = useRecordSidebar();
 
 	const systemObjects = useMemo(
 		() => (objects ?? []).filter((objectDef) => objectDef.isSystem),
@@ -88,30 +88,21 @@ function CrmSystemAdaptersPage() {
 					objects={systemObjects}
 					onSelect={(objectDefId) => {
 						setSelectedObjectId(objectDefId);
-						setSelectedRecord(undefined);
 					}}
 					selectedObjectId={selectedObjectId}
 					title="System object inventory"
 				/>
 			</div>
 
-			<div className="space-y-6">
-				<RecordTableSurface
-					emptyDescription="System records will appear here once the underlying native table has org-scoped data."
-					emptyTitle="Native record preview"
-					metricNote="System-object preview uses the native query adapter behind crm.viewQueries.queryViewRecords."
-					metricSource="native"
-					objectDef={selectedObject}
-					onSelectRecord={setSelectedRecord}
-					selectedRecordId={selectedRecord?.recordId}
-				/>
-
-				<RecordDetailCard
-					objectDef={selectedObject}
-					recordId={selectedRecord?.recordId}
-					recordKind={selectedRecord?.recordKind}
-				/>
-			</div>
+			<SystemAdapterTab
+				objectDef={selectedObject}
+				onSelectRecord={openRecord}
+				selectedRecordId={
+					currentRecord && currentRecord.objectDefId === selectedObject?._id
+						? currentRecord.recordId
+						: undefined
+				}
+			/>
 		</div>
 	);
 }
