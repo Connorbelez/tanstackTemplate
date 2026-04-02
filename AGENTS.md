@@ -1,36 +1,13 @@
-# CLAUDE
-
-## Tech Stack — Who Owns What
-
-| Layer | Technology | Responsibility |
-|---|---|---|
-| **Auth & AuthZ** | **WorkOS AuthKit** | Canonical source of truth for authentication and authorization. Roles, permissions, organizations, and session management all live in WorkOS. User/org data is synced to Convex via the `@convex-dev/workos-authkit` component webhooks. |
-| **Backend / DB / API** | **Convex** | Serverless backend, real-time database, ORM, scheduler, and function runtime. All business logic runs as Convex queries, mutations, and actions. |
-| **Middleware** | **fluent-convex** | Chainable API builder for Convex functions with composable middleware. All auth checks, permission gates, and context enrichment are enforced through fluent-convex middleware chains (`authedQuery`, `requirePermission(p)`, `adminMutation`, etc.). No raw `ctx.auth.getUserIdentity()` calls outside of `getAuthContext()`. |
-| **State Machines** | **XState v5** (pure functional API only) | Defines entity lifecycles as deterministic state machines. We use `setup().createMachine()` for definitions and `transition()` for pure state computation. No actors, no interpreters, no subscriptions — Convex's stateless V8 isolates require a hydrate-compute-persist pattern. |
-| **Frontend** | **React + TanStack Start** | Meta-framework providing SSR, file-based routing, server functions. |
-| **Routing** | **TanStack Router** | File-based routing in `src/routes/`. Route guards via `beforeLoad` for island-level auth gating. |
-| **Data Fetching** | **TanStack Query + Convex** | `useSuspenseQuery(convexQuery(...))` for live-updating, server-rendered queries. Route loaders pre-fetch via `ensureQueryData`. |
-| **UI** | **Tailwind CSS + ShadCN UI** | Utility-first styling with pre-built accessible components. |
-| **Audit Logging** | **convex-audit-log** | Hash-chained, tamper-evident audit trail for compliance (O.Reg 189/08). Two layers: atomic journal (Layer 1) + component-isolated hash chain (Layer 2). |
-| **Package Manager** | **Bun** | Package installation, script running, test execution. |
-| **Testing** | **Vitest, React Testing Library, Playwright, convex-test** | Unit, component, integration, and E2E testing. |
-| **Linting & Formatting** | **Biome** | Single tool for linting and formatting. Run `bun check` which auto-fixes before reporting errors. |
-
----
-
-## Important Links
-
-| Resource | Link |
-|---|---|
-| Product Planning System | [Notion](https://www.notion.so/FairLend-Product-Planning-System-30ffc1b4402481d187d8e2bdc309945b) |
-| Phase 1 PRD | [Notion](https://www.notion.so/Phase-1-PRD-Financial-Core-Platform-Foundation-322fc1b4402481cdbfecd1de3abd6526) |
-| How We Work | [Notion](https://www.notion.so/How-We-Work-Linear-Notion-Graphite-Workflow-322fc1b440248165a963eba34133fd20) |
-| Linear Initiative | [Linear](https://linear.app/fairlend/initiative/fairlend-phase-1-foundation-bb7a993c963f/overview) |
-| AI Agent Instructions | [AGENTS.md](./AGENTS.md) |
-| AI Coding Guidelines | [CLAUDE.md](./CLAUDE.md) |
-
-
+# AGENTS
+## Techstack
+- Backend, DB, API, ORM, Serverless: Convex
+- Convex function builder and middleware: fluent-convex
+- Frontend: React, TanStack Router, Tanstack Query + Convex query integration, Tailwind CSS, ShadCN UI
+- Authentication: WorkOS AuthKit
+- MetaFramework: TanStack Start
+- package manager: Bun
+- Testing: Vitest, React Testing Library, Playwright, convex-test
+- linting + Formatting - Biome
 
 ## Dev environment tips
 - Installing Packages: `bun add [package-name]`
@@ -65,6 +42,12 @@
 - **Auditability from the ground floor.** Every state transition is journaled, hash-chained, and queryable. Both successes and rejections. This is the 5-year regulatory retention layer.
 
 ## Standards & Conventions 
+### Convex
+- `fluent-convex` is the canonical way of writing Convex functions in this application.
+- Exported Convex queries, mutations, and actions must use the fluent builder and end with an explicit `.public()` or `.internal()` so visibility is obvious at the export site.
+- Do not ship raw exported helper functions as pseudo-endpoints. Shared Convex logic should live in fluent callables, builder chains, or local pipeline/middleware stages, then be registered explicitly.
+- Prefer pipeline/builder/middleware composition for validation and invariants such as uniqueness checks instead of standalone exported helper functions.
+
 ### Auth
 - WorkOS Authkit is the canonical source of truth. 
 - Always use `import { useAuth } from "@workos/authkit-tanstack-react-start/client"` to access auth state in React components.
@@ -232,7 +215,11 @@ We're building a backoffice Loan Management System with an integrated ledger and
 - [Filepath](./docs/convex/convex-tracer.md)
 - When to use skill: Whenever working on anything related to tracing backend flows, debugging production issues, inspecting nested operations, or improving Convex observability.
 
+#### convex-audit-log
+- Description: Track user actions, API calls, and system events in Convex with audit trails, change diffs, PII redaction, querying, anomaly detection, and compliance-oriented retention controls. Use when working with audits, compliance, security logging, or destructive/admin actions.
+- [Filepath](./docs/convex/convex-audit-log.md)
+- When to use skill: Whenever working on anything related to audit trails, compliance evidence, security-sensitive event logging, destructive admin actions, or change tracking.
+
 ## Subagent routing
 
 When spawning subagents (Agent/Task tool), the routing block is automatically injected into their prompt. Bash-type subagents are upgraded to general-purpose so they have access to MCP tools. You do NOT need to manually instruct subagents about context-mode.
-

@@ -155,6 +155,8 @@ import type * as ledger_validators from "../ledger/validators.js";
 import type * as lib_businessDates from "../lib/businessDates.js";
 import type * as lib_businessDays from "../lib/businessDays.js";
 import type * as lib_orgScope from "../lib/orgScope.js";
+import type * as listings_create from "../listings/create.js";
+import type * as listings_validators from "../listings/validators.js";
 import type * as mortgages_paymentFrequency from "../mortgages/paymentFrequency.js";
 import type * as mortgages_queries from "../mortgages/queries.js";
 import type * as numbers from "../numbers.js";
@@ -412,6 +414,8 @@ declare const fullApi: ApiFromModules<{
   "lib/businessDates": typeof lib_businessDates;
   "lib/businessDays": typeof lib_businessDays;
   "lib/orgScope": typeof lib_orgScope;
+  "listings/create": typeof listings_create;
+  "listings/validators": typeof listings_validators;
   "mortgages/paymentFrequency": typeof mortgages_paymentFrequency;
   "mortgages/queries": typeof mortgages_queries;
   numbers: typeof numbers;
