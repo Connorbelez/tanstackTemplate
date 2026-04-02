@@ -37,6 +37,16 @@ import {
 	feeStatusValidator,
 	feeSurfaceValidator,
 } from "./fees/validators";
+import {
+	listingDataSourceValidator,
+	listingDelistReasonValidator,
+	listingHeroImageValidator,
+	listingLoanTypeValidator,
+	listingPaymentFrequencyValidator,
+	listingPropertyTypeValidator,
+	listingRateTypeValidator,
+	listingStatusValidator,
+} from "./listings/validators";
 import { payoutFrequencyValidator } from "./payments/payout/validators";
 import {
 	counterpartyTypeValidator,
@@ -561,6 +571,79 @@ export default defineSchema({
 
 		createdAt: v.number(),
 	}).index("by_property", ["propertyId"]),
+
+	listings: defineTable({
+		// ─── Identity & provenance ───
+		mortgageId: v.optional(v.id("mortgages")),
+		propertyId: v.optional(v.id("properties")),
+		dataSource: listingDataSourceValidator,
+
+		// ─── GT fields ───
+		status: listingStatusValidator,
+		machineContext: v.optional(v.any()),
+		lastTransitionAt: v.optional(v.number()),
+
+		// ─── Denormalized mortgage / property fields ───
+		principal: v.number(),
+		interestRate: v.number(),
+		ltvRatio: v.number(),
+		termMonths: v.number(),
+		maturityDate: v.string(),
+		// Public listing contract keeps monthlyPayment naming even though
+		// mortgage source data currently uses paymentAmount.
+		monthlyPayment: v.number(),
+		rateType: listingRateTypeValidator,
+		paymentFrequency: listingPaymentFrequencyValidator,
+		loanType: listingLoanTypeValidator,
+		lienPosition: v.number(),
+		propertyType: listingPropertyTypeValidator,
+		city: v.string(),
+		province: v.string(),
+		approximateLatitude: v.optional(v.number()),
+		approximateLongitude: v.optional(v.number()),
+
+		// ─── Appraisal summary ───
+		latestAppraisalValueAsIs: v.optional(v.number()),
+		latestAppraisalDate: v.optional(v.string()),
+
+		// ─── Flexible denormalized composites ───
+		borrowerSignal: v.optional(v.any()),
+		paymentHistory: v.optional(v.any()),
+
+		// ─── Marketplace-owned fields ───
+		title: v.optional(v.string()),
+		description: v.optional(v.string()),
+		marketplaceCopy: v.optional(v.string()),
+		heroImages: v.array(listingHeroImageValidator),
+		featured: v.boolean(),
+		displayOrder: v.optional(v.number()),
+		adminNotes: v.optional(v.string()),
+		publicDocumentIds: v.array(v.id("_storage")),
+		seoSlug: v.optional(v.string()),
+
+		// ─── Engagement ───
+		viewCount: v.number(),
+
+		// ─── Lifecycle ───
+		publishedAt: v.optional(v.number()),
+		delistedAt: v.optional(v.number()),
+		delistReason: v.optional(listingDelistReasonValidator),
+
+		// ─── Timestamps ───
+		createdAt: v.number(),
+		updatedAt: v.number(),
+	})
+		.index("by_mortgage", ["mortgageId"])
+		.index("by_status", ["status"])
+		.index("by_status_and_featured", ["status", "featured"])
+		.index("by_property_type_and_status", ["propertyType", "status"])
+		.index("by_province_and_status", ["province", "status"])
+		.index("by_city_and_status", ["city", "status"])
+		.index("by_lien_position_and_status", ["lienPosition", "status"])
+		.index("by_interest_rate", ["status", "interestRate"])
+		.index("by_ltv", ["status", "ltvRatio"])
+		.index("by_principal", ["status", "principal"])
+		.index("by_published_at", ["status", "publishedAt"]),
 
 	obligations: defineTable({
 		/** WorkOS organization id — denormalized from mortgage. */

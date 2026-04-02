@@ -57,7 +57,14 @@ export function AdminDetailSheet({ entityType }: AdminDetailSheetProps) {
 									View record
 								</Link>
 							</>
-						) : null}
+						) : (
+							<>
+								.{" "}
+								<span className="cursor-not-allowed text-muted-foreground">
+									View record (select a row first)
+								</span>
+							</>
+						)}
 					</SheetDescription>
 				</SheetHeader>
 				<div className="text-sm">

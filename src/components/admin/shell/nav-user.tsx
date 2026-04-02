@@ -1,3 +1,5 @@
+"use client";
+
 import { useAuth } from "@workos/authkit-tanstack-react-start/client";
 import {
 	BadgeCheck,
