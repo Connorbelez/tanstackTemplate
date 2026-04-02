@@ -48,6 +48,17 @@ export async function insertListing(
 	ctx: MutationCtx,
 	listing: ListingInsert
 ): Promise<Id<"listings">> {
+	if (listing.dataSource === "demo" && listing.mortgageId !== undefined) {
+		throw new ConvexError("Demo listings must not include a mortgageId");
+	}
+
+	if (
+		listing.dataSource === "mortgage_pipeline" &&
+		listing.mortgageId === undefined
+	) {
+		throw new ConvexError("Mortgage-backed listings require a mortgageId");
+	}
+
 	await assertUniqueMortgageListing(ctx, listing.mortgageId);
 	return await ctx.db.insert("listings", listing);
 }
