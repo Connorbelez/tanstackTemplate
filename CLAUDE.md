@@ -160,12 +160,17 @@ Sample JWT Payload:
 ## Workflow 
 - DO NOT try to fix linting/formatting errors BEFORE running `bun check`. Always run `bun check` first as this command also auto formats and fixes some linting errors.
 - After Completing a Major unit of work like a full SPEC run `coderabbit review --plain` to get a code review summary and check for any potential issues or improvements. 
-- This is an early stage project, feel free to suggest sweeping changes to the schema, architecture etc, but ask your human first. 
+- This is an early stage project, feel free to suggest sweeping changes to the schema, architecture, etc., but ask your human first. 
 
 ## Maintainability
 
 Long term maintainability is a core priority. If you add new functionality, first check if there are shared logic that can be extracted to a separate module. Duplicate logic across mulitple files is a code smell and should be avoided. Don't be afraid to change existing code. Don't take shortcuts by just adding local logic to solve a problem.
 
+## Context 
+We're building a greenfield project; there is no existing prod data or deployment. Feel free to suggest sweeping changes to the schema, architecture, etc., but ask your human first. 
+
+## What we're building
+We're building a back-office loan management system with an integrated ledger and accounting system, plus an attached marketplace for fractional mortgage deal closings. 
 
 ## Toolkit 
 
@@ -181,40 +186,17 @@ Long term maintainability is a core priority. If you add new functionality, firs
 - [Filepath](./docs/convex/convex-fs.md)
 - When to use skill: Whenever working on anything related to filesystem-style storage, path-based file organization, signed downloads, expiring file artifacts, or file lifecycle management.
 
-#### convex-dev-resend
-- Description: Official Convex integration for Resend email service with queuing, batching, rate limiting, and guaranteed delivery via durable execution. Use when working with integrations features, email, resend, inbox.
-- [Filepath](./docs/convex/convex-dev-resend.md)
-- When to use skill: Whenever working on anything related to email sending, integrations, or Resend email service.
-
 #### convex-dev-workflow
 - Description: Execute long-running code flows durably with built-in retries, delays, and state persistence across function interruptions. Use when working with durable-functions features, Workflow.
 - [Filepath](./docs/convex/convex-dev-workflow.md)
 - When to use skill: Whenever working on anything related to durable function execution, long-running processes
-
-#### convex-dev-stripe
-- Description: Integrate Stripe payments, subscriptions, billing, checkout sessions, customer portals, and webhook syncing directly with Convex. Use when working with payments, subscriptions, billing, checkout, invoices, Stripe.
-- [Filepath](./docs/convex/convex-dev-stripe.md)
-- When to use skill: Whenever working on anything related to payments, subscriptions, billing, customer portals, or Stripe webhooks.
 
 #### convex-dev-action-cache
 - Description: Cache expensive action results with optional TTLs and automatic cleanup for slow or costly third-party API calls. Use when working with caching, expensive actions, API integrations, LLMs.
 - [Filepath](./docs/convex/convex-dev-action-cache.md)
 - When to use skill: Whenever working on anything related to caching expensive action results, reducing repeated API calls, or adding TTL-based action caches.
 
-#### gilhrpenner-convex-files-control
-- Description: Manage secure file uploads, access control, download grants, lifecycle cleanup, and optional HTTP upload/download routes for Convex storage or R2. Use when working with files, uploads, storage, access control.
-- [Filepath](./docs/convex/gilhrpenner-convex-files-control.md)
-- When to use skill: Whenever working on anything related to file uploads, secure downloads, file access policies, or managed file lifecycle flows.
 
-#### convex-dev-rate-limiter
-- Description: Define application-layer rate limits with fixed-window or token-bucket strategies, fairness guarantees, and configurable sharding. Use when working with abuse prevention, throttling, quotas, limits.
-- [Filepath](./docs/convex/convex-dev-rate-limiter.md)
-- When to use skill: Whenever working on anything related to throttling user actions, enforcing quotas, preventing abuse, or application-layer rate limiting.
-
-#### convex-dev-presence
-- Description: Track live room presence and last-online state with reactive updates and heartbeat-based session management. Use when working with collaboration, presence, rooms, online status.
-- [Filepath](./docs/convex/convex-dev-presence.md)
-- When to use skill: Whenever working on anything related to online presence, live room membership, collaborative cursors, or heartbeat-driven presence systems.
 
 #### convex-dev-migrations
 - Description: Define, run, resume, and observe database migrations with tracked state and batch processing across Convex tables. Use when working with schema evolution, backfills, database migrations.
@@ -245,61 +227,10 @@ Long term maintainability is a core priority. If you add new functionality, firs
 - When to use skill: Whenever working on anything related to undo/redo, scoped draft history, editor checkpoints, or restoreable user state.
 
 
-
 #### convex-tracer
 - Description: Add tracing and observability to Convex functions with sampled traces, nested spans, error preservation, and cross-function execution visibility. Use when working with observability, debugging, tracing, production diagnostics, or performance analysis.
 - [Filepath](./docs/convex/convex-tracer.md)
 - When to use skill: Whenever working on anything related to tracing backend flows, debugging production issues, inspecting nested operations, or improving Convex observability.
-
-#### convex-audit-log
-- Description: Track user actions, API calls, and system events in Convex with audit trails, change diffs, PII redaction, querying, anomaly detection, and compliance-oriented retention controls. Use when working with audits, compliance, security logging, or destructive/admin actions.
-- [Filepath](./docs/convex/convex-audit-log.md)
-- When to use skill: Whenever working on anything related to audit trails, compliance evidence, security-sensitive event logging, destructive admin actions, or change tracking.
-
-# context-mode — MANDATORY routing rules
-
-You have context-mode MCP tools available. These rules are NOT optional — they protect your context window from flooding. A single unrouted command can dump 56 KB into context and waste the entire session.
-
-## BLOCKED commands — do NOT attempt these
-
-### curl / wget — BLOCKED
-Any Bash command containing `curl` or `wget` is intercepted and replaced with an error message. Do NOT retry.
-Instead use:
-- `ctx_fetch_and_index(url, source)` to fetch and index web pages
-- `ctx_execute(language: "javascript", code: "const r = await fetch(...)")` to run HTTP calls in sandbox
-
-### Inline HTTP — BLOCKED
-Any Bash command containing `fetch('http`, `requests.get(`, `requests.post(`, `http.get(`, or `http.request(` is intercepted and replaced with an error message. Do NOT retry with Bash.
-Instead use:
-- `ctx_execute(language, code)` to run HTTP calls in sandbox — only stdout enters context
-
-### WebFetch — BLOCKED
-WebFetch calls are denied entirely. The URL is extracted and you are told to use `ctx_fetch_and_index` instead.
-Instead use:
-- `ctx_fetch_and_index(url, source)` then `ctx_search(queries)` to query the indexed content
-
-## REDIRECTED tools — use sandbox equivalents
-
-### Bash (>20 lines output)
-Bash is ONLY for: `git`, `mkdir`, `rm`, `mv`, `cd`, `ls`, `npm install`, `pip install`, and other short-output commands.
-For everything else, use:
-- `ctx_batch_execute(commands, queries)` — run multiple commands + search in ONE call
-- `ctx_execute(language: "shell", code: "...")` — run in sandbox, only stdout enters context
-
-### Read (for analysis)
-If you are reading a file to **Edit** it → Read is correct (Edit needs content in context).
-If you are reading to **analyze, explore, or summarize** → use `ctx_execute_file(path, language, code)` instead. Only your printed summary enters context. The raw file content stays in the sandbox.
-
-### Grep (large results)
-Grep results can flood context. Use `ctx_execute(language: "shell", code: "grep ...")` to run searches in sandbox. Only your printed summary enters context.
-
-## Tool selection hierarchy
-
-1. **GATHER**: `ctx_batch_execute(commands, queries)` — Primary tool. Runs all commands, auto-indexes output, returns search results. ONE call replaces 30+ individual calls.
-2. **FOLLOW-UP**: `ctx_search(queries: ["q1", "q2", ...])` — Query indexed content. Pass ALL questions as array in ONE call.
-3. **PROCESSING**: `ctx_execute(language, code)` | `ctx_execute_file(path, language, code)` — Sandbox execution. Only stdout enters context.
-4. **WEB**: `ctx_fetch_and_index(url, source)` then `ctx_search(queries)` — Fetch, chunk, index, query. Raw HTML never enters context.
-5. **INDEX**: `ctx_index(content, source)` — Store content in FTS5 knowledge base for later search.
 
 ## Subagent routing
 

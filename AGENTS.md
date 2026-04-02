@@ -1,22 +1,47 @@
-# AGENTS
-## Techstack
-- Backend, DB, API, ORM, Serverless: Convex
-- Frontend: React, TanStack Router, Tanstack Query + Convex query integration, Tailwind CSS, ShadCN UI
-- Authentication: WorkOS AuthKit
-- MetaFramework: TanStack Start
-- package manager: Bun
-- Testing: Vitest, React Testing Library, Playwright, convex-test
-- linting + Formatting - Biome
+# CLAUDE
+
+## Tech Stack — Who Owns What
+
+| Layer | Technology | Responsibility |
+|---|---|---|
+| **Auth & AuthZ** | **WorkOS AuthKit** | Canonical source of truth for authentication and authorization. Roles, permissions, organizations, and session management all live in WorkOS. User/org data is synced to Convex via the `@convex-dev/workos-authkit` component webhooks. |
+| **Backend / DB / API** | **Convex** | Serverless backend, real-time database, ORM, scheduler, and function runtime. All business logic runs as Convex queries, mutations, and actions. |
+| **Middleware** | **fluent-convex** | Chainable API builder for Convex functions with composable middleware. All auth checks, permission gates, and context enrichment are enforced through fluent-convex middleware chains (`authedQuery`, `requirePermission(p)`, `adminMutation`, etc.). No raw `ctx.auth.getUserIdentity()` calls outside of `getAuthContext()`. |
+| **State Machines** | **XState v5** (pure functional API only) | Defines entity lifecycles as deterministic state machines. We use `setup().createMachine()` for definitions and `transition()` for pure state computation. No actors, no interpreters, no subscriptions — Convex's stateless V8 isolates require a hydrate-compute-persist pattern. |
+| **Frontend** | **React + TanStack Start** | Meta-framework providing SSR, file-based routing, server functions. |
+| **Routing** | **TanStack Router** | File-based routing in `src/routes/`. Route guards via `beforeLoad` for island-level auth gating. |
+| **Data Fetching** | **TanStack Query + Convex** | `useSuspenseQuery(convexQuery(...))` for live-updating, server-rendered queries. Route loaders pre-fetch via `ensureQueryData`. |
+| **UI** | **Tailwind CSS + ShadCN UI** | Utility-first styling with pre-built accessible components. |
+| **Audit Logging** | **convex-audit-log** | Hash-chained, tamper-evident audit trail for compliance (O.Reg 189/08). Two layers: atomic journal (Layer 1) + component-isolated hash chain (Layer 2). |
+| **Package Manager** | **Bun** | Package installation, script running, test execution. |
+| **Testing** | **Vitest, React Testing Library, Playwright, convex-test** | Unit, component, integration, and E2E testing. |
+| **Linting & Formatting** | **Biome** | Single tool for linting and formatting. Run `bun check` which auto-fixes before reporting errors. |
+
+---
+
+## Important Links
+
+| Resource | Link |
+|---|---|
+| Product Planning System | [Notion](https://www.notion.so/FairLend-Product-Planning-System-30ffc1b4402481d187d8e2bdc309945b) |
+| Phase 1 PRD | [Notion](https://www.notion.so/Phase-1-PRD-Financial-Core-Platform-Foundation-322fc1b4402481cdbfecd1de3abd6526) |
+| How We Work | [Notion](https://www.notion.so/How-We-Work-Linear-Notion-Graphite-Workflow-322fc1b440248165a963eba34133fd20) |
+| Linear Initiative | [Linear](https://linear.app/fairlend/initiative/fairlend-phase-1-foundation-bb7a993c963f/overview) |
+| AI Agent Instructions | [AGENTS.md](./AGENTS.md) |
+| AI Coding Guidelines | [CLAUDE.md](./CLAUDE.md) |
+
+
 
 ## Dev environment tips
 - Installing Packages: `bun add [package-name]`
-- Running unit tests: `bun test`
-- Running end to end tests: `bun test:e2e`
+- Running unit tests: `bun run test`
+- Running end to end tests: `bun run test:e2e`
 - building: `vite build`
 - Running in development: `vite dev` 
 - Updating convex codegen: `bunx convex codegen`
 - Lint, format and check errors: `bun check`
 - Type check: `bun typecheck`
+- Code review: `bun run review`
 
 ## Code Quality
 - `bun check`, `bun typecheck` and `bunx convex codegen` must pass before considering tasks completed.
@@ -31,6 +56,13 @@
 - Strategy Pattern: Define a family of algorithms, encapsulate each one, and make them interchangeable. This allows you to select an algorithm at runtime without changing the client code. 
 - Inversion of Control: Instead of calling functions directly, use callbacks, events, or other mechanisms to allow the flow of control to be determined by the runtime environment. This promotes loose coupling and flexibility in your code.
 
+## Design Principles
+
+- **RBAC is structural, not decorative.** Authorization is wired into every query and mutation from day one via middleware chains. Retrofitting auth is the single most expensive technical debt pattern.
+- **State machines as the backbone.** Every entity lifecycle goes through Governed Transitions. The Transition Engine is the only code path that modifies status fields.
+- **Seed, don't build flows.** Phase 1 entities are seeded via admin mutations. The complex multi-step flows that create them are Phase 2+.
+- **Interface-first on payment rails.** Define the PaymentMethod interface now, implement ManualPaymentMethod first, drop in real payment providers later with zero changes to business logic.
+- **Auditability from the ground floor.** Every state transition is journaled, hash-chained, and queryable. Both successes and rejections. This is the 5-year regulatory retention layer.
 
 ## Standards & Conventions 
 ### Auth
@@ -91,27 +123,42 @@ export interface UserIdentity {
   [key: string]: JSONValue | undefined;
 }
 /**
-Custom Claims json shape: 
+Sample JWT Payload:
 {
-    "user_id": {{user.id}},
-    "user_email":{{user.email}},
-    "user_first_name":{{user.first_name}},
-    "user_last_name":{{user.last_name}},
-    "user_email_verified":{{user.email_verified}}, 
-    "user_profile_picture_url":{{user.profile_picture_url}},
-    "user_metadata":{{user.metadata}},
-    "organization_id":{{organization.id}},
-    "organization_name":{{organization.name}},
-    "organization_role":{{organization_membership.role}},
-    "organization_roles": {{organization_membership.roles}},
-    "organization_membership_id":{{organization_membership.id}}
+  "user_id": "user_01KKFF8EA41DV152KVHD8VJB48",
+  "user_email": "c.beleznay@humanfeedback.com",
+  "user_first_name": "Connor",
+  "user_last_name": "Beleznay",
+  "user_email_verified": true,
+  "user_profile_picture_url": "https://workoscdn.com/images/v1/J_dQHD0Fq4c4Wnao2Eq2UJHvxfG_Br2zZ2-UYUqxrtg",
+  "user_metadata": {},
+  "organization_id": "org_01KKF56VABM4NYFFSR039RTJBM",
+  "organization_name": "FairLendStaff",
+  "organization_role": "admin",
+  "organization_roles": [
+    "admin"
+  ],
+  "organization_membership_id": "om_01KKFF914H1XD788BZ2MNP7GKV",
+  "iss": "https://api.workos.com/user_management/client_01KJ62PRE8PHFSRB9XDCZYJGCK",
+  "sub": "user_01KKFF8EA41DV152KVHD8VJB48",
+  "sid": "session_01EXAMPLE000000000000000",
+  "jti": "token_01EXAMPLE000000000000000",
+  "org_id": "org_01KKF56VABM4NYFFSR039RTJBM",
+  "role": "admin",
+  "roles": [
+    "admin"
+  ],
+  "permissions": [
+    "widgets:users-table:manage"
+  ],
+  "iat": 1773405522,
+  "exp": 1773405822
 }
 */
 ```
 
 ## Workflow 
 - DO NOT try to fix linting/formatting errors BEFORE running `bun check`. Always run `bun check` first as this command also auto formats and fixes some linting errors.
-- TDD/test-first workflows are by request only in this repo. Do not automatically apply TDD, red-green-refactor, or test-first skills for setup scripts, one-off scripts, configuration changes, or routine implementation unless the user explicitly asks for TDD or for tests first.
 - After Completing a Major unit of work like a full SPEC run `coderabbit review --plain` to get a code review summary and check for any potential issues or improvements. 
 - This is an early stage project, feel free to suggest sweeping changes to the schema, architecture etc, but ask your human first. 
 
@@ -119,6 +166,11 @@ Custom Claims json shape:
 
 Long term maintainability is a core priority. If you add new functionality, first check if there are shared logic that can be extracted to a separate module. Duplicate logic across mulitple files is a code smell and should be avoided. Don't be afraid to change existing code. Don't take shortcuts by just adding local logic to solve a problem.
 
+## Context 
+We're building a GREENFIELD project there is not existing prod data or deployment. Feel free to suggest sweeping changes to the schema, architecture etc, but ask your human first. 
+
+## What we're building
+We're building a backoffice Loan Management System with an integrated ledger and accounting system with an attached marketplace for fractional mortgage deal closing. 
 
 ## Toolkit 
 
@@ -129,45 +181,22 @@ Long term maintainability is a core priority. If you add new functionality, firs
 - [Filepath](./docs/convex/convex-dev-workos-authkit.md)
 - When to use skill: Whenever working on anything related to authentication or authorization.
 
-#### convex-dev-resend
-- Description: Official Convex integration for Resend email service with queuing, batching, rate limiting, and guaranteed delivery via durable execution. Use when working with integrations features, email, resend, inbox.
-- [Filepath](./docs/convex/convex-dev-resend.md)
-- When to use skill: Whenever working on anything related to email sending, integrations, or Resend email service.
+#### convex-fs
+- Description: Manage files in Convex using filesystem-style paths, directories, atomic operations, signed CDN URLs, and expiration-aware storage workflows. Use when working with file storage, path-based file management, uploads, downloads, or CDN-backed file access.
+- [Filepath](./docs/convex/convex-fs.md)
+- When to use skill: Whenever working on anything related to filesystem-style storage, path-based file organization, signed downloads, expiring file artifacts, or file lifecycle management.
 
 #### convex-dev-workflow
 - Description: Execute long-running code flows durably with built-in retries, delays, and state persistence across function interruptions. Use when working with durable-functions features, Workflow.
 - [Filepath](./docs/convex/convex-dev-workflow.md)
 - When to use skill: Whenever working on anything related to durable function execution, long-running processes
 
-#### convex-dev-stripe
-- Description: Integrate Stripe payments, subscriptions, billing, checkout sessions, customer portals, and webhook syncing directly with Convex. Use when working with payments, subscriptions, billing, checkout, invoices, Stripe.
-- [Filepath](./docs/convex/convex-dev-stripe.md)
-- When to use skill: Whenever working on anything related to payments, subscriptions, billing, customer portals, or Stripe webhooks.
-
 #### convex-dev-action-cache
 - Description: Cache expensive action results with optional TTLs and automatic cleanup for slow or costly third-party API calls. Use when working with caching, expensive actions, API integrations, LLMs.
 - [Filepath](./docs/convex/convex-dev-action-cache.md)
 - When to use skill: Whenever working on anything related to caching expensive action results, reducing repeated API calls, or adding TTL-based action caches.
 
-#### gilhrpenner-convex-files-control
-- Description: Manage secure file uploads, access control, download grants, lifecycle cleanup, and optional HTTP upload/download routes for Convex storage or R2. Use when working with files, uploads, storage, access control.
-- [Filepath](./docs/convex/gilhrpenner-convex-files-control.md)
-- When to use skill: Whenever working on anything related to file uploads, secure downloads, file access policies, or managed file lifecycle flows.
 
-#### ikhrustalev-convex-debouncer
-- Description: Debounce expensive server-side operations with sliding, fixed, or eager modes so only the latest meaningful update is processed. Use when working with debouncing, expensive operations, background processing.
-- [Filepath](./docs/convex/ikhrustalev-convex-debouncer.md)
-- When to use skill: Whenever working on anything related to debounced backend execution, delayed recomputation, autosave-like flows, or suppressing repeated expensive work.
-
-#### convex-dev-rate-limiter
-- Description: Define application-layer rate limits with fixed-window or token-bucket strategies, fairness guarantees, and configurable sharding. Use when working with abuse prevention, throttling, quotas, limits.
-- [Filepath](./docs/convex/convex-dev-rate-limiter.md)
-- When to use skill: Whenever working on anything related to throttling user actions, enforcing quotas, preventing abuse, or application-layer rate limiting.
-
-#### convex-dev-presence
-- Description: Track live room presence and last-online state with reactive updates and heartbeat-based session management. Use when working with collaboration, presence, rooms, online status.
-- [Filepath](./docs/convex/convex-dev-presence.md)
-- When to use skill: Whenever working on anything related to online presence, live room membership, collaborative cursors, or heartbeat-driven presence systems.
 
 #### convex-dev-migrations
 - Description: Define, run, resume, and observe database migrations with tracked state and batch processing across Convex tables. Use when working with schema evolution, backfills, database migrations.
@@ -179,10 +208,6 @@ Long term maintainability is a core priority. If you add new functionality, firs
 - [Filepath](./docs/convex/convex-dev-aggregate.md)
 - When to use skill: Whenever working on anything related to efficient counts, sums, rankings, leaderboards, or aggregate analytics over large datasets.
 
-#### convex-dev-geospatial
-- Description: Store and query geospatial points with efficient rectangle queries, filters, and sort keys on top of Convex. Use when working with maps, nearby search, coordinates, geospatial indexing.
-- [Filepath](./docs/convex/convex-dev-geospatial.md)
-- When to use skill: Whenever working on anything related to location indexing, map features, nearby lookups, or geospatial filtering.
 
 #### convex-dev-crons
 - Description: Register and manage cron jobs dynamically at runtime using interval or cron schedules instead of only static deploy-time definitions. Use when working with scheduling, automation, cron jobs, recurring tasks.
@@ -201,18 +226,13 @@ Long term maintainability is a core priority. If you add new functionality, firs
 - [Filepath](./docs/convex/convex-timeline.md)
 - When to use skill: Whenever working on anything related to undo/redo, scoped draft history, editor checkpoints, or restoreable user state.
 
-#### convex-fs
-- Description: Manage files in Convex using filesystem-style paths, directories, atomic operations, signed CDN URLs, and expiration-aware storage workflows. Use when working with file storage, path-based file management, uploads, downloads, or CDN-backed file access.
-- [Filepath](./docs/convex/convex-fs.md)
-- When to use skill: Whenever working on anything related to filesystem-style storage, path-based file organization, signed downloads, expiring file artifacts, or file lifecycle management.
 
 #### convex-tracer
 - Description: Add tracing and observability to Convex functions with sampled traces, nested spans, error preservation, and cross-function execution visibility. Use when working with observability, debugging, tracing, production diagnostics, or performance analysis.
 - [Filepath](./docs/convex/convex-tracer.md)
 - When to use skill: Whenever working on anything related to tracing backend flows, debugging production issues, inspecting nested operations, or improving Convex observability.
 
-#### convex-audit-log
-- Description: Track user actions, API calls, and system events in Convex with audit trails, change diffs, PII redaction, querying, anomaly detection, and compliance-oriented retention controls. Use when working with audits, compliance, security logging, or destructive/admin actions.
-- [Filepath](./docs/convex/convex-audit-log.md)
-- When to use skill: Whenever working on anything related to audit trails, compliance evidence, security-sensitive event logging, destructive admin actions, or change tracking.
+## Subagent routing
+
+When spawning subagents (Agent/Task tool), the routing block is automatically injected into their prompt. Bash-type subagents are upgraded to general-purpose so they have access to MCP tools. You do NOT need to manually instruct subagents about context-mode.
 
