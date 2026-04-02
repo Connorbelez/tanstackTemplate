@@ -11,6 +11,7 @@ import {
 } from "./validators";
 
 const DEFAULT_PAGE_SIZE = 20;
+const FILTERED_LISTING_SCAN_LIMIT = 250;
 const MAX_PAGE_SIZE = 50;
 const OFFSET_CURSOR_PREFIX = "offset:";
 const OFFSET_CURSOR_PATTERN = /^\d+$/;
@@ -137,6 +138,25 @@ function paginateResults<T>(
 		isDone,
 		page,
 	};
+}
+
+function hasPublishedFilters(
+	filters: PublishedListingFilters | undefined
+): boolean {
+	return Boolean(
+		filters?.city ??
+			filters?.province ??
+			filters?.propertyType ??
+			filters?.lienPosition ??
+			filters?.interestRate?.min ??
+			filters?.interestRate?.max ??
+			filters?.ltv?.min ??
+			filters?.ltv?.max ??
+			filters?.principalAmount?.min ??
+			filters?.principalAmount?.max ??
+			filters?.maturityDate?.start ??
+			filters?.maturityDate?.end
+	);
 }
 
 function toSafeNumber(value: bigint, label: string): number {
@@ -299,53 +319,124 @@ async function collectPublishedListingCandidates(
 	ctx: { db: Pick<DatabaseReader, "query"> },
 	filters: PublishedListingFilters | undefined
 ): Promise<ListingDoc[]> {
+	const takeBoundedResults = async (query: {
+		take(limit: number): Promise<ListingDoc[]>;
+	}) => {
+		const page = await query.take(FILTERED_LISTING_SCAN_LIMIT + 1);
+		if (page.length > FILTERED_LISTING_SCAN_LIMIT) {
+			throw new ConvexError(
+				"Listing filter combination is too broad; add more filters or use a supported indexed sort"
+			);
+		}
+
+		return page;
+	};
+
 	if (filters?.city) {
-		return await ctx.db
-			.query("listings")
-			.withIndex("by_city_and_status", (q) =>
-				q.eq("city", filters.city as string).eq("status", "published")
-			)
-			.collect();
+		return await takeBoundedResults(
+			ctx.db
+				.query("listings")
+				.withIndex("by_city_and_status", (q) =>
+					q.eq("city", filters.city as string).eq("status", "published")
+				)
+		);
 	}
 
 	if (filters?.province) {
-		return await ctx.db
-			.query("listings")
-			.withIndex("by_province_and_status", (q) =>
-				q.eq("province", filters.province as string).eq("status", "published")
-			)
-			.collect();
+		return await takeBoundedResults(
+			ctx.db
+				.query("listings")
+				.withIndex("by_province_and_status", (q) =>
+					q.eq("province", filters.province as string).eq("status", "published")
+				)
+		);
 	}
 
 	if (filters?.propertyType) {
-		return await ctx.db
-			.query("listings")
-			.withIndex("by_property_type_and_status", (q) =>
-				q
-					.eq(
-						"propertyType",
-						filters.propertyType as ListingDoc["propertyType"]
-					)
-					.eq("status", "published")
-			)
-			.collect();
+		return await takeBoundedResults(
+			ctx.db
+				.query("listings")
+				.withIndex("by_property_type_and_status", (q) =>
+					q
+						.eq(
+							"propertyType",
+							filters.propertyType as ListingDoc["propertyType"]
+						)
+						.eq("status", "published")
+				)
+		);
 	}
 
 	if (filters?.lienPosition !== undefined) {
-		return await ctx.db
-			.query("listings")
-			.withIndex("by_lien_position_and_status", (q) =>
-				q
-					.eq("lienPosition", filters.lienPosition as number)
-					.eq("status", "published")
-			)
-			.collect();
+		return await takeBoundedResults(
+			ctx.db
+				.query("listings")
+				.withIndex("by_lien_position_and_status", (q) =>
+					q
+						.eq("lienPosition", filters.lienPosition as number)
+						.eq("status", "published")
+				)
+		);
 	}
 
-	return await ctx.db
-		.query("listings")
-		.withIndex("by_status", (q) => q.eq("status", "published"))
-		.collect();
+	return await takeBoundedResults(
+		ctx.db
+			.query("listings")
+			.withIndex("by_status", (q) => q.eq("status", "published"))
+	);
+}
+
+async function paginateListingsBySortField(
+	ctx: { db: Pick<DatabaseReader, "query"> },
+	args: {
+		cursor: string | null | undefined;
+		numItems: number | undefined;
+		sortDirection: SortDirection;
+		sortField: ListingSortField;
+		status: ListingDoc["status"];
+	}
+) {
+	const paginationOpts = {
+		cursor: args.cursor ?? null,
+		numItems: normalizePageSize(args.numItems),
+	};
+
+	switch (args.sortField) {
+		case "interestRate":
+			return await ctx.db
+				.query("listings")
+				.withIndex("by_interest_rate", (q) => q.eq("status", args.status))
+				.order(args.sortDirection)
+				.paginate(paginationOpts);
+		case "ltv":
+			return await ctx.db
+				.query("listings")
+				.withIndex("by_ltv", (q) => q.eq("status", args.status))
+				.order(args.sortDirection)
+				.paginate(paginationOpts);
+		case "principalAmount":
+			return await ctx.db
+				.query("listings")
+				.withIndex("by_principal", (q) => q.eq("status", args.status))
+				.order(args.sortDirection)
+				.paginate(paginationOpts);
+		case "publishedAt":
+			return await ctx.db
+				.query("listings")
+				.withIndex("by_published_at", (q) => q.eq("status", args.status))
+				.order(args.sortDirection)
+				.paginate(paginationOpts);
+		case "viewCount":
+			return await ctx.db
+				.query("listings")
+				.withIndex("by_status_and_view_count", (q) =>
+					q.eq("status", args.status)
+				)
+				.order(args.sortDirection)
+				.paginate(paginationOpts);
+		default:
+			throw new ConvexError("Unsupported listing sort field");
+	}
 }
 
 async function buildListingAvailability(
@@ -412,12 +503,38 @@ async function attachAvailabilityToListings(
 	ctx: Parameters<typeof buildListingAvailability>[0],
 	listings: ListingDoc[]
 ) {
-	return await Promise.all(
-		listings.map(async (listing) => ({
-			...listing,
-			availability: await buildListingAvailability(ctx, listing.mortgageId),
-		}))
+	const mortgageIds = [
+		...new Set(
+			listings
+				.map((listing) => listing.mortgageId)
+				.filter(
+					(mortgageId): mortgageId is Id<"mortgages"> =>
+						mortgageId !== undefined
+				)
+		),
+	];
+
+	const availabilityByMortgageId = new Map<
+		Id<"mortgages">,
+		ListingAvailability | null
+	>();
+
+	await Promise.all(
+		mortgageIds.map(async (mortgageId) => {
+			availabilityByMortgageId.set(
+				mortgageId,
+				await buildListingAvailability(ctx, mortgageId)
+			);
+		})
 	);
+
+	return listings.map((listing) => ({
+		...listing,
+		availability:
+			listing.mortgageId === undefined
+				? null
+				: (availabilityByMortgageId.get(listing.mortgageId) ?? null),
+	}));
 }
 
 export const getListingById = authedQuery
@@ -494,6 +611,21 @@ export const listPublishedListings = authedQuery
 	.handler(async (ctx, args) => {
 		const sortField = args.sort?.field ?? "publishedAt";
 		const sortDirection = args.sort?.direction ?? "desc";
+		if (!hasPublishedFilters(args.filters)) {
+			const paginated = await paginateListingsBySortField(ctx, {
+				cursor: args.cursor,
+				numItems: args.numItems,
+				sortDirection,
+				sortField,
+				status: "published",
+			});
+
+			return {
+				...paginated,
+				page: await attachAvailabilityToListings(ctx, paginated.page),
+			};
+		}
+
 		const candidates = await collectPublishedListingCandidates(
 			ctx,
 			args.filters
@@ -537,29 +669,21 @@ export const listListingsForAdmin = adminQuery
 		status: v.optional(listingStatusValidator),
 	})
 	.handler(async (ctx, args) => {
-		const sortField = args.sort?.field ?? "publishedAt";
-		const sortDirection = args.sort?.direction ?? "desc";
-		let listings: ListingDoc[];
-
-		if (args.status !== undefined) {
-			const status = args.status;
-			listings = await ctx.db
-				.query("listings")
-				.withIndex("by_status", (q) => q.eq("status", status))
-				.collect();
-		} else {
-			listings = await ctx.db.query("listings").collect();
+		if (args.status === undefined) {
+			throw new ConvexError(
+				"status is required to list listings for admin without scanning the entire table"
+			);
 		}
 
-		listings.sort((left, right) =>
-			compareListings(left, right, sortField, sortDirection)
-		);
-
-		const paginated = paginateResults(
-			listings,
-			args.cursor ?? null,
-			args.numItems
-		);
+		const sortField = args.sort?.field ?? "publishedAt";
+		const sortDirection = args.sort?.direction ?? "desc";
+		const paginated = await paginateListingsBySortField(ctx, {
+			cursor: args.cursor,
+			numItems: args.numItems,
+			sortDirection,
+			sortField,
+			status: args.status,
+		});
 
 		return {
 			...paginated,

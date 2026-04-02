@@ -636,6 +636,7 @@ export default defineSchema({
 		.index("by_mortgage", ["mortgageId"])
 		.index("by_status", ["status"])
 		.index("by_status_and_featured", ["status", "featured"])
+		.index("by_status_and_view_count", ["status", "viewCount"])
 		.index("by_property_type_and_status", ["propertyType", "status"])
 		.index("by_province_and_status", ["province", "status"])
 		.index("by_city_and_status", ["city", "status"])

@@ -394,13 +394,24 @@ describe("listing queries", () => {
 		const result = await admin.query(listingApi.listListingsForAdmin, {
 			cursor: null,
 			numItems: 10,
+			status: "published",
 		});
 
-		expect(result.page.map((listing) => listing.status)).toEqual([
-			"published",
-			"delisted",
-			"draft",
-		]);
+		expect(result.page.map((listing) => listing.status)).toEqual(["published"]);
+	});
+
+	it("requires a status filter for admin listings", async () => {
+		const t = createHarness();
+		const admin = asAdminUser(t);
+
+		await expect(
+			admin.query(listingApi.listListingsForAdmin, {
+				cursor: null,
+				numItems: 10,
+			})
+		).rejects.toThrow(
+			"status is required to list listings for admin without scanning the entire table"
+		);
 	});
 
 	it("returns appraisals with comparables and encumbrances by property", async () => {
