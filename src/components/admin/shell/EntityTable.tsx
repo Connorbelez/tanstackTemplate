@@ -7,6 +7,7 @@ import {
 	getCoreRowModel,
 	useReactTable,
 } from "@tanstack/react-table";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
 	Table,
 	TableBody,
@@ -19,6 +20,10 @@ import {
 interface DataTableProps<TData, TValue> {
 	columns: ColumnDef<TData, TValue>[];
 	data: TData[];
+	emptyMessage?: string;
+	errorMessage?: string;
+	isLoading?: boolean;
+	loadingRowCount?: number;
 	onRowClick?: (row: TData) => void;
 }
 
@@ -129,6 +134,10 @@ export const columns: ColumnDef<{
 export default function EntityTable<TData, TValue>({
 	columns,
 	data,
+	emptyMessage = "No results.",
+	errorMessage,
+	isLoading = false,
+	loadingRowCount = 6,
 	onRowClick,
 }: DataTableProps<TData, TValue>) {
 	const table = useReactTable({
@@ -143,6 +152,77 @@ export default function EntityTable<TData, TValue>({
 		columns,
 		getCoreRowModel: getCoreRowModel(),
 	});
+	const rowModel = table.getRowModel();
+	const loadingRowKeys = Array.from(
+		{ length: loadingRowCount },
+		(_, rowIndex) => `loading-row-${rowIndex + 1}`
+	);
+	const loadingCellKeys = Array.from(
+		{ length: columns.length },
+		(_, columnIndex) => `loading-cell-${columnIndex + 1}`
+	);
+
+	let bodyContent: React.ReactNode;
+
+	if (isLoading) {
+		bodyContent = loadingRowKeys.map((rowKey) => (
+			<TableRow key={rowKey}>
+				{columns.map((column, columnIndex) => (
+					<TableCell
+						key={`${rowKey}-${column.id ?? loadingCellKeys[columnIndex]}`}
+					>
+						<Skeleton
+							className={
+								columnIndex === columns.length - 1
+									? "ml-auto h-4 w-16"
+									: "h-4 w-full max-w-36"
+							}
+						/>
+					</TableCell>
+				))}
+			</TableRow>
+		));
+	} else if (errorMessage) {
+		bodyContent = (
+			<TableRow>
+				<TableCell
+					className="h-24 text-center text-destructive"
+					colSpan={columns.length}
+				>
+					{errorMessage}
+				</TableCell>
+			</TableRow>
+		);
+	} else if (rowModel.rows.length > 0) {
+		bodyContent = rowModel.rows.map((row) => (
+			<TableRow
+				className={onRowClick ? "cursor-pointer hover:bg-muted/50" : undefined}
+				data-state={row.getIsSelected() && "selected"}
+				key={row.id}
+				onClick={
+					onRowClick
+						? () => {
+								onRowClick(row.original);
+							}
+						: undefined
+				}
+			>
+				{row.getVisibleCells().map((cell) => (
+					<TableCell key={cell.id}>
+						{flexRender(cell.column.columnDef.cell, cell.getContext())}
+					</TableCell>
+				))}
+			</TableRow>
+		));
+	} else {
+		bodyContent = (
+			<TableRow>
+				<TableCell className="h-24 text-center" colSpan={columns.length}>
+					{emptyMessage}
+				</TableCell>
+			</TableRow>
+		);
+	}
 
 	return (
 		<div className="overflow-hidden rounded-md border">
@@ -165,38 +245,7 @@ export default function EntityTable<TData, TValue>({
 						</TableRow>
 					))}
 				</TableHeader>
-				<TableBody>
-					{table.getRowModel().rows?.length ? (
-						table.getRowModel().rows.map((row) => (
-							<TableRow
-								className={
-									onRowClick ? "cursor-pointer hover:bg-muted/50" : undefined
-								}
-								data-state={row.getIsSelected() && "selected"}
-								key={row.id}
-								onClick={
-									onRowClick
-										? () => {
-												onRowClick(row.original);
-											}
-										: undefined
-								}
-							>
-								{row.getVisibleCells().map((cell) => (
-									<TableCell key={cell.id}>
-										{flexRender(cell.column.columnDef.cell, cell.getContext())}
-									</TableCell>
-								))}
-							</TableRow>
-						))
-					) : (
-						<TableRow>
-							<TableCell className="h-24 text-center" colSpan={columns.length}>
-								No results.
-							</TableCell>
-						</TableRow>
-					)}
-				</TableBody>
+				<TableBody>{bodyContent}</TableBody>
 			</Table>
 		</div>
 	);

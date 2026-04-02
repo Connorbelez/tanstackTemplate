@@ -1,10 +1,17 @@
 import { createFileRoute, Outlet, useMatch } from "@tanstack/react-router";
 
+import { AdminDetailSheet } from "#/components/admin/shell/AdminDetailSheet";
+import {
+	AdminPageSkeleton,
+	AdminRouteErrorBoundary,
+	AdminTableSkeleton,
+} from "#/components/admin/shell/AdminRouteStates";
 import EntityTable, { columns } from "#/components/admin/shell/EntityTable.tsx";
 import { useAdminDetailSheet } from "#/hooks/useAdminDetailSheet";
 
 export const Route = createFileRoute("/admin/listings")({
 	component: EntityList,
+	errorComponent: AdminRouteErrorBoundary,
 	loader: async () => {
 		const fakeData = Array.from({ length: 10 }, (_, index) => ({
 			id: index,
@@ -14,6 +21,7 @@ export const Route = createFileRoute("/admin/listings")({
 
 		return { fakeData };
 	},
+	pendingComponent: ListingsPendingPage,
 });
 
 function EntityList() {
@@ -30,10 +38,21 @@ function EntityList() {
 	}
 
 	return (
-		<EntityTable
-			columns={columns}
-			data={fakeData}
-			onRowClick={(row) => open(String(row.id))}
-		/>
+		<>
+			<EntityTable
+				columns={columns}
+				data={fakeData}
+				onRowClick={(row) => open(String(row.id))}
+			/>
+			<AdminDetailSheet entityType="listings" />
+		</>
+	);
+}
+
+function ListingsPendingPage() {
+	return (
+		<AdminPageSkeleton titleWidth="w-40">
+			<AdminTableSkeleton columnCount={columns.length} />
+		</AdminPageSkeleton>
 	);
 }

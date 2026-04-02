@@ -8,6 +8,12 @@ export interface AdminDetailSearch {
 	readonly recordId: string | undefined;
 }
 
+export const EMPTY_ADMIN_DETAIL_SEARCH: AdminDetailSearch = {
+	detailOpen: false,
+	entityType: undefined,
+	recordId: undefined,
+};
+
 /**
  * TanStack Router may serialize string search values as JSON (e.g. `0` → `"0"` in the query),
  * which decodes to a string that includes literal quote characters. Normalize back to the plain value.

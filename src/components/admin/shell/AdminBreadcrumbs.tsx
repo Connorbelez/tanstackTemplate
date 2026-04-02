@@ -2,6 +2,8 @@
 
 import { Link, useRouterState } from "@tanstack/react-router";
 import { Fragment } from "react";
+import { getAdminEntityByType } from "#/components/admin/shell/entity-registry";
+import { EMPTY_ADMIN_DETAIL_SEARCH } from "#/lib/admin-detail-search";
 import {
 	Breadcrumb,
 	BreadcrumbItem,
@@ -14,29 +16,31 @@ import {
 const adminSegmentLabels: Record<string, string> = {
 	admin: "Admin",
 	applications: "Applications",
-	borrowers: "Borrowers",
-	deals: "Deals",
-	listings: "Listings",
-	mortgages: "Mortgages",
-	obligations: "Obligations",
-	properties: "Properties",
 	underwriting: "Underwriting",
 };
 
-function formatSegmentLabel(
-	segment: string,
-	index: number,
-	segments: string[]
-): string {
+interface AdminEntityBreadcrumbItem {
+	readonly entityType: string;
+	readonly key: string;
+	readonly label: string;
+	readonly route: "entity";
+}
+
+interface AdminStaticBreadcrumbItem {
+	readonly key: string;
+	readonly label: string;
+	readonly route?: undefined;
+}
+
+type AdminBreadcrumbItem =
+	| AdminEntityBreadcrumbItem
+	| AdminStaticBreadcrumbItem;
+
+function formatSegmentLabel(segment: string): string {
 	const decodedSegment = decodeURIComponent(segment);
 	const mappedLabel = adminSegmentLabels[decodedSegment];
-
 	if (mappedLabel) {
 		return mappedLabel;
-	}
-
-	if (index >= 2 && index === segments.length - 1) {
-		return `Record ${decodedSegment}`;
 	}
 
 	return decodedSegment
@@ -44,31 +48,77 @@ function formatSegmentLabel(
 		.replace(/\b\w/g, (character) => character.toUpperCase());
 }
 
+function getAdminBreadcrumbItems(pathname: string): AdminBreadcrumbItem[] {
+	const segments = pathname.split("/").filter(Boolean);
+	const adminSegments = segments[0] === "admin" ? segments : ["admin"];
+	const items: AdminBreadcrumbItem[] = [
+		{
+			key: "/admin",
+			label: "Admin",
+		},
+	];
+
+	const entityType = adminSegments[1];
+	if (!entityType) {
+		return items;
+	}
+
+	const entity = getAdminEntityByType(entityType);
+	if (entity) {
+		items.push({
+			entityType: entity.entityType,
+			key: entity.route,
+			label: entity.pluralLabel,
+			route: "entity",
+		});
+
+		const recordId = adminSegments[2];
+		if (recordId) {
+			items.push({
+				key: `${entity.route}/${recordId}`,
+				label: `Record ${decodeURIComponent(recordId)}`,
+			});
+		}
+
+		return items;
+	}
+
+	items.push({
+		key: `/admin/${entityType}`,
+		label: formatSegmentLabel(entityType),
+		route: undefined,
+	});
+
+	return items;
+}
+
 export function AdminBreadcrumbs() {
 	const pathname = useRouterState({
 		select: (state) => state.location.pathname,
 	});
-
-	const segments = pathname.split("/").filter(Boolean);
-	const adminSegments =
-		segments[0] === "admin" ? segments : ["admin", ...segments];
+	const items = getAdminBreadcrumbItems(pathname);
 
 	return (
 		<Breadcrumb>
 			<BreadcrumbList>
-				{adminSegments.map((segment, index) => {
-					const href = `/${adminSegments.slice(0, index + 1).join("/")}`;
-					const isCurrentPage = index === adminSegments.length - 1;
-					const label = formatSegmentLabel(segment, index, adminSegments);
+				{items.map((item, index) => {
+					const isCurrentPage = index === items.length - 1;
 
 					return (
-						<Fragment key={href}>
+						<Fragment key={item.key}>
 							<BreadcrumbItem>
-								{isCurrentPage || index === 0 ? (
-									<BreadcrumbPage>{label}</BreadcrumbPage>
+								{isCurrentPage || !item.route ? (
+									<BreadcrumbPage>{item.label}</BreadcrumbPage>
 								) : (
 									<BreadcrumbLink asChild>
-										<Link to={href}>{label}</Link>
+										<Link
+											params={{ entitytype: item.entityType }}
+											search={EMPTY_ADMIN_DETAIL_SEARCH}
+											to="/admin/$entitytype"
+											viewTransition
+										>
+											{item.label}
+										</Link>
 									</BreadcrumbLink>
 								)}
 							</BreadcrumbItem>

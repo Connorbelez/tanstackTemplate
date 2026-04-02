@@ -2,6 +2,7 @@
 
 import { Link } from "@tanstack/react-router";
 import { useAdminDetailSheet } from "#/hooks/useAdminDetailSheet";
+import { EMPTY_ADMIN_DETAIL_SEARCH } from "#/lib/admin-detail-search";
 import { Button } from "@/components/ui/button";
 import {
 	Sheet,
@@ -41,12 +42,9 @@ export function AdminDetailSheet({ entityType }: AdminDetailSheetProps) {
 								entitytype: entityType,
 								recordid: recordId ?? "",
 							}}
-							search={{
-								detailOpen: false,
-								entityType: undefined,
-								recordId: undefined,
-							}}
+							search={EMPTY_ADMIN_DETAIL_SEARCH}
 							to="/admin/$entitytype/$recordid"
+							viewTransition
 						>
 							View record
 						</Link>

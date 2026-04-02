@@ -2,16 +2,33 @@ import {
 	createFileRoute,
 	getRouteApi,
 	Outlet,
+	redirect,
 	useMatch,
 } from "@tanstack/react-router";
 import { AdminDetailSheet } from "#/components/admin/shell/AdminDetailSheet";
+import {
+	AdminPageSkeleton,
+	AdminRouteErrorBoundary,
+	AdminTableSkeleton,
+} from "#/components/admin/shell/AdminRouteStates";
 import EntityTable, { columns } from "#/components/admin/shell/EntityTable.tsx";
+import { isAdminEntityType } from "#/components/admin/shell/entity-registry";
 import { useAdminDetailSheet } from "#/hooks/useAdminDetailSheet";
+import { EMPTY_ADMIN_DETAIL_SEARCH } from "#/lib/admin-detail-search";
 
 const routeApi = getRouteApi("/admin/$entitytype");
 
 export const Route = createFileRoute("/admin/$entitytype")({
+	beforeLoad: ({ params }) => {
+		if (!isAdminEntityType(params.entitytype)) {
+			throw redirect({
+				to: "/admin",
+				search: EMPTY_ADMIN_DETAIL_SEARCH,
+			});
+		}
+	},
 	component: EntityList,
+	errorComponent: AdminRouteErrorBoundary,
 	loader: async ({ params }) => {
 		const { entitytype } = params;
 
@@ -23,6 +40,7 @@ export const Route = createFileRoute("/admin/$entitytype")({
 
 		return { entitytype: entitytype as string, fakeData };
 	},
+	pendingComponent: GenericEntityPendingPage,
 });
 
 function EntityList() {
@@ -48,5 +66,13 @@ function EntityList() {
 			/>
 			<AdminDetailSheet entityType={entitytype} />
 		</>
+	);
+}
+
+function GenericEntityPendingPage() {
+	return (
+		<AdminPageSkeleton titleWidth="w-48">
+			<AdminTableSkeleton columnCount={columns.length} />
+		</AdminPageSkeleton>
 	);
 }

@@ -6,6 +6,7 @@ import {
 	Outlet,
 	ScriptOnce,
 	Scripts,
+	useRouterState,
 } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/react-start";
 import { getAuth, type UserInfo } from "@workos/authkit-tanstack-react-start";
@@ -15,6 +16,7 @@ import { AppErrorComponent } from "../components/error-boundary";
 import Footer from "../components/footer";
 import Header from "../components/header";
 import { Toaster } from "../components/ui/sonner";
+import { isAdminPathname } from "../lib/admin-routes";
 import appCss from "../styles.css?url";
 
 // Suppress known TanStack Start SSR hydration warning (dev-only, harmless)
@@ -98,9 +100,14 @@ export const Route = createRootRouteWithContext<{
 });
 
 function RootComponent() {
+	const pathname = useRouterState({
+		select: (state) => state.location.pathname,
+	});
+	const isAdminRoute = isAdminPathname(pathname);
+
 	return (
 		<RootDocument>
-			<Header />
+			{isAdminRoute ? null : <Header />}
 			<Outlet />
 			<Footer />
 		</RootDocument>

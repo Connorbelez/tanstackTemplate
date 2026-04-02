@@ -1,10 +1,16 @@
 import { createFileRoute, Outlet, useMatch } from "@tanstack/react-router";
 import { AdminDetailSheet } from "#/components/admin/shell/AdminDetailSheet";
+import {
+	AdminPageSkeleton,
+	AdminRouteErrorBoundary,
+	AdminTableSkeleton,
+} from "#/components/admin/shell/AdminRouteStates";
 import EntityTable, { columns } from "#/components/admin/shell/EntityTable.tsx";
 import { useAdminDetailSheet } from "#/hooks/useAdminDetailSheet";
 
 export const Route = createFileRoute("/admin/mortgages")({
 	component: EntityList,
+	errorComponent: AdminRouteErrorBoundary,
 	loader: async () => {
 		const fakeData = Array.from({ length: 10 }, (_, index) => ({
 			id: index,
@@ -14,6 +20,7 @@ export const Route = createFileRoute("/admin/mortgages")({
 
 		return { fakeData };
 	},
+	pendingComponent: MortgagesPendingPage,
 });
 
 function EntityList() {
@@ -38,5 +45,13 @@ function EntityList() {
 			/>
 			<AdminDetailSheet entityType="mortgages" />
 		</>
+	);
+}
+
+function MortgagesPendingPage() {
+	return (
+		<AdminPageSkeleton titleWidth="w-52">
+			<AdminTableSkeleton columnCount={columns.length} />
+		</AdminPageSkeleton>
 	);
 }
