@@ -93,9 +93,15 @@ export function RecordFieldDisplay({
 						{isEditing ? (
 							<>
 								<Button
+									aria-label={
+										isSaving ? `Saving ${field.label}` : `Save ${field.label}`
+									}
 									disabled={isSaving}
 									onClick={handleSave}
 									size="icon-xs"
+									title={
+										isSaving ? `Saving ${field.label}` : `Save ${field.label}`
+									}
 									variant="outline"
 								>
 									{isSaving ? (
@@ -105,12 +111,14 @@ export function RecordFieldDisplay({
 									)}
 								</Button>
 								<Button
+									aria-label={`Cancel editing ${field.label}`}
 									disabled={isSaving}
 									onClick={() => {
 										setDraftValue(value);
 										setIsEditing(false);
 									}}
 									size="icon-xs"
+									title={`Cancel editing ${field.label}`}
 									variant="ghost"
 								>
 									<X className="size-3" />
@@ -118,11 +126,13 @@ export function RecordFieldDisplay({
 							</>
 						) : (
 							<Button
+								aria-label={`Edit ${field.label}`}
 								onClick={() => {
 									setDraftValue(value);
 									setIsEditing(true);
 								}}
 								size="icon-xs"
+								title={`Edit ${field.label}`}
 								variant="ghost"
 							>
 								<PencilLine className="size-3" />

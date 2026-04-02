@@ -33,6 +33,7 @@ import { ViewToggle } from "./ViewToggle";
 
 type ObjectDef = Doc<"objectDefs">;
 type FieldDef = Doc<"fieldDefs">;
+const RECORD_PAGE_SIZE = 50;
 
 interface RecordTableSurfaceProps {
 	emptyDescription: string;
@@ -50,8 +51,7 @@ interface RecordTableSurfaceProps {
 function buildTableView(views: Doc<"viewDefs">[] | undefined) {
 	return (
 		views?.find((view) => view.isDefault && view.viewType === "table") ??
-		views?.find((view) => view.viewType === "table") ??
-		views?.[0]
+		views?.find((view) => view.viewType === "table")
 	);
 }
 
@@ -123,36 +123,58 @@ function RecordSurfaceHeader({
 
 function RecordSurfaceBody({
 	emptyDescription,
+	emptyTitle,
 	fields,
 	kanbanPreview,
 	metricSource,
 	objectDef,
 	onSelectRecord,
+	onNextTablePage,
+	onPreviousTablePage,
 	selectedRecordId,
 	tablePreview,
+	tablePageIndex,
 	viewMode,
 }: {
 	emptyDescription: string;
+	emptyTitle: string;
 	fields: FieldDef[] | undefined;
 	kanbanPreview: CrmDemoKanbanResult | undefined;
 	metricSource: CrmDemoMetricSource;
 	objectDef: ObjectDef;
 	onSelectRecord?: (record: CrmDemoRecordReference) => void;
+	onNextTablePage: () => void;
+	onPreviousTablePage: () => void;
 	selectedRecordId?: string;
 	tablePreview: CrmDemoTableResult | undefined;
+	tablePageIndex: number;
 	viewMode: RecordViewMode;
 }) {
-	if (fields === undefined || tablePreview === undefined) {
+	const activePreview = viewMode === "kanban" ? kanbanPreview : tablePreview;
+	const activeRows =
+		viewMode === "kanban"
+			? buildKanbanRows(kanbanPreview)
+			: (tablePreview?.rows ?? []);
+
+	if (fields === undefined || activePreview === undefined) {
 		return <RecordSurfaceLoading />;
 	}
+
+	const tablePageCount = Math.max(
+		1,
+		Math.ceil((tablePreview?.totalCount ?? 0) / RECORD_PAGE_SIZE)
+	);
+	const visibleRangeStart =
+		activeRows.length === 0 ? 0 : tablePageIndex * RECORD_PAGE_SIZE + 1;
+	const visibleRangeEnd = tablePageIndex * RECORD_PAGE_SIZE + activeRows.length;
 
 	return (
 		<>
 			<div className="flex flex-wrap items-center gap-2">
 				<Badge variant="secondary">
 					{viewMode === "kanban"
-						? `${kanbanPreview?.totalCount ?? buildKanbanRows(kanbanPreview).length} grouped records`
-						: `${tablePreview.totalCount} records`}
+						? `${kanbanPreview?.totalCount ?? 0} grouped records`
+						: `${tablePreview?.totalCount ?? 0} records`}
 				</Badge>
 				<Badge variant="outline">{fields.length} fields</Badge>
 				<Badge variant="outline">
@@ -160,9 +182,9 @@ function RecordSurfaceBody({
 				</Badge>
 			</div>
 
-			{tablePreview.rows.length === 0 ? (
+			{activeRows.length === 0 ? (
 				<div className="rounded-2xl border border-border/70 border-dashed px-4 py-8">
-					{renderEmptyRecordState(emptyDescription)}
+					{renderEmptyRecordState(emptyDescription, emptyTitle)}
 				</div>
 			) : null}
 
@@ -171,9 +193,9 @@ function RecordSurfaceBody({
 					fields={fields}
 					objectDef={objectDef}
 					onSelectRecord={onSelectRecord}
-					rows={tablePreview.rows}
+					rows={tablePreview?.rows ?? []}
 					selectedRecordId={selectedRecordId}
-					viewColumns={tablePreview.columns}
+					viewColumns={tablePreview?.columns ?? []}
 				/>
 			) : null}
 
@@ -184,8 +206,41 @@ function RecordSurfaceBody({
 					objectDef={objectDef}
 					onSelectRecord={onSelectRecord}
 					selectedRecordId={selectedRecordId}
-					viewColumns={tablePreview.columns}
+					viewColumns={tablePreview?.columns ?? []}
 				/>
+			) : null}
+
+			{viewMode === "table" &&
+			(tablePreview?.totalCount ?? 0) > RECORD_PAGE_SIZE ? (
+				<div className="flex flex-col gap-3 rounded-2xl border border-border/70 bg-muted/10 px-4 py-3 text-sm lg:flex-row lg:items-center lg:justify-between">
+					<div className="space-y-1">
+						<p className="font-medium">
+							Server page {tablePageIndex + 1} of {tablePageCount}
+						</p>
+						<p className="text-muted-foreground">
+							Showing records {visibleRangeStart}-{visibleRangeEnd} of{" "}
+							{tablePreview?.totalCount ?? 0}.
+						</p>
+					</div>
+					<div className="flex items-center gap-2">
+						<Button
+							disabled={tablePageIndex === 0}
+							onClick={onPreviousTablePage}
+							size="sm"
+							variant="outline"
+						>
+							Previous 50
+						</Button>
+						<Button
+							disabled={!tablePreview?.cursor}
+							onClick={onNextTablePage}
+							size="sm"
+							variant="outline"
+						>
+							Next 50
+						</Button>
+					</div>
+				</div>
 			) : null}
 		</>
 	);
@@ -211,7 +266,7 @@ function useRecordSurfaceMetrics({
 	const startedAtRef = useRef<number | null>(null);
 
 	useEffect(() => {
-		if (!(trackMetrics && fields && activeRows.length > 0)) {
+		if (!(trackMetrics && fields)) {
 			return;
 		}
 
@@ -265,33 +320,71 @@ export function RecordTableSurface({
 	);
 	const createView = useMutation(api.crm.viewDefs.createView);
 	const [viewMode, setViewMode] = useState<RecordViewMode>("table");
+	const [pendingKanbanViewId, setPendingKanbanViewId] = useState<
+		Doc<"viewDefs">["_id"] | null
+	>(null);
+	const [tableCursorHistory, setTableCursorHistory] = useState<
+		Array<string | null>
+	>([null]);
+	const [tablePageIndex, setTablePageIndex] = useState(0);
 
 	const tableView = useMemo(() => buildTableView(views), [views]);
 	const kanbanView = useMemo(
 		() => views?.find((view) => view.viewType === "kanban"),
 		[views]
 	);
+	const tableCursor = tableCursorHistory[tablePageIndex] ?? null;
+	const objectDefId = objectDef?._id;
+	const tableViewId = tableView?._id;
 
-	const prevObjectDefId = useRef(objectDef?._id);
+	const prevObjectDefId = useRef(objectDefId);
+	const prevTableViewId = useRef(tableViewId);
 	useEffect(() => {
-		if (prevObjectDefId.current !== objectDef?._id) {
-			prevObjectDefId.current = objectDef?._id;
+		if (prevObjectDefId.current !== objectDefId) {
+			prevObjectDefId.current = objectDefId;
+			setViewMode("table");
+			setPendingKanbanViewId(null);
+			setTableCursorHistory([null]);
+			setTablePageIndex(0);
+		}
+	}, [objectDefId]);
+
+	useEffect(() => {
+		if (prevTableViewId.current === tableViewId) {
+			return;
+		}
+
+		prevTableViewId.current = tableViewId;
+		setTableCursorHistory([null]);
+		setTablePageIndex(0);
+	}, [tableViewId]);
+
+	useEffect(() => {
+		if (
+			pendingKanbanViewId &&
+			views?.some((view) => view._id === pendingKanbanViewId)
+		) {
+			setPendingKanbanViewId(null);
+		}
+	}, [pendingKanbanViewId, views]);
+
+	useEffect(() => {
+		if (viewMode === "table" && !tableView && kanbanView && enableKanban) {
+			setViewMode("kanban");
+			return;
+		}
+
+		if (viewMode === "kanban" && !kanbanView && !pendingKanbanViewId) {
 			setViewMode("table");
 		}
-	}, [objectDef?._id]);
-
-	useEffect(() => {
-		if (viewMode === "kanban" && !kanbanView) {
-			setViewMode("table");
-		}
-	}, [kanbanView, viewMode]);
+	}, [enableKanban, kanbanView, pendingKanbanViewId, tableView, viewMode]);
 
 	const tablePreview = useQuery(
 		api.crm.viewQueries.queryViewRecords,
 		tableView
 			? {
-					cursor: null,
-					limit: 50,
+					cursor: tableCursor,
+					limit: RECORD_PAGE_SIZE,
 					viewDefId: tableView._id,
 				}
 			: "skip"
@@ -302,7 +395,7 @@ export function RecordTableSurface({
 		viewMode === "kanban" && kanbanView
 			? {
 					cursor: null,
-					limit: 50,
+					limit: RECORD_PAGE_SIZE,
 					viewDefId: kanbanView._id,
 				}
 			: "skip"
@@ -341,17 +434,35 @@ export function RecordTableSurface({
 		}
 
 		try {
-			await createView({
+			const nextKanbanViewId = await createView({
 				boundFieldId: firstKanbanField._id,
 				name: `${objectDef.pluralLabel} Pipeline`,
 				objectDefId: objectDef._id,
 				viewType: "kanban",
 			});
+			setPendingKanbanViewId(nextKanbanViewId);
 			setViewMode("kanban");
 			toast.success(`Created kanban view bound to ${firstKanbanField.label}.`);
 		} catch (error) {
 			toast.error(extractCrmErrorMessage(error));
 		}
+	}
+
+	function handleNextTablePage() {
+		if (!tablePreview?.cursor) {
+			return;
+		}
+
+		setTableCursorHistory((current) =>
+			current[tablePageIndex + 1] === tablePreview.cursor
+				? current
+				: [...current, tablePreview.cursor]
+		);
+		setTablePageIndex((current) => current + 1);
+	}
+
+	function handlePreviousTablePage() {
+		setTablePageIndex((current) => Math.max(current - 1, 0));
 	}
 
 	if (!objectDef) {
@@ -382,12 +493,16 @@ export function RecordTableSurface({
 			<CardContent className="space-y-4">
 				<RecordSurfaceBody
 					emptyDescription={emptyDescription}
+					emptyTitle={emptyTitle}
 					fields={fields as FieldDef[] | undefined}
 					kanbanPreview={kanbanPreview}
 					metricSource={metricSource}
 					objectDef={objectDef}
+					onNextTablePage={handleNextTablePage}
+					onPreviousTablePage={handlePreviousTablePage}
 					onSelectRecord={onSelectRecord}
 					selectedRecordId={selectedRecordId}
+					tablePageIndex={tablePageIndex}
 					tablePreview={tablePreview}
 					viewMode={viewMode}
 				/>

@@ -122,14 +122,30 @@ function renderLinkValue(
 	}
 
 	if (fieldType === "url") {
+		const rawValue = String(value);
+		let safeUrl: string | undefined;
+
+		try {
+			const parsedUrl = new URL(rawValue);
+			if (parsedUrl.protocol === "http:" || parsedUrl.protocol === "https:") {
+				safeUrl = parsedUrl.toString();
+			}
+		} catch {
+			safeUrl = undefined;
+		}
+
+		if (!safeUrl) {
+			return <span className="break-all">{rawValue}</span>;
+		}
+
 		return (
 			<a
 				className="inline-flex items-center gap-1 text-primary underline-offset-4 hover:underline"
-				href={String(value)}
-				rel="noreferrer"
+				href={safeUrl}
+				rel="noopener noreferrer"
 				target="_blank"
 			>
-				<span className="truncate">{String(value)}</span>
+				<span className="truncate">{rawValue}</span>
 				<ExternalLink className="size-3" />
 			</a>
 		);
@@ -225,11 +241,14 @@ export function renderSourceBadge(recordKind: CrmDemoRecordKind) {
 	);
 }
 
-export function renderEmptyRecordState(label: string) {
+export function renderEmptyRecordState(label: string, title?: string) {
 	return (
-		<div className="flex items-center gap-2 text-muted-foreground text-sm">
-			<CircleDashed className="size-4" />
-			{label}
+		<div className="flex items-start gap-2 text-muted-foreground text-sm">
+			<CircleDashed className="mt-0.5 size-4 shrink-0" />
+			<div className="space-y-1">
+				{title ? <p className="font-medium text-foreground">{title}</p> : null}
+				<p>{label}</p>
+			</div>
 		</div>
 	);
 }

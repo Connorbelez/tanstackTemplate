@@ -45,7 +45,7 @@ function CrmLinksPage() {
 	const linkTypes = useQuery(crmListLinkTypes, {});
 	const createLinkType = useMutation(crmCreateLinkType);
 	const createLink = useMutation(crmCreateRecordLink);
-	const { currentRecord, openRecord } = useRecordSidebar();
+	const { openRecord } = useRecordSidebar();
 	const [sourceObjectId, setSourceObjectId] = useState<Id<"objectDefs">>();
 	const [targetObjectId, setTargetObjectId] = useState<Id<"objectDefs">>();
 	const [selectedSourceRecord, setSelectedSourceRecord] = useState<{
@@ -308,11 +308,7 @@ function CrmLinksPage() {
 					metricSource={sourceObject?.isSystem ? "native" : "eav"}
 					objectDef={sourceObject}
 					onSelectRecord={setSelectedSourceRecord}
-					selectedRecordId={
-						currentRecord && currentRecord.objectDefId === sourceObject?._id
-							? currentRecord.recordId
-							: selectedSourceRecord?.recordId
-					}
+					selectedRecordId={selectedSourceRecord?.recordId}
 					trackMetrics={false}
 				/>
 				<RecordTableSurface
@@ -322,11 +318,7 @@ function CrmLinksPage() {
 					metricSource={targetObject?.isSystem ? "native" : "eav"}
 					objectDef={targetObject}
 					onSelectRecord={setSelectedTargetRecord}
-					selectedRecordId={
-						currentRecord && currentRecord.objectDefId === targetObject?._id
-							? currentRecord.recordId
-							: selectedTargetRecord?.recordId
-					}
+					selectedRecordId={selectedTargetRecord?.recordId}
 					trackMetrics={false}
 				/>
 			</div>

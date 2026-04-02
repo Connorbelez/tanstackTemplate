@@ -14,21 +14,21 @@ export const Route = createFileRoute("/demo/crm/$objectDefId/$recordId")({
 				<CardHeader>
 					<CardTitle className="flex items-center gap-2 text-lg">
 						<AlertCircle className="size-4 text-destructive" />
-						Record not found
+						Unable to load record
 					</CardTitle>
 				</CardHeader>
 				<CardContent className="space-y-4">
 					<p className="text-muted-foreground text-sm">
 						{error instanceof Error
 							? error.message
-							: "The requested CRM demo record could not be loaded."}
+							: "An error occurred while loading this CRM demo record."}
 					</p>
-					<Link to="/demo/crm">
-						<Button size="sm" variant="outline">
+					<Button asChild size="sm" variant="outline">
+						<Link to="/demo/crm">
 							<ArrowLeft className="size-4" />
 							Back to CRM Demo
-						</Button>
-					</Link>
+						</Link>
+					</Button>
 				</CardContent>
 			</Card>
 		</div>
@@ -60,12 +60,12 @@ function CrmRecordDetailRoute() {
 							The requested CRM object definition does not exist in this
 							sandbox.
 						</p>
-						<Link to="/demo/crm">
-							<Button size="sm" variant="outline">
+						<Button asChild size="sm" variant="outline">
+							<Link to="/demo/crm">
 								<ArrowLeft className="size-4" />
 								Back to CRM Demo
-							</Button>
-						</Link>
+							</Link>
+						</Button>
 					</CardContent>
 				</Card>
 			</div>

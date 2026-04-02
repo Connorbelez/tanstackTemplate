@@ -1,5 +1,5 @@
 import { ServerCog } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
 	Card,
 	CardContent,
@@ -27,6 +27,17 @@ export function SystemAdapterTab({
 	const [sampleRecord, setSampleRecord] = useState<
 		CrmDemoTableResult["rows"][number] | undefined
 	>();
+	const objectDefId = objectDef?._id;
+	const previousObjectDefId = useRef(objectDefId);
+
+	useEffect(() => {
+		if (previousObjectDefId.current === objectDefId) {
+			return;
+		}
+
+		previousObjectDefId.current = objectDefId;
+		setSampleRecord(undefined);
+	});
 
 	return (
 		<div className="space-y-6">

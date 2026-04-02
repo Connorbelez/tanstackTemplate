@@ -19,7 +19,7 @@ import {
 } from "@tanstack/react-table";
 import { ArrowUpDown, Search } from "lucide-react";
 import type { ComponentProps } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Badge } from "#/components/ui/badge";
 import { Button } from "#/components/ui/button";
 import { Input } from "#/components/ui/input";
@@ -133,25 +133,52 @@ export function RecordTable({
 		() => new Map(fields.map((field) => [field.name, field])),
 		[fields]
 	);
+	const pageResetKey = `${globalFilter}:${JSON.stringify(columnFilters)}:${rows
+		.map((row) => row._id)
+		.join(",")}`;
+	const previousPageResetKey = useRef(pageResetKey);
 
 	const columns = useMemo<ColumnDef<RecordTableRow>[]>(
 		() => [
 			{
-				accessorKey: "_id",
+				accessorFn: (row) => getRecordTitle(row, fields),
+				id: "record",
 				header: "Record",
-				cell: ({ row }) => (
-					<div className="space-y-1">
-						<div className="flex items-center gap-2">
-							<p className="font-medium">
-								{getRecordTitle(row.original, fields)}
+				cell: ({ row }) => {
+					const nextReference: CrmDemoRecordReference = {
+						labelValue: getRecordTitle(row.original, fields),
+						objectDefId: row.original.objectDefId,
+						recordId: row.original._id,
+						recordKind: row.original._kind,
+					};
+					const content = (
+						<div className="space-y-1">
+							<div className="flex items-center gap-2">
+								<p className="font-medium">
+									{getRecordTitle(row.original, fields)}
+								</p>
+								{renderSourceBadge(row.original._kind)}
+							</div>
+							<p className="text-muted-foreground text-xs">
+								{getRecordSupportingText(row.original, objectDef)}
 							</p>
-							{renderSourceBadge(row.original._kind)}
 						</div>
-						<p className="text-muted-foreground text-xs">
-							{getRecordSupportingText(row.original, objectDef)}
-						</p>
-					</div>
-				),
+					);
+
+					if (!onSelectRecord) {
+						return content;
+					}
+
+					return (
+						<button
+							className="w-full rounded-lg p-0 text-left outline-none transition-colors focus-visible:ring-2 focus-visible:ring-primary/40"
+							onClick={() => onSelectRecord(nextReference)}
+							type="button"
+						>
+							{content}
+						</button>
+					);
+				},
 				sortingFn: (rowA, rowB) =>
 					getRecordTitle(rowA.original, fields).localeCompare(
 						getRecordTitle(rowB.original, fields)
@@ -194,7 +221,7 @@ export function RecordTable({
 					})
 				),
 		],
-		[fieldMap, fields, objectDef, viewColumns]
+		[fieldMap, fields, objectDef, onSelectRecord, viewColumns]
 	);
 
 	const table = useReactTable({
@@ -215,10 +242,15 @@ export function RecordTable({
 	});
 
 	useEffect(() => {
+		if (previousPageResetKey.current === pageResetKey) {
+			return;
+		}
+
+		previousPageResetKey.current = pageResetKey;
 		if (table.getState().pagination.pageIndex > 0) {
 			table.setPageIndex(0);
 		}
-	}, [table]);
+	}, [pageResetKey, table]);
 
 	return (
 		<div className="space-y-4">
@@ -270,22 +302,13 @@ export function RecordTable({
 							</UITableRow>
 						) : (
 							table.getRowModel().rows.map((row) => {
-								const nextReference: CrmDemoRecordReference = {
-									labelValue: getRecordTitle(row.original, fields),
-									objectDefId: row.original.objectDefId,
-									recordId: row.original._id,
-									recordKind: row.original._kind,
-								};
-
 								return (
 									<UITableRow
 										className={cn(
-											onSelectRecord &&
-												"cursor-pointer transition-colors hover:bg-muted/30",
+											"transition-colors hover:bg-muted/30",
 											selectedRecordId === row.original._id && "bg-muted/40"
 										)}
 										key={row.id}
-										onClick={() => onSelectRecord?.(nextReference)}
 									>
 										{row.getVisibleCells().map((cell) => (
 											<TableCell key={cell.id}>

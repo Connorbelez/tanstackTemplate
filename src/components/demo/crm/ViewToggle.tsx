@@ -15,8 +15,13 @@ export function ViewToggle({
 	onModeChange,
 }: ViewToggleProps) {
 	return (
-		<div className="inline-flex items-center rounded-xl border border-border/70 bg-muted/30 p-1">
+		<div
+			aria-label="Record view mode"
+			className="inline-flex items-center rounded-xl border border-border/70 bg-muted/30 p-1"
+			role="group"
+		>
 			<Button
+				aria-pressed={mode === "table"}
 				className={cn(
 					"rounded-lg border-transparent",
 					mode === "table"
@@ -31,6 +36,7 @@ export function ViewToggle({
 				Table
 			</Button>
 			<Button
+				aria-pressed={mode === "kanban"}
 				className={cn(
 					"rounded-lg border-transparent",
 					mode === "kanban"

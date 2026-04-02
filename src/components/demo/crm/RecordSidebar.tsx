@@ -1,7 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { useQuery } from "convex/react";
 import { ArrowLeft, ExternalLink, LoaderCircle } from "lucide-react";
-import { useEffect, useMemo, useRef } from "react";
+import { type MouseEvent, useEffect, useMemo, useRef } from "react";
 import { Badge } from "#/components/ui/badge";
 import { Button } from "#/components/ui/button";
 import { ScrollArea } from "#/components/ui/scroll-area";
@@ -88,6 +88,9 @@ export function RecordSidebar() {
 	const recordKey = currentRecord
 		? `${currentRecord.objectDefId}:${currentRecord.recordKind}:${currentRecord.recordId}`
 		: null;
+	const isLoadingDetail =
+		!objectDef || detail === undefined || fields === undefined;
+	const objectLabel = objectDef?.singularLabel ?? "Record";
 
 	if (previousRecordKeyRef.current !== recordKey) {
 		previousRecordKeyRef.current = recordKey;
@@ -105,8 +108,21 @@ export function RecordSidebar() {
 		setRenderTime(Math.round(performance.now() - startedAtRef.current));
 	}, [currentRecord, detail, setMetricNotes, setRenderTime]);
 
-	if (!(currentRecord && objectDef)) {
+	if (!(isOpen && currentRecord)) {
 		return null;
+	}
+
+	function handleOpenFullPageClick(event: MouseEvent<HTMLAnchorElement>) {
+		if (
+			event.button === 0 &&
+			!event.defaultPrevented &&
+			!event.metaKey &&
+			!event.ctrlKey &&
+			!event.altKey &&
+			!event.shiftKey
+		) {
+			close();
+		}
 	}
 
 	return (
@@ -116,7 +132,7 @@ export function RecordSidebar() {
 					<div className="flex items-start justify-between gap-4">
 						<div className="space-y-2">
 							<div className="flex flex-wrap items-center gap-2">
-								<Badge variant="outline">{objectDef.singularLabel}</Badge>
+								<Badge variant="outline">{objectLabel}</Badge>
 								{navigationStack.length > 1 ? (
 									<Button onClick={goBack} size="sm" variant="ghost">
 										<ArrowLeft className="size-4" />
@@ -135,24 +151,23 @@ export function RecordSidebar() {
 							</SheetDescription>
 						</div>
 
-						{currentRecord ? (
+						<Button asChild size="sm" variant="outline">
 							<Link
+								onClick={handleOpenFullPageClick}
 								params={{
 									objectDefId: currentRecord.objectDefId,
 									recordId: currentRecord.recordId,
 								}}
 								to="/demo/crm/$objectDefId/$recordId"
 							>
-								<Button size="sm" variant="outline">
-									<ExternalLink className="size-4" />
-									Open Full Page
-								</Button>
+								<ExternalLink className="size-4" />
+								Open Full Page
 							</Link>
-						) : null}
+						</Button>
 					</div>
 				</SheetHeader>
 
-				{detail === undefined || fields === undefined ? (
+				{isLoadingDetail ? (
 					<div className="flex flex-1 items-center justify-center gap-2 p-6 text-muted-foreground text-sm">
 						<LoaderCircle className="size-4 animate-spin" />
 						Loading record detail...
