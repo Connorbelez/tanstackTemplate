@@ -45,6 +45,18 @@ export const ADMIN_ENTITIES = [
 		supportsDetailPage: true,
 	},
 	{
+		entityType: "properties",
+		singularLabel: "Property",
+		pluralLabel: "Properties",
+		route: "/admin/properties",
+		iconName: "building-2",
+		domain: "marketplace",
+		tableName: "properties",
+		labelColor: "cyan",
+		supportsTableView: true,
+		supportsDetailPage: true,
+	},
+	{
 		entityType: "deals",
 		singularLabel: "Deal",
 		pluralLabel: "Deals",
@@ -177,6 +189,12 @@ const ADMIN_ENTITIES_BY_TYPE: ReadonlyMap<string, AdminEntity> = new Map(
 	ADMIN_ENTITIES.map((entity) => [entity.entityType, entity] as const)
 );
 
+const ADMIN_ENTITIES_BY_TABLE_NAME: ReadonlyMap<string, AdminEntity> = new Map(
+	ADMIN_ENTITIES.flatMap((entity) =>
+		entity.tableName ? [[entity.tableName, entity] as const] : []
+	)
+);
+
 const ADMIN_ENTITIES_BY_ROUTE: ReadonlyMap<AdminEntityRoute, AdminEntity> =
 	new Map(ADMIN_ENTITIES.map((entity) => [entity.route, entity] as const));
 
@@ -197,6 +215,51 @@ export function getAdminEntityByType(entityType: string) {
 
 export function getAdminEntityByRoute(route: AdminEntityRoute) {
 	return ADMIN_ENTITIES_BY_ROUTE.get(route);
+}
+
+export function getAdminEntityByTableName(tableName: string) {
+	return ADMIN_ENTITIES_BY_TABLE_NAME.get(tableName);
+}
+
+export function getAdminEntityForObjectDef(objectDef: {
+	name?: string;
+	nativeTable?: string;
+	pluralLabel?: string;
+	singularLabel?: string;
+}) {
+	if (objectDef.nativeTable) {
+		const entityByTable = getAdminEntityByTableName(objectDef.nativeTable);
+		if (entityByTable) {
+			return entityByTable;
+		}
+	}
+
+	const normalizedCandidates = [
+		objectDef.name,
+		objectDef.pluralLabel,
+		objectDef.singularLabel,
+	]
+		.filter((value): value is string => Boolean(value))
+		.map((value) => value.trim().toLowerCase());
+
+	if (normalizedCandidates.length === 0) {
+		return undefined;
+	}
+
+	return ADMIN_ENTITIES.find((entity) => {
+		const entityCandidates = [
+			entity.entityType,
+			entity.pluralLabel,
+			entity.singularLabel,
+			entity.tableName,
+		]
+			.filter((value): value is string => Boolean(value))
+			.map((value) => value.trim().toLowerCase());
+
+		return normalizedCandidates.some((candidate) =>
+			entityCandidates.includes(candidate)
+		);
+	});
 }
 
 export function getAdminEntityByPathname(pathname: string) {

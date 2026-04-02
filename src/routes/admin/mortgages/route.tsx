@@ -1,5 +1,4 @@
 import { createFileRoute, Outlet, useMatch } from "@tanstack/react-router";
-import { AdminDetailSheet } from "#/components/admin/shell/AdminDetailSheet";
 import {
 	AdminPageSkeleton,
 	AdminRouteErrorBoundary,
@@ -37,14 +36,11 @@ function EntityList() {
 	}
 
 	return (
-		<>
-			<EntityTable
-				columns={columns}
-				data={fakeData}
-				onRowClick={(row) => open(String(row.id))}
-			/>
-			<AdminDetailSheet entityType="mortgages" />
-		</>
+		<EntityTable
+			columns={columns}
+			data={fakeData}
+			onRowClick={(row) => open(String(row.id))}
+		/>
 	);
 }
 

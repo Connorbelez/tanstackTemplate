@@ -5,7 +5,6 @@ import {
 	redirect,
 	useMatch,
 } from "@tanstack/react-router";
-import { AdminDetailSheet } from "#/components/admin/shell/AdminDetailSheet";
 import {
 	AdminPageSkeleton,
 	AdminRouteErrorBoundary,
@@ -30,15 +29,13 @@ export const Route = createFileRoute("/admin/$entitytype")({
 	component: EntityList,
 	errorComponent: AdminRouteErrorBoundary,
 	loader: async ({ params }) => {
-		const { entitytype } = params;
-
 		const fakeData = Array.from({ length: 10 }, (_, index) => ({
 			id: index,
 			name: `Entity ${index}`,
 			amount: Math.random() * 1000,
 		}));
 
-		return { entitytype: entitytype as string, fakeData };
+		return { fakeData };
 	},
 	pendingComponent: GenericEntityPendingPage,
 });
@@ -46,7 +43,6 @@ export const Route = createFileRoute("/admin/$entitytype")({
 function EntityList() {
 	const { fakeData } = routeApi.useLoaderData();
 	const { open } = useAdminDetailSheet();
-	const { entitytype } = routeApi.useParams();
 	const recordId = useMatch({
 		from: "/admin/$entitytype/$recordid",
 		select: (match) => match.params.recordid,
@@ -58,14 +54,11 @@ function EntityList() {
 	}
 
 	return (
-		<>
-			<EntityTable
-				columns={columns}
-				data={fakeData}
-				onRowClick={(row) => open(String(row.id))}
-			/>
-			<AdminDetailSheet entityType={entitytype} />
-		</>
+		<EntityTable
+			columns={columns}
+			data={fakeData}
+			onRowClick={(row) => open(String(row.id))}
+		/>
 	);
 }
 

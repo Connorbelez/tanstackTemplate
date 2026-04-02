@@ -1,64 +1,7 @@
 "use client";
 
-import { Link } from "@tanstack/react-router";
-import { useAdminDetailSheet } from "#/hooks/useAdminDetailSheet";
-import { EMPTY_ADMIN_DETAIL_SEARCH } from "#/lib/admin-detail-search";
-import { Button } from "@/components/ui/button";
-import {
-	Sheet,
-	SheetContent,
-	SheetDescription,
-	SheetHeader,
-	SheetTitle,
-} from "@/components/ui/sheet";
+import { RecordSidebar } from "#/components/admin/shell/RecordSidebar";
 
-export interface AdminDetailSheetProps {
-	entityType: string;
-}
-
-export function AdminDetailSheet({ entityType }: AdminDetailSheetProps) {
-	const { detailOpen, recordId, close } = useAdminDetailSheet();
-
-	return (
-		<Sheet
-			onOpenChange={(open) => {
-				if (!open) {
-					close();
-				}
-			}}
-			open={detailOpen}
-		>
-			<SheetContent className="flex flex-col gap-4" side="right">
-				<SheetHeader>
-					<SheetTitle>Record detail</SheetTitle>
-					<SheetDescription>
-						State is driven by URL search params:{" "}
-						<code className="rounded bg-muted px-1 py-0.5 text-xs">
-							detailOpen
-						</code>{" "}
-						and{" "}
-						<Link
-							params={{
-								entitytype: entityType,
-								recordid: recordId ?? "",
-							}}
-							search={EMPTY_ADMIN_DETAIL_SEARCH}
-							to="/admin/$entitytype/$recordid"
-							viewTransition
-						>
-							View record
-						</Link>
-					</SheetDescription>
-				</SheetHeader>
-				<div className="text-sm">
-					<p>
-						<span className="font-medium">recordId:</span> {recordId ?? "—"}
-					</p>
-				</div>
-				<Button onClick={() => close()} type="button" variant="secondary">
-					Close (clears search params)
-				</Button>
-			</SheetContent>
-		</Sheet>
-	);
+export function AdminDetailSheet() {
+	return <RecordSidebar />;
 }

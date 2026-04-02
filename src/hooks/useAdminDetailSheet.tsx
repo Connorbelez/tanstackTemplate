@@ -1,8 +1,6 @@
-import { getRouteApi, useNavigate } from "@tanstack/react-router";
-
-import type { AdminDetailSearch } from "#/lib/admin-detail-search";
-
-const adminRouteApi = getRouteApi("/admin");
+import { useLocation } from "@tanstack/react-router";
+import { getAdminEntityByPathname } from "#/components/admin/shell/entity-registry";
+import { useRecordSidebar } from "#/components/admin/shell/RecordSidebarProvider";
 
 export interface UseAdminDetailSheetResult {
 	close: () => void;
@@ -18,50 +16,52 @@ export interface UseAdminDetailSheetResult {
 }
 
 /**
- * Reads and updates admin detail sheet state from URL search params (`detailOpen`, `recordId`).
- * Use from any route under `/admin`.
- *
- * `from: "/admin"` + `to: "."` alone resolves the destination pathname to `/admin` (the `from` route),
- * not the active leaf (e.g. `/admin/foo`). `unsafeRelative: "path"` bases relative navigation on the
- * current URL pathname so the child segment is preserved.
+ * Backwards-compatible wrapper around the provider-backed record sidebar state.
+ * Existing callers can keep using `open(recordId)` while the new sidebar owns its
+ * state in React context instead of URL search params.
  */
 export function useAdminDetailSheet(): UseAdminDetailSheetResult {
-	const { detailOpen, recordId, entityType } = adminRouteApi.useSearch();
-	const navigate = useNavigate({ from: "/admin" });
-
-	const patchSearch = (
-		updater: (prev: AdminDetailSearch) => AdminDetailSearch
-	) => {
-		void navigate({
-			to: ".",
-			unsafeRelative: "path",
-			search: updater,
-		});
-	};
+	const pathname = useLocation({
+		select: (location) => location.pathname,
+	});
+	const routeEntityType = getAdminEntityByPathname(pathname)?.entityType;
+	const { close, current, isOpen, open, replace } = useRecordSidebar();
+	const entityType = current?.entityType ?? routeEntityType;
 
 	return {
-		detailOpen,
+		close,
+		detailOpen: isOpen,
 		entityType,
-		recordId,
-		open: (nextRecordId: string) => {
-			patchSearch((prev) => ({
-				...prev,
-				detailOpen: true,
-				recordId: nextRecordId,
-			}));
+		recordId: current?.recordId,
+		open: (recordId) => {
+			if (!routeEntityType) {
+				return;
+			}
+
+			open({
+				entityType: routeEntityType,
+				recordId,
+			});
 		},
-		close: () => {
-			patchSearch((prev) => ({
-				...prev,
-				detailOpen: false,
-				recordId: undefined,
-			}));
-		},
-		setSearch: (patch) => {
-			patchSearch((prev) => ({
-				...prev,
-				...patch,
-			}));
+		setSearch: ({ detailOpen, entityType: nextEntityType, recordId }) => {
+			if (detailOpen === false) {
+				close();
+				return;
+			}
+
+			if (!recordId) {
+				return;
+			}
+
+			const resolvedEntityType = nextEntityType ?? entityType;
+			if (!resolvedEntityType) {
+				return;
+			}
+
+			replace({
+				entityType: resolvedEntityType,
+				recordId,
+			});
 		},
 	};
 }
