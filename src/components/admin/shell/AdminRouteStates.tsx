@@ -64,16 +64,22 @@ export function AdminTableSkeleton({
 	columnCount?: number;
 	rowCount?: number;
 }) {
+	const sanitizedColumnCount = Number.isFinite(columnCount)
+		? Math.max(0, Math.floor(columnCount))
+		: 0;
+	const sanitizedRowCount = Number.isFinite(rowCount)
+		? Math.max(0, Math.floor(rowCount))
+		: 0;
 	const headerKeys = Array.from(
-		{ length: columnCount },
+		{ length: sanitizedColumnCount },
 		(_, index) => `header-${index + 1}`
 	);
 	const rowKeys = Array.from(
-		{ length: rowCount },
+		{ length: sanitizedRowCount },
 		(_, index) => `row-${index + 1}`
 	);
 	const cellKeys = Array.from(
-		{ length: columnCount },
+		{ length: sanitizedColumnCount },
 		(_, index) => `cell-${index + 1}`
 	);
 
@@ -96,7 +102,7 @@ export function AdminTableSkeleton({
 								<TableCell key={`${rowKey}-${cellKey}`}>
 									<Skeleton
 										className={
-											columnIndex === columnCount - 1
+											columnIndex === sanitizedColumnCount - 1
 												? "ml-auto h-4 w-16"
 												: "h-4 w-full max-w-36"
 										}

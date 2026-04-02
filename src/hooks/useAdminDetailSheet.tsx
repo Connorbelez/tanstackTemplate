@@ -1,6 +1,6 @@
 import { useLocation } from "@tanstack/react-router";
-import { getAdminEntityByPathname } from "#/components/admin/shell/entity-registry";
 import { useRecordSidebar } from "#/components/admin/shell/RecordSidebarProvider";
+import { getAdminDetailRouteState } from "#/lib/admin-detail-route-state";
 
 export interface UseAdminDetailSheetResult {
 	close: () => void;
@@ -24,22 +24,24 @@ export function useAdminDetailSheet(): UseAdminDetailSheetResult {
 	const pathname = useLocation({
 		select: (location) => location.pathname,
 	});
-	const routeEntityType = getAdminEntityByPathname(pathname)?.entityType;
+	const routeState = getAdminDetailRouteState(pathname);
 	const { close, current, isOpen, open, replace } = useRecordSidebar();
-	const entityType = current?.entityType ?? routeEntityType;
+	const entityType = current?.entityType ?? routeState.entityType;
+	const recordId = current?.recordId ?? routeState.recordId;
+	const detailOpen = isOpen || routeState.detailOpen;
 
 	return {
 		close,
-		detailOpen: isOpen,
+		detailOpen,
 		entityType,
-		recordId: current?.recordId,
+		recordId,
 		open: (recordId) => {
-			if (!routeEntityType) {
+			if (!routeState.entityType) {
 				return;
 			}
 
 			open({
-				entityType: routeEntityType,
+				entityType: routeState.entityType,
 				recordId,
 			});
 		},

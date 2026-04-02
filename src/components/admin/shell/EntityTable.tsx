@@ -16,6 +16,24 @@ import {
 	TableRow,
 } from "@/components/ui/table";
 
+function getRowActionLabel(rowData: unknown): string {
+	if (typeof rowData !== "object" || rowData === null) {
+		return "Open record details";
+	}
+
+	const record = rowData as Record<string, unknown>;
+	const label =
+		typeof record.title === "string"
+			? record.title
+			: typeof record.name === "string"
+				? record.name
+				: typeof record.id === "string"
+					? record.id
+					: undefined;
+
+	return label ? `Open details for ${label}` : "Open record details";
+}
+
 interface DataTableProps<TData, TValue> {
 	columns: ColumnDef<TData, TValue>[];
 	data: TData[];
@@ -61,24 +79,50 @@ export default function EntityTable<TData, TValue>({
 				</TableHeader>
 				<TableBody>
 					{table.getRowModel().rows.length > 0 ? (
-						table.getRowModel().rows.map((row) => (
-							<TableRow
-								className={
-									onRowClick ? "cursor-pointer hover:bg-muted/50" : undefined
-								}
-								data-state={row.getIsSelected() && "selected"}
-								key={row.id}
-								onClick={
-									onRowClick ? () => onRowClick(row.original) : undefined
-								}
-							>
-								{row.getVisibleCells().map((cell) => (
-									<TableCell key={cell.id}>
-										{flexRender(cell.column.columnDef.cell, cell.getContext())}
-									</TableCell>
-								))}
-							</TableRow>
-						))
+						table.getRowModel().rows.map((row) => {
+							const isInteractive = Boolean(onRowClick);
+
+							return (
+								<TableRow
+									aria-label={
+										isInteractive
+											? getRowActionLabel(row.original)
+											: undefined
+									}
+									className={
+										isInteractive
+											? "cursor-pointer hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+											: undefined
+									}
+									data-state={row.getIsSelected() && "selected"}
+									key={row.id}
+									onClick={
+										onRowClick ? () => onRowClick(row.original) : undefined
+									}
+									onKeyDown={
+										onRowClick
+											? (event) => {
+													if (event.key === "Enter" || event.key === " ") {
+														event.preventDefault();
+														onRowClick(row.original);
+													}
+												}
+											: undefined
+									}
+									role={isInteractive ? "button" : undefined}
+									tabIndex={isInteractive ? 0 : undefined}
+								>
+									{row.getVisibleCells().map((cell) => (
+										<TableCell key={cell.id}>
+											{flexRender(
+												cell.column.columnDef.cell,
+												cell.getContext()
+											)}
+										</TableCell>
+									))}
+								</TableRow>
+							);
+						})
 					) : (
 						<TableRow>
 							<TableCell className="h-24 text-center" colSpan={columns.length}>
