@@ -22,6 +22,9 @@ type DerivedFieldContractMetadata = Pick<
 	| "rendererHint"
 >;
 
+export type MaterializedFieldDef = Doc<"fieldDefs"> &
+	DerivedFieldContractMetadata;
+
 function enabledRule(): { enabled: true } {
 	return { enabled: true };
 }
@@ -193,6 +196,85 @@ export function deriveFieldContractMetadata(args: {
 			computed: args.computed,
 		}),
 		isVisibleByDefault: args.isVisibleByDefault ?? true,
+	};
+}
+
+export function materializeFieldContractMetadata(args: {
+	aggregation?: DerivedFieldContractMetadata["aggregation"];
+	computed?: ComputedFieldMetadata;
+	editability?: DerivedFieldContractMetadata["editability"];
+	fieldType: FieldType;
+	isVisibleByDefault?: boolean;
+	layoutEligibility?: DerivedFieldContractMetadata["layoutEligibility"];
+	nativeReadOnly: boolean;
+	normalizedFieldKind?: DerivedFieldContractMetadata["normalizedFieldKind"];
+	relation?: RelationMetadata;
+	rendererHint?: DerivedFieldContractMetadata["rendererHint"];
+}): DerivedFieldContractMetadata {
+	const derived = deriveFieldContractMetadata(args);
+
+	return {
+		normalizedFieldKind:
+			args.normalizedFieldKind ?? derived.normalizedFieldKind,
+		rendererHint: args.rendererHint ?? derived.rendererHint,
+		relation: args.relation ?? derived.relation,
+		computed: args.computed ?? derived.computed,
+		layoutEligibility: args.layoutEligibility ?? derived.layoutEligibility,
+		aggregation: args.aggregation ?? derived.aggregation,
+		editability: args.editability ?? derived.editability,
+		isVisibleByDefault: args.isVisibleByDefault ?? derived.isVisibleByDefault,
+	};
+}
+
+export function materializeFieldDef(
+	fieldDef: Doc<"fieldDefs">
+): MaterializedFieldDef {
+	return {
+		...fieldDef,
+		...materializeFieldContractMetadata({
+			fieldType: fieldDef.fieldType,
+			nativeReadOnly: fieldDef.nativeReadOnly,
+			relation: fieldDef.relation,
+			computed: fieldDef.computed,
+			normalizedFieldKind: fieldDef.normalizedFieldKind,
+			rendererHint: fieldDef.rendererHint,
+			layoutEligibility: fieldDef.layoutEligibility,
+			aggregation: fieldDef.aggregation,
+			editability: fieldDef.editability,
+			isVisibleByDefault: fieldDef.isVisibleByDefault,
+		}),
+	};
+}
+
+export function materializeFieldDefinition(
+	fieldDef: Doc<"fieldDefs">
+): NormalizedFieldDefinition {
+	const materializedFieldDef = materializeFieldDef(fieldDef);
+
+	return {
+		fieldDefId: materializedFieldDef._id,
+		fieldSource: "persisted",
+		objectDefId: materializedFieldDef.objectDefId,
+		name: materializedFieldDef.name,
+		label: materializedFieldDef.label,
+		fieldType: materializedFieldDef.fieldType,
+		normalizedFieldKind: materializedFieldDef.normalizedFieldKind,
+		description: materializedFieldDef.description,
+		isRequired: materializedFieldDef.isRequired,
+		isUnique: materializedFieldDef.isUnique,
+		isActive: materializedFieldDef.isActive,
+		displayOrder: materializedFieldDef.displayOrder,
+		defaultValue: materializedFieldDef.defaultValue,
+		options: materializedFieldDef.options,
+		rendererHint: materializedFieldDef.rendererHint,
+		relation: materializedFieldDef.relation,
+		computed: materializedFieldDef.computed,
+		layoutEligibility: materializedFieldDef.layoutEligibility,
+		aggregation: materializedFieldDef.aggregation,
+		editability: materializedFieldDef.editability,
+		nativeColumnPath: materializedFieldDef.nativeColumnPath,
+		nativeReadOnly: materializedFieldDef.nativeReadOnly,
+		isVisibleByDefault: materializedFieldDef.isVisibleByDefault,
 	};
 }
 

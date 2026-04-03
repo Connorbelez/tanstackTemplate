@@ -12,6 +12,7 @@
 
 import { convexTest } from "convex-test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { registerAuditLogComponent } from "../../../../src/test/convex/registerAuditLogComponent";
 import type { Id } from "../../../_generated/dataModel";
 import type { MutationCtx } from "../../../_generated/server";
 import auditTrailSchema from "../../../components/auditTrail/schema";
@@ -25,7 +26,6 @@ import {
 	convexModules,
 	auditTrailModules as sharedAuditTrailModules,
 } from "../../../test/moduleMaps";
-import { registerAuditLogComponent } from "../../../test/registerAuditLogComponent";
 
 // ── Module globs ────────────────────────────────────────────────────
 

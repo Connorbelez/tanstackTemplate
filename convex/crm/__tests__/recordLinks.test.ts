@@ -8,11 +8,11 @@
 import { ConvexError } from "convex/values";
 import { convexTest } from "convex-test";
 import { describe, expect, it } from "vitest";
+import { registerAuditLogComponent } from "../../../src/test/convex/registerAuditLogComponent";
 import { api } from "../../_generated/api";
 import type { Id } from "../../_generated/dataModel";
 import schema from "../../schema";
 import { convexModules } from "../../test/moduleMaps";
-import { registerAuditLogComponent } from "../../test/registerAuditLogComponent";
 
 const modules = convexModules;
 

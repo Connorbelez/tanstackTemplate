@@ -1,6 +1,7 @@
 import auditLogTest from "convex-audit-log/test";
 import { convexTest } from "convex-test";
 import { describe, expect, it, vi } from "vitest";
+import { registerAuditLogComponent } from "../../../../src/test/convex/registerAuditLogComponent";
 import { api } from "../../../_generated/api";
 import type { Id } from "../../../_generated/dataModel";
 import { FAIRLEND_STAFF_ORG_ID } from "../../../constants";

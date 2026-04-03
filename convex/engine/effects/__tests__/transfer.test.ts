@@ -1,7 +1,7 @@
-import auditLogTest from "convex-audit-log/test";
 import { afterAll, describe, expect, it, vi } from "vitest";
 import workflowSchema from "../../../../node_modules/@convex-dev/workflow/dist/component/schema.js";
 import workpoolSchema from "../../../../node_modules/@convex-dev/workpool/dist/component/schema.js";
+import { registerAuditLogComponent } from "../../../../src/test/convex/registerAuditLogComponent";
 import type { Id } from "../../../_generated/dataModel";
 import type { MutationCtx } from "../../../_generated/server";
 import auditTrailSchema from "../../../components/auditTrail/schema";
@@ -66,7 +66,7 @@ const publishTransferReversedMutation =
 
 function createTransferHarness() {
 	const t = createHarness(modules);
-	auditLogTest.register(t, "auditLog");
+	registerAuditLogComponent(t, "auditLog");
 	t.registerComponent("auditTrail", auditTrailSchema, auditTrailModules);
 	t.registerComponent("workflow", workflowSchema, workflowModules);
 	t.registerComponent("workflow/workpool", workpoolSchema, workpoolModules);

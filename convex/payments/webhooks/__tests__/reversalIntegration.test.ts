@@ -1,11 +1,11 @@
 import process from "node:process";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { registerAuditLogComponent } from "../../../../src/test/convex/registerAuditLogComponent";
 import { internal } from "../../../_generated/api";
 import type { Id } from "../../../_generated/dataModel";
 import type { MutationCtx } from "../../../_generated/server";
 import { publishTransferReversed } from "../../../engine/effects/transfer";
 import { convexModules } from "../../../test/moduleMaps";
-import { registerAuditLogComponent } from "../../../test/registerAuditLogComponent";
 import {
 	createHarness,
 	SYSTEM_SOURCE,
