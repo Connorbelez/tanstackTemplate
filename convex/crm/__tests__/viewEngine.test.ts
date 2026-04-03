@@ -1110,6 +1110,28 @@ describe("View Engine", () => {
 				expect(["new", "qualified"]).toContain(row.fields.status);
 			}
 		});
+
+		it("between filter throws a clear error for table views", async () => {
+			const fixture = await seedLeadFixture(t);
+
+			await t.run(async (ctx) => {
+				await ctx.db.insert("viewFilters", {
+					viewDefId: fixture.defaultViewId,
+					fieldDefId: fixture.fieldDefs.deal_value,
+					operator: "between",
+					value: JSON.stringify([10_000, 50_000]),
+				});
+			});
+
+			await expect(
+				asAdmin(t).query(api.crm.viewQueries.queryViewRecords, {
+					viewDefId: fixture.defaultViewId,
+					limit: 25,
+				})
+			).rejects.toThrow(
+				'Operator "between" is not supported by table or kanban view filtering yet'
+			);
+		});
 	});
 
 	// ── View schema ─────────────────────────────────────────────────
