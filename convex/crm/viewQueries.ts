@@ -17,6 +17,7 @@ import {
 	queryNativeTable,
 } from "./systemAdapters/queryAdapter";
 import type {
+	EffectiveViewDefinition,
 	EntityViewAdapterContract,
 	EntityViewPageResult,
 	EntityViewRow,
@@ -24,8 +25,8 @@ import type {
 	RecordFilter,
 	SystemViewDefinition,
 	UnifiedRecord,
+	UserSavedViewDefinition,
 	ViewAggregateResult,
-	ViewFilterDefinition,
 	ViewLayout,
 } from "./types";
 import { KANBAN_NO_VALUE_SENTINEL } from "./viewDefs";
@@ -113,8 +114,11 @@ interface ViewSchemaColumn extends ViewColumnDefinition {
 interface ViewSchemaResult {
 	adapterContract: EntityViewAdapterContract;
 	columns: ViewSchemaColumn[];
+	effectiveView: EffectiveViewDefinition;
 	fields: NormalizedFieldDefinition[];
 	needsRepair: boolean;
+	savedView: UserSavedViewDefinition | null;
+	systemView: SystemViewDefinition;
 	view: SystemViewDefinition;
 	viewType: ViewLayout;
 }
@@ -162,10 +166,11 @@ function normalizeViewFilterOperator(
  * used by table and kanban queries.
  */
 function convertViewFiltersToRecordFilters(
-	viewFilters: ViewFilterDefinition[]
+	viewFilters: RecordFilter[]
 ): RecordFilter[] {
 	return viewFilters.map((filter) => ({
 		fieldDefId: filter.fieldDefId,
+		logicalOperator: filter.logicalOperator,
 		operator: normalizeViewFilterOperator(filter.operator),
 		value: filter.value,
 	}));
@@ -667,6 +672,7 @@ async function queryKanbanView(
 export const queryViewRecords = crmQuery
 	.input({
 		viewDefId: v.id("viewDefs"),
+		userSavedViewId: v.optional(v.id("userSavedViews")),
 		cursor: v.optional(v.union(v.string(), v.null())),
 		limit: v.optional(v.number()),
 		rangeStart: v.optional(v.number()),
@@ -676,7 +682,11 @@ export const queryViewRecords = crmQuery
 		),
 	})
 	.handler(async (ctx, args) => {
-		const state = await resolveViewState(ctx, args.viewDefId);
+		const state = await resolveViewState(
+			ctx,
+			args.viewDefId,
+			args.userSavedViewId
+		);
 		if (state.viewDef.needsRepair) {
 			throw new ConvexError(
 				"This view needs repair before it can be queried. Please update the view configuration."
@@ -702,6 +712,7 @@ export const queryViewRecords = crmQuery
 				}
 				return queryCalendarViewData(ctx, {
 					viewDefId: args.viewDefId,
+					userSavedViewId: args.userSavedViewId,
 					rangeStart: args.rangeStart,
 					rangeEnd: args.rangeEnd,
 					granularity: args.granularity,
@@ -719,9 +730,14 @@ export const queryViewRecords = crmQuery
 export const getViewSchema = crmQuery
 	.input({
 		viewDefId: v.id("viewDefs"),
+		userSavedViewId: v.optional(v.id("userSavedViews")),
 	})
 	.handler(async (ctx, args): Promise<ViewSchemaResult> => {
-		const state = await resolveViewState(ctx, args.viewDefId);
+		const state = await resolveViewState(
+			ctx,
+			args.viewDefId,
+			args.userSavedViewId
+		);
 
 		// 4. Load fieldCapabilities where capability === "sort"
 		const sortCapabilities = await ctx.db
@@ -758,10 +774,13 @@ export const getViewSchema = crmQuery
 		return {
 			adapterContract: state.adapterContract,
 			columns,
+			effectiveView: state.effectiveView,
 			fields: state.fields,
 			viewType: state.view.layout,
 			needsRepair: state.view.needsRepair,
-			view: state.view,
+			savedView: state.savedView,
+			systemView: state.systemView,
+			view: state.systemView,
 		};
 	})
 	.public();

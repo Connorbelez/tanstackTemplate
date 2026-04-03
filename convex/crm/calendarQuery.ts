@@ -13,6 +13,7 @@ import type {
 	EntityViewAdapterContract,
 	EntityViewRow,
 	NormalizedFieldDefinition,
+	RecordFilter,
 	SystemViewDefinition,
 	UnifiedRecord,
 	ViewAggregateResult,
@@ -50,7 +51,7 @@ interface CalendarData {
 
 type Granularity = "day" | "week" | "month";
 type FieldDef = Doc<"fieldDefs">;
-type ViewFilter = Doc<"viewFilters">;
+type ViewFilter = RecordFilter;
 type CrmQueryCtx = QueryCtx & { viewer: Viewer };
 
 interface ParsedViewFilter {
@@ -100,10 +101,10 @@ function truncateDate(unixMs: number, granularity: Granularity): number {
 // ── View Filter Parsing + Evaluation ─────────────────────────────────
 
 function parseScalarFilterValue(
-	rawValue: string | undefined,
+	rawValue: unknown,
 	fieldDef: FieldDef
 ): unknown {
-	if (rawValue === undefined || rawValue === "") {
+	if (rawValue === undefined || rawValue === null || rawValue === "") {
 		return undefined;
 	}
 
@@ -113,11 +114,14 @@ function parseScalarFilterValue(
 		case "percentage":
 		case "date":
 		case "datetime": {
-			const n = Number.parseFloat(rawValue);
+			if (typeof rawValue === "number") {
+				return Number.isFinite(rawValue) ? rawValue : undefined;
+			}
+			const n = Number.parseFloat(String(rawValue));
 			return Number.isFinite(n) ? n : undefined;
 		}
 		case "boolean":
-			return rawValue === "true";
+			return typeof rawValue === "boolean" ? rawValue : rawValue === "true";
 		default:
 			return rawValue;
 	}
@@ -128,9 +132,19 @@ function parseRangeBoundary(value: unknown, fieldDef: FieldDef): unknown {
 }
 
 function parseBetweenFilterValue(
-	rawValue: string,
+	rawValue: unknown,
 	fieldDef: FieldDef
 ): [unknown, unknown] | undefined {
+	if (Array.isArray(rawValue) && rawValue.length === 2) {
+		const start = parseRangeBoundary(rawValue[0], fieldDef);
+		const end = parseRangeBoundary(rawValue[1], fieldDef);
+		return start !== undefined && end !== undefined ? [start, end] : undefined;
+	}
+
+	if (typeof rawValue !== "string") {
+		return undefined;
+	}
+
 	try {
 		const parsed: unknown = JSON.parse(rawValue);
 		if (Array.isArray(parsed) && parsed.length === 2) {
@@ -155,7 +169,15 @@ function parseBetweenFilterValue(
 	return start !== undefined && end !== undefined ? [start, end] : undefined;
 }
 
-function parseIsAnyOfFilterValue(rawValue: string): unknown[] {
+function parseIsAnyOfFilterValue(rawValue: unknown): unknown[] {
+	if (Array.isArray(rawValue)) {
+		return rawValue;
+	}
+
+	if (typeof rawValue !== "string") {
+		return rawValue === undefined || rawValue === null ? [] : [rawValue];
+	}
+
 	try {
 		const parsed: unknown = JSON.parse(rawValue);
 		if (Array.isArray(parsed)) {
@@ -168,7 +190,7 @@ function parseIsAnyOfFilterValue(rawValue: string): unknown[] {
 }
 
 function parseFilterValue(
-	rawValue: string | undefined,
+	rawValue: unknown,
 	fieldDef: FieldDef,
 	operator: ViewFilter["operator"]
 ): unknown {
@@ -342,9 +364,10 @@ interface ValidatedCalendarContext {
 async function validateCalendarView(
 	ctx: CrmQueryCtx,
 	viewDefId: Id<"viewDefs">,
+	userSavedViewId: Id<"userSavedViews"> | undefined,
 	orgId: string
 ): Promise<ValidatedCalendarContext> {
-	const viewState = await resolveViewState(ctx, viewDefId);
+	const viewState = await resolveViewState(ctx, viewDefId, userSavedViewId);
 	const { viewDef } = viewState;
 	if (!viewDef || viewDef.orgId !== orgId) {
 		throw new ConvexError("View not found or access denied");
@@ -437,6 +460,7 @@ export async function queryCalendarViewData(
 		granularity?: Granularity;
 		rangeEnd: number;
 		rangeStart: number;
+		userSavedViewId?: Id<"userSavedViews">;
 		viewDefId: Id<"viewDefs">;
 	}
 ): Promise<CalendarData> {
@@ -452,6 +476,7 @@ export async function queryCalendarViewData(
 	const { objectDefId, boundFieldId, viewState } = await validateCalendarView(
 		ctx,
 		args.viewDefId,
+		args.userSavedViewId,
 		orgId
 	);
 
@@ -493,14 +518,8 @@ export async function queryCalendarViewData(
 	);
 	const assembled = await assembleRecords(ctx, recordDocs, activeFieldDefs);
 
-	// Load view-level filters and apply as second pass
-	const viewFilterRows = await ctx.db
-		.query("viewFilters")
-		.withIndex("by_view", (q) => q.eq("viewDefId", args.viewDefId))
-		.collect();
-
 	const { filters: parsedFilters, skippedCount: skippedFilters } =
-		parseViewFilters(viewFilterRows, fieldDefsById);
+		parseViewFilters(viewState.view.filters, fieldDefsById);
 	const filtered = applyViewFilters(assembled, parsedFilters, fieldDefsById);
 
 	// Group records by truncated date and sort ascending
@@ -534,6 +553,7 @@ export async function queryCalendarViewData(
 export const queryCalendarRecords = crmQuery
 	.input({
 		viewDefId: v.id("viewDefs"),
+		userSavedViewId: v.optional(v.id("userSavedViews")),
 		rangeStart: v.number(),
 		rangeEnd: v.number(),
 		granularity: v.optional(
