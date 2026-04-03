@@ -1,6 +1,5 @@
 import { useSuspenseQuery } from "@tanstack/react-query";
 import { createFileRoute, Outlet, useMatch } from "@tanstack/react-router";
-import { AdminDetailSheet } from "#/components/admin/shell/AdminDetailSheet";
 import { AdminNotFoundState } from "#/components/admin/shell/AdminRouteStates";
 import EntityTable from "#/components/admin/shell/EntityTable";
 import { adminEntityTableColumns } from "#/components/admin/shell/entity-table-columns";
@@ -44,13 +43,10 @@ function TypedEntityList({ entityType }: { entityType: AdminEntityType }) {
 	}
 
 	return (
-		<>
-			<EntityTable
-				columns={adminEntityTableColumns}
-				data={data}
-				onRowClick={(row) => open(row.id)}
-			/>
-			<AdminDetailSheet entityType={entityType} />
-		</>
+		<EntityTable
+			columns={adminEntityTableColumns}
+			data={data}
+			onRowClick={(row) => open(row.id)}
+		/>
 	);
 }

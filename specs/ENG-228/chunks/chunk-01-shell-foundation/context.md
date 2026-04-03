@@ -27,7 +27,7 @@
 - Keep the entity registry strongly typed. Do not introduce `any`.
 - Preserve typed admin search validation in `src/routes/admin/route.tsx`.
 - Support both entity-backed routes and generic operations/platform routes in breadcrumbs and navigation shape.
-- Listings are a first-class admin entity. Properties are not part of the initial registry even though a placeholder route exists.
+- Listings and properties are first-class admin entities, and `/admin/properties` is backed by the typed entity registry.
 
 ## Planned implementation contract
 - Introduce typed definitions for:
