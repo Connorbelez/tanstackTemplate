@@ -451,7 +451,7 @@ function DetailsTab({
 		record,
 		recordId,
 	});
-	if (adapterDetails) {
+	if (adapterDetails != null) {
 		return adapterDetails;
 	}
 
