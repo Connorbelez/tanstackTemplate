@@ -718,7 +718,6 @@ async function loadRequestedView(
 	if (!requestedView || requestedView.orgId !== args.orgId) {
 		throw new ConvexError("View not found or access denied");
 	}
-
 	return requestedView;
 }
 
