@@ -13,7 +13,6 @@ import { getAuth, type UserInfo } from "@workos/authkit-tanstack-react-start";
 import type { ConvexReactClient } from "convex/react";
 import type { ReactNode } from "react";
 import { AppErrorComponent } from "../components/error-boundary";
-import Footer from "../components/footer";
 import Header from "../components/header";
 import { Toaster } from "../components/ui/sonner";
 import { isAdminPathname } from "../lib/admin-routes";
@@ -109,7 +108,7 @@ function RootComponent() {
 		<RootDocument>
 			{isAdminRoute ? null : <Header />}
 			<Outlet />
-			<Footer />
+			{/* <Footer /> */}
 		</RootDocument>
 	);
 }
