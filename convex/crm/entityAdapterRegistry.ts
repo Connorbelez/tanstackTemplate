@@ -79,6 +79,31 @@ const DEDICATED_ENTITY_VIEW_ADAPTERS = [
 		entityType: "borrowers",
 		aliases: ["borrower"],
 		detail: { mode: "dedicated", surfaceKey: "borrowers" },
+		computedFields: [
+			{
+				description:
+					"Derived borrower verification summary from lifecycle and IDV state.",
+				expressionKey: "borrowerVerificationSummary",
+				fieldName: "verificationSummary",
+				fieldType: "text",
+				isVisibleByDefault: false,
+				label: "Verification Summary",
+				rendererHint: "computed",
+				sourceFieldNames: ["status", "idvStatus"],
+			},
+		],
+		fieldOverrides: [
+			{
+				fieldName: "status",
+				label: "Borrower Status",
+				preferredDisplayOrder: 0,
+			},
+			{
+				fieldName: "idvStatus",
+				label: "Identity Verification",
+				preferredDisplayOrder: 1,
+			},
+		],
 		layoutDefaults: {
 			kanbanFieldName: "status",
 			preferredVisibleFieldNames: ["status", "idvStatus"],

@@ -1298,6 +1298,22 @@ describe("System object view queries", () => {
 	});
 
 	it("queryViewRecords with system object returns UnifiedRecord with _kind=native", async () => {
+		await t.run(async (ctx) => {
+			const userId = await ctx.db.insert("users", {
+				authId: "test-view-engine-borrower",
+				email: "borrower+view-engine@test.ca",
+				firstName: "Taylor",
+				lastName: "Borrower",
+			});
+			await ctx.db.insert("borrowers", {
+				status: "active",
+				idvStatus: "verified",
+				userId,
+				orgId: CRM_ADMIN_IDENTITY.org_id,
+				createdAt: Date.now(),
+			});
+		});
+
 		// Bootstrap system objects (creates objectDefs for all native tables including borrower)
 		await t.mutation(
 			internal.crm.systemAdapters.bootstrap.bootstrapSystemObjects,
@@ -1361,6 +1377,10 @@ describe("System object view queries", () => {
 		expect(result.rows[0]).toHaveProperty("fields");
 		expect(result.rows[0]).toHaveProperty("createdAt");
 		expect(result.rows[0]).toHaveProperty("updatedAt");
+		expect(result.rows[0].fields).toMatchObject({
+			idvStatus: "verified",
+			status: "active",
+		});
 	});
 
 	it("queryViewRecords with non-system object returns _kind=record", async () => {
@@ -1443,5 +1463,71 @@ describe("System object view queries", () => {
 				"status",
 			])
 		);
+	});
+
+	it("getViewSchema applies dedicated field overrides and computed fields", async () => {
+		await t.mutation(
+			internal.crm.systemAdapters.bootstrap.bootstrapSystemObjects,
+			{
+				orgId: CRM_ADMIN_IDENTITY.org_id,
+			}
+		);
+
+		const borrowerObjDef = await t.run(async (ctx) => {
+			return ctx.db
+				.query("objectDefs")
+				.withIndex("by_org_name", (q) =>
+					q.eq("orgId", CRM_ADMIN_IDENTITY.org_id).eq("name", "borrower")
+				)
+				.first();
+		});
+		expect(borrowerObjDef).not.toBeNull();
+		if (!borrowerObjDef) {
+			throw new Error("Borrower system object not found");
+		}
+
+		const viewDefId = await asAdmin(t).mutation(api.crm.viewDefs.createView, {
+			objectDefId: borrowerObjDef._id,
+			name: "All Borrowers",
+			viewType: "table",
+		});
+
+		const schema = await asAdmin(t).query(api.crm.viewQueries.getViewSchema, {
+			viewDefId,
+		});
+
+		const statusColumn = schema.columns.find(
+			(column: { name: string }) => column.name === "status"
+		);
+		expect(statusColumn).toMatchObject({
+			displayOrder: 0,
+			label: "Borrower Status",
+		});
+
+		const idvField = schema.fields.find(
+			(field: { name: string }) => field.name === "idvStatus"
+		);
+		expect(idvField).toMatchObject({
+			displayOrder: 1,
+			fieldSource: "persisted",
+			label: "Identity Verification",
+		});
+
+		const computedField = schema.fields.find(
+			(field: { name: string }) => field.name === "verificationSummary"
+		);
+		expect(computedField).toMatchObject({
+			computed: {
+				expressionKey: "borrowerVerificationSummary",
+				sourceFieldNames: ["status", "idvStatus"],
+			},
+			fieldSource: "adapter_computed",
+			fieldType: "text",
+			isVisibleByDefault: false,
+			label: "Verification Summary",
+			normalizedFieldKind: "computed",
+			rendererHint: "computed",
+		});
+		expect(computedField?.fieldDefId).toBeUndefined();
 	});
 });
