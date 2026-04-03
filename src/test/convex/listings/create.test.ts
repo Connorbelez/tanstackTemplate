@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
 import { convexTest } from "convex-test";
+import { describe, expect, it } from "vitest";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import type { ListingCreateInput } from "../../../../convex/listings/validators";
@@ -178,6 +178,24 @@ describe("listings/create.create", () => {
 				buildListingInput({ mortgageId })
 			)
 		).rejects.toThrow(`Listing already exists for mortgage ${String(mortgageId)}`);
+	});
+
+	it("allows demo listings without a mortgage link", async () => {
+		const t = convexTest(schema, modules);
+
+		const listingId = await t
+			.withIdentity(FAIRLEND_ADMIN)
+			.mutation(
+				api.listings.create.create,
+				buildListingInput({
+					dataSource: "demo",
+					mortgageId: undefined,
+				})
+			);
+
+		const created = await t.run(async (ctx) => await ctx.db.get(listingId));
+		expect(created?.dataSource).toBe("demo");
+		expect(created?.mortgageId).toBeUndefined();
 	});
 
 	it("rejects a demo listing with a mortgage link", async () => {

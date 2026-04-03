@@ -30,6 +30,10 @@ export const convexModules: ModuleMap = {
 		await import("./../auth/resourceChecks.ts"),
 	"/convex/brokers/migrations.ts": async () =>
 		await import("./../brokers/migrations.ts"),
+	"/convex/_generated/api.js": async () =>
+		await import("./../_generated/api.js"),
+	"/convex/_generated/server.js": async () =>
+		await import("./../_generated/server.js"),
 	"/convex/components/auditTrail/_generated/api.ts": async () =>
 		await import("./../components/auditTrail/_generated/api.ts"),
 	"/convex/components/auditTrail/_generated/component.ts": async () =>
@@ -289,6 +293,12 @@ export const convexModules: ModuleMap = {
 		await import("./../ledger/validation.ts"),
 	"/convex/ledger/validators.ts": async () =>
 		await import("./../ledger/validators.ts"),
+	"/convex/listings/create.ts": async () =>
+		await import("./../listings/create.ts"),
+	"/convex/listings/queries.ts": async () =>
+		await import("./../listings/queries.ts"),
+	"/convex/listings/validators.ts": async () =>
+		await import("./../listings/validators.ts"),
 	"/convex/lib/businessDates.ts": async () =>
 		await import("./../lib/businessDates.ts"),
 	"/convex/lib/businessDays.ts": async () =>
