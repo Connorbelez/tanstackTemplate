@@ -175,6 +175,36 @@ export interface EntityViewAdapterContract {
 	titleFieldName?: string;
 }
 
+export interface EntityViewCell {
+	fieldDefId: Id<"fieldDefs">;
+	fieldName: string;
+	label: string;
+	value: unknown;
+}
+
+export interface EntityViewRow {
+	cells: EntityViewCell[];
+	record: UnifiedRecord;
+}
+
+export interface ViewAggregateResult {
+	fieldDefId: Id<"fieldDefs">;
+	fieldName: string;
+	fn: AggregateFn;
+	label: string;
+	value: number | string | null;
+}
+
+export interface EntityViewPageResult {
+	continueCursor: string | null;
+	isDone: boolean;
+	limit: number;
+	returnedCount: number;
+	rows: EntityViewRow[];
+	totalCount: number;
+	truncated: boolean;
+}
+
 /** Result shape for paginated record queries. */
 export interface QueryRecordsResult {
 	continueCursor: string | null;
