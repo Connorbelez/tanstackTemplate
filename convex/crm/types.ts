@@ -1,4 +1,5 @@
 import type { Doc, Id } from "../_generated/dataModel";
+import type { FilterOperator, LogicalOperator } from "./filterConstants";
 
 export type ViewLayout = "table" | "kanban" | "calendar";
 export type NormalizedFieldKind =
@@ -64,6 +65,13 @@ export interface AggregatePreset {
 	fieldDefId: Id<"fieldDefs">;
 	fn: AggregateFn;
 	label?: string;
+}
+
+export interface ViewFilterDefinition {
+	fieldDefId: Id<"fieldDefs">;
+	logicalOperator?: LogicalOperator;
+	operator: FilterOperator;
+	value: unknown;
 }
 
 /** Unified shape returned by all record queries — both EAV and native adapter. */
@@ -133,7 +141,7 @@ export interface SystemViewDefinition {
 		table?: string;
 	};
 	fieldOrder: Id<"fieldDefs">[];
-	filters: RecordFilter[];
+	filters: ViewFilterDefinition[];
 	groupByFieldId?: Id<"fieldDefs">;
 	isDefault: boolean;
 	layout: ViewLayout;
@@ -147,7 +155,7 @@ export interface SystemViewDefinition {
 export interface UserSavedViewDefinition {
 	aggregatePresets: AggregatePreset[];
 	fieldOrder: Id<"fieldDefs">[];
-	filters: RecordFilter[];
+	filters: ViewFilterDefinition[];
 	groupByFieldId?: Id<"fieldDefs">;
 	isDefault: boolean;
 	layout: ViewLayout;

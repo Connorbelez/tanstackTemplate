@@ -283,6 +283,7 @@ export const updateField = crmAdminMutation
 		patch.layoutEligibility = effectiveFieldContract.layoutEligibility;
 		patch.aggregation = effectiveFieldContract.aggregation;
 		patch.editability = effectiveFieldContract.editability;
+		patch.isVisibleByDefault = effectiveFieldContract.isVisibleByDefault;
 
 		await ctx.db.patch(args.fieldDefId, patch);
 

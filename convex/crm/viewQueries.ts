@@ -3,6 +3,7 @@ import type { Doc, Id } from "../_generated/dataModel";
 import type { QueryCtx } from "../_generated/server";
 import { auditLog } from "../auditLog";
 import { crmMutation, crmQuery } from "../fluent";
+import type { FilterOperator } from "./filterConstants";
 import {
 	applyFilters,
 	assembleRecords,
@@ -17,6 +18,7 @@ import type {
 	RecordFilter,
 	SystemViewDefinition,
 	UnifiedRecord,
+	ViewFilterDefinition,
 	ViewLayout,
 } from "./types";
 import { KANBAN_NO_VALUE_SENTINEL } from "./viewDefs";
@@ -92,28 +94,77 @@ type KanbanGroupDoc = Doc<"viewKanbanGroups">;
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
+function parseViewFilterValue(rawValue: string | undefined): unknown {
+	if (rawValue === undefined) {
+		return undefined;
+	}
+
+	try {
+		return JSON.parse(rawValue);
+	} catch {
+		return rawValue;
+	}
+}
+
+function convertViewFiltersToDefinitions(
+	viewFilters: Doc<"viewFilters">[]
+): ViewFilterDefinition[] {
+	return viewFilters.map((vf) => {
+		return {
+			fieldDefId: vf.fieldDefId,
+			logicalOperator: vf.logicalOperator,
+			operator: vf.operator,
+			value: parseViewFilterValue(vf.value),
+		};
+	});
+}
+
+function normalizeViewFilterOperator(
+	operator: FilterOperator
+): RecordFilter["operator"] {
+	switch (operator) {
+		case "equals":
+		case "is":
+			return "eq";
+		case "before":
+			return "lt";
+		case "after":
+			return "gt";
+		case "eq":
+		case "gt":
+		case "lt":
+		case "gte":
+		case "lte":
+		case "contains":
+		case "starts_with":
+		case "is_any_of":
+		case "is_true":
+		case "is_false":
+			return operator;
+		case "between":
+		case "is_not":
+			throw new ConvexError(
+				`Operator "${operator}" is not supported by table or kanban view filtering yet`
+			);
+		default: {
+			const _exhaustive: never = operator;
+			throw new ConvexError(`Unknown filter operator: ${String(_exhaustive)}`);
+		}
+	}
+}
+
 /**
- * Converts viewFilter rows (which store value as optional string)
- * into RecordFilter[] suitable for applyFilters.
+ * Converts persisted view filters into the narrower in-memory record filter set
+ * used by table and kanban queries.
  */
 function convertViewFiltersToRecordFilters(
 	viewFilters: Doc<"viewFilters">[]
 ): RecordFilter[] {
-	return viewFilters.map((vf) => {
-		let parsedValue: unknown = vf.value;
-		if (vf.value !== undefined) {
-			try {
-				parsedValue = JSON.parse(vf.value);
-			} catch {
-				parsedValue = vf.value;
-			}
-		}
-		return {
-			fieldDefId: vf.fieldDefId,
-			operator: vf.operator as RecordFilter["operator"],
-			value: parsedValue,
-		};
-	});
+	return convertViewFiltersToDefinitions(viewFilters).map((filter) => ({
+		fieldDefId: filter.fieldDefId,
+		operator: normalizeViewFilterOperator(filter.operator),
+		value: filter.value,
+	}));
 }
 
 function sanitizeQueryLimit(limit: number | undefined): number {
@@ -183,7 +234,7 @@ function deriveDisabledLayoutMessages(
 	const messages: NonNullable<SystemViewDefinition["disabledLayoutMessages"]> =
 		{};
 
-	if (!fieldDefs.some((fieldDef) => fieldDef.layoutEligibility.table.enabled)) {
+	if (!fieldDefs.some((fieldDef) => fieldDef.isActive)) {
 		messages.table = "Table layout requires at least one active field.";
 	}
 
@@ -270,7 +321,7 @@ function buildSystemViewDefinition(args: {
 		boundFieldId: args.viewDef.boundFieldId,
 		fieldOrder,
 		visibleFieldIds,
-		filters: convertViewFiltersToRecordFilters(args.viewFilters),
+		filters: convertViewFiltersToDefinitions(args.viewFilters),
 		groupByFieldId: args.viewDef.groupByFieldId,
 		aggregatePresets: args.viewDef.aggregatePresets ?? [],
 		disabledLayoutMessages:
