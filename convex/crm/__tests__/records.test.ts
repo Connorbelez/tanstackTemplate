@@ -630,6 +630,49 @@ describe("Record CRUD", () => {
 			);
 			expect(afterResult.records).toHaveLength(0);
 		});
+
+		it("queryRecords respects logicalOperator OR filters", async () => {
+			const fixture = await seedObjectWithFields(t, {
+				name: "or_filter_obj",
+				fields: [{ name: "title", fieldType: "text" }],
+			});
+
+			await seedRecord(t, fixture.objectDefId, {
+				title: "Acme",
+			});
+			await seedRecord(t, fixture.objectDefId, {
+				title: "Beta",
+			});
+			await seedRecord(t, fixture.objectDefId, {
+				title: "Charlie",
+			});
+
+			const result = await asAdmin(t).query(
+				api.crm.recordQueries.queryRecords,
+				{
+					objectDefId: fixture.objectDefId,
+					filters: [
+						{
+							fieldDefId: fixture.fieldDefs.title,
+							operator: "contains",
+							value: "Acme",
+						},
+						{
+							fieldDefId: fixture.fieldDefs.title,
+							logicalOperator: "or",
+							operator: "contains",
+							value: "Beta",
+						},
+					],
+					paginationOpts: { numItems: 25, cursor: null },
+				}
+			);
+
+			expect(result.records).toHaveLength(2);
+			expect(
+				result.records.map((record) => record.fields.title).sort()
+			).toEqual(["Acme", "Beta"]);
+		});
 	});
 });
 

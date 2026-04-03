@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
+import { registerAuditLogComponent } from "../../../../src/test/convex/registerAuditLogComponent";
 import { internal } from "../../../_generated/api";
 import type { Id } from "../../../_generated/dataModel";
 import { convexModules } from "../../../test/moduleMaps";
-import { registerAuditLogComponent } from "../../../test/registerAuditLogComponent";
 import {
 	createHarness,
 	SYSTEM_SOURCE,

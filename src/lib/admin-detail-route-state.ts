@@ -19,7 +19,9 @@ function decodePathSegment(value: string | undefined): string | undefined {
 	}
 }
 
-export function getAdminDetailRouteState(pathname: string): AdminDetailRouteState {
+export function getAdminDetailRouteState(
+	pathname: string
+): AdminDetailRouteState {
 	const entityType = getAdminEntityByPathname(pathname)?.entityType;
 
 	if (!entityType) {

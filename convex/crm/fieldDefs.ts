@@ -1,8 +1,16 @@
 import { ConvexError, v } from "convex/values";
 import { auditLog } from "../auditLog";
 import { crmAdminMutation, crmAdminQuery } from "../fluent";
-import { deriveCapabilities } from "./metadataCompiler";
-import { fieldTypeValidator, selectOptionValidator } from "./validators";
+import {
+	deriveCapabilities,
+	deriveFieldContractMetadata,
+} from "./metadataCompiler";
+import {
+	computedFieldMetadataValidator,
+	fieldTypeValidator,
+	relationMetadataValidator,
+	selectOptionValidator,
+} from "./validators";
 
 // ── createField ─────────────────────────────────────────────────────
 // Creates fieldDef + runs capability compiler + adds to default view.
@@ -17,6 +25,9 @@ export const createField = crmAdminMutation
 		isUnique: v.optional(v.boolean()),
 		defaultValue: v.optional(v.string()),
 		options: v.optional(v.array(selectOptionValidator)),
+		relation: v.optional(relationMetadataValidator),
+		computed: v.optional(computedFieldMetadataValidator),
+		isVisibleByDefault: v.optional(v.boolean()),
 		nativeColumnPath: v.optional(v.string()),
 		nativeReadOnly: v.optional(v.boolean()),
 	})
@@ -26,6 +37,11 @@ export const createField = crmAdminMutation
 			throw new ConvexError("Org context required for CRM operations");
 		}
 		const now = Date.now();
+		if (args.relation && args.computed) {
+			throw new ConvexError(
+				"Field definitions cannot be both relation-backed and computed"
+			);
+		}
 
 		// Verify objectDef exists and belongs to org
 		const objectDef = await ctx.db.get(args.objectDefId);
@@ -62,6 +78,13 @@ export const createField = crmAdminMutation
 			.withIndex("by_object", (q) => q.eq("objectDefId", args.objectDefId))
 			.collect();
 		const displayOrder = existingFields.length;
+		const fieldContract = deriveFieldContractMetadata({
+			fieldType: args.fieldType,
+			nativeReadOnly: args.nativeReadOnly ?? false,
+			relation: args.relation,
+			computed: args.computed,
+			isVisibleByDefault: args.isVisibleByDefault,
+		});
 
 		const fieldDefId = await ctx.db.insert("fieldDefs", {
 			orgId,
@@ -69,6 +92,7 @@ export const createField = crmAdminMutation
 			name: args.name,
 			label: args.label,
 			fieldType: args.fieldType,
+			normalizedFieldKind: fieldContract.normalizedFieldKind,
 			description: args.description,
 			isRequired: args.isRequired ?? false,
 			isUnique: args.isUnique ?? false,
@@ -76,6 +100,13 @@ export const createField = crmAdminMutation
 			displayOrder,
 			defaultValue: args.defaultValue,
 			options: args.options,
+			rendererHint: fieldContract.rendererHint,
+			relation: fieldContract.relation,
+			computed: fieldContract.computed,
+			layoutEligibility: fieldContract.layoutEligibility,
+			aggregation: fieldContract.aggregation,
+			editability: fieldContract.editability,
+			isVisibleByDefault: fieldContract.isVisibleByDefault,
 			nativeColumnPath: args.nativeColumnPath,
 			nativeReadOnly: args.nativeReadOnly ?? false,
 			createdAt: now,
@@ -143,6 +174,9 @@ export const updateField = crmAdminMutation
 		isUnique: v.optional(v.boolean()),
 		defaultValue: v.optional(v.string()),
 		options: v.optional(v.array(selectOptionValidator)),
+		relation: v.optional(relationMetadataValidator),
+		computed: v.optional(computedFieldMetadataValidator),
+		isVisibleByDefault: v.optional(v.boolean()),
 	})
 	.handler(async (ctx, args) => {
 		const orgId = ctx.viewer.orgId;
@@ -159,6 +193,15 @@ export const updateField = crmAdminMutation
 		const objectDef = await ctx.db.get(before.objectDefId);
 		if (!objectDef || objectDef.orgId !== orgId) {
 			throw new ConvexError("Field not found or access denied");
+		}
+		const effectiveRelation =
+			args.relation !== undefined ? args.relation : before.relation;
+		const effectiveComputed =
+			args.computed !== undefined ? args.computed : before.computed;
+		if (effectiveRelation && effectiveComputed) {
+			throw new ConvexError(
+				"Field definitions cannot be both relation-backed and computed"
+			);
 		}
 
 		// Validate name uniqueness per object when renaming
@@ -189,6 +232,16 @@ export const updateField = crmAdminMutation
 				`Field type "${effectiveType}" requires at least one option`
 			);
 		}
+		const effectiveFieldContract = deriveFieldContractMetadata({
+			fieldType: effectiveType,
+			nativeReadOnly: before.nativeReadOnly,
+			relation: effectiveRelation,
+			computed: effectiveComputed,
+			isVisibleByDefault:
+				args.isVisibleByDefault !== undefined
+					? args.isVisibleByDefault
+					: before.isVisibleByDefault,
+		});
 
 		// Build patch
 		const patch: Record<string, unknown> = { updatedAt: Date.now() };
@@ -216,6 +269,19 @@ export const updateField = crmAdminMutation
 		if (args.options !== undefined) {
 			patch.options = args.options;
 		}
+		if (args.relation !== undefined) {
+			patch.relation = args.relation;
+		}
+		if (args.computed !== undefined) {
+			patch.computed = args.computed;
+		}
+		patch.isVisibleByDefault = effectiveFieldContract.isVisibleByDefault;
+		patch.normalizedFieldKind = effectiveFieldContract.normalizedFieldKind;
+		patch.rendererHint = effectiveFieldContract.rendererHint;
+		patch.layoutEligibility = effectiveFieldContract.layoutEligibility;
+		patch.aggregation = effectiveFieldContract.aggregation;
+		patch.editability = effectiveFieldContract.editability;
+		patch.isVisibleByDefault = effectiveFieldContract.isVisibleByDefault;
 
 		await ctx.db.patch(args.fieldDefId, patch);
 

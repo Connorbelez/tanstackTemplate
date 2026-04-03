@@ -165,6 +165,7 @@ describe("View Engine", () => {
 			expect(p1.rows).toHaveLength(2);
 			expect(p1.totalCount).toBe(5);
 			expect(p1.cursor).not.toBeNull();
+			expect(p1.cursor?.startsWith("native:")).toBe(false);
 
 			// Request second page
 			const page2 = await asAdmin(t).query(
@@ -183,6 +184,145 @@ describe("View Engine", () => {
 			};
 			expect(p2.rows).toHaveLength(2);
 			expect(p2.totalCount).toBe(5);
+		});
+
+		it("returns normalized page rows and filtered aggregates alongside compatibility rows", async () => {
+			const fixture = await seedLeadFixture(t);
+
+			await seedRecord(t, fixture.objectDefId, {
+				company_name: "Alpha",
+				status: "new",
+				deal_value: 100_000,
+			});
+			await seedRecord(t, fixture.objectDefId, {
+				company_name: "Beta",
+				status: "new",
+				deal_value: 300_000,
+			});
+			await seedRecord(t, fixture.objectDefId, {
+				company_name: "Gamma",
+				status: "contacted",
+				deal_value: 900_000,
+			});
+
+			await t.run(async (ctx) => {
+				const viewDef = await ctx.db.get(fixture.defaultViewId);
+				if (!viewDef) {
+					throw new Error("Expected default view");
+				}
+
+				await ctx.db.patch(fixture.defaultViewId, {
+					aggregatePresets: [
+						{
+							fieldDefId: fixture.fieldDefs.deal_value,
+							fn: "sum",
+							label: "Pipeline total",
+						},
+					],
+				});
+				await ctx.db.insert("viewFilters", {
+					viewDefId: fixture.defaultViewId,
+					fieldDefId: fixture.fieldDefs.status,
+					operator: "eq",
+					value: "new",
+				});
+			});
+
+			const result = await asAdmin(t).query(
+				api.crm.viewQueries.queryViewRecords,
+				{
+					viewDefId: fixture.defaultViewId,
+					limit: 10,
+				}
+			);
+
+			expect(result.totalCount).toBe(2);
+			expect(result.page.rows).toHaveLength(2);
+			expect(result.page.rows[0].record._id).toBe(result.rows[0]._id);
+			expect(result.page.rows[0].cells.length).toBeGreaterThan(0);
+			expect(result.page.rows[0].cells[0]).toHaveProperty("fieldName");
+			expect(result.aggregates).toContainEqual(
+				expect.objectContaining({
+					fieldDefId: fixture.fieldDefs.deal_value,
+					fn: "sum",
+					label: "Pipeline total",
+					value: 400_000,
+				})
+			);
+		});
+
+		it("applies a default saved-view overlay for ordering, visibility, filters, and aggregates", async () => {
+			const fixture = await seedLeadFixture(t);
+
+			await seedRecord(t, fixture.objectDefId, {
+				company_name: "Qualified Deal",
+				status: "qualified",
+				deal_value: 500_000,
+			});
+			await seedRecord(t, fixture.objectDefId, {
+				company_name: "New Deal",
+				status: "new",
+				deal_value: 100_000,
+			});
+
+			await t.run(async (ctx) => {
+				await ctx.db.insert("userSavedViews", {
+					orgId: CRM_ADMIN_IDENTITY.org_id,
+					objectDefId: fixture.objectDefId,
+					ownerAuthId: CRM_ADMIN_IDENTITY.subject,
+					sourceViewDefId: fixture.defaultViewId,
+					name: "Saved Pipeline",
+					viewType: "table",
+					visibleFieldIds: [
+						fixture.fieldDefs.deal_value,
+						fixture.fieldDefs.company_name,
+					],
+					fieldOrder: [
+						fixture.fieldDefs.deal_value,
+						fixture.fieldDefs.company_name,
+					],
+					filters: [
+						{
+							fieldDefId: fixture.fieldDefs.status,
+							operator: "eq",
+							value: "qualified",
+						},
+					],
+					groupByFieldId: undefined,
+					aggregatePresets: [
+						{
+							fieldDefId: fixture.fieldDefs.deal_value,
+							fn: "sum",
+							label: "Saved total",
+						},
+					],
+					isDefault: true,
+					createdAt: Date.now(),
+					updatedAt: Date.now(),
+				});
+			});
+
+			const result = await asAdmin(t).query(
+				api.crm.viewQueries.queryViewRecords,
+				{
+					viewDefId: fixture.defaultViewId,
+					limit: 10,
+				}
+			);
+
+			expect(result.view.name).toBe("Saved Pipeline");
+			expect(result.columns.slice(0, 2).map((column) => column.name)).toEqual([
+				"deal_value",
+				"company_name",
+			]);
+			expect(result.totalCount).toBe(1);
+			expect(result.rows[0].fields.company_name).toBe("Qualified Deal");
+			expect(result.aggregates).toContainEqual(
+				expect.objectContaining({
+					label: "Saved total",
+					value: 500_000,
+				})
+			);
 		});
 	});
 
@@ -412,6 +552,104 @@ describe("View Engine", () => {
 			);
 			expect(companyNames).not.toContain("Old Corp");
 		});
+
+		it("queryViewRecords returns calendar payload when a range is provided", async () => {
+			const fixture = await seedLeadFixture(t);
+			const jan15 = new Date("2026-01-15T00:00:00Z").getTime();
+			const feb10 = new Date("2026-02-10T00:00:00Z").getTime();
+
+			await seedRecord(t, fixture.objectDefId, {
+				company_name: "Jan Corp",
+				next_followup: jan15,
+			});
+			await seedRecord(t, fixture.objectDefId, {
+				company_name: "Feb Corp",
+				next_followup: feb10,
+			});
+
+			const calendarViewId = await asAdmin(t).mutation(
+				api.crm.viewDefs.createView,
+				{
+					objectDefId: fixture.objectDefId,
+					name: "Calendar",
+					viewType: "calendar",
+					boundFieldId: fixture.fieldDefs.next_followup,
+				}
+			);
+
+			const result = await asAdmin(t).query(
+				api.crm.viewQueries.queryViewRecords,
+				{
+					viewDefId: calendarViewId,
+					rangeStart: new Date("2026-01-01T00:00:00Z").getTime(),
+					rangeEnd: new Date("2026-02-28T23:59:59Z").getTime(),
+				}
+			);
+
+			expect(result.viewType).toBe("calendar");
+			expect(result.events.length).toBe(2);
+			expect(result.events[0].rows[0].record.fields.company_name).toBeDefined();
+		});
+
+		it("parses legacy comma-delimited between filters for calendar views", async () => {
+			const fixture = await seedLeadFixture(t);
+
+			const jan15 = new Date("2026-01-15T00:00:00Z").getTime();
+			const feb10 = new Date("2026-02-10T00:00:00Z").getTime();
+			const mar20 = new Date("2026-03-20T00:00:00Z").getTime();
+			const rangeStart = new Date("2026-01-01T00:00:00Z").getTime();
+			const febEnd = new Date("2026-02-28T23:59:59Z").getTime();
+			const rangeEnd = new Date("2026-12-31T23:59:59Z").getTime();
+
+			await seedRecord(t, fixture.objectDefId, {
+				company_name: "Jan Corp",
+				next_followup: jan15,
+			});
+			await seedRecord(t, fixture.objectDefId, {
+				company_name: "Feb Corp",
+				next_followup: feb10,
+			});
+			await seedRecord(t, fixture.objectDefId, {
+				company_name: "Mar Corp",
+				next_followup: mar20,
+			});
+
+			const calendarViewId = await asAdmin(t).mutation(
+				api.crm.viewDefs.createView,
+				{
+					objectDefId: fixture.objectDefId,
+					name: "Follow-up Calendar",
+					viewType: "calendar",
+					boundFieldId: fixture.fieldDefs.next_followup,
+				}
+			);
+
+			await t.run(async (ctx) => {
+				await ctx.db.insert("viewFilters", {
+					viewDefId: calendarViewId,
+					fieldDefId: fixture.fieldDefs.next_followup,
+					operator: "between",
+					value: `${String(rangeStart)},${String(febEnd)}`,
+				});
+			});
+
+			const result = await asAdmin(t).query(
+				api.crm.calendarQuery.queryCalendarRecords,
+				{
+					viewDefId: calendarViewId,
+					rangeStart,
+					rangeEnd,
+				}
+			);
+
+			const companyNames = result.events.flatMap(
+				(event: { records: Array<{ fields: Record<string, unknown> }> }) =>
+					event.records.map((record) => record.fields.company_name)
+			);
+			expect(companyNames).toContain("Jan Corp");
+			expect(companyNames).toContain("Feb Corp");
+			expect(companyNames).not.toContain("Mar Corp");
+		});
 	});
 
 	// ── View filters ────────────────────────────────────────────────
@@ -504,6 +742,44 @@ describe("View Engine", () => {
 			for (const row of rows) {
 				expect(String(row.fields.company_name).toLowerCase()).toContain("acme");
 			}
+		});
+
+		it("equals filter aliases to exact match on text field", async () => {
+			const fixture = await seedLeadFixture(t);
+
+			await seedRecord(t, fixture.objectDefId, {
+				company_name: "Acme",
+				status: "new",
+			});
+			await seedRecord(t, fixture.objectDefId, {
+				company_name: "Acme Holdings",
+				status: "new",
+			});
+
+			await t.run(async (ctx) => {
+				await ctx.db.insert("viewFilters", {
+					viewDefId: fixture.defaultViewId,
+					fieldDefId: fixture.fieldDefs.company_name,
+					operator: "equals",
+					value: "Acme",
+				});
+			});
+
+			const result = await asAdmin(t).query(
+				api.crm.viewQueries.queryViewRecords,
+				{
+					viewDefId: fixture.defaultViewId,
+					limit: 25,
+				}
+			);
+
+			const { rows, totalCount } = result as {
+				rows: Array<{ fields: Record<string, unknown> }>;
+				totalCount: number;
+			};
+
+			expect(totalCount).toBe(1);
+			expect(rows[0]?.fields.company_name).toBe("Acme");
 		});
 
 		it("is_true filter: boolean field", async () => {
@@ -751,13 +1027,105 @@ describe("View Engine", () => {
 				expect(["new", "qualified"]).toContain(row.fields.status);
 			}
 		});
+
+		it("is filter aliases to exact match on select field", async () => {
+			const fixture = await seedLeadFixture(t);
+
+			await seedRecord(t, fixture.objectDefId, {
+				company_name: "Acme",
+				status: "new",
+			});
+			await seedRecord(t, fixture.objectDefId, {
+				company_name: "Beta",
+				status: "contacted",
+			});
+
+			await t.run(async (ctx) => {
+				await ctx.db.insert("viewFilters", {
+					viewDefId: fixture.defaultViewId,
+					fieldDefId: fixture.fieldDefs.status,
+					operator: "is",
+					value: "new",
+				});
+			});
+
+			const result = await asAdmin(t).query(
+				api.crm.viewQueries.queryViewRecords,
+				{
+					viewDefId: fixture.defaultViewId,
+					limit: 25,
+				}
+			);
+			const { rows, totalCount } = result as {
+				rows: Array<{ fields: Record<string, unknown> }>;
+				totalCount: number;
+			};
+
+			expect(totalCount).toBe(1);
+			expect(rows[0]?.fields.status).toBe("new");
+		});
+
+		it("logicalOperator OR combines view filters left-to-right", async () => {
+			const fixture = await seedLeadFixture(t);
+
+			await seedRecord(t, fixture.objectDefId, {
+				company_name: "A",
+				status: "new",
+			});
+			await seedRecord(t, fixture.objectDefId, {
+				company_name: "B",
+				status: "contacted",
+			});
+			await seedRecord(t, fixture.objectDefId, {
+				company_name: "C",
+				status: "qualified",
+			});
+
+			await t.run(async (ctx) => {
+				await ctx.db.insert("viewFilters", {
+					viewDefId: fixture.defaultViewId,
+					fieldDefId: fixture.fieldDefs.status,
+					operator: "is",
+					value: "new",
+				});
+				await ctx.db.insert("viewFilters", {
+					viewDefId: fixture.defaultViewId,
+					fieldDefId: fixture.fieldDefs.status,
+					logicalOperator: "or",
+					operator: "is",
+					value: "qualified",
+				});
+			});
+
+			const result = await asAdmin(t).query(
+				api.crm.viewQueries.queryViewRecords,
+				{ viewDefId: fixture.defaultViewId, limit: 25 }
+			);
+			const { rows, totalCount } = result as {
+				rows: Array<{ fields: Record<string, unknown> }>;
+				totalCount: number;
+			};
+			expect(totalCount).toBe(2);
+			for (const row of rows) {
+				expect(["new", "qualified"]).toContain(row.fields.status);
+			}
+		});
 	});
 
 	// ── View schema ─────────────────────────────────────────────────
 
 	describe("View schema", () => {
-		it("getViewSchema returns columns with sort capability flags", async () => {
+		it("getViewSchema returns normalized field and view contracts", async () => {
 			const fixture = await seedLeadFixture(t);
+
+			await t.run(async (ctx) => {
+				await ctx.db.insert("viewFilters", {
+					viewDefId: fixture.defaultViewId,
+					fieldDefId: fixture.fieldDefs.company_name,
+					operator: "equals",
+					value: "Acme",
+				});
+			});
 
 			const schema = await asAdmin(t).query(api.crm.viewQueries.getViewSchema, {
 				viewDefId: fixture.defaultViewId,
@@ -783,6 +1151,92 @@ describe("View Engine", () => {
 				(c: { name: string }) => c.name === "company_name"
 			);
 			expect(textCol?.hasSortCapability).toBe(false);
+
+			const statusCol = schema.columns.find(
+				(c: { name: string }) => c.name === "status"
+			);
+			expect(statusCol).toMatchObject({
+				normalizedFieldKind: "single_select",
+				rendererHint: "select",
+				layoutEligibility: {
+					kanban: { enabled: true },
+					groupBy: { enabled: true },
+				},
+				editability: {
+					mode: "editable",
+				},
+				isVisibleByDefault: true,
+			});
+
+			const followupField = schema.fields.find(
+				(field: { name: string }) => field.name === "next_followup"
+			);
+			expect(followupField).toMatchObject({
+				rendererHint: "date",
+				layoutEligibility: {
+					calendar: { enabled: true },
+				},
+			});
+
+			expect(schema.view).toMatchObject({
+				viewDefId: fixture.defaultViewId,
+				layout: "table",
+				isDefault: true,
+				filters: [
+					expect.objectContaining({
+						fieldDefId: fixture.fieldDefs.company_name,
+						operator: "equals",
+						value: "Acme",
+					}),
+				],
+				visibleFieldIds: schema.columns
+					.filter((column: { isVisible: boolean }) => column.isVisible)
+					.map((column: { fieldDefId: string }) => column.fieldDefId),
+			});
+			expect(schema.adapterContract).toMatchObject({
+				entityType: "lead",
+				objectDefId: fixture.objectDefId,
+				variant: "fallback",
+				detail: {
+					mode: "generated",
+					surfaceKey: "lead",
+				},
+			});
+			expect(schema.adapterContract.supportedLayouts).toEqual(
+				expect.arrayContaining(["table", "kanban", "calendar"])
+			);
+			expect(schema.adapterContract.layoutDefaults).toMatchObject({
+				kanbanFieldName: "status",
+				calendarDateFieldName: "next_followup",
+				preferredVisibleFieldNames: expect.arrayContaining([
+					"company_name",
+					"status",
+					"next_followup",
+				]),
+			});
+			expect(schema.adapterContract.fieldOverrides).toEqual([]);
+			expect(schema.adapterContract.computedFields).toEqual([]);
+			expect(schema.view.disabledLayoutMessages).toBeUndefined();
+		});
+
+		it("derives disabled layout messages when no persisted messages exist", async () => {
+			const fixture = await seedObjectWithFields(t, {
+				name: "notes_only",
+				fields: [{ name: "title", fieldType: "text" }],
+			});
+
+			const schema = await asAdmin(t).query(api.crm.viewQueries.getViewSchema, {
+				viewDefId: fixture.defaultViewId,
+			});
+
+			expect(schema.systemView.disabledLayoutMessages).toMatchObject({
+				calendar: "Add a date or datetime field to unlock calendar layouts.",
+				kanban: "Add a select or multi-select field to unlock kanban layouts.",
+			});
+			expect(schema.view.disabledLayoutMessages).toMatchObject({
+				calendar: "Add a date or datetime field to unlock calendar layouts.",
+				kanban: "Add a select or multi-select field to unlock kanban layouts.",
+			});
 		});
 	});
 
@@ -882,13 +1336,13 @@ describe("View Engine", () => {
 			);
 			expect(movedRecord?.fields.status).toBe("contacted");
 
-			// Audit: verify crm.record.fieldUpdated event was emitted
+			// Audit: verify crm.record.updated event was emitted
 			const auditEntries = await t.query(
 				components.auditLog.lib.queryByResource,
 				{ resourceType: "records", resourceId: recordId }
 			);
 			const updateEntry = auditEntries.find(
-				(e: { action: string }) => e.action === "crm.record.fieldUpdated"
+				(e: { action: string }) => e.action === "crm.record.updated"
 			);
 			expect(updateEntry).toBeDefined();
 		});
@@ -947,6 +1401,22 @@ describe("System object view queries", () => {
 	});
 
 	it("queryViewRecords with system object returns UnifiedRecord with _kind=native", async () => {
+		await t.run(async (ctx) => {
+			const userId = await ctx.db.insert("users", {
+				authId: "test-view-engine-borrower",
+				email: "borrower+view-engine@test.ca",
+				firstName: "Taylor",
+				lastName: "Borrower",
+			});
+			await ctx.db.insert("borrowers", {
+				status: "active",
+				idvStatus: "verified",
+				userId,
+				orgId: CRM_ADMIN_IDENTITY.org_id,
+				createdAt: Date.now(),
+			});
+		});
+
 		// Bootstrap system objects (creates objectDefs for all native tables including borrower)
 		await t.mutation(
 			internal.crm.systemAdapters.bootstrap.bootstrapSystemObjects,
@@ -967,6 +1437,22 @@ describe("System object view queries", () => {
 		}
 		expect(borrowerObjDef.isSystem).toBe(true);
 		expect(borrowerObjDef.nativeTable).toBeTruthy();
+
+		await t.run(async (ctx) => {
+			const userId = await ctx.db.insert("users", {
+				authId: "borrower-auth-1",
+				email: "borrower@test.fairlend.ca",
+				firstName: "Native",
+				lastName: "Borrower",
+			});
+
+			await ctx.db.insert("borrowers", {
+				status: "active",
+				orgId: CRM_ADMIN_IDENTITY.org_id,
+				userId,
+				createdAt: Date.now(),
+			});
+		});
 
 		// Create a default view for the borrower object
 		const viewDefId = await asAdmin(t).mutation(api.crm.viewDefs.createView, {
@@ -994,6 +1480,10 @@ describe("System object view queries", () => {
 		expect(result.rows[0]).toHaveProperty("fields");
 		expect(result.rows[0]).toHaveProperty("createdAt");
 		expect(result.rows[0]).toHaveProperty("updatedAt");
+		expect(result.rows[0].fields).toMatchObject({
+			idvStatus: "verified",
+			status: "active",
+		});
 	});
 
 	it("queryViewRecords with non-system object returns _kind=record", async () => {
@@ -1015,5 +1505,132 @@ describe("System object view queries", () => {
 		expect(result.rows).toBeDefined();
 		expect(result.rows.length).toBeGreaterThan(0);
 		expect(result.rows[0]._kind).toBe("record");
+	});
+
+	it("getViewSchema returns dedicated adapter metadata for system objects", async () => {
+		await t.mutation(
+			internal.crm.systemAdapters.bootstrap.bootstrapSystemObjects,
+			{
+				orgId: CRM_ADMIN_IDENTITY.org_id,
+			}
+		);
+
+		const mortgageObjDef = await t.run(async (ctx) => {
+			return ctx.db
+				.query("objectDefs")
+				.withIndex("by_org_name", (q) =>
+					q.eq("orgId", CRM_ADMIN_IDENTITY.org_id).eq("name", "mortgage")
+				)
+				.first();
+		});
+		expect(mortgageObjDef).not.toBeNull();
+		if (!mortgageObjDef) {
+			throw new Error("Mortgage system object not found");
+		}
+
+		const viewDefId = await asAdmin(t).mutation(api.crm.viewDefs.createView, {
+			objectDefId: mortgageObjDef._id,
+			name: "All Mortgages",
+			viewType: "table",
+		});
+
+		const schema = await asAdmin(t).query(api.crm.viewQueries.getViewSchema, {
+			viewDefId,
+		});
+
+		expect(schema.adapterContract).toMatchObject({
+			entityType: "mortgages",
+			objectDefId: mortgageObjDef._id,
+			variant: "dedicated",
+			detail: {
+				mode: "dedicated",
+				surfaceKey: "mortgages",
+			},
+			statusFieldName: "status",
+			layoutDefaults: {
+				kanbanFieldName: "status",
+				calendarDateFieldName: "maturityDate",
+			},
+		});
+		expect(schema.adapterContract.supportedLayouts).toEqual(
+			expect.arrayContaining(["table", "kanban", "calendar"])
+		);
+		expect(
+			schema.adapterContract.layoutDefaults.preferredVisibleFieldNames
+		).toEqual(
+			expect.arrayContaining([
+				"principal",
+				"paymentAmount",
+				"interestRate",
+				"maturityDate",
+				"status",
+			])
+		);
+	});
+
+	it("getViewSchema applies dedicated field overrides and computed fields", async () => {
+		await t.mutation(
+			internal.crm.systemAdapters.bootstrap.bootstrapSystemObjects,
+			{
+				orgId: CRM_ADMIN_IDENTITY.org_id,
+			}
+		);
+
+		const borrowerObjDef = await t.run(async (ctx) => {
+			return ctx.db
+				.query("objectDefs")
+				.withIndex("by_org_name", (q) =>
+					q.eq("orgId", CRM_ADMIN_IDENTITY.org_id).eq("name", "borrower")
+				)
+				.first();
+		});
+		expect(borrowerObjDef).not.toBeNull();
+		if (!borrowerObjDef) {
+			throw new Error("Borrower system object not found");
+		}
+
+		const viewDefId = await asAdmin(t).mutation(api.crm.viewDefs.createView, {
+			objectDefId: borrowerObjDef._id,
+			name: "All Borrowers",
+			viewType: "table",
+		});
+
+		const schema = await asAdmin(t).query(api.crm.viewQueries.getViewSchema, {
+			viewDefId,
+		});
+
+		const statusColumn = schema.columns.find(
+			(column: { name: string }) => column.name === "status"
+		);
+		expect(statusColumn).toMatchObject({
+			displayOrder: 0,
+			label: "Borrower Status",
+		});
+
+		const idvField = schema.fields.find(
+			(field: { name: string }) => field.name === "idvStatus"
+		);
+		expect(idvField).toMatchObject({
+			displayOrder: 1,
+			fieldSource: "persisted",
+			label: "Identity Verification",
+		});
+
+		const computedField = schema.fields.find(
+			(field: { name: string }) => field.name === "verificationSummary"
+		);
+		expect(computedField).toMatchObject({
+			computed: {
+				expressionKey: "borrowerVerificationSummary",
+				sourceFieldNames: ["status", "idvStatus"],
+			},
+			fieldSource: "adapter_computed",
+			fieldType: "text",
+			isVisibleByDefault: false,
+			label: "Verification Summary",
+			normalizedFieldKind: "computed",
+			rendererHint: "computed",
+		});
+		expect(computedField?.fieldDefId).toBeUndefined();
 	});
 });

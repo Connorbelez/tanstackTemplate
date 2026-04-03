@@ -1,8 +1,8 @@
 import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
 import { AdminDetailSheet } from "#/components/admin/shell/AdminDetailSheet";
+import { AdminRouteErrorBoundary } from "#/components/admin/shell/AdminRouteStates";
 import DashboardShell from "#/components/admin/shell/DashboardShell";
 import { RecordSidebarProvider } from "#/components/admin/shell/RecordSidebarProvider";
-import { AdminRouteErrorBoundary } from "#/components/admin/shell/AdminRouteStates";
 import { parseAdminDetailSearch } from "#/lib/admin-detail-search";
 import { canAccessAdminPath } from "#/lib/auth";
 import { buildSignInRedirect } from "#/lib/auth-redirect";

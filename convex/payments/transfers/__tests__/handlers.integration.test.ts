@@ -1,11 +1,11 @@
 import { convexTest } from "convex-test";
 import { describe, expect, it, vi } from "vitest";
+import { registerAuditLogComponent } from "../../../../src/test/convex/registerAuditLogComponent";
 import { api } from "../../../_generated/api";
 import type { Id } from "../../../_generated/dataModel";
 import { FAIRLEND_STAFF_ORG_ID } from "../../../constants";
 import schema from "../../../schema";
 import { convexModules } from "../../../test/moduleMaps";
-import { registerAuditLogComponent } from "../../../test/registerAuditLogComponent";
 import { getOrCreateCashAccount } from "../../cashLedger/accounts";
 import { postObligationAccrued } from "../../cashLedger/integrations";
 

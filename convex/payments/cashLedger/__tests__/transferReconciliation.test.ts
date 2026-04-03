@@ -1,5 +1,6 @@
 import { convexTest } from "convex-test";
 import { describe, expect, it, vi } from "vitest";
+import { registerAuditLogComponent } from "../../../../src/test/convex/registerAuditLogComponent";
 import { internal } from "../../../_generated/api";
 import auditTrailSchema from "../../../components/auditTrail/schema";
 import schema from "../../../schema";
@@ -7,7 +8,6 @@ import {
 	convexModules,
 	auditTrailModules as sharedAuditTrailModules,
 } from "../../../test/moduleMaps";
-import { registerAuditLogComponent } from "../../../test/registerAuditLogComponent";
 import {
 	checkOrphanedConfirmedTransfers,
 	checkOrphanedReversedTransfers,
