@@ -506,6 +506,44 @@ describe("View Engine", () => {
 			}
 		});
 
+		it("equals filter aliases to exact match on text field", async () => {
+			const fixture = await seedLeadFixture(t);
+
+			await seedRecord(t, fixture.objectDefId, {
+				company_name: "Acme",
+				status: "new",
+			});
+			await seedRecord(t, fixture.objectDefId, {
+				company_name: "Acme Holdings",
+				status: "new",
+			});
+
+			await t.run(async (ctx) => {
+				await ctx.db.insert("viewFilters", {
+					viewDefId: fixture.defaultViewId,
+					fieldDefId: fixture.fieldDefs.company_name,
+					operator: "equals",
+					value: "Acme",
+				});
+			});
+
+			const result = await asAdmin(t).query(
+				api.crm.viewQueries.queryViewRecords,
+				{
+					viewDefId: fixture.defaultViewId,
+					limit: 25,
+				}
+			);
+
+			const { rows, totalCount } = result as {
+				rows: Array<{ fields: Record<string, unknown> }>;
+				totalCount: number;
+			};
+
+			expect(totalCount).toBe(1);
+			expect(rows[0]?.fields.company_name).toBe("Acme");
+		});
+
 		it("is_true filter: boolean field", async () => {
 			const fixture = await seedLeadFixture(t);
 
@@ -751,13 +789,82 @@ describe("View Engine", () => {
 				expect(["new", "qualified"]).toContain(row.fields.status);
 			}
 		});
+
+		it("is filter aliases to exact match on select field", async () => {
+			const fixture = await seedLeadFixture(t);
+
+			await seedRecord(t, fixture.objectDefId, {
+				company_name: "Acme",
+				status: "new",
+			});
+			await seedRecord(t, fixture.objectDefId, {
+				company_name: "Beta",
+				status: "contacted",
+			});
+
+			await t.run(async (ctx) => {
+				await ctx.db.insert("viewFilters", {
+					viewDefId: fixture.defaultViewId,
+					fieldDefId: fixture.fieldDefs.status,
+					operator: "is",
+					value: "new",
+				});
+			});
+
+			const result = await asAdmin(t).query(
+				api.crm.viewQueries.queryViewRecords,
+				{
+					viewDefId: fixture.defaultViewId,
+					limit: 25,
+				}
+			);
+
+			const { rows, totalCount } = result as {
+				rows: Array<{ fields: Record<string, unknown> }>;
+				totalCount: number;
+			};
+
+			expect(totalCount).toBe(1);
+			expect(rows[0]?.fields.status).toBe("new");
+		});
+
+		it("between filter throws a clear error for table views", async () => {
+			const fixture = await seedLeadFixture(t);
+
+			await t.run(async (ctx) => {
+				await ctx.db.insert("viewFilters", {
+					viewDefId: fixture.defaultViewId,
+					fieldDefId: fixture.fieldDefs.deal_value,
+					operator: "between",
+					value: JSON.stringify([10_000, 50_000]),
+				});
+			});
+
+			await expect(
+				asAdmin(t).query(api.crm.viewQueries.queryViewRecords, {
+					viewDefId: fixture.defaultViewId,
+					limit: 25,
+				})
+			).rejects.toThrow(
+				'Operator "between" is not supported by table or kanban view filtering yet'
+			);
+		});
 	});
 
 	// ── View schema ─────────────────────────────────────────────────
 
 	describe("View schema", () => {
-		it("getViewSchema returns columns with sort capability flags", async () => {
+		it("getViewSchema returns normalized field and view contracts", async () => {
 			const fixture = await seedLeadFixture(t);
+
+			await t.run(async (ctx) => {
+				await ctx.db.insert("viewFilters", {
+					viewDefId: fixture.defaultViewId,
+					fieldDefId: fixture.fieldDefs.company_name,
+					operator: "equals",
+					value: "Acme",
+				});
+			});
 
 			const schema = await asAdmin(t).query(api.crm.viewQueries.getViewSchema, {
 				viewDefId: fixture.defaultViewId,
@@ -783,6 +890,56 @@ describe("View Engine", () => {
 				(c: { name: string }) => c.name === "company_name"
 			);
 			expect(textCol?.hasSortCapability).toBe(false);
+
+			const statusCol = schema.columns.find(
+				(c: { name: string }) => c.name === "status"
+			);
+			expect(statusCol).toMatchObject({
+				normalizedFieldKind: "single_select",
+				rendererHint: "select",
+				layoutEligibility: {
+					kanban: { enabled: true },
+					groupBy: { enabled: true },
+				},
+				editability: {
+					mode: "editable",
+				},
+				isVisibleByDefault: true,
+			});
+
+			const followupField = schema.fields.find(
+				(field: { name: string }) => field.name === "next_followup"
+			);
+			expect(followupField).toMatchObject({
+				rendererHint: "date",
+				layoutEligibility: {
+					calendar: { enabled: true },
+				},
+			});
+
+			expect(schema.view).toMatchObject({
+				viewDefId: fixture.defaultViewId,
+				layout: "table",
+				isDefault: true,
+				filters: [
+					expect.objectContaining({
+						fieldDefId: fixture.fieldDefs.company_name,
+						operator: "equals",
+						value: "Acme",
+					}),
+				],
+				visibleFieldIds: schema.columns
+					.filter((column: { isVisible: boolean }) => column.isVisible)
+					.map((column: { fieldDefId: string }) => column.fieldDefId),
+			});
+			expect(schema.adapterContract).toMatchObject({
+				entityType: "lead",
+				objectDefId: fixture.objectDefId,
+			});
+			expect(schema.adapterContract.supportedLayouts).toEqual(
+				expect.arrayContaining(["table", "kanban", "calendar"])
+			);
+			expect(schema.view.disabledLayoutMessages).toBeUndefined();
 		});
 	});
 
