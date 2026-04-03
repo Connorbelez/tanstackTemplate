@@ -5,6 +5,7 @@ import { auditLog } from "../auditLog";
 import { crmMutation, crmQuery } from "../fluent";
 import { queryCalendarViewData } from "./calendarQuery";
 import type { FilterOperator } from "./filterConstants";
+import { materializeFieldDef } from "./metadataCompiler";
 import {
 	applyFilters,
 	assembleRecords,
@@ -755,18 +756,19 @@ export const getViewSchema = crmQuery
 			if (!fieldDef) {
 				return [];
 			}
+			const materializedFieldDef = materializeFieldDef(fieldDef);
 
 			return [
 				{
 					...column,
-					normalizedFieldKind: fieldDef.normalizedFieldKind,
-					rendererHint: fieldDef.rendererHint,
-					relation: fieldDef.relation,
-					layoutEligibility: fieldDef.layoutEligibility,
-					aggregation: fieldDef.aggregation,
-					editability: fieldDef.editability,
-					options: fieldDef.options,
-					isVisibleByDefault: fieldDef.isVisibleByDefault,
+					normalizedFieldKind: materializedFieldDef.normalizedFieldKind,
+					rendererHint: materializedFieldDef.rendererHint,
+					relation: materializedFieldDef.relation,
+					layoutEligibility: materializedFieldDef.layoutEligibility,
+					aggregation: materializedFieldDef.aggregation,
+					editability: materializedFieldDef.editability,
+					options: materializedFieldDef.options,
+					isVisibleByDefault: materializedFieldDef.isVisibleByDefault,
 					hasSortCapability: sortableFieldIds.has(column.fieldDefId.toString()),
 				},
 			];
