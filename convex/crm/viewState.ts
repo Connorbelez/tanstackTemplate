@@ -3,6 +3,10 @@ import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import type { Viewer } from "../fluent";
 import { resolveEntityViewAdapterContract } from "./entityAdapterRegistry";
+import {
+	materializeFieldDef,
+	materializeFieldDefinition,
+} from "./metadataCompiler";
 import { loadActiveFieldDefs } from "./recordQueries";
 import type {
 	AggregatePreset,
@@ -70,31 +74,7 @@ export interface ResolvedViewState {
 function toNormalizedFieldDefinition(
 	fieldDef: FieldDef
 ): NormalizedFieldDefinition {
-	return {
-		fieldDefId: fieldDef._id,
-		fieldSource: "persisted",
-		objectDefId: fieldDef.objectDefId,
-		name: fieldDef.name,
-		label: fieldDef.label,
-		fieldType: fieldDef.fieldType,
-		normalizedFieldKind: fieldDef.normalizedFieldKind,
-		description: fieldDef.description,
-		isRequired: fieldDef.isRequired,
-		isUnique: fieldDef.isUnique,
-		isActive: fieldDef.isActive,
-		displayOrder: fieldDef.displayOrder,
-		defaultValue: fieldDef.defaultValue,
-		options: fieldDef.options,
-		rendererHint: fieldDef.rendererHint,
-		relation: fieldDef.relation,
-		computed: fieldDef.computed,
-		layoutEligibility: fieldDef.layoutEligibility,
-		aggregation: fieldDef.aggregation,
-		editability: fieldDef.editability,
-		nativeColumnPath: fieldDef.nativeColumnPath,
-		nativeReadOnly: fieldDef.nativeReadOnly,
-		isVisibleByDefault: fieldDef.isVisibleByDefault,
-	};
+	return materializeFieldDefinition(fieldDef);
 }
 
 function parseStoredFilterValue(value: string | undefined): unknown {
@@ -150,24 +130,33 @@ function normalizeVisibleFieldIds(
 }
 
 function deriveDisabledLayoutMessages(
-	fieldDefs: Pick<Doc<"fieldDefs">, "layoutEligibility">[]
+	fieldDefs: FieldDef[]
 ): SystemViewDefinition["disabledLayoutMessages"] | undefined {
+	const materializedFieldDefs = fieldDefs.map(materializeFieldDef);
 	const messages: NonNullable<SystemViewDefinition["disabledLayoutMessages"]> =
 		{};
 
-	if (!fieldDefs.some((fieldDef) => fieldDef.layoutEligibility.table.enabled)) {
+	if (
+		!materializedFieldDefs.some(
+			(fieldDef) => fieldDef.layoutEligibility.table.enabled
+		)
+	) {
 		messages.table = "Table layout requires at least one active field.";
 	}
 
 	if (
-		!fieldDefs.some((fieldDef) => fieldDef.layoutEligibility.kanban.enabled)
+		!materializedFieldDefs.some(
+			(fieldDef) => fieldDef.layoutEligibility.kanban.enabled
+		)
 	) {
 		messages.kanban =
 			"Add a select or multi-select field to unlock kanban layouts.";
 	}
 
 	if (
-		!fieldDefs.some((fieldDef) => fieldDef.layoutEligibility.calendar.enabled)
+		!materializedFieldDefs.some(
+			(fieldDef) => fieldDef.layoutEligibility.calendar.enabled
+		)
 	) {
 		messages.calendar =
 			"Add a date or datetime field to unlock calendar layouts.";
@@ -921,7 +910,8 @@ export async function resolveViewState(
 	const fieldOverridesByName = buildFieldOverridesByName(adapterContract);
 	const schemaOrderHints = buildSchemaOrderHints({
 		adapterContract,
-		viewIsDefault: effectiveState.viewDef.isDefault && !effectiveState.savedView,
+		viewIsDefault:
+			effectiveState.viewDef.isDefault && !effectiveState.savedView,
 	});
 	const persistedFields = activeFieldDefs.map((fieldDef) =>
 		applyFieldOverridesToDefinition({
@@ -967,7 +957,8 @@ export async function resolveViewState(
 			effectiveView: view,
 			fieldDefsById,
 			viewFields: effectiveState.viewFields,
-			viewIsDefault: effectiveState.viewDef.isDefault && !effectiveState.savedView,
+			viewIsDefault:
+				effectiveState.viewDef.isDefault && !effectiveState.savedView,
 		}),
 	};
 }

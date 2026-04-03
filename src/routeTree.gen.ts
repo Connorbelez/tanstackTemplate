@@ -73,6 +73,7 @@ import { Route as DemoRbacAuthRolesRouteImport } from './routes/demo/rbac-auth/r
 import { Route as DemoRbacAuthOnboardingRouteImport } from './routes/demo/rbac-auth/onboarding'
 import { Route as DemoRbacAuthAuditRouteImport } from './routes/demo/rbac-auth/audit'
 import { Route as DemoRbacAuthAccessControlRouteImport } from './routes/demo/rbac-auth/access-control'
+import { Route as DemoListingsListingidRouteImport } from './routes/demo/listings/$listingid'
 import { Route as DemoGovernedTransitionsMachineRouteImport } from './routes/demo/governed-transitions/machine'
 import { Route as DemoGovernedTransitionsJournalRouteImport } from './routes/demo/governed-transitions/journal'
 import { Route as DemoFormSimpleRouteImport } from './routes/demo/form.simple'
@@ -434,6 +435,11 @@ const DemoRbacAuthAccessControlRoute =
     path: '/access-control',
     getParentRoute: () => DemoRbacAuthRouteRoute,
   } as any)
+const DemoListingsListingidRoute = DemoListingsListingidRouteImport.update({
+  id: '/demo/listings/$listingid',
+  path: '/demo/listings/$listingid',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const DemoGovernedTransitionsMachineRoute =
   DemoGovernedTransitionsMachineRouteImport.update({
     id: '/machine',
@@ -689,6 +695,7 @@ export interface FileRoutesByFullPath {
   '/demo/form/simple': typeof DemoFormSimpleRoute
   '/demo/governed-transitions/journal': typeof DemoGovernedTransitionsJournalRoute
   '/demo/governed-transitions/machine': typeof DemoGovernedTransitionsMachineRoute
+  '/demo/listings/$listingid': typeof DemoListingsListingidRoute
   '/demo/rbac-auth/access-control': typeof DemoRbacAuthAccessControlRoute
   '/demo/rbac-auth/audit': typeof DemoRbacAuthAuditRoute
   '/demo/rbac-auth/onboarding': typeof DemoRbacAuthOnboardingRoute
@@ -780,6 +787,7 @@ export interface FileRoutesByTo {
   '/demo/form/simple': typeof DemoFormSimpleRoute
   '/demo/governed-transitions/journal': typeof DemoGovernedTransitionsJournalRoute
   '/demo/governed-transitions/machine': typeof DemoGovernedTransitionsMachineRoute
+  '/demo/listings/$listingid': typeof DemoListingsListingidRoute
   '/demo/rbac-auth/access-control': typeof DemoRbacAuthAccessControlRoute
   '/demo/rbac-auth/audit': typeof DemoRbacAuthAuditRoute
   '/demo/rbac-auth/onboarding': typeof DemoRbacAuthOnboardingRoute
@@ -878,6 +886,7 @@ export interface FileRoutesById {
   '/demo/form/simple': typeof DemoFormSimpleRoute
   '/demo/governed-transitions/journal': typeof DemoGovernedTransitionsJournalRoute
   '/demo/governed-transitions/machine': typeof DemoGovernedTransitionsMachineRoute
+  '/demo/listings/$listingid': typeof DemoListingsListingidRoute
   '/demo/rbac-auth/access-control': typeof DemoRbacAuthAccessControlRoute
   '/demo/rbac-auth/audit': typeof DemoRbacAuthAuditRoute
   '/demo/rbac-auth/onboarding': typeof DemoRbacAuthOnboardingRoute
@@ -977,6 +986,7 @@ export interface FileRouteTypes {
     | '/demo/form/simple'
     | '/demo/governed-transitions/journal'
     | '/demo/governed-transitions/machine'
+    | '/demo/listings/$listingid'
     | '/demo/rbac-auth/access-control'
     | '/demo/rbac-auth/audit'
     | '/demo/rbac-auth/onboarding'
@@ -1068,6 +1078,7 @@ export interface FileRouteTypes {
     | '/demo/form/simple'
     | '/demo/governed-transitions/journal'
     | '/demo/governed-transitions/machine'
+    | '/demo/listings/$listingid'
     | '/demo/rbac-auth/access-control'
     | '/demo/rbac-auth/audit'
     | '/demo/rbac-auth/onboarding'
@@ -1165,6 +1176,7 @@ export interface FileRouteTypes {
     | '/demo/form/simple'
     | '/demo/governed-transitions/journal'
     | '/demo/governed-transitions/machine'
+    | '/demo/listings/$listingid'
     | '/demo/rbac-auth/access-control'
     | '/demo/rbac-auth/audit'
     | '/demo/rbac-auth/onboarding'
@@ -1229,6 +1241,7 @@ export interface RootRouteChildren {
   E2eSwitchOrgRoute: typeof E2eSwitchOrgRoute
   DemoFormAddressRoute: typeof DemoFormAddressRoute
   DemoFormSimpleRoute: typeof DemoFormSimpleRoute
+  DemoListingsListingidRoute: typeof DemoListingsListingidRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -1680,6 +1693,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/demo/rbac-auth/access-control'
       preLoaderRoute: typeof DemoRbacAuthAccessControlRouteImport
       parentRoute: typeof DemoRbacAuthRouteRoute
+    }
+    '/demo/listings/$listingid': {
+      id: '/demo/listings/$listingid'
+      path: '/demo/listings/$listingid'
+      fullPath: '/demo/listings/$listingid'
+      preLoaderRoute: typeof DemoListingsListingidRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/demo/governed-transitions/machine': {
       id: '/demo/governed-transitions/machine'
@@ -2197,6 +2217,7 @@ const rootRouteChildren: RootRouteChildren = {
   E2eSwitchOrgRoute: E2eSwitchOrgRoute,
   DemoFormAddressRoute: DemoFormAddressRoute,
   DemoFormSimpleRoute: DemoFormSimpleRoute,
+  DemoListingsListingidRoute: DemoListingsListingidRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

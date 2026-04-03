@@ -22,6 +22,7 @@ import { convexTest } from "convex-test";
 import { afterAll, describe, expect, it, vi } from "vitest";
 import workflowSchema from "../../../../node_modules/@convex-dev/workflow/dist/component/schema.js";
 import workpoolSchema from "../../../../node_modules/@convex-dev/workpool/dist/component/schema.js";
+import { registerAuditLogComponent } from "../../../../src/test/convex/registerAuditLogComponent";
 import type { Id } from "../../../_generated/dataModel";
 import type { MutationCtx } from "../../../_generated/server";
 import auditTrailSchema from "../../../components/auditTrail/schema";
@@ -35,7 +36,6 @@ import {
 	workflowModules as sharedWorkflowModules,
 	workpoolModules as sharedWorkpoolModules,
 } from "../../../test/moduleMaps";
-import { registerAuditLogComponent } from "../../../test/registerAuditLogComponent";
 import { postObligationAccrued } from "../../cashLedger/integrations";
 
 // ── Module globs ────────────────────────────────────────────────────

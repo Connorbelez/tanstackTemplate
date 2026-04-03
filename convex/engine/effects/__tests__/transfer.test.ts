@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { registerAuditLogComponent } from "../../../../src/test/convex/registerAuditLogComponent";
 import type { Id } from "../../../_generated/dataModel";
 import type { MutationCtx } from "../../../_generated/server";
 import {
@@ -9,7 +10,6 @@ import {
 	type TestHarness,
 } from "../../../payments/cashLedger/__tests__/testUtils";
 import { convexModules } from "../../../test/moduleMaps";
-import { registerAuditLogComponent } from "../../../test/registerAuditLogComponent";
 import { effectRegistry } from "../registry";
 import {
 	publishTransferConfirmed,

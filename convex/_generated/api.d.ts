@@ -37,6 +37,7 @@ import type * as crm_filterOperatorValidation from "../crm/filterOperatorValidat
 import type * as crm_linkQueries from "../crm/linkQueries.js";
 import type * as crm_linkTypes from "../crm/linkTypes.js";
 import type * as crm_metadataCompiler from "../crm/metadataCompiler.js";
+import type * as crm_migrations from "../crm/migrations.js";
 import type * as crm_objectDefs from "../crm/objectDefs.js";
 import type * as crm_recordLinks from "../crm/recordLinks.js";
 import type * as crm_recordQueries from "../crm/recordQueries.js";
@@ -45,6 +46,7 @@ import type * as crm_systemAdapters_bootstrap from "../crm/systemAdapters/bootst
 import type * as crm_systemAdapters_columnResolver from "../crm/systemAdapters/columnResolver.js";
 import type * as crm_systemAdapters_queryAdapter from "../crm/systemAdapters/queryAdapter.js";
 import type * as crm_types from "../crm/types.js";
+import type * as crm_userSavedViews from "../crm/userSavedViews.js";
 import type * as crm_validators from "../crm/validators.js";
 import type * as crm_valueRouter from "../crm/valueRouter.js";
 import type * as crm_viewDefs from "../crm/viewDefs.js";
@@ -260,7 +262,6 @@ import type * as seed_seedOnboardingRequest from "../seed/seedOnboardingRequest.
 import type * as seed_seedPaymentData from "../seed/seedPaymentData.js";
 import type * as test_authTestEndpoints from "../test/authTestEndpoints.js";
 import type * as test_moduleMaps from "../test/moduleMaps.js";
-import type * as test_registerAuditLogComponent from "../test/registerAuditLogComponent.js";
 import type * as todos from "../todos.js";
 
 import type {
@@ -299,6 +300,7 @@ declare const fullApi: ApiFromModules<{
   "crm/linkQueries": typeof crm_linkQueries;
   "crm/linkTypes": typeof crm_linkTypes;
   "crm/metadataCompiler": typeof crm_metadataCompiler;
+  "crm/migrations": typeof crm_migrations;
   "crm/objectDefs": typeof crm_objectDefs;
   "crm/recordLinks": typeof crm_recordLinks;
   "crm/recordQueries": typeof crm_recordQueries;
@@ -307,6 +309,7 @@ declare const fullApi: ApiFromModules<{
   "crm/systemAdapters/columnResolver": typeof crm_systemAdapters_columnResolver;
   "crm/systemAdapters/queryAdapter": typeof crm_systemAdapters_queryAdapter;
   "crm/types": typeof crm_types;
+  "crm/userSavedViews": typeof crm_userSavedViews;
   "crm/validators": typeof crm_validators;
   "crm/valueRouter": typeof crm_valueRouter;
   "crm/viewDefs": typeof crm_viewDefs;
@@ -522,7 +525,6 @@ declare const fullApi: ApiFromModules<{
   "seed/seedPaymentData": typeof seed_seedPaymentData;
   "test/authTestEndpoints": typeof test_authTestEndpoints;
   "test/moduleMaps": typeof test_moduleMaps;
-  "test/registerAuditLogComponent": typeof test_registerAuditLogComponent;
   todos: typeof todos;
 }>;
 

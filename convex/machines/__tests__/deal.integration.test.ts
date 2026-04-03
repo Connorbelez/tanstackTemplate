@@ -12,6 +12,7 @@ import { convexTest } from "convex-test";
 import { describe, expect, it } from "vitest";
 import workflowSchema from "../../../node_modules/@convex-dev/workflow/dist/component/schema.js";
 import workpoolSchema from "../../../node_modules/@convex-dev/workpool/dist/component/schema.js";
+import { registerAuditLogComponent } from "../../../src/test/convex/registerAuditLogComponent";
 import { internal } from "../../_generated/api";
 import type { Id } from "../../_generated/dataModel";
 import auditTrailSchema from "../../components/auditTrail/schema";
@@ -22,7 +23,6 @@ import {
 	workflowModules as sharedWorkflowModules,
 	workpoolModules as sharedWorkpoolModules,
 } from "../../test/moduleMaps";
-import { registerAuditLogComponent } from "../../test/registerAuditLogComponent";
 
 // ── Module glob ─────────────────────────────────────────────────────
 const modules = convexModules;
