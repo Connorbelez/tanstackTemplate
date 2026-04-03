@@ -52,6 +52,7 @@ import type * as crm_viewFields from "../crm/viewFields.js";
 import type * as crm_viewFilters from "../crm/viewFilters.js";
 import type * as crm_viewKanbanGroups from "../crm/viewKanbanGroups.js";
 import type * as crm_viewQueries from "../crm/viewQueries.js";
+import type * as crm_viewState from "../crm/viewState.js";
 import type * as crons from "../crons.js";
 import type * as dealReroutes_mutations from "../dealReroutes/mutations.js";
 import type * as dealReroutes_queries from "../dealReroutes/queries.js";
@@ -313,6 +314,7 @@ declare const fullApi: ApiFromModules<{
   "crm/viewFilters": typeof crm_viewFilters;
   "crm/viewKanbanGroups": typeof crm_viewKanbanGroups;
   "crm/viewQueries": typeof crm_viewQueries;
+  "crm/viewState": typeof crm_viewState;
   crons: typeof crons;
   "dealReroutes/mutations": typeof dealReroutes_mutations;
   "dealReroutes/queries": typeof dealReroutes_queries;
