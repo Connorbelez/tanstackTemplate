@@ -1,7 +1,89 @@
 "use client";
 
-import { RecordSidebar } from "#/components/admin/shell/RecordSidebar";
+import { Link } from "@tanstack/react-router";
+import { useAdminDetailSheet } from "#/hooks/useAdminDetailSheet";
+import {
+	getDedicatedAdminRecordRoute,
+	isDedicatedAdminEntityType,
+} from "#/lib/admin-entity-routes";
+import { Button } from "@/components/ui/button";
+import {
+	Sheet,
+	SheetContent,
+	SheetDescription,
+	SheetHeader,
+	SheetTitle,
+} from "@/components/ui/sheet";
 
-export function AdminDetailSheet() {
-	return <RecordSidebar />;
+export interface AdminDetailSheetProps {
+	entityType: string;
+}
+
+export function AdminDetailSheet({ entityType }: AdminDetailSheetProps) {
+	const { detailOpen, recordId, close } = useAdminDetailSheet();
+	const detailSearch = {
+		detailOpen: false,
+		entityType: undefined,
+		recordId: undefined,
+	} as const;
+
+	const recordLink =
+		recordId && isDedicatedAdminEntityType(entityType) ? (
+			<Link
+				params={{
+					recordid: recordId,
+				}}
+				search={detailSearch}
+				to={getDedicatedAdminRecordRoute(entityType)}
+			>
+				View record
+			</Link>
+		) : recordId ? (
+			<Link
+				params={{
+					entitytype: entityType,
+					recordid: recordId,
+				}}
+				search={detailSearch}
+				to="/admin/$entitytype/$recordid"
+			>
+				View record
+			</Link>
+		) : (
+			<span className="cursor-not-allowed text-muted-foreground">
+				View record (select a row first)
+			</span>
+		);
+
+	return (
+		<Sheet
+			onOpenChange={(open) => {
+				if (!open) {
+					close();
+				}
+			}}
+			open={detailOpen}
+		>
+			<SheetContent className="flex flex-col gap-4" side="right">
+				<SheetHeader>
+					<SheetTitle>Record detail</SheetTitle>
+					<SheetDescription>
+						State is driven by URL search params:{" "}
+						<code className="rounded bg-muted px-1 py-0.5 text-xs">
+							detailOpen
+						</code>{" "}
+						and {recordLink}
+					</SheetDescription>
+				</SheetHeader>
+				<div className="text-sm">
+					<p>
+						<span className="font-medium">recordId:</span> {recordId ?? "—"}
+					</p>
+				</div>
+				<Button onClick={() => close()} type="button" variant="secondary">
+					Close (clears search params)
+				</Button>
+			</SheetContent>
+		</Sheet>
+	);
 }

@@ -58,9 +58,11 @@ import { Route as DemoCrmRouteRouteImport } from './routes/demo/crm/route'
 import { Route as DemoAuditTraceabilityRouteRouteImport } from './routes/demo/audit-traceability/route'
 import { Route as AdminUnderwritingRouteRouteImport } from './routes/admin/underwriting/route'
 import { Route as AdminPropertiesRouteRouteImport } from './routes/admin/properties/route'
+import { Route as AdminObligationsRouteRouteImport } from './routes/admin/obligations/route'
 import { Route as AdminMortgagesRouteRouteImport } from './routes/admin/mortgages/route'
 import { Route as AdminListingsRouteRouteImport } from './routes/admin/listings/route'
 import { Route as AdminDealsRouteRouteImport } from './routes/admin/deals/route'
+import { Route as AdminBorrowersRouteRouteImport } from './routes/admin/borrowers/route'
 import { Route as DemoRbacIndexRouteImport } from './routes/demo/rbac/index'
 import { Route as DemoRbacAuthIndexRouteImport } from './routes/demo/rbac-auth/index'
 import { Route as DemoGovernedTransitionsIndexRouteImport } from './routes/demo/governed-transitions/index'
@@ -88,9 +90,11 @@ import { Route as DemoAuditTraceabilityHashChainRouteImport } from './routes/dem
 import { Route as DemoAuditTraceabilityAuditTrailRouteImport } from './routes/demo/audit-traceability/audit-trail'
 import { Route as DemoAuditTraceabilityAccessLogRouteImport } from './routes/demo/audit-traceability/access-log'
 import { Route as AdminPropertiesRecordidRouteImport } from './routes/admin/properties/$recordid'
+import { Route as AdminObligationsRecordidRouteImport } from './routes/admin/obligations/$recordid'
 import { Route as AdminMortgagesRecordidRouteImport } from './routes/admin/mortgages/$recordid'
 import { Route as AdminListingsRecordidRouteImport } from './routes/admin/listings/$recordid'
 import { Route as AdminDealsRecordidRouteImport } from './routes/admin/deals/$recordid'
+import { Route as AdminBorrowersRecordidRouteImport } from './routes/admin/borrowers/$recordid'
 import { Route as AdminEntitytypeRecordidRouteImport } from './routes/admin/$entitytype.$recordid'
 import { Route as DemoRbacLenderRouteRouteImport } from './routes/demo/rbac/lender/route'
 import { Route as DemoRbacLawyerRouteRouteImport } from './routes/demo/rbac/lawyer/route'
@@ -352,6 +356,11 @@ const AdminPropertiesRouteRoute = AdminPropertiesRouteRouteImport.update({
   path: '/properties',
   getParentRoute: () => AdminRouteRoute,
 } as any)
+const AdminObligationsRouteRoute = AdminObligationsRouteRouteImport.update({
+  id: '/obligations',
+  path: '/obligations',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
 const AdminMortgagesRouteRoute = AdminMortgagesRouteRouteImport.update({
   id: '/mortgages',
   path: '/mortgages',
@@ -365,6 +374,11 @@ const AdminListingsRouteRoute = AdminListingsRouteRouteImport.update({
 const AdminDealsRouteRoute = AdminDealsRouteRouteImport.update({
   id: '/deals',
   path: '/deals',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const AdminBorrowersRouteRoute = AdminBorrowersRouteRouteImport.update({
+  id: '/borrowers',
+  path: '/borrowers',
   getParentRoute: () => AdminRouteRoute,
 } as any)
 const DemoRbacIndexRoute = DemoRbacIndexRouteImport.update({
@@ -517,6 +531,12 @@ const AdminPropertiesRecordidRoute = AdminPropertiesRecordidRouteImport.update({
   path: '/$recordid',
   getParentRoute: () => AdminPropertiesRouteRoute,
 } as any)
+const AdminObligationsRecordidRoute =
+  AdminObligationsRecordidRouteImport.update({
+    id: '/$recordid',
+    path: '/$recordid',
+    getParentRoute: () => AdminObligationsRouteRoute,
+  } as any)
 const AdminMortgagesRecordidRoute = AdminMortgagesRecordidRouteImport.update({
   id: '/$recordid',
   path: '/$recordid',
@@ -531,6 +551,11 @@ const AdminDealsRecordidRoute = AdminDealsRecordidRouteImport.update({
   id: '/$recordid',
   path: '/$recordid',
   getParentRoute: () => AdminDealsRouteRoute,
+} as any)
+const AdminBorrowersRecordidRoute = AdminBorrowersRecordidRouteImport.update({
+  id: '/$recordid',
+  path: '/$recordid',
+  getParentRoute: () => AdminBorrowersRouteRoute,
 } as any)
 const AdminEntitytypeRecordidRoute = AdminEntitytypeRecordidRouteImport.update({
   id: '/$recordid',
@@ -595,9 +620,11 @@ export interface FileRoutesByFullPath {
   '/sign-out': typeof SignOutRoute
   '/sign-up': typeof SignUpRoute
   '/unauthorized': typeof UnauthorizedRoute
+  '/admin/borrowers': typeof AdminBorrowersRouteRouteWithChildren
   '/admin/deals': typeof AdminDealsRouteRouteWithChildren
   '/admin/listings': typeof AdminListingsRouteRouteWithChildren
   '/admin/mortgages': typeof AdminMortgagesRouteRouteWithChildren
+  '/admin/obligations': typeof AdminObligationsRouteRouteWithChildren
   '/admin/properties': typeof AdminPropertiesRouteRouteWithChildren
   '/admin/underwriting': typeof AdminUnderwritingRouteRoute
   '/demo/audit-traceability': typeof DemoAuditTraceabilityRouteRouteWithChildren
@@ -640,9 +667,11 @@ export interface FileRoutesByFullPath {
   '/demo/rbac/lawyer': typeof DemoRbacLawyerRouteRoute
   '/demo/rbac/lender': typeof DemoRbacLenderRouteRoute
   '/admin/$entitytype/$recordid': typeof AdminEntitytypeRecordidRoute
+  '/admin/borrowers/$recordid': typeof AdminBorrowersRecordidRoute
   '/admin/deals/$recordid': typeof AdminDealsRecordidRoute
   '/admin/listings/$recordid': typeof AdminListingsRecordidRoute
   '/admin/mortgages/$recordid': typeof AdminMortgagesRecordidRoute
+  '/admin/obligations/$recordid': typeof AdminObligationsRecordidRoute
   '/admin/properties/$recordid': typeof AdminPropertiesRecordidRoute
   '/demo/audit-traceability/access-log': typeof DemoAuditTraceabilityAccessLogRoute
   '/demo/audit-traceability/audit-trail': typeof DemoAuditTraceabilityAuditTrailRoute
@@ -688,9 +717,11 @@ export interface FileRoutesByTo {
   '/sign-out': typeof SignOutRoute
   '/sign-up': typeof SignUpRoute
   '/unauthorized': typeof UnauthorizedRoute
+  '/admin/borrowers': typeof AdminBorrowersRouteRouteWithChildren
   '/admin/deals': typeof AdminDealsRouteRouteWithChildren
   '/admin/listings': typeof AdminListingsRouteRouteWithChildren
   '/admin/mortgages': typeof AdminMortgagesRouteRouteWithChildren
+  '/admin/obligations': typeof AdminObligationsRouteRouteWithChildren
   '/admin/properties': typeof AdminPropertiesRouteRouteWithChildren
   '/admin/underwriting': typeof AdminUnderwritingRouteRoute
   '/authenticated': typeof AuthenticatedAuthenticatedRoute
@@ -727,9 +758,11 @@ export interface FileRoutesByTo {
   '/demo/rbac/lawyer': typeof DemoRbacLawyerRouteRoute
   '/demo/rbac/lender': typeof DemoRbacLenderRouteRoute
   '/admin/$entitytype/$recordid': typeof AdminEntitytypeRecordidRoute
+  '/admin/borrowers/$recordid': typeof AdminBorrowersRecordidRoute
   '/admin/deals/$recordid': typeof AdminDealsRecordidRoute
   '/admin/listings/$recordid': typeof AdminListingsRecordidRoute
   '/admin/mortgages/$recordid': typeof AdminMortgagesRecordidRoute
+  '/admin/obligations/$recordid': typeof AdminObligationsRecordidRoute
   '/admin/properties/$recordid': typeof AdminPropertiesRecordidRoute
   '/demo/audit-traceability/access-log': typeof DemoAuditTraceabilityAccessLogRoute
   '/demo/audit-traceability/audit-trail': typeof DemoAuditTraceabilityAuditTrailRoute
@@ -776,9 +809,11 @@ export interface FileRoutesById {
   '/sign-out': typeof SignOutRoute
   '/sign-up': typeof SignUpRoute
   '/unauthorized': typeof UnauthorizedRoute
+  '/admin/borrowers': typeof AdminBorrowersRouteRouteWithChildren
   '/admin/deals': typeof AdminDealsRouteRouteWithChildren
   '/admin/listings': typeof AdminListingsRouteRouteWithChildren
   '/admin/mortgages': typeof AdminMortgagesRouteRouteWithChildren
+  '/admin/obligations': typeof AdminObligationsRouteRouteWithChildren
   '/admin/properties': typeof AdminPropertiesRouteRouteWithChildren
   '/admin/underwriting': typeof AdminUnderwritingRouteRoute
   '/demo/audit-traceability': typeof DemoAuditTraceabilityRouteRouteWithChildren
@@ -821,9 +856,11 @@ export interface FileRoutesById {
   '/demo/rbac/lawyer': typeof DemoRbacLawyerRouteRoute
   '/demo/rbac/lender': typeof DemoRbacLenderRouteRoute
   '/admin/$entitytype/$recordid': typeof AdminEntitytypeRecordidRoute
+  '/admin/borrowers/$recordid': typeof AdminBorrowersRecordidRoute
   '/admin/deals/$recordid': typeof AdminDealsRecordidRoute
   '/admin/listings/$recordid': typeof AdminListingsRecordidRoute
   '/admin/mortgages/$recordid': typeof AdminMortgagesRecordidRoute
+  '/admin/obligations/$recordid': typeof AdminObligationsRecordidRoute
   '/admin/properties/$recordid': typeof AdminPropertiesRecordidRoute
   '/demo/audit-traceability/access-log': typeof DemoAuditTraceabilityAccessLogRoute
   '/demo/audit-traceability/audit-trail': typeof DemoAuditTraceabilityAuditTrailRoute
@@ -871,9 +908,11 @@ export interface FileRouteTypes {
     | '/sign-out'
     | '/sign-up'
     | '/unauthorized'
+    | '/admin/borrowers'
     | '/admin/deals'
     | '/admin/listings'
     | '/admin/mortgages'
+    | '/admin/obligations'
     | '/admin/properties'
     | '/admin/underwriting'
     | '/demo/audit-traceability'
@@ -916,9 +955,11 @@ export interface FileRouteTypes {
     | '/demo/rbac/lawyer'
     | '/demo/rbac/lender'
     | '/admin/$entitytype/$recordid'
+    | '/admin/borrowers/$recordid'
     | '/admin/deals/$recordid'
     | '/admin/listings/$recordid'
     | '/admin/mortgages/$recordid'
+    | '/admin/obligations/$recordid'
     | '/admin/properties/$recordid'
     | '/demo/audit-traceability/access-log'
     | '/demo/audit-traceability/audit-trail'
@@ -964,9 +1005,11 @@ export interface FileRouteTypes {
     | '/sign-out'
     | '/sign-up'
     | '/unauthorized'
+    | '/admin/borrowers'
     | '/admin/deals'
     | '/admin/listings'
     | '/admin/mortgages'
+    | '/admin/obligations'
     | '/admin/properties'
     | '/admin/underwriting'
     | '/authenticated'
@@ -1003,9 +1046,11 @@ export interface FileRouteTypes {
     | '/demo/rbac/lawyer'
     | '/demo/rbac/lender'
     | '/admin/$entitytype/$recordid'
+    | '/admin/borrowers/$recordid'
     | '/admin/deals/$recordid'
     | '/admin/listings/$recordid'
     | '/admin/mortgages/$recordid'
+    | '/admin/obligations/$recordid'
     | '/admin/properties/$recordid'
     | '/demo/audit-traceability/access-log'
     | '/demo/audit-traceability/audit-trail'
@@ -1051,9 +1096,11 @@ export interface FileRouteTypes {
     | '/sign-out'
     | '/sign-up'
     | '/unauthorized'
+    | '/admin/borrowers'
     | '/admin/deals'
     | '/admin/listings'
     | '/admin/mortgages'
+    | '/admin/obligations'
     | '/admin/properties'
     | '/admin/underwriting'
     | '/demo/audit-traceability'
@@ -1096,9 +1143,11 @@ export interface FileRouteTypes {
     | '/demo/rbac/lawyer'
     | '/demo/rbac/lender'
     | '/admin/$entitytype/$recordid'
+    | '/admin/borrowers/$recordid'
     | '/admin/deals/$recordid'
     | '/admin/listings/$recordid'
     | '/admin/mortgages/$recordid'
+    | '/admin/obligations/$recordid'
     | '/admin/properties/$recordid'
     | '/demo/audit-traceability/access-log'
     | '/demo/audit-traceability/audit-trail'
@@ -1527,6 +1576,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminPropertiesRouteRouteImport
       parentRoute: typeof AdminRouteRoute
     }
+    '/admin/obligations': {
+      id: '/admin/obligations'
+      path: '/obligations'
+      fullPath: '/admin/obligations'
+      preLoaderRoute: typeof AdminObligationsRouteRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
     '/admin/mortgages': {
       id: '/admin/mortgages'
       path: '/mortgages'
@@ -1546,6 +1602,13 @@ declare module '@tanstack/react-router' {
       path: '/deals'
       fullPath: '/admin/deals'
       preLoaderRoute: typeof AdminDealsRouteRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/admin/borrowers': {
+      id: '/admin/borrowers'
+      path: '/borrowers'
+      fullPath: '/admin/borrowers'
+      preLoaderRoute: typeof AdminBorrowersRouteRouteImport
       parentRoute: typeof AdminRouteRoute
     }
     '/demo/rbac/': {
@@ -1737,6 +1800,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminPropertiesRecordidRouteImport
       parentRoute: typeof AdminPropertiesRouteRoute
     }
+    '/admin/obligations/$recordid': {
+      id: '/admin/obligations/$recordid'
+      path: '/$recordid'
+      fullPath: '/admin/obligations/$recordid'
+      preLoaderRoute: typeof AdminObligationsRecordidRouteImport
+      parentRoute: typeof AdminObligationsRouteRoute
+    }
     '/admin/mortgages/$recordid': {
       id: '/admin/mortgages/$recordid'
       path: '/$recordid'
@@ -1757,6 +1827,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/admin/deals/$recordid'
       preLoaderRoute: typeof AdminDealsRecordidRouteImport
       parentRoute: typeof AdminDealsRouteRoute
+    }
+    '/admin/borrowers/$recordid': {
+      id: '/admin/borrowers/$recordid'
+      path: '/$recordid'
+      fullPath: '/admin/borrowers/$recordid'
+      preLoaderRoute: typeof AdminBorrowersRecordidRouteImport
+      parentRoute: typeof AdminBorrowersRouteRoute
     }
     '/admin/$entitytype/$recordid': {
       id: '/admin/$entitytype/$recordid'
@@ -1824,6 +1901,17 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface AdminBorrowersRouteRouteChildren {
+  AdminBorrowersRecordidRoute: typeof AdminBorrowersRecordidRoute
+}
+
+const AdminBorrowersRouteRouteChildren: AdminBorrowersRouteRouteChildren = {
+  AdminBorrowersRecordidRoute: AdminBorrowersRecordidRoute,
+}
+
+const AdminBorrowersRouteRouteWithChildren =
+  AdminBorrowersRouteRoute._addFileChildren(AdminBorrowersRouteRouteChildren)
+
 interface AdminDealsRouteRouteChildren {
   AdminDealsRecordidRoute: typeof AdminDealsRecordidRoute
 }
@@ -1858,6 +1946,19 @@ const AdminMortgagesRouteRouteChildren: AdminMortgagesRouteRouteChildren = {
 const AdminMortgagesRouteRouteWithChildren =
   AdminMortgagesRouteRoute._addFileChildren(AdminMortgagesRouteRouteChildren)
 
+interface AdminObligationsRouteRouteChildren {
+  AdminObligationsRecordidRoute: typeof AdminObligationsRecordidRoute
+}
+
+const AdminObligationsRouteRouteChildren: AdminObligationsRouteRouteChildren = {
+  AdminObligationsRecordidRoute: AdminObligationsRecordidRoute,
+}
+
+const AdminObligationsRouteRouteWithChildren =
+  AdminObligationsRouteRoute._addFileChildren(
+    AdminObligationsRouteRouteChildren,
+  )
+
 interface AdminPropertiesRouteRouteChildren {
   AdminPropertiesRecordidRoute: typeof AdminPropertiesRecordidRoute
 }
@@ -1882,18 +1983,22 @@ const AdminEntitytypeRouteWithChildren = AdminEntitytypeRoute._addFileChildren(
 )
 
 interface AdminRouteRouteChildren {
+  AdminBorrowersRouteRoute: typeof AdminBorrowersRouteRouteWithChildren
   AdminDealsRouteRoute: typeof AdminDealsRouteRouteWithChildren
   AdminListingsRouteRoute: typeof AdminListingsRouteRouteWithChildren
   AdminMortgagesRouteRoute: typeof AdminMortgagesRouteRouteWithChildren
+  AdminObligationsRouteRoute: typeof AdminObligationsRouteRouteWithChildren
   AdminPropertiesRouteRoute: typeof AdminPropertiesRouteRouteWithChildren
   AdminUnderwritingRouteRoute: typeof AdminUnderwritingRouteRoute
   AdminEntitytypeRoute: typeof AdminEntitytypeRouteWithChildren
 }
 
 const AdminRouteRouteChildren: AdminRouteRouteChildren = {
+  AdminBorrowersRouteRoute: AdminBorrowersRouteRouteWithChildren,
   AdminDealsRouteRoute: AdminDealsRouteRouteWithChildren,
   AdminListingsRouteRoute: AdminListingsRouteRouteWithChildren,
   AdminMortgagesRouteRoute: AdminMortgagesRouteRouteWithChildren,
+  AdminObligationsRouteRoute: AdminObligationsRouteRouteWithChildren,
   AdminPropertiesRouteRoute: AdminPropertiesRouteRouteWithChildren,
   AdminUnderwritingRouteRoute: AdminUnderwritingRouteRoute,
   AdminEntitytypeRoute: AdminEntitytypeRouteWithChildren,
