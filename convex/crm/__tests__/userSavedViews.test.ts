@@ -257,6 +257,96 @@ describe("CRM user saved views", () => {
 	expect(schema.effectiveView.filters[0]?.value).toBe("new");
 	});
 
+	it("does not apply a default saved view to a different requested system view", async () => {
+		const fixture = await seedLeadFixture(t);
+
+		await seedRecord(t, fixture.objectDefId, {
+			company_name: "Acme",
+			status: "new",
+		});
+		await seedRecord(t, fixture.objectDefId, {
+			company_name: "Beta",
+			status: "contacted",
+		});
+
+		await asAdmin(t).mutation(CREATE_USER_SAVED_VIEW, {
+			name: "Default New Leads",
+			objectDefId: fixture.objectDefId,
+			sourceViewDefId: fixture.defaultViewId,
+			viewType: "table",
+			isDefault: true,
+			filters: [
+				{
+					fieldDefId: fixture.fieldDefs.status,
+					operator: "is",
+					value: "new",
+				},
+			],
+		});
+
+		const alternateTableViewId = await asAdmin(t).mutation(
+			api.crm.viewDefs.createView,
+			{
+				objectDefId: fixture.objectDefId,
+				name: "All Leads Table",
+				viewType: "table",
+			}
+		);
+
+		const result = (await asAdmin(t).query(
+			api.crm.viewQueries.queryViewRecords,
+			{
+				viewDefId: alternateTableViewId,
+				limit: 25,
+			}
+		)) as TableQueryResult;
+
+		expect(result.totalCount).toBe(2);
+
+		const schema = (await asAdmin(t).query(api.crm.viewQueries.getViewSchema, {
+			viewDefId: alternateTableViewId,
+		})) as ViewSchemaResult;
+		expect(schema.savedView).toBeNull();
+		expect(schema.view.activeSavedViewId).toBeUndefined();
+		expect(schema.view.name).toBe("All Leads Table");
+	});
+
+	it("rejects applying a saved view to a different requested system view", async () => {
+		const fixture = await seedLeadFixture(t);
+
+		const savedViewId = await asAdmin(t).mutation(CREATE_USER_SAVED_VIEW, {
+			name: "Default New Leads",
+			objectDefId: fixture.objectDefId,
+			sourceViewDefId: fixture.defaultViewId,
+			viewType: "table",
+			filters: [
+				{
+					fieldDefId: fixture.fieldDefs.status,
+					operator: "is",
+					value: "new",
+				},
+			],
+		});
+
+		const alternateTableViewId = await asAdmin(t).mutation(
+			api.crm.viewDefs.createView,
+			{
+				objectDefId: fixture.objectDefId,
+				name: "All Leads Table",
+				viewType: "table",
+			}
+		);
+
+		await expect(
+			asAdmin(t).query(api.crm.viewQueries.queryViewRecords, {
+				viewDefId: alternateTableViewId,
+				userSavedViewId: savedViewId,
+			})
+		).rejects.toThrow(
+			"Saved view does not belong to the requested system view"
+		);
+	});
+
 	it("applies personal kanban overlays when an explicit saved view is requested", async () => {
 		const fixture = await seedLeadFixture(t);
 
