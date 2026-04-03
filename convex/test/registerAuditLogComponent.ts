@@ -66,6 +66,11 @@ const aggregateModules: ConvexModuleMap = {
 			await import(
 				"../../node_modules/@convex-dev/aggregate/dist/component/_generated/server.js"
 			),
+	"/node_modules/@convex-dev/aggregate/dist/component/arbitrary.helpers.js":
+		async () =>
+			await import(
+				"../../node_modules/@convex-dev/aggregate/dist/component/arbitrary.helpers.js"
+			),
 	"/node_modules/@convex-dev/aggregate/dist/component/btree.js": async () =>
 		await import(
 			"../../node_modules/@convex-dev/aggregate/dist/component/btree.js"
