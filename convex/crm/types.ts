@@ -1,5 +1,4 @@
 import type { Doc, Id } from "../_generated/dataModel";
-import type { FilterOperator, LogicalOperator } from "./filterConstants";
 
 export type ViewLayout = "table" | "kanban" | "calendar";
 export type NormalizedFieldKind =
@@ -67,11 +66,11 @@ export interface AggregatePreset {
 	label?: string;
 }
 
-export interface ViewFilterDefinition {
+export interface SavedViewFilterDefinition {
 	fieldDefId: Id<"fieldDefs">;
-	logicalOperator?: LogicalOperator;
-	operator: FilterOperator;
-	value: unknown;
+	logicalOperator?: "and" | "or";
+	operator: RecordFilter["operator"];
+	value?: string;
 }
 
 export interface EntityViewComputedFieldContract {
@@ -117,17 +116,24 @@ export interface UnifiedRecord {
 /** A single field-level filter condition. */
 export interface RecordFilter {
 	fieldDefId: Id<"fieldDefs">;
+	logicalOperator?: "and" | "or";
 	operator:
+		| "after"
+		| "before"
+		| "between"
+		| "equals"
 		| "eq"
 		| "gt"
-		| "lt"
 		| "gte"
+		| "is"
+		| "is_any_of"
+		| "is_false"
+		| "is_not"
+		| "is_true"
+		| "lt"
 		| "lte"
 		| "contains"
-		| "starts_with"
-		| "is_any_of"
-		| "is_true"
-		| "is_false";
+		| "starts_with";
 	value: unknown;
 }
 
@@ -172,7 +178,7 @@ export interface SystemViewDefinition {
 		table?: string;
 	};
 	fieldOrder: Id<"fieldDefs">[];
-	filters: ViewFilterDefinition[];
+	filters: RecordFilter[];
 	groupByFieldId?: Id<"fieldDefs">;
 	isDefault: boolean;
 	layout: ViewLayout;
@@ -186,14 +192,31 @@ export interface SystemViewDefinition {
 export interface UserSavedViewDefinition {
 	aggregatePresets: AggregatePreset[];
 	fieldOrder: Id<"fieldDefs">[];
-	filters: ViewFilterDefinition[];
+	filters: SavedViewFilterDefinition[];
 	groupByFieldId?: Id<"fieldDefs">;
 	isDefault: boolean;
-	layout: ViewLayout;
 	name: string;
 	objectDefId: Id<"objectDefs">;
 	ownerAuthId: string;
 	sourceViewDefId?: Id<"viewDefs">;
+	userSavedViewId: Id<"userSavedViews">;
+	viewType: ViewLayout;
+	visibleFieldIds: Id<"fieldDefs">[];
+}
+
+export interface EffectiveViewDefinition {
+	activeSavedViewId?: Id<"userSavedViews">;
+	aggregatePresets: AggregatePreset[];
+	boundFieldId?: Id<"fieldDefs">;
+	disabledLayoutMessages?: SystemViewDefinition["disabledLayoutMessages"];
+	fieldOrder: Id<"fieldDefs">[];
+	filters: RecordFilter[];
+	groupByFieldId?: Id<"fieldDefs">;
+	isDefault: boolean;
+	name: string;
+	objectDefId: Id<"objectDefs">;
+	sourceViewDefId: Id<"viewDefs">;
+	viewType: ViewLayout;
 	visibleFieldIds: Id<"fieldDefs">[];
 }
 

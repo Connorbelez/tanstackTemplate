@@ -281,13 +281,13 @@ describe("View Engine", () => {
 						fixture.fieldDefs.deal_value,
 						fixture.fieldDefs.company_name,
 					],
-					filtersJson: JSON.stringify([
+					filters: [
 						{
 							fieldDefId: fixture.fieldDefs.status,
 							operator: "eq",
 							value: "qualified",
 						},
-					]),
+					],
 					groupByFieldId: undefined,
 					aggregatePresets: [
 						{

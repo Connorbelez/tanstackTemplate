@@ -178,15 +178,21 @@ export function matchesFilter(
 	filterValue: unknown
 ): boolean {
 	switch (operator) {
+		case "equals":
+		case "is":
 		case "eq":
 			return fieldValue === filterValue;
+		case "is_not":
+			return fieldValue !== filterValue;
 		case "gt":
+		case "after":
 			return (
 				typeof fieldValue === "number" &&
 				typeof filterValue === "number" &&
 				fieldValue > filterValue
 			);
 		case "lt":
+		case "before":
 			return (
 				typeof fieldValue === "number" &&
 				typeof filterValue === "number" &&
@@ -204,6 +210,22 @@ export function matchesFilter(
 				typeof filterValue === "number" &&
 				fieldValue <= filterValue
 			);
+		case "between": {
+			if (
+				typeof fieldValue !== "number" ||
+				!Array.isArray(filterValue) ||
+				filterValue.length !== 2
+			) {
+				return false;
+			}
+			const [start, end] = filterValue;
+			return (
+				typeof start === "number" &&
+				typeof end === "number" &&
+				fieldValue >= start &&
+				fieldValue <= end
+			);
+		}
 		case "contains":
 			return (
 				typeof fieldValue === "string" &&
