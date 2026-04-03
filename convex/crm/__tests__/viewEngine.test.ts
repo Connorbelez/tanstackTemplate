@@ -165,6 +165,7 @@ describe("View Engine", () => {
 			expect(p1.rows).toHaveLength(2);
 			expect(p1.totalCount).toBe(5);
 			expect(p1.cursor).not.toBeNull();
+			expect(p1.cursor?.startsWith("native:")).toBe(false);
 
 			// Request second page
 			const page2 = await asAdmin(t).query(
