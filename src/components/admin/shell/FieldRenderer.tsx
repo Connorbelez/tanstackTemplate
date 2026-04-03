@@ -1,8 +1,8 @@
 "use client";
 
-import type { Doc } from "../../../../convex/_generated/dataModel";
 import { Badge } from "#/components/ui/badge";
 import { cn } from "#/lib/utils";
+import type { Doc } from "../../../../convex/_generated/dataModel";
 
 type FieldType = Doc<"fieldDefs">["fieldType"];
 
@@ -29,6 +29,14 @@ export function FieldRenderer({
 	);
 }
 
+function getArrayItemKey(item: unknown, seenKeys: Map<string, number>): string {
+	const baseKey =
+		typeof item === "string" ? item : (JSON.stringify(item) ?? String(item));
+	const nextCount = (seenKeys.get(baseKey) ?? 0) + 1;
+	seenKeys.set(baseKey, nextCount);
+	return `${baseKey}-${nextCount}`;
+}
+
 function renderFieldValue(value: unknown, fieldType?: FieldType) {
 	if (value === null || value === undefined || value === "") {
 		return <p className="text-muted-foreground text-sm">No value</p>;
@@ -39,10 +47,11 @@ function renderFieldValue(value: unknown, fieldType?: FieldType) {
 			return <p className="text-muted-foreground text-sm">No values</p>;
 		}
 
+		const seenKeys = new Map<string, number>();
 		return (
 			<div className="flex flex-wrap gap-2">
-				{value.map((item, index) => (
-					<Badge key={`${String(item)}-${index}`} variant="secondary">
+				{value.map((item) => (
+					<Badge key={getArrayItemKey(item, seenKeys)} variant="secondary">
 						{formatScalarValue(item, fieldType)}
 					</Badge>
 				))}
@@ -51,7 +60,11 @@ function renderFieldValue(value: unknown, fieldType?: FieldType) {
 	}
 
 	if (fieldType === "boolean" || typeof value === "boolean") {
-		return <Badge variant={value === true ? "default" : "secondary"}>{value === true ? "Yes" : "No"}</Badge>;
+		return (
+			<Badge variant={value === true ? "default" : "secondary"}>
+				{value === true ? "Yes" : "No"}
+			</Badge>
+		);
 	}
 
 	if (typeof value === "object") {

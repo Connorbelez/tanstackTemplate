@@ -197,6 +197,16 @@ const ADMIN_ENTITIES_BY_TABLE_NAME: ReadonlyMap<string, AdminEntity> = new Map(
 const ADMIN_ENTITIES_BY_ROUTE: ReadonlyMap<AdminEntityRoute, AdminEntity> =
 	new Map(ADMIN_ENTITIES.map((entity) => [entity.route, entity] as const));
 
+function normalizeCandidateStrings(
+	values: readonly (string | undefined)[]
+): string[] {
+	return values.flatMap((value) =>
+		typeof value === "string" && value.trim().length > 0
+			? [value.trim().toLowerCase()]
+			: []
+	);
+}
+
 function sortNavigationItems(
 	left: AdminNavigationItem,
 	right: AdminNavigationItem
@@ -237,25 +247,23 @@ export function getAdminEntityForObjectDef(objectDef: {
 		objectDef.name,
 		objectDef.pluralLabel,
 		objectDef.singularLabel,
-	]
-		.filter((value): value is string => Boolean(value))
-		.map((value) => value.trim().toLowerCase());
+	];
+	const normalizedCandidateValues =
+		normalizeCandidateStrings(normalizedCandidates);
 
-	if (normalizedCandidates.length === 0) {
+	if (normalizedCandidateValues.length === 0) {
 		return undefined;
 	}
 
 	return ADMIN_ENTITIES.find((entity) => {
-		const entityCandidates = [
+		const entityCandidates = normalizeCandidateStrings([
 			entity.entityType,
 			entity.pluralLabel,
 			entity.singularLabel,
 			entity.tableName,
-		]
-			.filter((value): value is string => Boolean(value))
-			.map((value) => value.trim().toLowerCase());
+		]);
 
-		return normalizedCandidates.some((candidate) =>
+		return normalizedCandidateValues.some((candidate) =>
 			entityCandidates.includes(candidate)
 		);
 	});

@@ -12,31 +12,38 @@ import {
 	PanelRightClose,
 } from "lucide-react";
 import { type ReactNode, useMemo } from "react";
-import type { Doc } from "../../../../convex/_generated/dataModel";
-import { api } from "../../../../convex/_generated/api";
 import { Badge } from "#/components/ui/badge";
 import { Button } from "#/components/ui/button";
-import {
-	Sheet,
-	SheetContent,
-	SheetHeader,
-} from "#/components/ui/sheet";
+import { Sheet, SheetContent, SheetHeader } from "#/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "#/components/ui/tabs";
+import { EMPTY_ADMIN_DETAIL_SEARCH } from "#/lib/admin-detail-search";
 import { cn } from "#/lib/utils";
+import { api } from "../../../../convex/_generated/api";
+import type { Doc } from "../../../../convex/_generated/dataModel";
+import type { UnifiedRecord } from "../../../../convex/crm/types";
 import { ActivityTimeline } from "./ActivityTimeline";
+import { EntityIcon } from "./entity-icon";
+import {
+	getAdminEntityByType,
+	getAdminEntityForObjectDef,
+} from "./entity-registry";
 import { FieldRenderer } from "./FieldRenderer";
 import { LinkedRecordsPanel } from "./LinkedRecordsPanel";
-import { EntityIcon } from "./entity-icon";
-import { getAdminEntityByType, getAdminEntityForObjectDef } from "./entity-registry";
 import {
-	useRecordSidebar,
 	type SidebarRecordRef,
+	useRecordSidebar,
 } from "./RecordSidebarProvider";
-import type { UnifiedRecord } from "../../../../convex/crm/types";
 
 type FieldDef = Doc<"fieldDefs">;
 type ObjectDef = Doc<"objectDefs">;
 type RecordDetailRecord = UnifiedRecord;
+const PLACEHOLDER_RECORD_ID_PATTERN = /^\d+$/;
+const FIELD_SKELETON_IDS = [
+	"field-skeleton-1",
+	"field-skeleton-2",
+	"field-skeleton-3",
+	"field-skeleton-4",
+] as const;
 
 export interface RecordSidebarEntityAdapter {
 	readonly getRecordStatus?: (args: {
@@ -129,12 +136,13 @@ export function AdminRecordDetailSurface({
 		[reference, objectDefs]
 	);
 	const entity = useMemo(
-		() =>
-			resolveAdminEntity(reference.entityType, objectDef ?? undefined),
+		() => resolveAdminEntity(reference.entityType, objectDef ?? undefined),
 		[objectDef, reference.entityType]
 	);
 	const resolvedEntityType = entity?.entityType ?? reference.entityType;
-	const adapter = resolvedEntityType ? adapters?.[resolvedEntityType] : undefined;
+	const adapter = resolvedEntityType
+		? adapters?.[resolvedEntityType]
+		: undefined;
 	const recordKind =
 		reference.recordKind ?? (objectDef?.isSystem ? "native" : "record");
 	const shouldLoadLiveRecord =
@@ -161,15 +169,15 @@ export function AdminRecordDetailSurface({
 			objectDef,
 			record,
 			recordId: reference.recordId,
-		}) ??
-		getRecordTitle(record, objectDef, entity, reference.recordId);
+		}) ?? getRecordTitle(record, objectDef, entity, reference.recordId);
 	const status =
 		adapter?.getRecordStatus?.({
 			entity,
 			objectDef,
 			record,
 		}) ?? getDefaultRecordStatus(recordKind, record);
-	const recordLabel = objectDef?.singularLabel ?? entity?.singularLabel ?? "Record";
+	const recordLabel =
+		objectDef?.singularLabel ?? entity?.singularLabel ?? "Record";
 	const iconName = entity?.iconName ?? objectDef?.icon;
 	const sharedTabArgs: RecordTabRenderArgs = {
 		entity,
@@ -205,14 +213,21 @@ export function AdminRecordDetailSurface({
 							<p className="flex flex-wrap items-center gap-2 text-muted-foreground text-xs">
 								<span>ID {reference.recordId}</span>
 								<span aria-hidden="true">•</span>
-								<span>{recordKind === "native" ? "Native adapter" : "CRM record"}</span>
+								<span>
+									{recordKind === "native" ? "Native adapter" : "CRM record"}
+								</span>
 							</p>
 						</div>
 					</div>
 
 					<div className="flex items-center gap-2">
 						{canGoBack && onBack ? (
-							<Button onClick={onBack} size="icon" type="button" variant="ghost">
+							<Button
+								onClick={onBack}
+								size="icon"
+								type="button"
+								variant="ghost"
+							>
 								<ChevronLeft className="h-4 w-4" />
 								<span className="sr-only">Back</span>
 							</Button>
@@ -225,6 +240,7 @@ export function AdminRecordDetailSurface({
 										entitytype: resolvedEntityType,
 										recordid: reference.recordId,
 									}}
+									search={EMPTY_ADMIN_DETAIL_SEARCH}
 									to="/admin/$entitytype/$recordid"
 									viewTransition
 								>
@@ -234,7 +250,12 @@ export function AdminRecordDetailSurface({
 							</Button>
 						) : null}
 						{variant === "sheet" && onClose ? (
-							<Button onClick={onClose} size="icon" type="button" variant="ghost">
+							<Button
+								onClick={onClose}
+								size="icon"
+								type="button"
+								variant="ghost"
+							>
 								<PanelRightClose className="h-4 w-4" />
 								<span className="sr-only">Close</span>
 							</Button>
@@ -251,10 +272,7 @@ export function AdminRecordDetailSurface({
 					variant === "page" && "rounded-xl border bg-card"
 				)}
 			>
-				<Tabs
-					className="min-h-0 flex-1"
-					defaultValue="details"
-				>
+				<Tabs className="min-h-0 flex-1" defaultValue="details">
 					<div className="border-b px-4 pt-4 sm:px-6">
 						<TabsList className="w-full justify-start" variant="line">
 							<TabsTrigger value="details">Details</TabsTrigger>
@@ -281,15 +299,14 @@ export function AdminRecordDetailSurface({
 								objectDefId={objectDef._id}
 								onNavigate={(recordId, linkedRecordKind, linkedObjectDefId) => {
 									push({
-										entityType:
-											objectDefs
-												? getAdminEntityForObjectDef(
-														objectDefs.find(
-															(candidate) =>
-																String(candidate._id) === linkedObjectDefId
-														) ?? {}
-													)?.entityType
-												: undefined,
+										entityType: objectDefs
+											? getAdminEntityForObjectDef(
+													objectDefs.find(
+														(candidate) =>
+															String(candidate._id) === linkedObjectDefId
+													) ?? {}
+												)?.entityType
+											: undefined,
 										objectDefId: linkedObjectDefId,
 										recordId,
 										recordKind: linkedRecordKind,
@@ -329,7 +346,10 @@ export function AdminRecordDetailSurface({
 
 					<TabsContent className="p-4 sm:p-6" value="history">
 						{record ? (
-							<ActivityTimeline recordId={record._id} recordKind={record._kind} />
+							<ActivityTimeline
+								recordId={record._id}
+								recordKind={record._kind}
+							/>
 						) : (
 							<UnavailableTab
 								description="History will populate once the selected record resolves to a live CRM or native entity."
@@ -403,10 +423,10 @@ function DetailsTab({
 	if (fieldDefs === undefined) {
 		return (
 			<div className="space-y-3">
-				{Array.from({ length: 4 }, (_, index) => (
+				{FIELD_SKELETON_IDS.map((skeletonId) => (
 					<div
 						className="h-24 animate-pulse rounded-lg border bg-muted/40"
-						key={`field-skeleton-${index + 1}`}
+						key={skeletonId}
 					/>
 				))}
 			</div>
@@ -508,26 +528,32 @@ function resolveObjectDef(
 	}
 
 	return objectDefs.find((objectDef) => {
-		const candidates = [
+		const candidates = normalizeCandidateStrings([
 			objectDef.name,
 			objectDef.nativeTable,
 			objectDef.singularLabel,
 			objectDef.pluralLabel,
-		]
-			.filter((value): value is string => Boolean(value))
-			.map((value) => value.trim().toLowerCase());
+		]);
 
-		const entityCandidates = [
+		const entityCandidates = normalizeCandidateStrings([
 			entity.entityType,
 			entity.tableName,
 			entity.singularLabel,
 			entity.pluralLabel,
-		]
-			.filter((value): value is string => Boolean(value))
-			.map((value) => value.trim().toLowerCase());
+		]);
 
 		return entityCandidates.some((candidate) => candidates.includes(candidate));
 	});
+}
+
+function normalizeCandidateStrings(
+	values: readonly (string | undefined)[]
+): string[] {
+	return values.flatMap((value) =>
+		typeof value === "string" && value.trim().length > 0
+			? [value.trim().toLowerCase()]
+			: []
+	);
 }
 
 function resolveAdminEntity(
@@ -577,7 +603,10 @@ function getDefaultRecordStatus(
 ) {
 	if (record) {
 		const statusCandidate = record.fields.status;
-		if (typeof statusCandidate === "string" && statusCandidate.trim().length > 0) {
+		if (
+			typeof statusCandidate === "string" &&
+			statusCandidate.trim().length > 0
+		) {
 			return statusCandidate;
 		}
 	}
@@ -586,7 +615,7 @@ function getDefaultRecordStatus(
 }
 
 function isPlaceholderRecordId(recordId: string) {
-	return /^\d+$/.test(recordId);
+	return PLACEHOLDER_RECORD_ID_PATTERN.test(recordId);
 }
 
 function formatTimestamp(timestamp: number) {
