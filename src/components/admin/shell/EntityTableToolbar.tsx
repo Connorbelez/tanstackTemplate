@@ -76,6 +76,8 @@ export function EntityTableToolbar<TData>({
 		return () => window.clearTimeout(timeoutId);
 	}, [onGlobalFilterChange, searchValue]);
 
+	const columnFilters = table.getState().columnFilters;
+
 	const activeFilters = useMemo(() => {
 		const filters: Array<{ id: string; label: string; value: string }> = [];
 
@@ -87,7 +89,7 @@ export function EntityTableToolbar<TData>({
 			});
 		}
 
-		for (const filter of table.getState().columnFilters) {
+		for (const filter of columnFilters) {
 			const column = table.getColumn(filter.id);
 			const value =
 				typeof filter.value === "string"
@@ -106,7 +108,7 @@ export function EntityTableToolbar<TData>({
 		}
 
 		return filters;
-	}, [globalFilter, table]);
+	}, [columnFilters, globalFilter, table]);
 
 	function clearFilter(filterId: string) {
 		if (filterId === "global") {
@@ -120,7 +122,12 @@ export function EntityTableToolbar<TData>({
 
 	const hideableColumns = table
 		.getAllLeafColumns()
-		.filter((column) => column.getCanHide() && column.id !== "select");
+		.filter(
+			(column) =>
+				column.getCanHide() &&
+				column.columnDef.meta?.isHideable !== false &&
+				column.id !== "select"
+		);
 
 	return (
 		<div className="space-y-3">

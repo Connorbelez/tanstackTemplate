@@ -6,7 +6,10 @@ This file and the accompanying `tasks.md` contain everything needed to implement
 ## Current Consumer Drift
 `src/routes/admin/listings/route.tsx`
 ```typescript
-import EntityTable, { columns } from "#/components/admin/shell/EntityTable.tsx";
+import type { ColumnDef } from "@tanstack/react-table";
+import EntityTable from "#/components/admin/shell/EntityTable.tsx";
+
+const columns: ColumnDef<ListingTableRow>[] = [/* route-local listing columns */];
 
 return (
   <EntityTable
@@ -19,7 +22,10 @@ return (
 
 `src/routes/admin/mortgages/route.tsx`
 ```typescript
-import EntityTable, { columns } from "#/components/admin/shell/EntityTable.tsx";
+import type { ColumnDef } from "@tanstack/react-table";
+import EntityTable from "#/components/admin/shell/EntityTable.tsx";
+
+const columns: ColumnDef<MortgageTableRow>[] = [/* route-local mortgage columns */];
 
 return (
   <>
@@ -35,7 +41,10 @@ return (
 
 `src/routes/admin/$entitytype.tsx`
 ```typescript
-import EntityTable, { columns } from "#/components/admin/shell/EntityTable.tsx";
+import type { ColumnDef } from "@tanstack/react-table";
+import EntityTable from "#/components/admin/shell/EntityTable.tsx";
+
+const columns: ColumnDef<DynamicEntityRow>[] = [/* route-local dynamic columns */];
 
 return (
   <>

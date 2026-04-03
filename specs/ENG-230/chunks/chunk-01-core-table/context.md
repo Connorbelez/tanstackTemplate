@@ -69,12 +69,12 @@ export interface EntityTableColumnMeta {
 
 ## Current Repo Drift
 ### Contradictions Found
-- **Current `EntityTable.tsx` is still scaffold code**.
-  - **Impact:** it exports fake `columns` for `{ id, name, amount }`, only uses `getCoreRowModel`, and does not satisfy the issue scope.
-  - **Recommendation:** remove the scaffold contract entirely and migrate routes to pass their own columns.
-- **Admin routes are still fake-data consumers**.
-  - **Impact:** the table cannot be validated against real entity rows yet without additional route work.
-  - **Recommendation:** keep the table generic and let downstream routes replace fake loaders incrementally.
+- **Pre-ENG-230 baseline: `EntityTable.tsx` started as scaffold code**.
+  - **Impact at baseline:** it exported fake `columns` for `{ id, name, amount }`, only used `getCoreRowModel`, and did not satisfy the issue scope.
+  - **Outcome in this branch:** the scaffold export was removed and routes now provide local column definitions.
+- **Admin routes were fake-data consumers at the start of the chunk**.
+  - **Impact at baseline:** the table could not be validated against real entity rows yet without additional route work.
+  - **Current state:** route consumers now own their column definitions, but several routes still use scaffold-friendly data sources while the CRM-backed view engine rollout continues.
 
 ### Confirmed Alignments
 - `src/routes/demo/table.tsx` already demonstrates TanStack sorting, fuzzy filtering, and pagination patterns worth lifting into the production table.
@@ -147,19 +147,14 @@ const table = useReactTable({
 
 `src/components/admin/shell/EntityTable.tsx`
 ```typescript
-export const columns: ColumnDef<{
-  id: number;
-  name: string;
-  amount: number;
-}>[] = [ ... ];
-
-export default function EntityTable<TData, TValue>({
+export default function EntityTable<TData>({
   columns,
   data,
   onRowClick,
-}: DataTableProps<TData, TValue>) {
+}: EntityTableProps<TData>) {
   const table = useReactTable({
     data,
+    columns,
     filterFns: {
       fuzzy: (row, columnId, value, addMeta) => {
         const itemRank = rankItem(row.getValue(columnId), value);
@@ -167,8 +162,10 @@ export default function EntityTable<TData, TValue>({
         return itemRank.passed;
       },
     },
-    columns,
     getCoreRowModel: getCoreRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+    getPaginationRowModel: getPaginationRowModel(),
   });
 }
 ```

@@ -223,7 +223,11 @@ export function DateCell({
 	format?: "absolute" | "both" | "relative";
 	value?: Date | number | string | null;
 }) {
-	if (!value) {
+	if (
+		value === undefined ||
+		value === null ||
+		(typeof value === "string" && value.trim().length === 0)
+	) {
 		return <span className="text-muted-foreground">{emptyText}</span>;
 	}
 
