@@ -115,6 +115,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "2.4.5",
+    "@fast-check/vitest": "^0.3.0",
     "@playwright/test": "^1.58.2",
     "@tailwindcss/typography": "^0.5.16",
     "@tanstack/devtools-vite": "latest",

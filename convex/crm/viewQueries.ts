@@ -755,7 +755,6 @@ export const getViewSchema = crmQuery
 				},
 			];
 		});
-
 		return {
 			adapterContract: state.adapterContract,
 			columns,

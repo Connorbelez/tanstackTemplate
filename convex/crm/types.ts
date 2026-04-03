@@ -74,6 +74,36 @@ export interface ViewFilterDefinition {
 	value: unknown;
 }
 
+export interface EntityViewComputedFieldContract {
+	description?: string;
+	expressionKey: string;
+	fieldName: string;
+	fieldType: Doc<"fieldDefs">["fieldType"];
+	isVisibleByDefault: boolean;
+	label: string;
+	rendererHint: FieldRendererHint;
+	sourceFieldNames: string[];
+}
+
+export interface EntityViewDetailContract {
+	mode: "dedicated" | "generated";
+	surfaceKey: string;
+}
+
+export interface EntityViewFieldOverrideContract {
+	fieldName: string;
+	hiddenInLayouts?: ViewLayout[];
+	isVisibleByDefault?: boolean;
+	label?: string;
+	preferredDisplayOrder?: number;
+}
+
+export interface EntityViewLayoutDefaultsContract {
+	calendarDateFieldName?: string;
+	kanbanFieldName?: string;
+	preferredVisibleFieldNames: string[];
+}
+
 /** Unified shape returned by all record queries — both EAV and native adapter. */
 export interface UnifiedRecord {
 	_id: string;
@@ -114,7 +144,8 @@ export interface NormalizedFieldDefinition {
 	description?: string;
 	displayOrder: number;
 	editability: EditabilityMetadata;
-	fieldDefId: Id<"fieldDefs">;
+	fieldDefId?: Id<"fieldDefs">;
+	fieldSource: "persisted" | "adapter_computed";
 	fieldType: Doc<"fieldDefs">["fieldType"];
 	isActive: boolean;
 	isRequired: boolean;
@@ -167,12 +198,17 @@ export interface UserSavedViewDefinition {
 }
 
 export interface EntityViewAdapterContract {
+	computedFields: EntityViewComputedFieldContract[];
+	detail: EntityViewDetailContract;
 	detailSurfaceKey?: string;
 	entityType: string;
+	fieldOverrides: EntityViewFieldOverrideContract[];
+	layoutDefaults: EntityViewLayoutDefaultsContract;
 	objectDefId?: Id<"objectDefs">;
 	statusFieldName?: string;
 	supportedLayouts: ViewLayout[];
 	titleFieldName?: string;
+	variant: "dedicated" | "fallback";
 }
 
 export interface EntityViewCell {
