@@ -11,7 +11,14 @@ import {
 } from "./recordQueries";
 import { readExistingValue, writeValue } from "./records";
 import { queryNativeRecords } from "./systemAdapters/queryAdapter";
-import type { RecordFilter, UnifiedRecord } from "./types";
+import type {
+	EntityViewAdapterContract,
+	NormalizedFieldDefinition,
+	RecordFilter,
+	SystemViewDefinition,
+	UnifiedRecord,
+	ViewLayout,
+} from "./types";
 import { KANBAN_NO_VALUE_SENTINEL } from "./viewDefs";
 
 // ── OQ-1: Multi-select kanban grouping ────────────────────────────────
@@ -61,13 +68,24 @@ interface KanbanViewResult {
 }
 
 interface ViewSchemaColumn extends ColumnDef {
+	aggregation: FieldDef["aggregation"];
+	editability: FieldDef["editability"];
 	hasSortCapability: boolean;
+	isVisibleByDefault: boolean;
+	layoutEligibility: FieldDef["layoutEligibility"];
+	normalizedFieldKind: FieldDef["normalizedFieldKind"];
+	options: FieldDef["options"];
+	relation: FieldDef["relation"];
+	rendererHint: FieldDef["rendererHint"];
 }
 
 interface ViewSchemaResult {
+	adapterContract: EntityViewAdapterContract;
 	columns: ViewSchemaColumn[];
+	fields: NormalizedFieldDefinition[];
 	needsRepair: boolean;
-	viewType: "table" | "kanban" | "calendar";
+	view: SystemViewDefinition;
+	viewType: ViewLayout;
 }
 
 type KanbanGroupDoc = Doc<"viewKanbanGroups">;
@@ -127,6 +145,139 @@ function toColumnDef(
 		width: viewField.width,
 		isVisible: viewField.isVisible,
 		displayOrder: viewField.displayOrder,
+	};
+}
+
+function toNormalizedFieldDefinition(
+	fieldDef: FieldDef
+): NormalizedFieldDefinition {
+	return {
+		fieldDefId: fieldDef._id,
+		objectDefId: fieldDef.objectDefId,
+		name: fieldDef.name,
+		label: fieldDef.label,
+		fieldType: fieldDef.fieldType,
+		normalizedFieldKind: fieldDef.normalizedFieldKind,
+		description: fieldDef.description,
+		isRequired: fieldDef.isRequired,
+		isUnique: fieldDef.isUnique,
+		isActive: fieldDef.isActive,
+		displayOrder: fieldDef.displayOrder,
+		defaultValue: fieldDef.defaultValue,
+		options: fieldDef.options,
+		rendererHint: fieldDef.rendererHint,
+		relation: fieldDef.relation,
+		computed: fieldDef.computed,
+		layoutEligibility: fieldDef.layoutEligibility,
+		aggregation: fieldDef.aggregation,
+		editability: fieldDef.editability,
+		nativeColumnPath: fieldDef.nativeColumnPath,
+		nativeReadOnly: fieldDef.nativeReadOnly,
+		isVisibleByDefault: fieldDef.isVisibleByDefault,
+	};
+}
+
+function deriveDisabledLayoutMessages(
+	fieldDefs: FieldDef[]
+): SystemViewDefinition["disabledLayoutMessages"] | undefined {
+	const messages: NonNullable<SystemViewDefinition["disabledLayoutMessages"]> =
+		{};
+
+	if (!fieldDefs.some((fieldDef) => fieldDef.layoutEligibility.table.enabled)) {
+		messages.table = "Table layout requires at least one active field.";
+	}
+
+	if (
+		!fieldDefs.some((fieldDef) => fieldDef.layoutEligibility.kanban.enabled)
+	) {
+		messages.kanban =
+			"Add a select or multi-select field to unlock kanban layouts.";
+	}
+
+	if (
+		!fieldDefs.some((fieldDef) => fieldDef.layoutEligibility.calendar.enabled)
+	) {
+		messages.calendar =
+			"Add a date or datetime field to unlock calendar layouts.";
+	}
+
+	return Object.keys(messages).length > 0 ? messages : undefined;
+}
+
+function buildAdapterContract(args: {
+	fieldDefs: FieldDef[];
+	objectDef: Doc<"objectDefs">;
+	viewDef: Doc<"viewDefs">;
+}): EntityViewAdapterContract {
+	const supportedLayouts = new Set<ViewLayout>(["table"]);
+	if (
+		args.fieldDefs.some((fieldDef) => fieldDef.layoutEligibility.kanban.enabled)
+	) {
+		supportedLayouts.add("kanban");
+	}
+	if (
+		args.fieldDefs.some(
+			(fieldDef) => fieldDef.layoutEligibility.calendar.enabled
+		)
+	) {
+		supportedLayouts.add("calendar");
+	}
+	supportedLayouts.add(args.viewDef.viewType);
+	const titleField = args.fieldDefs.find(
+		(fieldDef) => fieldDef.name === "name"
+	);
+	const statusField = args.fieldDefs.find(
+		(fieldDef) => fieldDef.name === "status"
+	);
+	return {
+		entityType: args.objectDef.name,
+		objectDefId: args.objectDef._id,
+		detailSurfaceKey: args.objectDef.name,
+		titleFieldName: titleField?.name,
+		statusFieldName: statusField?.name,
+		supportedLayouts: [...supportedLayouts],
+	};
+}
+
+function buildSystemViewDefinition(args: {
+	fieldDefsById: Map<string, FieldDef>;
+	objectDefId: Id<"objectDefs">;
+	viewDef: Doc<"viewDefs">;
+	viewFields: Doc<"viewFields">[];
+	viewFilters: Doc<"viewFilters">[];
+}): SystemViewDefinition {
+	const orderedFields = [...args.viewFields].sort(
+		(a, b) => a.displayOrder - b.displayOrder
+	);
+	const fieldOrder = orderedFields
+		.filter((viewField) =>
+			args.fieldDefsById.has(viewField.fieldDefId.toString())
+		)
+		.map((viewField) => viewField.fieldDefId);
+	const visibleFieldIds = orderedFields
+		.filter(
+			(viewField) =>
+				viewField.isVisible &&
+				args.fieldDefsById.has(viewField.fieldDefId.toString())
+		)
+		.map((viewField) => viewField.fieldDefId);
+
+	return {
+		viewDefId: args.viewDef._id,
+		objectDefId: args.objectDefId,
+		name: args.viewDef.name,
+		layout: args.viewDef.viewType,
+		boundFieldId: args.viewDef.boundFieldId,
+		fieldOrder,
+		visibleFieldIds,
+		filters: convertViewFiltersToRecordFilters(args.viewFilters),
+		groupByFieldId: args.viewDef.groupByFieldId,
+		aggregatePresets: args.viewDef.aggregatePresets ?? [],
+		disabledLayoutMessages:
+			args.viewDef.disabledLayoutMessages ??
+			deriveDisabledLayoutMessages([...args.fieldDefsById.values()]),
+		isDefault: args.viewDef.isDefault,
+		needsRepair: args.viewDef.needsRepair,
 	};
 }
 
@@ -501,10 +652,18 @@ export const getViewSchema = crmQuery
 		if (!viewDef || viewDef.orgId !== orgId) {
 			throw new ConvexError("View not found or access denied");
 		}
+		const objectDef = await ctx.db.get(viewDef.objectDefId);
+		if (!objectDef || objectDef.orgId !== orgId || !objectDef.isActive) {
+			throw new ConvexError("Object not found or access denied");
+		}
 
 		// 2. Load viewFields for this view
 		const viewFields = await ctx.db
 			.query("viewFields")
+			.withIndex("by_view", (q) => q.eq("viewDefId", args.viewDefId))
+			.collect();
+		const viewFilters = await ctx.db
+			.query("viewFilters")
 			.withIndex("by_view", (q) => q.eq("viewDefId", args.viewDefId))
 			.collect();
 
@@ -528,27 +687,48 @@ export const getViewSchema = crmQuery
 		// 5. Build columns array
 		const columns = viewFields
 			.flatMap((vf) => {
-				const column = toColumnDef(
-					vf,
-					fieldDefsById.get(vf.fieldDefId.toString())
-				);
-				if (!column) {
+				const fieldDef = fieldDefsById.get(vf.fieldDefId.toString());
+				const column = toColumnDef(vf, fieldDef);
+				if (!(column && fieldDef)) {
 					return [];
 				}
 
 				return [
 					{
 						...column,
+						normalizedFieldKind: fieldDef.normalizedFieldKind,
+						rendererHint: fieldDef.rendererHint,
+						relation: fieldDef.relation,
+						layoutEligibility: fieldDef.layoutEligibility,
+						aggregation: fieldDef.aggregation,
+						editability: fieldDef.editability,
+						options: fieldDef.options,
+						isVisibleByDefault: fieldDef.isVisibleByDefault,
 						hasSortCapability: sortableFieldIds.has(vf.fieldDefId.toString()),
 					},
 				];
 			})
 			.sort((a, b) => a.displayOrder - b.displayOrder);
+		const fields = activeFieldDefs.map(toNormalizedFieldDefinition);
+		const view = buildSystemViewDefinition({
+			viewDef,
+			objectDefId: viewDef.objectDefId,
+			viewFields,
+			viewFilters,
+			fieldDefsById,
+		});
 
 		return {
+			adapterContract: buildAdapterContract({
+				objectDef,
+				viewDef,
+				fieldDefs: activeFieldDefs,
+			}),
 			columns,
+			fields,
 			viewType: viewDef.viewType,
 			needsRepair: viewDef.needsRepair,
+			view,
 		};
 	})
 	.public();

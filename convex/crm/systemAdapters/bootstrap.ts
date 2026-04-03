@@ -4,7 +4,10 @@ import type { MutationCtx } from "../../_generated/server";
 import { internalMutation } from "../../_generated/server";
 import { auditLog } from "../../auditLog";
 import { crmAdminMutation } from "../../fluent";
-import { deriveCapabilities } from "../metadataCompiler";
+import {
+	deriveCapabilities,
+	deriveFieldContractMetadata,
+} from "../metadataCompiler";
 
 // ── T-001: SystemObjectConfig type ───────────────────────────────────
 
@@ -493,6 +496,10 @@ async function bootstrapForOrg(
 		// Create fields, capabilities, and viewFields
 		for (let i = 0; i < config.fields.length; i++) {
 			const field = config.fields[i];
+			const fieldContract = deriveFieldContractMetadata({
+				fieldType: field.fieldType,
+				nativeReadOnly: true,
+			});
 
 			const fieldDefId = await ctx.db.insert("fieldDefs", {
 				orgId,
@@ -500,10 +507,16 @@ async function bootstrapForOrg(
 				name: field.name,
 				label: field.label,
 				fieldType: field.fieldType,
+				normalizedFieldKind: fieldContract.normalizedFieldKind,
 				isRequired: false,
 				isUnique: false,
 				isActive: true,
 				displayOrder: i,
+				rendererHint: fieldContract.rendererHint,
+				layoutEligibility: fieldContract.layoutEligibility,
+				aggregation: fieldContract.aggregation,
+				editability: fieldContract.editability,
+				isVisibleByDefault: fieldContract.isVisibleByDefault,
 				nativeColumnPath: field.nativeColumnPath,
 				nativeReadOnly: true,
 				options: field.options,

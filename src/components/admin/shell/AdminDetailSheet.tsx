@@ -16,44 +16,56 @@ import {
 } from "@/components/ui/sheet";
 
 export interface AdminDetailSheetProps {
-	entityType: string;
+	entityType?: string;
 }
 
 export function AdminDetailSheet({ entityType }: AdminDetailSheetProps) {
-	const { detailOpen, recordId, close } = useAdminDetailSheet();
+	const {
+		detailOpen,
+		recordId,
+		close,
+		entityType: activeEntityType,
+	} = useAdminDetailSheet();
+	const resolvedEntityType = entityType ?? activeEntityType;
 	const detailSearch = {
 		detailOpen: false,
 		entityType: undefined,
 		recordId: undefined,
 	} as const;
+	let recordLink = (
+		<span className="cursor-not-allowed text-muted-foreground">
+			View record (select a row first)
+		</span>
+	);
 
-	const recordLink =
-		recordId && isDedicatedAdminEntityType(entityType) ? (
-			<Link
-				params={{
-					recordid: recordId,
-				}}
-				search={detailSearch}
-				to={getDedicatedAdminRecordRoute(entityType)}
-			>
-				View record
-			</Link>
-		) : recordId ? (
-			<Link
-				params={{
-					entitytype: entityType,
-					recordid: recordId,
-				}}
-				search={detailSearch}
-				to="/admin/$entitytype/$recordid"
-			>
-				View record
-			</Link>
-		) : (
-			<span className="cursor-not-allowed text-muted-foreground">
-				View record (select a row first)
-			</span>
-		);
+	if (recordId && resolvedEntityType) {
+		if (isDedicatedAdminEntityType(resolvedEntityType)) {
+			recordLink = (
+				<Link
+					params={{
+						recordid: recordId,
+					}}
+					search={detailSearch}
+					to={getDedicatedAdminRecordRoute(resolvedEntityType)}
+				>
+					View record
+				</Link>
+			);
+		} else {
+			recordLink = (
+				<Link
+					params={{
+						entitytype: resolvedEntityType,
+						recordid: recordId,
+					}}
+					search={detailSearch}
+					to="/admin/$entitytype/$recordid"
+				>
+					View record
+				</Link>
+			);
+		}
+	}
 
 	return (
 		<Sheet

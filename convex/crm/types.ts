@@ -1,4 +1,70 @@
-import type { Id } from "../_generated/dataModel";
+import type { Doc, Id } from "../_generated/dataModel";
+
+export type ViewLayout = "table" | "kanban" | "calendar";
+export type NormalizedFieldKind =
+	| "primitive"
+	| "single_select"
+	| "multi_select"
+	| "user"
+	| "relation"
+	| "computed";
+export type AggregateFn = "count" | "sum" | "avg" | "min" | "max";
+export type EditabilityMode = "editable" | "read_only" | "computed";
+export type FieldRendererHint =
+	| "text"
+	| "number"
+	| "currency"
+	| "percentage"
+	| "date"
+	| "datetime"
+	| "select"
+	| "multi_select"
+	| "boolean"
+	| "rich_text"
+	| "user_ref"
+	| "relation"
+	| "computed";
+
+export interface LayoutEligibilityRule {
+	enabled: boolean;
+	reason?: string;
+}
+
+export interface FieldLayoutEligibility {
+	calendar: LayoutEligibilityRule;
+	groupBy: LayoutEligibilityRule;
+	kanban: LayoutEligibilityRule;
+	table: LayoutEligibilityRule;
+}
+
+export interface AggregationEligibility {
+	enabled: boolean;
+	reason?: string;
+	supportedFunctions: AggregateFn[];
+}
+
+export interface RelationMetadata {
+	cardinality: Doc<"linkTypeDefs">["cardinality"];
+	relationName?: string;
+	targetFieldName?: string;
+	targetObjectDefId?: Id<"objectDefs">;
+}
+
+export interface ComputedFieldMetadata {
+	expressionKey?: string;
+	sourceFieldNames?: string[];
+}
+
+export interface EditabilityMetadata {
+	mode: EditabilityMode;
+	reason?: string;
+}
+
+export interface AggregatePreset {
+	fieldDefId: Id<"fieldDefs">;
+	fn: AggregateFn;
+	label?: string;
+}
 
 /** Unified shape returned by all record queries — both EAV and native adapter. */
 export interface UnifiedRecord {
@@ -31,6 +97,74 @@ export interface RecordFilter {
 export interface RecordSort {
 	direction: "asc" | "desc";
 	fieldDefId: Id<"fieldDefs">;
+}
+
+export interface NormalizedFieldDefinition {
+	aggregation: AggregationEligibility;
+	computed?: ComputedFieldMetadata;
+	defaultValue?: string;
+	description?: string;
+	displayOrder: number;
+	editability: EditabilityMetadata;
+	fieldDefId: Id<"fieldDefs">;
+	fieldType: Doc<"fieldDefs">["fieldType"];
+	isActive: boolean;
+	isRequired: boolean;
+	isUnique: boolean;
+	isVisibleByDefault: boolean;
+	label: string;
+	layoutEligibility: FieldLayoutEligibility;
+	name: string;
+	nativeColumnPath?: string;
+	nativeReadOnly: boolean;
+	normalizedFieldKind: NormalizedFieldKind;
+	objectDefId: Id<"objectDefs">;
+	options?: Doc<"fieldDefs">["options"];
+	relation?: RelationMetadata;
+	rendererHint: FieldRendererHint;
+}
+
+export interface SystemViewDefinition {
+	aggregatePresets: AggregatePreset[];
+	boundFieldId?: Id<"fieldDefs">;
+	disabledLayoutMessages?: {
+		calendar?: string;
+		kanban?: string;
+		table?: string;
+	};
+	fieldOrder: Id<"fieldDefs">[];
+	filters: RecordFilter[];
+	groupByFieldId?: Id<"fieldDefs">;
+	isDefault: boolean;
+	layout: ViewLayout;
+	name: string;
+	needsRepair: boolean;
+	objectDefId: Id<"objectDefs">;
+	viewDefId: Id<"viewDefs">;
+	visibleFieldIds: Id<"fieldDefs">[];
+}
+
+export interface UserSavedViewDefinition {
+	aggregatePresets: AggregatePreset[];
+	fieldOrder: Id<"fieldDefs">[];
+	filters: RecordFilter[];
+	groupByFieldId?: Id<"fieldDefs">;
+	isDefault: boolean;
+	layout: ViewLayout;
+	name: string;
+	objectDefId: Id<"objectDefs">;
+	ownerAuthId: string;
+	sourceViewDefId?: Id<"viewDefs">;
+	visibleFieldIds: Id<"fieldDefs">[];
+}
+
+export interface EntityViewAdapterContract {
+	detailSurfaceKey?: string;
+	entityType: string;
+	objectDefId?: Id<"objectDefs">;
+	statusFieldName?: string;
+	supportedLayouts: ViewLayout[];
+	titleFieldName?: string;
 }
 
 /** Result shape for paginated record queries. */

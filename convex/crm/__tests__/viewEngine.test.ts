@@ -756,7 +756,7 @@ describe("View Engine", () => {
 	// ── View schema ─────────────────────────────────────────────────
 
 	describe("View schema", () => {
-		it("getViewSchema returns columns with sort capability flags", async () => {
+		it("getViewSchema returns normalized field and view contracts", async () => {
 			const fixture = await seedLeadFixture(t);
 
 			const schema = await asAdmin(t).query(api.crm.viewQueries.getViewSchema, {
@@ -783,6 +783,49 @@ describe("View Engine", () => {
 				(c: { name: string }) => c.name === "company_name"
 			);
 			expect(textCol?.hasSortCapability).toBe(false);
+
+			const statusCol = schema.columns.find(
+				(c: { name: string }) => c.name === "status"
+			);
+			expect(statusCol).toMatchObject({
+				normalizedFieldKind: "single_select",
+				rendererHint: "select",
+				layoutEligibility: {
+					kanban: { enabled: true },
+					groupBy: { enabled: true },
+				},
+				editability: {
+					mode: "editable",
+				},
+				isVisibleByDefault: true,
+			});
+
+			const followupField = schema.fields.find(
+				(field: { name: string }) => field.name === "next_followup"
+			);
+			expect(followupField).toMatchObject({
+				rendererHint: "date",
+				layoutEligibility: {
+					calendar: { enabled: true },
+				},
+			});
+
+			expect(schema.view).toMatchObject({
+				viewDefId: fixture.defaultViewId,
+				layout: "table",
+				isDefault: true,
+				visibleFieldIds: schema.columns
+					.filter((column: { isVisible: boolean }) => column.isVisible)
+					.map((column: { fieldDefId: string }) => column.fieldDefId),
+			});
+			expect(schema.adapterContract).toMatchObject({
+				entityType: "lead",
+				objectDefId: fixture.objectDefId,
+			});
+			expect(schema.adapterContract.supportedLayouts).toEqual(
+				expect.arrayContaining(["table", "kanban", "calendar"])
+			);
+			expect(schema.view.disabledLayoutMessages).toBeUndefined();
 		});
 	});
 

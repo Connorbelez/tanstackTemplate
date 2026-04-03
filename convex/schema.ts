@@ -1,13 +1,22 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 import {
+	aggregatePresetValidator,
+	aggregationEligibilityValidator,
 	capabilityValidator,
 	cardinalityValidator,
+	computedFieldMetadataValidator,
+	editabilityMetadataValidator,
 	entityKindValidator,
+	fieldRendererHintValidator,
 	fieldTypeValidator,
 	filterOperatorValidator,
+	layoutEligibilityValidator,
 	logicalOperatorValidator,
+	normalizedFieldKindValidator,
+	relationMetadataValidator,
 	selectOptionValidator,
+	viewLayoutMessagesValidator,
 	viewTypeValidator,
 } from "./crm/validators";
 import {
@@ -1968,6 +1977,7 @@ export default defineSchema({
 		name: v.string(),
 		label: v.string(),
 		fieldType: fieldTypeValidator,
+		normalizedFieldKind: normalizedFieldKindValidator,
 		description: v.optional(v.string()),
 		isRequired: v.boolean(),
 		isUnique: v.boolean(),
@@ -1975,6 +1985,13 @@ export default defineSchema({
 		displayOrder: v.number(),
 		defaultValue: v.optional(v.string()),
 		options: v.optional(v.array(selectOptionValidator)),
+		rendererHint: fieldRendererHintValidator,
+		relation: v.optional(relationMetadataValidator),
+		computed: v.optional(computedFieldMetadataValidator),
+		layoutEligibility: layoutEligibilityValidator,
+		aggregation: aggregationEligibilityValidator,
+		editability: editabilityMetadataValidator,
+		isVisibleByDefault: v.boolean(),
 		nativeColumnPath: v.optional(v.string()),
 		nativeReadOnly: v.boolean(),
 		createdAt: v.number(),
@@ -2013,6 +2030,9 @@ export default defineSchema({
 		name: v.string(),
 		viewType: viewTypeValidator,
 		boundFieldId: v.optional(v.id("fieldDefs")),
+		groupByFieldId: v.optional(v.id("fieldDefs")),
+		aggregatePresets: v.optional(v.array(aggregatePresetValidator)),
+		disabledLayoutMessages: v.optional(viewLayoutMessagesValidator),
 		isDefault: v.boolean(),
 		needsRepair: v.boolean(),
 		createdAt: v.number(),
@@ -2051,6 +2071,26 @@ export default defineSchema({
 	})
 		.index("by_view", ["viewDefId"])
 		.index("by_field", ["fieldDefId"]),
+
+	userSavedViews: defineTable({
+		orgId: v.string(),
+		objectDefId: v.id("objectDefs"),
+		ownerAuthId: v.string(),
+		sourceViewDefId: v.optional(v.id("viewDefs")),
+		name: v.string(),
+		viewType: viewTypeValidator,
+		visibleFieldIds: v.array(v.id("fieldDefs")),
+		fieldOrder: v.array(v.id("fieldDefs")),
+		filtersJson: v.optional(v.string()),
+		groupByFieldId: v.optional(v.id("fieldDefs")),
+		aggregatePresets: v.optional(v.array(aggregatePresetValidator)),
+		isDefault: v.boolean(),
+		createdAt: v.number(),
+		updatedAt: v.number(),
+	})
+		.index("by_owner_object", ["ownerAuthId", "objectDefId"])
+		.index("by_org", ["orgId"])
+		.index("by_source_view", ["sourceViewDefId"]),
 
 	// ══════════════════════════════════════════════════════════
 	// EAV-CRM DATA PLANE
