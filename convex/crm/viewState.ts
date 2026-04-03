@@ -219,9 +219,28 @@ function buildFieldOverridesByName(
 	);
 }
 
+function resolveSchemaDisplayOrder(args: {
+	baseDisplayOrder: number;
+	fieldName: string;
+	orderHints: ReadonlyMap<string, number>;
+	override?: EntityViewAdapterContract["fieldOverrides"][number];
+}): number {
+	const hintedOrder = args.orderHints.get(args.fieldName);
+	if (hintedOrder !== undefined) {
+		return hintedOrder;
+	}
+
+	if (typeof args.override?.preferredDisplayOrder === "number") {
+		return args.override.preferredDisplayOrder;
+	}
+
+	return args.baseDisplayOrder;
+}
+
 function applyFieldOverridesToColumn(args: {
 	column: ViewColumnDefinition;
 	currentLayout: SystemViewDefinition["layout"];
+	orderHints: ReadonlyMap<string, number>;
 	override?: EntityViewAdapterContract["fieldOverrides"][number];
 }): ViewColumnDefinition {
 	const hiddenInCurrentLayout =
@@ -229,6 +248,12 @@ function applyFieldOverridesToColumn(args: {
 
 	return {
 		...args.column,
+		displayOrder: resolveSchemaDisplayOrder({
+			baseDisplayOrder: args.column.displayOrder,
+			fieldName: args.column.name,
+			orderHints: args.orderHints,
+			override: args.override,
+		}),
 		isVisible: hiddenInCurrentLayout ? false : args.column.isVisible,
 		label: args.override?.label ?? args.column.label,
 	};
@@ -237,6 +262,7 @@ function applyFieldOverridesToColumn(args: {
 function applyFieldOverridesToDefinition(args: {
 	currentLayout: SystemViewDefinition["layout"];
 	field: NormalizedFieldDefinition;
+	orderHints: ReadonlyMap<string, number>;
 	override?: EntityViewAdapterContract["fieldOverrides"][number];
 }): NormalizedFieldDefinition {
 	const hiddenInCurrentLayout =
@@ -244,7 +270,12 @@ function applyFieldOverridesToDefinition(args: {
 
 	return {
 		...args.field,
-		displayOrder: args.field.displayOrder,
+		displayOrder: resolveSchemaDisplayOrder({
+			baseDisplayOrder: args.field.displayOrder,
+			fieldName: args.field.name,
+			orderHints: args.orderHints,
+			override: args.override,
+		}),
 		isVisibleByDefault: hiddenInCurrentLayout
 			? false
 			: (args.override?.isVisibleByDefault ?? args.field.isVisibleByDefault),
@@ -305,46 +336,10 @@ function toComputedNormalizedFieldDefinition(args: {
 	};
 }
 
-function compareSchemaOrderedEntries(args: {
+function compareSchemaItemsByDisplayOrder(args: {
 	left: { displayOrder: number; name: string };
 	right: { displayOrder: number; name: string };
-	orderHints: ReadonlyMap<string, number>;
-	overrideByName: ReadonlyMap<
-		string,
-		EntityViewAdapterContract["fieldOverrides"][number]
-	>;
 }): number {
-	const leftHint = args.orderHints.get(args.left.name);
-	const rightHint = args.orderHints.get(args.right.name);
-	const leftOverride = args.overrideByName.get(args.left.name);
-	const rightOverride = args.overrideByName.get(args.right.name);
-
-	if (leftHint !== undefined || rightHint !== undefined) {
-		if (leftHint === undefined) {
-			return 1;
-		}
-		if (rightHint === undefined) {
-			return -1;
-		}
-		if (leftHint !== rightHint) {
-			return leftHint - rightHint;
-		}
-	}
-
-	const leftOverrideOrder = leftOverride?.preferredDisplayOrder;
-	const rightOverrideOrder = rightOverride?.preferredDisplayOrder;
-	if (leftOverrideOrder !== undefined || rightOverrideOrder !== undefined) {
-		if (leftOverrideOrder === undefined) {
-			return 1;
-		}
-		if (rightOverrideOrder === undefined) {
-			return -1;
-		}
-		if (leftOverrideOrder !== rightOverrideOrder) {
-			return leftOverrideOrder - rightOverrideOrder;
-		}
-	}
-
 	if (args.left.displayOrder !== args.right.displayOrder) {
 		return args.left.displayOrder - args.right.displayOrder;
 	}
@@ -525,38 +520,30 @@ function buildEffectiveColumns(args: {
 		viewIsDefault: args.viewIsDefault,
 	});
 
-	return orderedFieldIds
-		.flatMap((fieldId, index) => {
-			const fieldDef = args.fieldDefsById.get(fieldId.toString());
-			if (!fieldDef) {
-				return [];
-			}
+	return orderedFieldIds.flatMap((fieldId, index) => {
+		const fieldDef = args.fieldDefsById.get(fieldId.toString());
+		if (!fieldDef) {
+			return [];
+		}
 
-			const baseColumn = baseColumnsById.get(fieldId.toString());
-			return [
-				applyFieldOverridesToColumn({
-					column: {
-						fieldDefId: fieldDef._id,
-						name: fieldDef.name,
-						label: fieldDef.label,
-						fieldType: fieldDef.fieldType,
-						width: baseColumn?.width,
-						isVisible: visibleFieldIds.has(fieldId.toString()),
-						displayOrder: index,
-					},
-					currentLayout: args.effectiveView.layout,
-					override: fieldOverridesByName.get(fieldDef.name),
-				}),
-			];
-		})
-		.sort((left, right) =>
-			compareSchemaOrderedEntries({
-				left,
-				right,
+		const baseColumn = baseColumnsById.get(fieldId.toString());
+		return [
+			applyFieldOverridesToColumn({
+				column: {
+					fieldDefId: fieldDef._id,
+					name: fieldDef.name,
+					label: fieldDef.label,
+					fieldType: fieldDef.fieldType,
+					width: baseColumn?.width,
+					isVisible: visibleFieldIds.has(fieldId.toString()),
+					displayOrder: index,
+				},
+				currentLayout: args.effectiveView.layout,
 				orderHints: schemaOrderHints,
-				overrideByName: fieldOverridesByName,
-			})
-		);
+				override: fieldOverridesByName.get(fieldDef.name),
+			}),
+		];
+	}).sort((left, right) => compareSchemaItemsByDisplayOrder({ left, right }));
 }
 
 export function toUserSavedViewDefinition(
@@ -928,13 +915,16 @@ export async function resolveViewState(
 		applyFieldOverridesToDefinition({
 			field: toNormalizedFieldDefinition(fieldDef),
 			currentLayout: view.layout,
+			orderHints: schemaOrderHints,
 			override: fieldOverridesByName.get(fieldDef.name),
 		})
 	);
 	const computedFields = adapterContract.computedFields
 		.filter(
 			(computedField) =>
-				!persistedFields.some((field) => field.name === computedField.fieldName)
+				!persistedFields.some(
+					(field) => field.name === computedField.fieldName
+				)
 		)
 		.map((computedField, index) =>
 			toComputedNormalizedFieldDefinition({
@@ -944,12 +934,7 @@ export async function resolveViewState(
 			})
 		);
 	const fields = [...persistedFields, ...computedFields].sort((left, right) =>
-		compareSchemaOrderedEntries({
-			left,
-			right,
-			orderHints: schemaOrderHints,
-			overrideByName: fieldOverridesByName,
-		})
+		compareSchemaItemsByDisplayOrder({ left, right })
 	);
 
 	return {

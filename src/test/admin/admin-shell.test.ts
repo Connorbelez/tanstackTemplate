@@ -118,6 +118,85 @@ const EXTERNAL_ADMIN_CONTEXT = {
 	userId: "user_external_admin",
 };
 
+function buildFieldDef(args: {
+	displayOrder: number;
+	fieldType?: Doc<"fieldDefs">["fieldType"];
+	label: string;
+	name: string;
+}): Doc<"fieldDefs"> {
+	return {
+		_id: `field_${args.name}` as Id<"fieldDefs">,
+		_creationTime: 0,
+		aggregation: {
+			enabled: false,
+			reason: "Test fixture",
+			supportedFunctions: [],
+		},
+		computed: undefined,
+		createdAt: 0,
+		defaultValue: undefined,
+		description: undefined,
+		displayOrder: args.displayOrder,
+		editability: { mode: "editable" },
+		fieldType: args.fieldType ?? "text",
+		isActive: true,
+		isRequired: false,
+		isUnique: false,
+		isVisibleByDefault: true,
+		label: args.label,
+		layoutEligibility: {
+			calendar: { enabled: false, reason: "Test fixture" },
+			groupBy: { enabled: false, reason: "Test fixture" },
+			kanban: { enabled: false, reason: "Test fixture" },
+			table: { enabled: true },
+		},
+		name: args.name,
+		nativeColumnPath: undefined,
+		nativeReadOnly: false,
+		normalizedFieldKind: "primitive",
+		objectDefId: "object_borrower" as Id<"objectDefs">,
+		options: undefined,
+		orgId: "org_test",
+		relation: undefined,
+		rendererHint: "text",
+		updatedAt: 0,
+	};
+}
+
+function buildBorrowerObjectDef(): Doc<"objectDefs"> {
+	return {
+		_id: "object_borrower" as Id<"objectDefs">,
+		_creationTime: 0,
+		createdAt: 0,
+		createdBy: "user_test",
+		description: "Test borrower object",
+		icon: "user",
+		isActive: true,
+		isSystem: true,
+		name: "borrower",
+		nativeTable: "borrowers",
+		orgId: "org_test",
+		pluralLabel: "Borrowers",
+		singularLabel: "Borrower",
+		updatedAt: 0,
+	};
+}
+
+function buildBorrowerRecord(): UnifiedRecord {
+	return {
+		_id: "borrower_1",
+		_kind: "native",
+		createdAt: 0,
+		fields: {
+			idvStatus: "verified",
+			notes: "Follow up tomorrow",
+			status: "active",
+		},
+		objectDefId: "object_borrower" as Id<"objectDefs">,
+		updatedAt: 0,
+	};
+}
+
 describe("admin shell helpers", () => {
 	it("matches dashboard routes exactly instead of every admin page", () => {
 		expect(isAdminRouteActive("/admin", "/admin")).toBe(true);
