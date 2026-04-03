@@ -799,6 +799,9 @@ export default defineSchema({
 		),
 		ruleId: v.optional(v.id("collectionRules")),
 		rescheduledFromId: v.optional(v.id("collectionPlanEntries")),
+		executedAt: v.optional(v.number()),
+		executionIdempotencyKey: v.optional(v.string()),
+		collectionAttemptId: v.optional(v.id("collectionAttempts")),
 		createdAt: v.number(),
 	})
 		.index("by_scheduled_date", ["scheduledDate", "status"])
@@ -826,6 +829,22 @@ export default defineSchema({
 		planEntryId: v.id("collectionPlanEntries"),
 		method: v.string(),
 		amount: v.number(), // cents
+		triggerSource: v.optional(
+			v.union(
+				v.literal("system_scheduler"),
+				v.literal("admin_manual"),
+				v.literal("workflow_replay"),
+				v.literal("migration_backfill")
+			)
+		),
+		executionRequestedAt: v.optional(v.number()),
+		executionIdempotencyKey: v.optional(v.string()),
+		requestedByActorType: v.optional(
+			v.union(v.literal("system"), v.literal("admin"), v.literal("workflow"))
+		),
+		requestedByActorId: v.optional(v.string()),
+		executionReason: v.optional(v.string()),
+		transferRequestId: v.optional(v.id("transferRequests")),
 		providerRef: v.optional(v.string()),
 		providerStatus: v.optional(v.string()),
 		providerData: v.optional(v.any()),

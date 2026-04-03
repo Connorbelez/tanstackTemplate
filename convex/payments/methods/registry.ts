@@ -1,5 +1,11 @@
 /**
- * Payment method registry — two-tier API for obtaining PaymentMethod instances.
+ * Payment method registry — legacy compatibility lookup for `PaymentMethod`.
+ *
+ * Prefer the transfer-domain provider registry for new inbound work:
+ * `convex/payments/transfers/providers/registry.ts`
+ *
+ * This registry remains in place so older collection flows can keep running
+ * while the repo converges on `TransferProvider` as the canonical contract.
  *
  * Simple tier:
  *   `getPaymentMethod("manual")` — returns ManualPaymentMethod with a no-op

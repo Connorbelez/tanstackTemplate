@@ -65,6 +65,14 @@ The Cash Ledger sits beneath a three-layer payment system:
 └─────────────────────────────────────────────────────────────┘
 ```
 
+### Contract Alignment Notes
+
+- `Collection Attempt` remains the business execution record for borrower collection activity.
+- `TransferProvider` is the canonical provider abstraction for new inbound provider work.
+- Legacy `PaymentMethod` support is transitional compatibility and should not be treated as a peer abstraction for new integrations.
+- The canonical production path is `Collection Plan -> Collection Attempt -> transfer/provider settlement -> obligation application -> cash posting`.
+- Mortgage delinquency and cure remain obligation-driven only; Collection Plan strategy and transfer execution stay adjacent but separate.
+
 ### Core Design Principles
 
 - **Append-only**: No journal entry is ever mutated or deleted. Corrections are new entries with `causedBy` linkage.

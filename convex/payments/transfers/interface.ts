@@ -1,10 +1,16 @@
 /**
- * TransferProvider strategy interface — defines the contract for all payment
- * provider integrations in the transfer domain.
+ * TransferProvider strategy interface — canonical provider contract for the
+ * transfer domain and all new inbound provider work.
+ *
+ * Contract guidance:
+ * - Collection Attempts remain the business execution record.
+ * - Transfer execution is delegated through this interface and related
+ *   transfer lifecycle infrastructure.
+ * - Legacy `PaymentMethod` support remains transitional compatibility only.
  *
  * Phase 1: only ManualTransferProvider is implemented.
- * Phase 2+: real PAD, EFT, wire, and Plaid providers will be added with
- * zero changes to business logic that depends on this interface.
+ * Phase 2+: real PAD, EFT, wire, and other providers are added without
+ * changing business logic that depends on this interface.
  */
 
 import type { Id } from "../../_generated/dataModel";
@@ -81,7 +87,7 @@ export interface StatusResult {
 // Strategy interface
 // ---------------------------------------------------------------------------
 
-/** Strategy interface for all payment providers */
+/** Canonical strategy interface for transfer-domain providers */
 export interface TransferProvider {
 	cancel(providerRef: string): Promise<CancelResult>;
 	confirm(providerRef: string): Promise<ConfirmResult>;

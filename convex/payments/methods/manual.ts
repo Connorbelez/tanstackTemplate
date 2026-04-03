@@ -1,8 +1,12 @@
 /**
- * ManualPaymentMethod — immediate confirmation, no external API.
+ * ManualPaymentMethod — legacy manual inbound compatibility path.
  *
- * Used for manually-recorded payments (e.g. cash, cheque, bank draft)
- * where the operator confirms receipt at the time of entry.
+ * Used for older manually-recorded borrower collections (e.g. cash, cheque,
+ * bank draft) where the operator confirms receipt at the time of entry.
+ *
+ * New inbound manual work should prefer the transfer-domain
+ * `ManualTransferProvider` unless a compatibility-only code path requires this
+ * interface.
  */
 
 import type {

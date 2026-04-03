@@ -4,8 +4,9 @@
  * Used for manually-recorded transfers (both inbound and outbound) where the
  * operator confirms settlement at the time of entry.
  *
- * Mirrors the existing ManualPaymentMethod pattern but uses the
- * TransferProvider interface for the transfer domain.
+ * This is the canonical manual provider implementation for the transfer
+ * domain. It mirrors the existing ManualPaymentMethod pattern while keeping
+ * new work on the `TransferProvider` boundary.
  */
 
 import type {

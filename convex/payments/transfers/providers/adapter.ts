@@ -1,9 +1,10 @@
 /**
- * PaymentMethodAdapter — bridges existing PaymentMethod implementations
- * to the TransferProvider interface.
+ * PaymentMethodAdapter — temporary bridge from legacy `PaymentMethod`
+ * implementations to the canonical `TransferProvider` contract.
  *
- * Temporary adapter for Phase M2a migration. Once all consumers are migrated
- * to TransferProvider directly, this adapter can be removed.
+ * This adapter exists to preserve compatibility during migration. New inbound
+ * provider work should target `TransferProvider` directly rather than adding
+ * fresh `PaymentMethod` implementations.
  */
 
 import type { InitiateParams, PaymentMethod } from "../../methods/interface";

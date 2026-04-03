@@ -195,6 +195,9 @@ import type * as payments_cashLedger_types from "../payments/cashLedger/types.js
 import type * as payments_cashLedger_validators from "../payments/cashLedger/validators.js";
 import type * as payments_cashLedger_waiveObligationBalanceHandler from "../payments/cashLedger/waiveObligationBalanceHandler.js";
 import type * as payments_collectionPlan_engine from "../payments/collectionPlan/engine.js";
+import type * as payments_collectionPlan_execution from "../payments/collectionPlan/execution.js";
+import type * as payments_collectionPlan_executionContract from "../payments/collectionPlan/executionContract.js";
+import type * as payments_collectionPlan_executionGuards from "../payments/collectionPlan/executionGuards.js";
 import type * as payments_collectionPlan_mutations from "../payments/collectionPlan/mutations.js";
 import type * as payments_collectionPlan_queries from "../payments/collectionPlan/queries.js";
 import type * as payments_collectionPlan_rules_lateFeeRule from "../payments/collectionPlan/rules/lateFeeRule.js";
@@ -457,6 +460,9 @@ declare const fullApi: ApiFromModules<{
   "payments/cashLedger/validators": typeof payments_cashLedger_validators;
   "payments/cashLedger/waiveObligationBalanceHandler": typeof payments_cashLedger_waiveObligationBalanceHandler;
   "payments/collectionPlan/engine": typeof payments_collectionPlan_engine;
+  "payments/collectionPlan/execution": typeof payments_collectionPlan_execution;
+  "payments/collectionPlan/executionContract": typeof payments_collectionPlan_executionContract;
+  "payments/collectionPlan/executionGuards": typeof payments_collectionPlan_executionGuards;
   "payments/collectionPlan/mutations": typeof payments_collectionPlan_mutations;
   "payments/collectionPlan/queries": typeof payments_collectionPlan_queries;
   "payments/collectionPlan/rules/lateFeeRule": typeof payments_collectionPlan_rules_lateFeeRule;

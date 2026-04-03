@@ -1,5 +1,10 @@
 # Unified Payment Rails Technical Design
 
+> Status note (2026-04-03): this document is still useful background, but the
+> aligned repo contract now treats `TransferProvider` as the canonical inbound
+> provider abstraction. References to `PaymentMethod` below describe legacy
+> compatibility context unless explicitly stated otherwise.
+
 ## Goal
 
 Build a provider-agnostic transfer rail that handles all platform money movement through one domain contract, one governed transfer lifecycle, and one ledger-facing settlement bridge.
@@ -10,7 +15,7 @@ This design is intentionally grounded in the current codebase, not just the prod
 
 ### What already exists
 
-- Borrower collection strategy abstraction exists as `PaymentMethod` in [convex/payments/methods/interface.ts](../../convex/payments/methods/interface.ts).
+- Borrower collection legacy compatibility exists as `PaymentMethod` in [convex/payments/methods/interface.ts](../../convex/payments/methods/interface.ts).
 - Two implementations exist today:
   - `ManualPaymentMethod` in [convex/payments/methods/manual.ts](../../convex/payments/methods/manual.ts)
   - `MockPADMethod` in [convex/payments/methods/mockPAD.ts](../../convex/payments/methods/mockPAD.ts)
@@ -39,6 +44,8 @@ The repo currently has:
 - A lender dispersal allocation model.
 - A mortgage ownership ledger.
 - A deal-closing ownership reroute mechanism.
+- A transfer-domain provider boundary centered on `TransferProvider`, with
+  legacy borrower-collection compatibility bridged behind it.
 
 It does **not** currently have a unified cash movement domain model. The proposed goal therefore spans multiple existing bounded contexts and must not be implemented as a thin extension of `PaymentMethod`.
 
