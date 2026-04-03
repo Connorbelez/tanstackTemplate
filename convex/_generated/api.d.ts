@@ -29,6 +29,7 @@ import type * as constants from "../constants.js";
 import type * as crm___tests___helpers from "../crm/__tests__/helpers.js";
 import type * as crm_activityQueries from "../crm/activityQueries.js";
 import type * as crm_calendarQuery from "../crm/calendarQuery.js";
+import type * as crm_entityAdapterRegistry from "../crm/entityAdapterRegistry.js";
 import type * as crm_fieldDefs from "../crm/fieldDefs.js";
 import type * as crm_fieldValidation from "../crm/fieldValidation.js";
 import type * as crm_filterConstants from "../crm/filterConstants.js";
@@ -289,6 +290,7 @@ declare const fullApi: ApiFromModules<{
   "crm/__tests__/helpers": typeof crm___tests___helpers;
   "crm/activityQueries": typeof crm_activityQueries;
   "crm/calendarQuery": typeof crm_calendarQuery;
+  "crm/entityAdapterRegistry": typeof crm_entityAdapterRegistry;
   "crm/fieldDefs": typeof crm_fieldDefs;
   "crm/fieldValidation": typeof crm_fieldValidation;
   "crm/filterConstants": typeof crm_filterConstants;

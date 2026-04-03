@@ -1113,10 +1113,26 @@ describe("View Engine", () => {
 			expect(schema.adapterContract).toMatchObject({
 				entityType: "lead",
 				objectDefId: fixture.objectDefId,
+				variant: "fallback",
+				detail: {
+					mode: "generated",
+					surfaceKey: "lead",
+				},
 			});
 			expect(schema.adapterContract.supportedLayouts).toEqual(
 				expect.arrayContaining(["table", "kanban", "calendar"])
 			);
+			expect(schema.adapterContract.layoutDefaults).toMatchObject({
+				kanbanFieldName: "status",
+				calendarDateFieldName: "next_followup",
+				preferredVisibleFieldNames: expect.arrayContaining([
+					"company_name",
+					"status",
+					"next_followup",
+				]),
+			});
+			expect(schema.adapterContract.fieldOverrides).toEqual([]);
+			expect(schema.adapterContract.computedFields).toEqual([]);
 			expect(schema.view.disabledLayoutMessages).toBeUndefined();
 		});
 	});
@@ -1366,5 +1382,66 @@ describe("System object view queries", () => {
 		expect(result.rows).toBeDefined();
 		expect(result.rows.length).toBeGreaterThan(0);
 		expect(result.rows[0]._kind).toBe("record");
+	});
+
+	it("getViewSchema returns dedicated adapter metadata for system objects", async () => {
+		await t.mutation(
+			internal.crm.systemAdapters.bootstrap.bootstrapSystemObjects,
+			{
+				orgId: CRM_ADMIN_IDENTITY.org_id,
+			}
+		);
+
+		const mortgageObjDef = await t.run(async (ctx) => {
+			return ctx.db
+				.query("objectDefs")
+				.withIndex("by_org_name", (q) =>
+					q.eq("orgId", CRM_ADMIN_IDENTITY.org_id).eq("name", "mortgage")
+				)
+				.first();
+		});
+		expect(mortgageObjDef).not.toBeNull();
+		if (!mortgageObjDef) {
+			throw new Error("Mortgage system object not found");
+		}
+
+		const viewDefId = await asAdmin(t).mutation(api.crm.viewDefs.createView, {
+			objectDefId: mortgageObjDef._id,
+			name: "All Mortgages",
+			viewType: "table",
+		});
+
+		const schema = await asAdmin(t).query(api.crm.viewQueries.getViewSchema, {
+			viewDefId,
+		});
+
+		expect(schema.adapterContract).toMatchObject({
+			entityType: "mortgages",
+			objectDefId: mortgageObjDef._id,
+			variant: "dedicated",
+			detail: {
+				mode: "dedicated",
+				surfaceKey: "mortgages",
+			},
+			statusFieldName: "status",
+			layoutDefaults: {
+				kanbanFieldName: "status",
+				calendarDateFieldName: "maturityDate",
+			},
+		});
+		expect(schema.adapterContract.supportedLayouts).toEqual(
+			expect.arrayContaining(["table", "kanban", "calendar"])
+		);
+		expect(
+			schema.adapterContract.layoutDefaults.preferredVisibleFieldNames
+		).toEqual(
+			expect.arrayContaining([
+				"principal",
+				"paymentAmount",
+				"interestRate",
+				"maturityDate",
+				"status",
+			])
+		);
 	});
 });
