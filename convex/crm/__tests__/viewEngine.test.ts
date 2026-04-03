@@ -590,6 +590,66 @@ describe("View Engine", () => {
 			expect(result.events.length).toBe(2);
 			expect(result.events[0].rows[0].record.fields.company_name).toBeDefined();
 		});
+
+		it("parses legacy comma-delimited between filters for calendar views", async () => {
+			const fixture = await seedLeadFixture(t);
+
+			const jan15 = new Date("2026-01-15T00:00:00Z").getTime();
+			const feb10 = new Date("2026-02-10T00:00:00Z").getTime();
+			const mar20 = new Date("2026-03-20T00:00:00Z").getTime();
+			const rangeStart = new Date("2026-01-01T00:00:00Z").getTime();
+			const febEnd = new Date("2026-02-28T23:59:59Z").getTime();
+			const rangeEnd = new Date("2026-12-31T23:59:59Z").getTime();
+
+			await seedRecord(t, fixture.objectDefId, {
+				company_name: "Jan Corp",
+				next_followup: jan15,
+			});
+			await seedRecord(t, fixture.objectDefId, {
+				company_name: "Feb Corp",
+				next_followup: feb10,
+			});
+			await seedRecord(t, fixture.objectDefId, {
+				company_name: "Mar Corp",
+				next_followup: mar20,
+			});
+
+			const calendarViewId = await asAdmin(t).mutation(
+				api.crm.viewDefs.createView,
+				{
+					objectDefId: fixture.objectDefId,
+					name: "Follow-up Calendar",
+					viewType: "calendar",
+					boundFieldId: fixture.fieldDefs.next_followup,
+				}
+			);
+
+			await t.run(async (ctx) => {
+				await ctx.db.insert("viewFilters", {
+					viewDefId: calendarViewId,
+					fieldDefId: fixture.fieldDefs.next_followup,
+					operator: "between",
+					value: `${String(rangeStart)},${String(febEnd)}`,
+				});
+			});
+
+			const result = await asAdmin(t).query(
+				api.crm.calendarQuery.queryCalendarRecords,
+				{
+					viewDefId: calendarViewId,
+					rangeStart,
+					rangeEnd,
+				}
+			);
+
+			const companyNames = result.events.flatMap(
+				(event: { records: Array<{ fields: Record<string, unknown> }> }) =>
+					event.records.map((record) => record.fields.company_name)
+			);
+			expect(companyNames).toContain("Jan Corp");
+			expect(companyNames).toContain("Feb Corp");
+			expect(companyNames).not.toContain("Mar Corp");
+		});
 	});
 
 	// ── View filters ────────────────────────────────────────────────
@@ -996,7 +1056,6 @@ describe("View Engine", () => {
 					limit: 25,
 				}
 			);
-
 			const { rows, totalCount } = result as {
 				rows: Array<{ fields: Record<string, unknown> }>;
 				totalCount: number;
@@ -1006,26 +1065,50 @@ describe("View Engine", () => {
 			expect(rows[0]?.fields.status).toBe("new");
 		});
 
-		it("between filter throws a clear error for table views", async () => {
+		it("logicalOperator OR combines view filters left-to-right", async () => {
 			const fixture = await seedLeadFixture(t);
+
+			await seedRecord(t, fixture.objectDefId, {
+				company_name: "A",
+				status: "new",
+			});
+			await seedRecord(t, fixture.objectDefId, {
+				company_name: "B",
+				status: "contacted",
+			});
+			await seedRecord(t, fixture.objectDefId, {
+				company_name: "C",
+				status: "qualified",
+			});
 
 			await t.run(async (ctx) => {
 				await ctx.db.insert("viewFilters", {
 					viewDefId: fixture.defaultViewId,
-					fieldDefId: fixture.fieldDefs.deal_value,
-					operator: "between",
-					value: JSON.stringify([10_000, 50_000]),
+					fieldDefId: fixture.fieldDefs.status,
+					operator: "is",
+					value: "new",
 				});
+				await ctx.db.insert("viewFilters", {
+					viewDefId: fixture.defaultViewId,
+					fieldDefId: fixture.fieldDefs.status,
+					logicalOperator: "or",
+					operator: "is",
+					value: "qualified",
+				})
 			});
 
-			await expect(
-				asAdmin(t).query(api.crm.viewQueries.queryViewRecords, {
-					viewDefId: fixture.defaultViewId,
-					limit: 25,
-				})
-			).rejects.toThrow(
-				'Operator "between" is not supported by table or kanban view filtering yet'
+			const result = await asAdmin(t).query(
+				api.crm.viewQueries.queryViewRecords,
+				{ viewDefId: fixture.defaultViewId, limit: 25 }
 			);
+			const { rows, totalCount } = result as {
+				rows: Array<{ fields: Record<string, unknown> }>;
+				totalCount: number;
+			};
+			expect(totalCount).toBe(2);
+			for (const row of rows) {
+				expect(["new", "qualified"]).toContain(row.fields.status);
+			}
 		});
 	});
 
@@ -1134,6 +1217,26 @@ describe("View Engine", () => {
 			expect(schema.adapterContract.fieldOverrides).toEqual([]);
 			expect(schema.adapterContract.computedFields).toEqual([]);
 			expect(schema.view.disabledLayoutMessages).toBeUndefined();
+		});
+
+		it("derives disabled layout messages when no persisted messages exist", async () => {
+			const fixture = await seedObjectWithFields(t, {
+				name: "notes_only",
+				fields: [{ name: "title", fieldType: "text" }],
+			});
+
+			const schema = await asAdmin(t).query(api.crm.viewQueries.getViewSchema, {
+				viewDefId: fixture.defaultViewId,
+			});
+
+			expect(schema.systemView.disabledLayoutMessages).toMatchObject({
+				calendar: "Add a date or datetime field to unlock calendar layouts.",
+				kanban: "Add a select or multi-select field to unlock kanban layouts.",
+			});
+			expect(schema.view.disabledLayoutMessages).toMatchObject({
+				calendar: "Add a date or datetime field to unlock calendar layouts.",
+				kanban: "Add a select or multi-select field to unlock kanban layouts.",
+			});
 		});
 	});
 

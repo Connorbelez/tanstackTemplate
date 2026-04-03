@@ -47,11 +47,14 @@ interface CalendarQueryResult {
 
 interface ViewSchemaResult {
 	columns: Array<{ displayOrder: number; isVisible: boolean; name: string }>;
+	effectiveView: {
+		activeSavedViewId?: Id<"userSavedViews">;
+		filters: RecordFilter[];
+		name: string;
+	};
 	savedView: UserSavedViewDefinition | null;
 	systemView: { name: string };
 	view: {
-		activeSavedViewId?: Id<"userSavedViews">;
-		filters: RecordFilter[];
 		name: string;
 	};
 }
@@ -248,13 +251,13 @@ describe("CRM user saved views", () => {
 			viewDefId: fixture.defaultViewId,
 		})) as ViewSchemaResult;
 
-	expect(schema.savedView?.userSavedViewId).toBe(userSavedViewId);
-	expect(schema.systemView.name).not.toBe(schema.effectiveView.name);
-	expect(schema.view.name).toBe(schema.systemView.name);
-	expect(schema.effectiveView.name).toBe("My Active Leads");
-	expect(schema.effectiveView.activeSavedViewId).toBe(userSavedViewId);
-	expect(schema.effectiveView.filters[0]?.operator).toBe("is");
-	expect(schema.effectiveView.filters[0]?.value).toBe("new");
+		expect(schema.savedView?.userSavedViewId).toBe(userSavedViewId);
+		expect(schema.systemView.name).not.toBe(schema.effectiveView.name);
+		expect(schema.view.name).toBe(schema.systemView.name);
+		expect(schema.effectiveView.name).toBe("My Active Leads");
+		expect(schema.effectiveView.activeSavedViewId).toBe(userSavedViewId);
+		expect(schema.effectiveView.filters[0]?.operator).toBe("is");
+		expect(schema.effectiveView.filters[0]?.value).toBe("new");
 	});
 
 	it("does not apply a default saved view to a different requested system view", async () => {
@@ -307,7 +310,7 @@ describe("CRM user saved views", () => {
 			viewDefId: alternateTableViewId,
 		})) as ViewSchemaResult;
 		expect(schema.savedView).toBeNull();
-		expect(schema.view.activeSavedViewId).toBeUndefined();
+		expect(schema.effectiveView.activeSavedViewId).toBeUndefined();
 		expect(schema.view.name).toBe("All Leads Table");
 	});
 
@@ -402,6 +405,70 @@ describe("CRM user saved views", () => {
 		).toBe(0);
 	});
 
+	it("applies logical OR filters for personal kanban overlays", async () => {
+		const fixture = await seedLeadFixture(t);
+
+		await seedRecord(t, fixture.objectDefId, {
+			company_name: "Acme North",
+			status: "new",
+		});
+		await seedRecord(t, fixture.objectDefId, {
+			company_name: "Beta South",
+			status: "contacted",
+		});
+		await seedRecord(t, fixture.objectDefId, {
+			company_name: "Gamma West",
+			status: "qualified",
+		});
+
+		const kanbanViewId = await asAdmin(t).mutation(
+			api.crm.viewDefs.createView,
+			{
+				objectDefId: fixture.objectDefId,
+				name: "Pipeline",
+				viewType: "kanban",
+				boundFieldId: fixture.fieldDefs.status,
+			}
+		);
+
+		const userSavedViewId = await asAdmin(t).mutation(CREATE_USER_SAVED_VIEW, {
+			name: "New Or Qualified",
+			objectDefId: fixture.objectDefId,
+			sourceViewDefId: kanbanViewId,
+			viewType: "kanban",
+			filters: [
+				{
+					fieldDefId: fixture.fieldDefs.status,
+					operator: "is",
+					value: "new",
+				},
+				{
+					fieldDefId: fixture.fieldDefs.status,
+					logicalOperator: "or",
+					operator: "is",
+					value: "qualified",
+				},
+			],
+		});
+
+		const result = (await asAdmin(t).query(
+			api.crm.viewQueries.queryViewRecords,
+			{
+				viewDefId: kanbanViewId,
+				userSavedViewId,
+			}
+		)) as KanbanQueryResult;
+
+		expect(result.totalCount).toBe(2);
+		expect(result.groups.find((group) => group.label === "New")?.count).toBe(1);
+		expect(
+			result.groups.find((group) => group.label === "Qualified")?.count
+		).toBe(1);
+		expect(
+			result.groups.find((group) => group.label === "Contacted")?.count
+		).toBe(0);
+	});
+
 	it("applies personal calendar overlays when an explicit saved view is requested", async () => {
 		const fixture = await seedLeadFixture(t);
 
@@ -463,5 +530,126 @@ describe("CRM user saved views", () => {
 		expect(companyNames).toContain("Jan Corp");
 		expect(companyNames).toContain("Feb Corp");
 		expect(companyNames).not.toContain("Mar Corp");
+	});
+
+	it("parses legacy raw string is_any_of filters for personal calendar overlays", async () => {
+		const fixture = await seedLeadFixture(t);
+
+		const jan15 = new Date("2026-01-15T00:00:00Z").getTime();
+		const feb10 = new Date("2026-02-10T00:00:00Z").getTime();
+
+		await seedRecord(t, fixture.objectDefId, {
+			company_name: "Jan Corp",
+			next_followup: jan15,
+			status: "new",
+		});
+		await seedRecord(t, fixture.objectDefId, {
+			company_name: "Feb Corp",
+			next_followup: feb10,
+			status: "contacted",
+		});
+
+		const calendarViewId = await asAdmin(t).mutation(
+			api.crm.viewDefs.createView,
+			{
+				objectDefId: fixture.objectDefId,
+				name: "Follow-up Calendar",
+				viewType: "calendar",
+				boundFieldId: fixture.fieldDefs.next_followup,
+			}
+		);
+
+		const userSavedViewId = await asAdmin(t).mutation(CREATE_USER_SAVED_VIEW, {
+			name: "New Only",
+			objectDefId: fixture.objectDefId,
+			sourceViewDefId: calendarViewId,
+			viewType: "calendar",
+			filters: [
+				{
+					fieldDefId: fixture.fieldDefs.status,
+					operator: "is_any_of",
+					value: "new",
+				},
+			],
+		});
+
+		const result = (await asAdmin(t).query(
+			api.crm.calendarQuery.queryCalendarRecords,
+			{
+				viewDefId: calendarViewId,
+				userSavedViewId,
+				rangeStart: new Date("2026-01-01T00:00:00Z").getTime(),
+				rangeEnd: new Date("2026-12-31T23:59:59Z").getTime(),
+			}
+		)) as CalendarQueryResult;
+
+		const companyNames = result.events.flatMap((event) =>
+			event.records.map((record) => record.fields.company_name)
+		);
+		expect(companyNames).toEqual(["Jan Corp"]);
+	});
+
+	it("reads legacy filtersJson saved views when resolving defaults", async () => {
+		const fixture = await seedLeadFixture(t);
+
+		await seedRecord(t, fixture.objectDefId, {
+			company_name: "Acme",
+			status: "new",
+		});
+		await seedRecord(t, fixture.objectDefId, {
+			company_name: "Beta",
+			status: "contacted",
+		});
+
+		await t.run(async (ctx) => {
+			const legacySavedView = {
+				orgId: "org_crm_test_001",
+				objectDefId: fixture.objectDefId,
+				ownerAuthId: "test-crm-admin",
+				sourceViewDefId: fixture.defaultViewId,
+				name: "Legacy New Leads",
+				viewType: "table" as const,
+				visibleFieldIds: [
+					fixture.fieldDefs.company_name,
+					fixture.fieldDefs.status,
+				],
+				fieldOrder: [fixture.fieldDefs.company_name, fixture.fieldDefs.status],
+				filtersJson: JSON.stringify([
+					{
+						fieldDefId: fixture.fieldDefs.status,
+						operator: "is",
+						value: "new",
+					},
+				]),
+				isDefault: true,
+				createdAt: Date.now(),
+				updatedAt: Date.now(),
+			};
+
+			await ctx.db.insert(
+				"userSavedViews",
+				legacySavedView as unknown as Parameters<typeof ctx.db.insert>[1]
+			);
+		});
+
+		const defaultSavedView = await asAdmin(t).query(
+			GET_DEFAULT_USER_SAVED_VIEW,
+			{
+				objectDefId: fixture.objectDefId,
+			}
+		);
+		expect(defaultSavedView?.filters[0]?.operator).toBe("is");
+		expect(defaultSavedView?.filters[0]?.value).toBe("new");
+
+		const result = (await asAdmin(t).query(
+			api.crm.viewQueries.queryViewRecords,
+			{
+				viewDefId: fixture.defaultViewId,
+				limit: 25,
+			}
+		)) as TableQueryResult;
+
+		expect(result.totalCount).toBe(1);
+		expect(result.rows[0]?.fields.status).toBe("new");
 	});
 });

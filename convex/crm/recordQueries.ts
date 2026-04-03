@@ -1,6 +1,6 @@
 import { ConvexError, v } from "convex/values";
 import type { Doc, Id } from "../_generated/dataModel";
-import type { QueryCtx } from "../_generated/server";
+import type { MutationCtx, QueryCtx } from "../_generated/server";
 import { crmQuery } from "../fluent";
 import {
 	getNativeRecordById,
@@ -14,10 +14,11 @@ import type {
 	RecordSort,
 	UnifiedRecord,
 } from "./types";
-import { entityKindValidator } from "./validators";
+import { entityKindValidator, logicalOperatorValidator } from "./validators";
 import { fieldTypeToTable, type ValueTableName } from "./valueRouter";
 
 type FieldDef = Doc<"fieldDefs">;
+type DbCtx = Pick<QueryCtx, "db"> | Pick<MutationCtx, "db">;
 const OFFSET_CURSOR_PATTERN = /^[0-9]+$/;
 
 interface QueryPaginationOpts {
@@ -258,9 +259,132 @@ export function matchesFilter(
 	}
 }
 
+function parseScalarFilterValue(
+	rawValue: unknown,
+	fieldDef: FieldDef
+): unknown {
+	if (rawValue === undefined || rawValue === null || rawValue === "") {
+		return undefined;
+	}
+
+	if (typeof rawValue !== "string") {
+		return rawValue;
+	}
+
+	switch (fieldDef.fieldType) {
+		case "number":
+		case "currency":
+		case "percentage":
+		case "date":
+		case "datetime": {
+			const parsedNumber = Number.parseFloat(rawValue);
+			return Number.isFinite(parsedNumber) ? parsedNumber : undefined;
+		}
+		case "boolean":
+			return rawValue === "true";
+		default:
+			return rawValue;
+	}
+}
+
+function parseRangeBoundary(value: unknown, fieldDef: FieldDef): unknown {
+	return parseScalarFilterValue(value, fieldDef);
+}
+
+function parseBetweenFilterValue(
+	rawValue: unknown,
+	fieldDef: FieldDef
+): [unknown, unknown] | undefined {
+	if (Array.isArray(rawValue) && rawValue.length === 2) {
+		const [start, end] = rawValue;
+		const parsedStart = parseRangeBoundary(start, fieldDef);
+		const parsedEnd = parseRangeBoundary(end, fieldDef);
+		return parsedStart !== undefined && parsedEnd !== undefined
+			? [parsedStart, parsedEnd]
+			: undefined;
+	}
+
+	if (typeof rawValue === "string") {
+		try {
+			const parsed: unknown = JSON.parse(rawValue);
+			if (Array.isArray(parsed) && parsed.length === 2) {
+				const [start, end] = parsed;
+				const parsedStart = parseRangeBoundary(start, fieldDef);
+				const parsedEnd = parseRangeBoundary(end, fieldDef);
+				return parsedStart !== undefined && parsedEnd !== undefined
+					? [parsedStart, parsedEnd]
+					: undefined;
+			}
+		} catch {
+			// Fall through to legacy comma-delimited parsing.
+		}
+
+		const [startRaw, endRaw, ...rest] = rawValue
+			.split(",")
+			.map((part) => part.trim());
+		if (!(startRaw && endRaw) || rest.length > 0) {
+			return undefined;
+		}
+
+		const parsedStart = parseScalarFilterValue(startRaw, fieldDef);
+		const parsedEnd = parseScalarFilterValue(endRaw, fieldDef);
+		return parsedStart !== undefined && parsedEnd !== undefined
+			? [parsedStart, parsedEnd]
+			: undefined;
+	}
+
+	return undefined;
+}
+
+function parseIsAnyOfFilterValue(rawValue: unknown): unknown[] | undefined {
+	if (rawValue === undefined || rawValue === null || rawValue === "") {
+		return undefined;
+	}
+
+	if (Array.isArray(rawValue)) {
+		return rawValue;
+	}
+
+	if (typeof rawValue === "string") {
+		try {
+			const parsed: unknown = JSON.parse(rawValue);
+			if (Array.isArray(parsed)) {
+				return parsed;
+			}
+		} catch {
+			// Fall back to a single-value array for leniency.
+		}
+
+		return [rawValue];
+	}
+
+	return [rawValue];
+}
+
+export function normalizeFilterValue(
+	filterValue: unknown,
+	fieldDef: FieldDef,
+	operator: RecordFilter["operator"]
+): unknown {
+	if (operator === "is_true" || operator === "is_false") {
+		return undefined;
+	}
+
+	if (operator === "between") {
+		return parseBetweenFilterValue(filterValue, fieldDef);
+	}
+
+	if (operator === "is_any_of") {
+		return parseIsAnyOfFilterValue(filterValue);
+	}
+
+	return parseScalarFilterValue(filterValue, fieldDef);
+}
+
 /**
  * Applies field-level filters in-memory.
- * All filters are AND'd together (every filter must match).
+ * Filters are evaluated left-to-right and respect each filter's logicalOperator,
+ * defaulting to AND when omitted.
  */
 export function applyFilters(
 	records: UnifiedRecord[],
@@ -272,16 +396,48 @@ export function applyFilters(
 		return records;
 	}
 
-	return records.filter((record) =>
-		filters.every((filter) => {
+	return records.filter((record) => {
+		let combined: boolean | undefined;
+
+		for (const filter of filters) {
 			const fieldDef = fieldDefsById.get(filter.fieldDefId.toString());
 			if (!fieldDef) {
-				return false; // fail-closed: unknown fieldDefId never matches
+				return false;
 			}
+
+			const normalizedValue = normalizeFilterValue(
+				filter.value,
+				fieldDef,
+				filter.operator
+			);
+			if (
+				normalizedValue === undefined &&
+				filter.operator !== "is_true" &&
+				filter.operator !== "is_false"
+			) {
+				return false;
+			}
+
 			const fieldValue = record.fields[fieldDef.name];
-			return matchesFilter(fieldValue, filter.operator, filter.value);
-		})
-	);
+			const nextMatch = matchesFilter(
+				fieldValue,
+				filter.operator,
+				normalizedValue
+			);
+
+			if (combined === undefined) {
+				combined = nextMatch;
+				continue;
+			}
+
+			combined =
+				filter.logicalOperator === "or"
+					? combined || nextMatch
+					: combined && nextMatch;
+		}
+
+		return combined ?? true;
+	});
 }
 
 // ── Helpers: Sorting ─────────────────────────────────────────────────
@@ -328,7 +484,7 @@ export function applySort(
 // ── Helpers: Shared ──────────────────────────────────────────────────
 
 export async function loadActiveFieldDefs(
-	ctx: QueryCtx,
+	ctx: DbCtx,
 	objectDefId: Id<"objectDefs">
 ): Promise<FieldDef[]> {
 	const allFieldDefs = await ctx.db
@@ -593,6 +749,7 @@ export const queryRecords = crmQuery
 			v.array(
 				v.object({
 					fieldDefId: v.id("fieldDefs"),
+					logicalOperator: v.optional(logicalOperatorValidator),
 					operator: v.union(
 						v.literal("eq"),
 						v.literal("gt"),

@@ -26,12 +26,10 @@ type ViewDefDoc = Doc<"viewDefs">;
 type ViewFieldDoc = Doc<"viewFields">;
 type ViewFilterDoc = Doc<"viewFilters">;
 type UserSavedViewDoc = Doc<"userSavedViews">;
-
 interface SavedViewFilterSource {
 	filters?: SavedViewFilterDefinition[];
 	filtersJson?: string;
 }
-
 type UserSavedViewSnapshot = Omit<
 	UserSavedViewDefinition,
 	"ownerAuthId" | "userSavedViewId"
@@ -399,7 +397,6 @@ function getStoredSavedViewFilters(
 ): SavedViewFilterDefinition[] {
 	return doc.filters ?? parseLegacySavedViewFiltersJson(doc.filtersJson) ?? [];
 }
-
 function toSavedViewFilters(
 	viewFilters: ViewFilterDoc[]
 ): SavedViewFilterDefinition[] {

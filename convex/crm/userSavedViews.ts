@@ -156,13 +156,13 @@ async function clearExistingDefaultSavedViews(
 ) {
 	const existingDefaults = await ctx.db
 		.query("userSavedViews")
-		.withIndex("by_owner_object_default", (query) =>
+		.withIndex("by_org_owner_object_default", (query) =>
 			query
+				.eq("orgId", args.orgId)
 				.eq("ownerAuthId", args.ownerAuthId)
 				.eq("objectDefId", args.objectDefId)
 				.eq("isDefault", true)
 		)
-		.filter((query) => query.eq(query.field("orgId"), args.orgId))
 		.collect();
 
 	for (const savedView of existingDefaults) {
@@ -195,12 +195,12 @@ export const listUserSavedViews = crmQuery
 
 		const rows = await ctx.db
 			.query("userSavedViews")
-			.withIndex("by_owner_object", (query) =>
+			.withIndex("by_org_owner_object", (query) =>
 				query
+					.eq("orgId", orgId)
 					.eq("ownerAuthId", ctx.viewer.authId)
 					.eq("objectDefId", args.objectDefId)
 			)
-			.filter((query) => query.eq(query.field("orgId"), orgId))
 			.collect();
 
 		return rows

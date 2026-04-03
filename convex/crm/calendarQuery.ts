@@ -8,6 +8,7 @@ import {
 	FILTERED_QUERY_CAP,
 	loadActiveFieldDefs,
 	matchesFilter,
+	normalizeFilterValue,
 } from "./recordQueries";
 import type {
 	EntityViewAdapterContract,
@@ -53,13 +54,7 @@ type Granularity = "day" | "week" | "month";
 type FieldDef = Doc<"fieldDefs">;
 type ViewFilter = RecordFilter;
 type CrmQueryCtx = QueryCtx & { viewer: Viewer };
-
-interface ParsedViewFilter {
-	fieldDefId: Id<"fieldDefs">;
-	logicalOperator?: ViewFilter["logicalOperator"];
-	operator: ViewFilter["operator"];
-	value: unknown;
-}
+type ParsedViewFilter = RecordFilter;
 
 // ── Date Truncation Helpers ──────────────────────────────────────────
 
@@ -100,121 +95,6 @@ function truncateDate(unixMs: number, granularity: Granularity): number {
 
 // ── View Filter Parsing + Evaluation ─────────────────────────────────
 
-function parseScalarFilterValue(
-	rawValue: unknown,
-	fieldDef: FieldDef
-): unknown {
-	if (rawValue === undefined || rawValue === null || rawValue === "") {
-		return undefined;
-	}
-
-	switch (fieldDef.fieldType) {
-		case "number":
-		case "currency":
-		case "percentage":
-		case "date":
-		case "datetime": {
-			if (typeof rawValue === "number") {
-				return Number.isFinite(rawValue) ? rawValue : undefined;
-			}
-			const n = Number.parseFloat(String(rawValue));
-			return Number.isFinite(n) ? n : undefined;
-		}
-		case "boolean":
-			return typeof rawValue === "boolean" ? rawValue : rawValue === "true";
-		default:
-			return rawValue;
-	}
-}
-
-function parseRangeBoundary(value: unknown, fieldDef: FieldDef): unknown {
-	return parseScalarFilterValue(String(value), fieldDef);
-}
-
-function parseBetweenFilterValue(
-	rawValue: unknown,
-	fieldDef: FieldDef
-): [unknown, unknown] | undefined {
-	if (Array.isArray(rawValue) && rawValue.length === 2) {
-		const start = parseRangeBoundary(rawValue[0], fieldDef);
-		const end = parseRangeBoundary(rawValue[1], fieldDef);
-		return start !== undefined && end !== undefined ? [start, end] : undefined;
-	}
-
-	if (typeof rawValue !== "string") {
-		return undefined;
-	}
-
-	try {
-		const parsed: unknown = JSON.parse(rawValue);
-		if (Array.isArray(parsed) && parsed.length === 2) {
-			const start = parseRangeBoundary(parsed[0], fieldDef);
-			const end = parseRangeBoundary(parsed[1], fieldDef);
-			return start !== undefined && end !== undefined
-				? [start, end]
-				: undefined;
-		}
-	} catch {
-		// Fall through to lenient legacy parsing below.
-	}
-
-	const [startRaw, endRaw, ...rest] = rawValue
-		.split(",")
-		.map((part) => part.trim());
-	if (!(startRaw && endRaw) || rest.length > 0) {
-		return undefined;
-	}
-	const start = parseScalarFilterValue(startRaw, fieldDef);
-	const end = parseScalarFilterValue(endRaw, fieldDef);
-	return start !== undefined && end !== undefined ? [start, end] : undefined;
-}
-
-function parseIsAnyOfFilterValue(rawValue: unknown): unknown[] {
-	if (Array.isArray(rawValue)) {
-		return rawValue;
-	}
-
-	if (typeof rawValue !== "string") {
-		return rawValue === undefined || rawValue === null ? [] : [rawValue];
-	}
-
-	try {
-		const parsed: unknown = JSON.parse(rawValue);
-		if (Array.isArray(parsed)) {
-			return parsed;
-		}
-	} catch {
-		// Fall back to a single-value array for leniency.
-	}
-	return [rawValue];
-}
-
-function parseFilterValue(
-	rawValue: unknown,
-	fieldDef: FieldDef,
-	operator: ViewFilter["operator"]
-): unknown {
-	if (operator === "is_true" || operator === "is_false") {
-		return undefined;
-	}
-
-	if (operator === "between") {
-		if (rawValue === undefined || rawValue === "") {
-			return undefined;
-		}
-		return parseBetweenFilterValue(rawValue, fieldDef);
-	}
-
-	if (operator === "is_any_of") {
-		if (rawValue === undefined || rawValue === "") {
-			return undefined;
-		}
-		return parseIsAnyOfFilterValue(rawValue);
-	}
-
-	return parseScalarFilterValue(rawValue, fieldDef);
-}
-
 function parseViewFilters(
 	viewFilters: ViewFilter[],
 	fieldDefsById: Map<string, FieldDef>
@@ -229,9 +109,13 @@ function parseViewFilters(
 			continue;
 		}
 
-		const value = parseFilterValue(vf.value, fieldDef, vf.operator);
+		const normalizedValue = normalizeFilterValue(
+			vf.value,
+			fieldDef,
+			vf.operator
+		);
 		if (
-			value === undefined &&
+			normalizedValue === undefined &&
 			vf.operator !== "is_true" &&
 			vf.operator !== "is_false"
 		) {
@@ -240,10 +124,8 @@ function parseViewFilters(
 		}
 
 		result.push({
-			fieldDefId: vf.fieldDefId,
-			logicalOperator: vf.logicalOperator,
-			operator: vf.operator,
-			value,
+			...vf,
+			value: normalizedValue,
 		});
 	}
 
