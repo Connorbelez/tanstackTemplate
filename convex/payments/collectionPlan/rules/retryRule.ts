@@ -2,6 +2,7 @@ import { internal } from "../../../_generated/api";
 import type { Id } from "../../../_generated/dataModel";
 import type { ActionCtx } from "../../../_generated/server";
 import type { RuleEvalContext, RuleHandler } from "../engine";
+import { getRetryRuleConfig } from "../ruleContract";
 
 const MS_PER_DAY = 86_400_000;
 
@@ -26,11 +27,14 @@ export const retryRuleHandler: RuleHandler = {
 			return;
 		}
 
-		const params = evalCtx.rule.parameters as
-			| { maxRetries?: number; backoffBaseDays?: number }
-			| undefined;
-		const maxRetries = params?.maxRetries ?? 3;
-		const backoffBaseDays = params?.backoffBaseDays ?? 3;
+		const config = getRetryRuleConfig(evalCtx.rule);
+		if (!config) {
+			console.warn(
+				`[retry-rule] Missing typed config for rule ${String(evalCtx.rule._id)}`
+			);
+			return;
+		}
+		const { backoffBaseDays, maxRetries } = config;
 
 		const payload = evalCtx.eventPayload as
 			| Partial<CollectionFailedPayload>

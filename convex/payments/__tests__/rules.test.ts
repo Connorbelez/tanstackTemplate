@@ -22,8 +22,17 @@ function mockRule(
 	return {
 		_id: "rule_1" as Id<"collectionRules">,
 		_creationTime: Date.now(),
+		kind: "schedule",
+		code: "schedule_rule",
+		displayName: "Initial scheduling",
+		description:
+			"Creates initial collection plan entries for upcoming obligations.",
 		name: "schedule_rule",
+		status: "active",
+		scope: { scopeType: "global" },
 		trigger: "schedule",
+		config: { kind: "schedule", delayDays: 5 },
+		version: 1,
 		action: "create_plan_entry",
 		parameters: { delayDays: 5 },
 		priority: 10,
@@ -88,7 +97,10 @@ describe("ScheduleRule", () => {
 
 	it("uses the rule delayDays parameter when delegating", async () => {
 		await scheduleRuleHandler.evaluate(ctx, {
-			rule: mockRule({ parameters: { delayDays: 9 } }),
+			rule: mockRule({
+				config: { kind: "schedule", delayDays: 9 },
+				parameters: { delayDays: 5 },
+			}),
 			mortgageId: "mortgage_1" as Id<"mortgages">,
 		});
 
@@ -123,8 +135,17 @@ describe("RetryRule", () => {
 	): RuleEvalContext {
 		return {
 			rule: mockRule({
+				kind: "retry",
+				code: "retry_rule",
+				displayName: "Retry collection",
+				description:
+					"Schedules retry collection plan entries after failed attempts.",
 				name: "retry_rule",
+				status: "active",
+				scope: { scopeType: "global" },
 				trigger: "event",
+				config: { kind: "retry", maxRetries: 3, backoffBaseDays: 3 },
+				version: 1,
 				action: "create_retry_entry",
 				parameters: { maxRetries: 3, backoffBaseDays: 3 },
 				priority: 20,
@@ -176,8 +197,15 @@ describe("RetryRule", () => {
 	it("exponential backoff calculation: verify delay pattern", async () => {
 		const backoffBaseDays = 3;
 		const rule = mockRule({
+			kind: "retry",
+			code: "retry_rule",
+			displayName: "Retry collection",
 			name: "retry_rule",
+			status: "active",
+			scope: { scopeType: "global" },
 			trigger: "event",
+			config: { kind: "retry", maxRetries: 5, backoffBaseDays },
+			version: 1,
 			action: "create_retry_entry",
 			parameters: { maxRetries: 5, backoffBaseDays },
 			priority: 20,
@@ -258,10 +286,22 @@ describe("LateFeeRule", () => {
 	): RuleEvalContext {
 		return {
 			rule: mockRule({
+				kind: "late_fee",
+				code: "late_fee_rule",
+				displayName: "Late fee assessment",
+				description: "Creates late-fee obligations after overdue events.",
 				name: "late_fee_rule",
+				status: "active",
+				scope: { scopeType: "global" },
 				trigger: "event",
+				config: {
+					kind: "late_fee",
+					feeCode: "late_fee",
+					feeSurface: "borrower_charge",
+				},
+				version: 1,
 				action: "create_late_fee",
-				parameters: { feeAmountCents: 5000, dueDays: 30, graceDays: 45 },
+				parameters: {},
 				priority: 30,
 			}),
 			eventType: "OBLIGATION_OVERDUE",

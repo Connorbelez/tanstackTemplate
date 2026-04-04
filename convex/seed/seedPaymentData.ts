@@ -5,6 +5,7 @@ import { internalMutation } from "../_generated/server";
 import { adminMutation } from "../fluent";
 import { seedCollectionRulesImpl } from "../payments/collectionPlan/defaultRules";
 import { scheduleInitialEntriesImpl } from "../payments/collectionPlan/initialScheduling";
+import { getScheduleRuleConfig } from "../payments/collectionPlan/ruleContract";
 import { generateObligationsImpl } from "../payments/obligations/generateImpl";
 
 // ---------------------------------------------------------------------------
@@ -87,16 +88,15 @@ async function seedPaymentDataImpl(
 
 	// 4. Ensure canonical collection rules exist before initial scheduling runs
 	const rules = await seedCollectionRulesImpl(ctx);
-	const scheduleRule = await ctx.db.get(rules.ruleIdsByName.schedule_rule);
-	const scheduleRuleParameters = scheduleRule?.parameters as
-		| { delayDays?: number }
-		| undefined;
+	const scheduleRule = await ctx.db.get(rules.ruleIdsByCode.schedule_rule);
+	const scheduleRuleConfig =
+		scheduleRule !== null ? getScheduleRuleConfig(scheduleRule) : null;
 
 	// 5. Generate initial plan entries through canonical schedule-rule semantics
 	const schedulingResult = await scheduleInitialEntriesImpl(ctx, {
 		mortgageId,
-		delayDays: scheduleRuleParameters?.delayDays ?? 5,
-		ruleId: rules.ruleIdsByName.schedule_rule,
+		delayDays: scheduleRuleConfig?.delayDays ?? 5,
+		ruleId: rules.ruleIdsByCode.schedule_rule,
 	});
 
 	return {

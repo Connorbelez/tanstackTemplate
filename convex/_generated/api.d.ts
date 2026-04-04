@@ -202,6 +202,7 @@ import type * as payments_collectionPlan_executionGuards from "../payments/colle
 import type * as payments_collectionPlan_initialScheduling from "../payments/collectionPlan/initialScheduling.js";
 import type * as payments_collectionPlan_mutations from "../payments/collectionPlan/mutations.js";
 import type * as payments_collectionPlan_queries from "../payments/collectionPlan/queries.js";
+import type * as payments_collectionPlan_ruleContract from "../payments/collectionPlan/ruleContract.js";
 import type * as payments_collectionPlan_rules_lateFeeRule from "../payments/collectionPlan/rules/lateFeeRule.js";
 import type * as payments_collectionPlan_rules_retryRule from "../payments/collectionPlan/rules/retryRule.js";
 import type * as payments_collectionPlan_rules_scheduleRule from "../payments/collectionPlan/rules/scheduleRule.js";
@@ -471,6 +472,7 @@ declare const fullApi: ApiFromModules<{
   "payments/collectionPlan/initialScheduling": typeof payments_collectionPlan_initialScheduling;
   "payments/collectionPlan/mutations": typeof payments_collectionPlan_mutations;
   "payments/collectionPlan/queries": typeof payments_collectionPlan_queries;
+  "payments/collectionPlan/ruleContract": typeof payments_collectionPlan_ruleContract;
   "payments/collectionPlan/rules/lateFeeRule": typeof payments_collectionPlan_rules_lateFeeRule;
   "payments/collectionPlan/rules/retryRule": typeof payments_collectionPlan_rules_retryRule;
   "payments/collectionPlan/rules/scheduleRule": typeof payments_collectionPlan_rules_scheduleRule;

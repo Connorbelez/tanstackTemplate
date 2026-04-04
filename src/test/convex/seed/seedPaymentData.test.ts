@@ -102,10 +102,23 @@ describe("seedPaymentDataInternal", () => {
 			return { rules, entries };
 		});
 
-		expect(state.rules.map((rule) => rule.name).sort()).toEqual([
+		expect(state.rules.map((rule) => rule.code ?? rule.name).sort()).toEqual([
 			"late_fee_rule",
 			"retry_rule",
 			"schedule_rule",
+		]);
+		expect(
+			state.rules
+				.map((rule) => ({
+					code: rule.code,
+					kind: rule.kind,
+					status: rule.status,
+				}))
+				.sort((left, right) => (left.code ?? "").localeCompare(right.code ?? ""))
+		).toEqual([
+			{ code: "late_fee_rule", kind: "late_fee", status: "active" },
+			{ code: "retry_rule", kind: "retry", status: "active" },
+			{ code: "schedule_rule", kind: "schedule", status: "active" },
 		]);
 		expect(state.entries).toHaveLength(1);
 		expect(state.entries[0]?.source).toBe("default_schedule");
@@ -165,13 +178,21 @@ describe("seedPaymentDataInternal", () => {
 				.query("obligations")
 				.withIndex("by_mortgage", (q) => q.eq("mortgageId", mortgageId))
 				.first();
+			const scheduleRule = await ctx.db.get(customScheduleRuleId);
 			const entry = await ctx.db
 				.query("collectionPlanEntries")
 				.withIndex("by_status", (q) => q.eq("status", "planned"))
 				.first();
-			return { obligation, entry };
+			return { obligation, scheduleRule, entry };
 		});
 
+		expect(state.scheduleRule?.kind).toBe("schedule");
+		expect(state.scheduleRule?.code).toBe("schedule_rule");
+		expect(state.scheduleRule?.status).toBe("active");
+		expect(state.scheduleRule?.config).toEqual({
+			kind: "schedule",
+			delayDays: 9,
+		});
 		expect(state.entry?.ruleId).toBe(customScheduleRuleId);
 		expect(state.entry?.scheduledDate).toBe(
 			(state.obligation?.dueDate ?? 0) - 9 * MS_PER_DAY

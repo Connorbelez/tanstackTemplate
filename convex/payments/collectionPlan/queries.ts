@@ -1,21 +1,34 @@
 import { v } from "convex/values";
 import { internalQuery } from "../../_generated/server";
+import {
+	compareCollectionRules,
+	isCollectionRuleActive,
+	isCollectionRuleEffectiveAt,
+	matchesCollectionRuleScope,
+} from "./ruleContract";
 
 /**
- * Returns all enabled collection rules for a given trigger type,
- * sorted by priority (ascending) via the by_trigger index.
+ * Returns all active collection rules for a given trigger type, filtered by
+ * optional scope and effective window, then sorted deterministically.
  */
 export const getEnabledRules = internalQuery({
 	args: {
+		asOfMs: v.optional(v.number()),
+		mortgageId: v.optional(v.id("mortgages")),
 		trigger: v.union(v.literal("schedule"), v.literal("event")),
 	},
-	handler: async (ctx, { trigger }) => {
-		return await ctx.db
+	handler: async (ctx, { trigger, mortgageId, asOfMs }) => {
+		const ruleCandidates = await ctx.db
 			.query("collectionRules")
-			.withIndex("by_trigger", (q) =>
-				q.eq("trigger", trigger).eq("enabled", true)
-			)
+			.withIndex("by_trigger", (q) => q.eq("trigger", trigger))
 			.collect();
+
+		const effectiveAt = asOfMs ?? Date.now();
+		return ruleCandidates
+			.filter((rule) => isCollectionRuleActive(rule))
+			.filter((rule) => isCollectionRuleEffectiveAt(rule, effectiveAt))
+			.filter((rule) => matchesCollectionRuleScope(rule, mortgageId))
+			.sort(compareCollectionRules);
 	},
 });
 
