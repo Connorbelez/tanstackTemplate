@@ -20,7 +20,10 @@ const MANUAL_REF_PATTERN =
 	/^manual_entry_789_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const MOCK_PAD_REF_PATTERN =
 	/^mock_pad_entry_789_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-const UNKNOWN_METHOD_PATTERN = /Unknown payment method: "stripe_ach"/;
+const UNKNOWN_METHOD_PATTERN =
+	/Unknown legacy payment method: "stripe_ach".*TransferProvider/;
+const TRANSFER_ONLY_METHOD_PATTERN =
+	/Unknown legacy payment method: "mock_eft".*TransferProvider/;
 
 const sampleParams: InitiateParams = {
 	amount: 100_000, // $1000 in cents
@@ -31,10 +34,10 @@ const sampleParams: InitiateParams = {
 };
 
 // ---------------------------------------------------------------------------
-// ManualPaymentMethod
+// ManualPaymentMethod compatibility surface
 // ---------------------------------------------------------------------------
 
-describe("ManualPaymentMethod", () => {
+describe("ManualPaymentMethod compatibility surface", () => {
 	let method: ManualPaymentMethod;
 
 	beforeEach(() => {
@@ -77,10 +80,10 @@ describe("ManualPaymentMethod", () => {
 });
 
 // ---------------------------------------------------------------------------
-// MockPADMethod
+// MockPADMethod compatibility surface
 // ---------------------------------------------------------------------------
 
-describe("MockPADMethod", () => {
+describe("MockPADMethod compatibility surface", () => {
 	let scheduler: ScheduleSettlementFn;
 
 	beforeEach(() => {
@@ -237,10 +240,10 @@ describe("MockPADMethod", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Method Registry
+// PaymentMethod compatibility registry
 // ---------------------------------------------------------------------------
 
-describe("Method Registry", () => {
+describe("PaymentMethod compatibility registry", () => {
 	afterEach(() => {
 		vi.restoreAllMocks();
 	});
@@ -262,6 +265,12 @@ describe("Method Registry", () => {
 	it("error message includes the unknown method name", () => {
 		expect(() => getPaymentMethod("stripe_ach")).toThrow(
 			UNKNOWN_METHOD_PATTERN
+		);
+	});
+
+	it("rejects transfer-provider-only mock codes from the legacy registry", () => {
+		expect(() => getPaymentMethod("mock_eft")).toThrow(
+			TRANSFER_ONLY_METHOD_PATTERN
 		);
 	});
 

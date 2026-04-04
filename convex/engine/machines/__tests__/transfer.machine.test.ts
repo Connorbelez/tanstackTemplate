@@ -118,14 +118,16 @@ describe("transfer machine", () => {
 			expect(actions.map((a) => a.type)).toContain("publishTransferConfirmed");
 		});
 
-		it("initiated -> cancelled on TRANSFER_CANCELLED", () => {
+		it("initiated -> cancelled on TRANSFER_CANCELLED fires publishTransferCancelled", () => {
 			const [next, actions] = transition(
 				transferMachine,
 				snapshotAt("initiated"),
 				TRANSFER_CANCELLED
 			);
 			expect(next.value).toBe("cancelled");
-			expect(actions).toHaveLength(0);
+			expect(actions.map((action) => action.type)).toContain(
+				"publishTransferCancelled"
+			);
 		});
 
 		it("initiated ignores PROVIDER_ACKNOWLEDGED", () => {
@@ -548,7 +550,9 @@ describe("transfer machine", () => {
 				TRANSFER_CANCELLED
 			);
 			expect(next.value).toBe("cancelled");
-			expect(actions).toHaveLength(0);
+			expect(actions.map((action) => action.type)).toContain(
+				"publishTransferCancelled"
+			);
 		});
 
 		it("async reversal path: initiated -> pending -> confirmed -> reversed", () => {

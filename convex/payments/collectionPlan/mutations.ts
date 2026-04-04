@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { internalMutation } from "../../_generated/server";
+import { scheduleInitialEntriesImpl } from "./initialScheduling";
 
 /**
  * Creates a new collection plan entry.
@@ -27,8 +28,8 @@ export const createEntry = internalMutation({
 		ruleId: v.optional(v.id("collectionRules")),
 		rescheduledFromId: v.optional(v.id("collectionPlanEntries")),
 	},
-	handler: async (ctx, args) => {
-		return await ctx.db.insert("collectionPlanEntries", {
+	handler: async (ctx, args) =>
+		await ctx.db.insert("collectionPlanEntries", {
 			obligationIds: args.obligationIds,
 			amount: args.amount,
 			method: args.method,
@@ -38,6 +39,19 @@ export const createEntry = internalMutation({
 			ruleId: args.ruleId,
 			rescheduledFromId: args.rescheduledFromId,
 			createdAt: Date.now(),
-		});
+		}),
+});
+
+/**
+ * Canonical initial scheduling seam used by both the schedule rule and
+ * bootstrap/activation-style orchestration.
+ */
+export const scheduleInitialEntries = internalMutation({
+	args: {
+		delayDays: v.number(),
+		mortgageId: v.optional(v.id("mortgages")),
+		nowMs: v.optional(v.number()),
+		ruleId: v.optional(v.id("collectionRules")),
 	},
+	handler: async (ctx, args) => await scheduleInitialEntriesImpl(ctx, args),
 });

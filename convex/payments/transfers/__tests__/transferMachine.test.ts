@@ -290,11 +290,11 @@ describe("Transfer machine — actions fire on correct transitions", () => {
 		]);
 	});
 
-	it("initiated + TRANSFER_CANCELLED fires no actions", () => {
+	it("initiated + TRANSFER_CANCELLED fires publishTransferCancelled", () => {
 		const snap = getInitialSnapshot(transferMachine);
 		expect(
 			actionTypes(transferMachine, snap, EVENTS.TRANSFER_CANCELLED)
-		).toEqual([]);
+		).toEqual(["publishTransferCancelled"]);
 	});
 
 	it("pending + PROVIDER_ACKNOWLEDGED fires no actions (self-loop)", () => {

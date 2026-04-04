@@ -19,7 +19,8 @@ This design is intentionally grounded in the current codebase, not just the prod
 - Two implementations exist today:
   - `ManualPaymentMethod` in [convex/payments/methods/manual.ts](../../convex/payments/methods/manual.ts)
   - `MockPADMethod` in [convex/payments/methods/mockPAD.ts](../../convex/payments/methods/mockPAD.ts)
-- Runtime method lookup exists in [convex/payments/methods/registry.ts](../../convex/payments/methods/registry.ts).
+- Runtime method lookup exists in [convex/payments/methods/registry.ts](../../convex/payments/methods/registry.ts) as a compatibility-only shim.
+- Canonical provider resolution belongs to the transfer-domain registry in [convex/payments/transfers/providers/registry.ts](../../convex/payments/transfers/providers/registry.ts).
 - Collection attempts are already modeled as a governed entity with a lifecycle in [convex/engine/machines/collectionAttempt.machine.ts](../../convex/engine/machines/collectionAttempt.machine.ts).
 - Collection attempt effects already fan out to obligations and retry rules in [convex/engine/effects/collectionAttempt.ts](../../convex/engine/effects/collectionAttempt.ts).
 - Obligation settlement already schedules lender dispersal creation in [convex/engine/effects/obligation.ts](../../convex/engine/effects/obligation.ts).

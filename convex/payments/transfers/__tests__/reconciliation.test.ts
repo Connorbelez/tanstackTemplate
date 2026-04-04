@@ -86,23 +86,22 @@ describe("isFreshTransfer", () => {
 // ── Orphan Detection Logic ──────────────────────────────────────────
 
 describe("orphan detection", () => {
-	it("confirmed transfer with collectionAttemptId is NOT orphaned (bridged)", () => {
-		// The reconciliation cron skips transfers with collectionAttemptId
+	it("collectionAttemptId alone no longer proves a confirmed transfer is healthy", () => {
 		const transfer = {
 			status: "confirmed",
+			direction: "inbound",
 			collectionAttemptId: "attempt_001",
 		};
-		const isBridged = !!transfer.collectionAttemptId;
-		expect(isBridged).toBe(true);
+		expect(Boolean(transfer.collectionAttemptId)).toBe(true);
+		expect(transfer.direction).toBe("inbound");
 	});
 
-	it("confirmed transfer without collectionAttemptId IS a candidate for orphan check", () => {
+	it("non-attempt-linked confirmed transfers still rely on transfer-owned journal checks", () => {
 		const transfer = {
 			status: "confirmed",
 			collectionAttemptId: undefined,
 		};
-		const isBridged = !!transfer.collectionAttemptId;
-		expect(isBridged).toBe(false);
+		expect(Boolean(transfer.collectionAttemptId)).toBe(false);
 	});
 
 	it("only confirmed transfers are checked (not pending, failed, etc.)", () => {

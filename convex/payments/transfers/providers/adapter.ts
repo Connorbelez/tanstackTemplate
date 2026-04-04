@@ -7,7 +7,12 @@
  * fresh `PaymentMethod` implementations.
  */
 
-import type { InitiateParams, PaymentMethod } from "../../methods/interface";
+import {
+	type InitiateParams,
+	isLegacyPaymentMethodCode,
+	LEGACY_PAYMENT_METHOD_CODES,
+	type PaymentMethod,
+} from "../../methods/interface";
 import type {
 	CancelResult,
 	ConfirmResult,
@@ -38,6 +43,15 @@ export class PaymentMethodAdapter implements TransferProvider {
 				"PaymentMethodAdapter only supports borrower counterparties. " +
 					`Received counterpartyType="${request.counterpartyType}". ` +
 					"Use a native TransferProvider for non-borrower counterparties."
+			);
+		}
+
+		if (!isLegacyPaymentMethodCode(request.providerCode)) {
+			throw new Error(
+				"PaymentMethodAdapter only supports legacy compatibility provider codes. " +
+					`Received providerCode="${request.providerCode}". ` +
+					`Supported codes: ${LEGACY_PAYMENT_METHOD_CODES.join(", ")}. ` +
+					"Use a native TransferProvider for canonical provider codes."
 			);
 		}
 

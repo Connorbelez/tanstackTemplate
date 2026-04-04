@@ -42,11 +42,11 @@ async function seedBaseEntities(t: GovernedTestConvex) {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// AC4: ManualPaymentMethod Full Lifecycle
-// seed → obligation due → plan entry → attempt initiated → FUNDS_SETTLED → confirmed → PAYMENT_APPLIED → obligation settled → PAYMENT_CONFIRMED → mortgage active
+// AC4: Legacy manual compatibility lifecycle
+// Compatibility-only attempt flow: seed → obligation due → plan entry → attempt initiated → FUNDS_SETTLED → confirmed → PAYMENT_APPLIED → obligation settled → PAYMENT_CONFIRMED → mortgage active
 // ══════════════════════════════════════════════════════════════════════════════
 
-describe("AC4: ManualPaymentMethod full lifecycle", () => {
+describe("AC4: legacy manual compatibility lifecycle", () => {
 	beforeEach(() => {
 		vi.useFakeTimers();
 	});
@@ -57,7 +57,7 @@ describe("AC4: ManualPaymentMethod full lifecycle", () => {
 		vi.useRealTimers();
 	});
 
-	it("should complete full manual payment lifecycle: initiated → confirmed → settled → mortgage active", async () => {
+	it("should complete the legacy manual compatibility lifecycle: initiated → confirmed → settled → mortgage active", async () => {
 		const t = createGovernedTestConvex();
 		await seedDefaultGovernedActors(t);
 		const { mortgageId, obligationId } = await seedBaseEntities(t);
@@ -80,7 +80,7 @@ describe("AC4: ManualPaymentMethod full lifecycle", () => {
 			machineContext: { attemptId: "", retryCount: 0, maxRetries: 3 },
 		});
 
-		// Step 1: Fire FUNDS_SETTLED on attempt → confirmed (ManualPaymentMethod immediate path)
+		// Step 1: Fire FUNDS_SETTLED on attempt → confirmed (legacy manual compatibility path)
 		const result = await fireTransition(
 			t,
 			"collectionAttempt",
@@ -216,11 +216,11 @@ describe("AC4: ManualPaymentMethod full lifecycle", () => {
 });
 
 // ══════════════════════════════════════════════════════════════════════════════
-// AC5: MockPADMethod Async Path
-// Same lifecycle but with async `pending` state: initiated → pending → confirmed
+// AC5: Legacy mock PAD compatibility path
+// Compatibility-only attempt flow with async `pending` state: initiated → pending → confirmed
 // ══════════════════════════════════════════════════════════════════════════════
 
-describe("AC5: MockPADMethod async path (initiated → pending → confirmed)", () => {
+describe("AC5: legacy mock PAD compatibility path (initiated → pending → confirmed)", () => {
 	beforeEach(() => {
 		vi.useFakeTimers();
 	});

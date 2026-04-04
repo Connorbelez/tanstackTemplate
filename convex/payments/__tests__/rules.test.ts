@@ -59,101 +59,47 @@ function mockObligation(
 // ---------------------------------------------------------------------------
 
 describe("ScheduleRule", () => {
-	let runQuery: ReturnType<typeof vi.fn>;
 	let runMutation: ReturnType<typeof vi.fn>;
 	let ctx: ActionCtx;
 	let rule: Doc<"collectionRules">;
 
 	beforeEach(() => {
-		runQuery = vi.fn();
 		runMutation = vi.fn().mockResolvedValue("mock_entry_id");
-		ctx = { runQuery, runMutation } as unknown as ActionCtx;
+		ctx = { runMutation } as unknown as ActionCtx;
 		rule = mockRule();
 	});
 
-	it("creates plan entry for obligation due within window", async () => {
-		const obligation = mockObligation();
-
-		// getUpcomingInWindow -> returns the obligation
-		runQuery.mockResolvedValueOnce([obligation]);
-		// getPlannedEntriesForObligations -> no existing entries (empty record)
-		runQuery.mockResolvedValueOnce({});
-
-		await scheduleRuleHandler.evaluate(ctx, { rule });
+	it("delegates canonical initial scheduling to the shared scheduling mutation", async () => {
+		await scheduleRuleHandler.evaluate(ctx, {
+			rule,
+			mortgageId: "mortgage_1" as Id<"mortgages">,
+		});
 
 		expect(runMutation).toHaveBeenCalledOnce();
 		expect(runMutation).toHaveBeenCalledWith(
-			expect.anything(), // internal.payments.collectionPlan.mutations.createEntry
+			expect.anything(),
 			expect.objectContaining({
-				obligationIds: [obligation._id],
-				amount: obligation.amount,
-				method: "manual",
-				status: "planned",
-				source: "default_schedule",
+				mortgageId: "mortgage_1",
+				delayDays: 5,
 				ruleId: rule._id,
 			})
 		);
 	});
 
-	it("skips obligation with existing plan entry (idempotency)", async () => {
-		const obligation = mockObligation();
-
-		// getUpcomingInWindow -> returns the obligation
-		runQuery.mockResolvedValueOnce([obligation]);
-		// getPlannedEntriesForObligations -> obligation already covered
-		runQuery.mockResolvedValueOnce({
-			[obligation._id]: "existing_entry" as Id<"collectionPlanEntries">,
-		});
-
-		await scheduleRuleHandler.evaluate(ctx, { rule });
-
-		expect(runMutation).not.toHaveBeenCalled();
-	});
-
-	it("respects delayDays parameter: obligation too far in future produces no entry", async () => {
-		// getUpcomingInWindow with dueBefore = now + 5 days would NOT include
-		// an obligation 20 days away, so the query returns an empty array
-		runQuery.mockResolvedValueOnce([]);
-
-		await scheduleRuleHandler.evaluate(ctx, { rule });
-
-		expect(runMutation).not.toHaveBeenCalled();
-	});
-
-	it('uses "manual" as default method', async () => {
-		const obligation = mockObligation();
-
-		runQuery.mockResolvedValueOnce([obligation]);
-		// getPlannedEntriesForObligations -> no existing entries
-		runQuery.mockResolvedValueOnce({});
-
-		await scheduleRuleHandler.evaluate(ctx, { rule });
-
-		const mutationArgs = runMutation.mock.calls[0][1] as Record<
-			string,
-			unknown
-		>;
-		expect(mutationArgs.method).toBe("manual");
-	});
-
-	it("sets correct scheduledDate (dueDate - delayDays * MS_PER_DAY)", async () => {
-		const dueDate = Date.now() + 4 * MS_PER_DAY;
-		const delayDays = 5;
-		const obligation = mockObligation({ dueDate });
-
-		runQuery.mockResolvedValueOnce([obligation]);
-		// getPlannedEntriesForObligations -> no existing entries
-		runQuery.mockResolvedValueOnce({});
-
+	it("uses the rule delayDays parameter when delegating", async () => {
 		await scheduleRuleHandler.evaluate(ctx, {
-			rule: mockRule({ parameters: { delayDays } }),
+			rule: mockRule({ parameters: { delayDays: 9 } }),
+			mortgageId: "mortgage_1" as Id<"mortgages">,
 		});
 
-		const mutationArgs = runMutation.mock.calls[0][1] as Record<
-			string,
-			unknown
-		>;
-		expect(mutationArgs.scheduledDate).toBe(dueDate - delayDays * MS_PER_DAY);
+		expect(runMutation).toHaveBeenCalledOnce();
+		expect(runMutation).toHaveBeenCalledWith(
+			expect.anything(),
+			expect.objectContaining({
+				mortgageId: "mortgage_1",
+				delayDays: 9,
+			})
+		);
 	});
 });
 

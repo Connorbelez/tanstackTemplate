@@ -17,6 +17,10 @@ import { internal } from "../../_generated/api";
 import type { Id } from "../../_generated/dataModel";
 import type { MutationCtx } from "../../_generated/server";
 import { internalMutation } from "../../_generated/server";
+import {
+	getAttemptLinkedInboundSettlementHealth,
+	isAttemptLinkedInboundTransfer,
+} from "./collectionAttemptReconciliation";
 
 // ── Constants ───────────────────────────────────────────────────────
 
@@ -113,17 +117,13 @@ async function reconcileTransfer(
 	transfer: {
 		_id: Id<"transferRequests">;
 		collectionAttemptId?: Id<"collectionAttempts">;
+		direction?: string;
 		settledAt?: number;
 		createdAt: number;
 	},
 	threshold: number
 ): Promise<void> {
 	if (isFreshTransfer(transfer, threshold)) {
-		return;
-	}
-
-	// Bridged transfers have journal entries via the collection attempt path
-	if (transfer.collectionAttemptId) {
 		return;
 	}
 
@@ -154,6 +154,26 @@ async function reconcileTransfer(
 			});
 		}
 		return;
+	}
+
+	if (isAttemptLinkedInboundTransfer(transfer)) {
+		const attemptHealth = await getAttemptLinkedInboundSettlementHealth(
+			ctx,
+			transfer
+		);
+		if (attemptHealth.isHealthy) {
+			if (
+				healing &&
+				healing.status !== "resolved" &&
+				healing.status !== "escalated"
+			) {
+				await ctx.db.patch(healing._id, {
+					status: "resolved" as const,
+					resolvedAt: Date.now(),
+				});
+			}
+			return;
+		}
 	}
 
 	if (healing?.status === "escalated" || healing?.status === "resolved") {

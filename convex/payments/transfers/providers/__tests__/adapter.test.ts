@@ -1,6 +1,9 @@
 /**
  * PaymentMethodAdapter tests — verifies field mapping from
  * TransferProvider interface to the legacy PaymentMethod interface.
+ *
+ * This suite is compatibility coverage only. Canonical inbound provider work
+ * should target native TransferProvider implementations instead.
  */
 
 import { describe, expect, it } from "vitest";
@@ -19,6 +22,7 @@ import { PaymentMethodAdapter } from "../adapter";
 // ── Error patterns ──────────────────────────────────────────────────
 const INBOUND_ONLY_RE = /only supports inbound transfers/;
 const BORROWER_ONLY_RE = /only supports borrower counterparties/;
+const LEGACY_PROVIDER_CODE_ONLY_RE = /legacy compatibility provider codes/i;
 
 // ── Mock PaymentMethod ──────────────────────────────────────────────
 
@@ -115,13 +119,13 @@ describe("PaymentMethodAdapter", () => {
 			expect(params.amount).toBe(55_000);
 		});
 
-		it("maps providerCode to method", async () => {
+		it("maps legacy providerCode to method", async () => {
 			const mock = new MockPaymentMethod();
 			const adapter = new PaymentMethodAdapter(mock);
-			await adapter.initiate(makeInput({ providerCode: "pad_rotessa" }));
+			await adapter.initiate(makeInput({ providerCode: "mock_pad" }));
 
 			const params = mock.calls[0].args[0] as InitiateParams;
-			expect(params.method).toBe("pad_rotessa");
+			expect(params.method).toBe("mock_pad");
 		});
 
 		it("passes metadata through", async () => {
@@ -193,6 +197,24 @@ describe("PaymentMethodAdapter", () => {
 			await expect(
 				adapter.initiate(makeInput({ counterpartyType: "trust" }))
 			).rejects.toThrow(BORROWER_ONLY_RE);
+			expect(mock.calls).toHaveLength(0);
+		});
+
+		it("rejects canonical transfer-provider codes that are not legacy payment methods", async () => {
+			const mock = new MockPaymentMethod();
+			const adapter = new PaymentMethodAdapter(mock);
+			await expect(
+				adapter.initiate(makeInput({ providerCode: "pad_rotessa" }))
+			).rejects.toThrow(LEGACY_PROVIDER_CODE_ONLY_RE);
+			expect(mock.calls).toHaveLength(0);
+		});
+
+		it("rejects transfer-only mock provider codes that have no PaymentMethod equivalent", async () => {
+			const mock = new MockPaymentMethod();
+			const adapter = new PaymentMethodAdapter(mock);
+			await expect(
+				adapter.initiate(makeInput({ providerCode: "mock_eft" }))
+			).rejects.toThrow(LEGACY_PROVIDER_CODE_ONLY_RE);
 			expect(mock.calls).toHaveLength(0);
 		});
 

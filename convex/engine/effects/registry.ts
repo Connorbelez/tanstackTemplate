@@ -71,6 +71,8 @@ export const effectRegistry: Record<
 		internal.engine.effects.transfer.recordTransferProviderRef,
 	publishTransferConfirmed:
 		internal.engine.effects.transfer.publishTransferConfirmed,
+	publishTransferCancelled:
+		internal.engine.effects.transfer.publishTransferCancelled,
 	publishTransferFailed: internal.engine.effects.transfer.publishTransferFailed,
 	publishTransferReversed:
 		internal.engine.effects.transfer.publishTransferReversed,

@@ -19,7 +19,12 @@
  */
 
 import { ConvexError } from "convex/values";
-import type { PaymentMethod } from "./interface";
+import {
+	isLegacyPaymentMethodCode,
+	LEGACY_PAYMENT_METHOD_CODES,
+	type LegacyPaymentMethodCode,
+	type PaymentMethod,
+} from "./interface";
 import { ManualPaymentMethod } from "./manual";
 import {
 	type MockPADConfig,
@@ -52,7 +57,7 @@ const noopScheduler: ScheduleSettlementFn = async () => {
 // ---------------------------------------------------------------------------
 
 function buildMethod(
-	method: string,
+	method: LegacyPaymentMethodCode,
 	scheduleSettlement: ScheduleSettlementFn,
 	mockPADConfig?: Partial<MockPADConfig>
 ): PaymentMethod {
@@ -61,9 +66,26 @@ function buildMethod(
 			return new ManualPaymentMethod();
 		case "mock_pad":
 			return new MockPADMethod(scheduleSettlement, mockPADConfig);
-		default:
-			throw new ConvexError(`Unknown payment method: "${method}"`);
+		default: {
+			const exhaustiveCheck: never = method;
+			void exhaustiveCheck;
+			throw new ConvexError("Unknown legacy payment method");
+		}
 	}
+}
+
+function assertLegacyPaymentMethodCode(
+	method: string
+): asserts method is LegacyPaymentMethodCode {
+	if (isLegacyPaymentMethodCode(method)) {
+		return;
+	}
+
+	throw new ConvexError(
+		`Unknown legacy payment method: "${method}". ` +
+			`PaymentMethod compatibility supports only ${LEGACY_PAYMENT_METHOD_CODES.map((code) => `"${code}"`).join(", ")}. ` +
+			"Use TransferProvider and the transfer-domain provider registry for new inbound work."
+	);
 }
 
 // ---------------------------------------------------------------------------
@@ -73,8 +95,12 @@ function buildMethod(
 /**
  * Quick lookup for payment methods that don't need a scheduler (e.g. manual).
  * If a method tries to schedule, it throws at call-time with a clear message.
+ *
+ * @deprecated Compatibility-only registry. New inbound provider resolution must
+ * use the transfer-domain provider registry.
  */
 export function getPaymentMethod(method: string): PaymentMethod {
+	assertLegacyPaymentMethodCode(method);
 	return buildMethod(method, noopScheduler);
 }
 
@@ -85,10 +111,15 @@ export function getPaymentMethod(method: string): PaymentMethod {
 /**
  * Creates a registry function pre-wired with a scheduler and optional config.
  * Use this in production Convex actions/mutations where `ctx.scheduler` is available.
+ *
+ * @deprecated Compatibility-only registry. New inbound provider resolution must
+ * use the transfer-domain provider registry.
  */
 export function createPaymentMethodRegistry(
 	config: PaymentMethodRegistryConfig
 ): (method: string) => PaymentMethod {
-	return (method: string) =>
-		buildMethod(method, config.scheduleSettlement, config.mockPADConfig);
+	return (method: string) => {
+		assertLegacyPaymentMethodCode(method);
+		return buildMethod(method, config.scheduleSettlement, config.mockPADConfig);
+	};
 }

@@ -9,6 +9,12 @@ import {
 	postLenderPayoutForTransfer,
 	postTransferReversal,
 } from "../../payments/cashLedger/integrations";
+import {
+	reconcileAttemptLinkedInboundCancellation,
+	reconcileAttemptLinkedInboundFailure,
+	reconcileAttemptLinkedInboundReversal,
+	reconcileAttemptLinkedInboundSettlement,
+} from "../../payments/transfers/collectionAttemptReconciliation";
 import { extractLeg1Metadata } from "../../payments/transfers/pipeline.types";
 import type { ProviderCode } from "../../payments/transfers/types";
 import { PROVIDER_CODES } from "../../payments/transfers/types";
@@ -100,10 +106,21 @@ export const publishTransferConfirmed = internalMutation({
 		// Persist settledAt BEFORE posting cash so posting helpers see the authoritative timestamp.
 		await ctx.db.patch(args.entityId, { settledAt });
 
-		// D4: bridged transfer — cash posted via collection attempt path
-		if (transfer.collectionAttemptId) {
+		const reconciledAttempt = await reconcileAttemptLinkedInboundSettlement(
+			ctx,
+			{
+				transfer,
+				settledAt,
+				source: args.source,
+			}
+		);
+
+		// Attempt-linked inbound transfers keep business settlement and cash posting
+		// on the Collection Attempt path. Outbound and non-attempt-linked transfers
+		// still post directly from the transfer effect.
+		if (reconciledAttempt) {
 			console.info(
-				`[publishTransferConfirmed] Bridged transfer ${args.entityId} — cash posted via collection attempt path. Skipping.`
+				`[publishTransferConfirmed] Attempt-linked inbound transfer ${args.entityId} reconciled through collection attempt settlement. Skipping transfer-owned cash posting.`
 			);
 		} else if (transfer.direction === "inbound") {
 			await postCashReceiptForTransfer(ctx, {
@@ -368,6 +385,13 @@ export const publishTransferFailed = internalMutation({
 			failureCode: errorCode,
 		});
 
+		await reconcileAttemptLinkedInboundFailure(ctx, {
+			transfer,
+			failureCode: errorCode,
+			failureReason: reason,
+			source: args.source,
+		});
+
 		console.warn(
 			`[publishTransferFailed] Transfer ${args.entityId} failed: ${reason} (${errorCode})`
 		);
@@ -430,6 +454,36 @@ export const publishTransferFailed = internalMutation({
 			reason,
 			errorCode
 		);
+	},
+});
+
+/**
+ * Mirrors transfer cancellation back onto the linked Collection Attempt for
+ * canonical inbound collection executions.
+ */
+export const publishTransferCancelled = internalMutation({
+	args: transferEffectValidator,
+	handler: async (ctx, args) => {
+		const transfer = await loadTransfer(ctx, args, "publishTransferCancelled");
+		const reason =
+			typeof args.payload?.reason === "string"
+				? args.payload.reason
+				: "transfer_cancelled";
+
+		const reconciledAttempt = await reconcileAttemptLinkedInboundCancellation(
+			ctx,
+			{
+				transfer,
+				reason,
+				source: args.source,
+			}
+		);
+
+		if (reconciledAttempt) {
+			console.info(
+				`[publishTransferCancelled] Attempt-linked inbound transfer ${args.entityId} cancelled its linked collection attempt.`
+			);
+		}
 	},
 });
 
@@ -524,10 +578,21 @@ export const publishTransferReversed = internalMutation({
 			typeof args.payload?.reason === "string"
 				? args.payload.reason
 				: "transfer_reversed";
+		const effectiveDate =
+			typeof args.payload?.effectiveDate === "string"
+				? args.payload.effectiveDate
+				: new Date().toISOString().slice(0, 10);
 
 		await ctx.db.patch(args.entityId, {
 			reversedAt: Date.now(),
 			reversalRef,
+		});
+
+		await reconcileAttemptLinkedInboundReversal(ctx, {
+			transfer,
+			reason,
+			effectiveDate,
+			source: args.source,
 		});
 
 		// Look up original journal entry for cash reversal
@@ -539,7 +604,6 @@ export const publishTransferReversed = internalMutation({
 			.first();
 
 		if (originalEntry) {
-			const effectiveDate = new Date().toISOString().slice(0, 10);
 			const journalAmount = safeBigintToNumber(originalEntry.amount);
 			const amount = transfer.amount ?? journalAmount;
 

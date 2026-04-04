@@ -323,7 +323,8 @@ export const initiateTransfer = paymentAction
 			);
 		}
 
-		// Schema guarantees these are typed — no unsafe casts needed
+		// Canonical provider boundary: AMPS hands off before this point and the
+		// transfer domain resolves the concrete provider implementation.
 		const provider = getTransferProvider(transfer.providerCode);
 
 		let counterpartyId: TransferRequestInput["counterpartyId"];
@@ -550,6 +551,9 @@ export const initiateTransferInternal = internalAction({
 			};
 		}
 
+		// Canonical provider boundary: internal orchestration still resolves
+		// providers through the transfer-domain registry, never through
+		// legacy PaymentMethod lookup.
 		const provider = getTransferProvider(transfer.providerCode);
 
 		let counterpartyId: TransferRequestInput["counterpartyId"];

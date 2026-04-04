@@ -98,6 +98,8 @@ provider work. The aligned repo contract is:
 
 - `TransferProvider` is canonical for new inbound provider integrations
 - `PaymentMethod` remains transitional compatibility
+- `PaymentMethodAdapter` and `methods/registry.ts` are explicit compatibility
+  shims, not normal extension points for new provider work
 - Collection Attempts remain business execution records even when transfer
   infrastructure performs provider work
 

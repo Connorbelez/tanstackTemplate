@@ -568,7 +568,7 @@ describe("collectionAttempt machine", () => {
 	// ── Happy path integration tests ────────────────────────────────
 
 	describe("happy paths", () => {
-		it("ManualPaymentMethod path: initiated -> confirmed (skips pending)", () => {
+		it("legacy manual compatibility path: initiated -> confirmed (skips pending)", () => {
 			const [next, actions] = transition(
 				collectionAttemptMachine,
 				snapshotAt("initiated"),

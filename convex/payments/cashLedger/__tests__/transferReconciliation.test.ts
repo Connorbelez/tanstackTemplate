@@ -1,13 +1,14 @@
+import auditLogTest from "convex-audit-log/test";
 import { convexTest } from "convex-test";
 import { describe, expect, it, vi } from "vitest";
 import { internal } from "../../../_generated/api";
+import type { Id } from "../../../_generated/dataModel";
 import auditTrailSchema from "../../../components/auditTrail/schema";
 import schema from "../../../schema";
 import {
 	convexModules,
 	auditTrailModules as sharedAuditTrailModules,
 } from "../../../test/moduleMaps";
-import { registerAuditLogComponent } from "../../../test/registerAuditLogComponent";
 import {
 	checkOrphanedConfirmedTransfers,
 	checkOrphanedReversedTransfers,
@@ -18,6 +19,7 @@ import {
 import { buildIdempotencyKey } from "../types";
 import {
 	createConfirmedTransfer,
+	createDueObligation,
 	createHarness,
 	createReversedTransfer,
 	createTestAccount,
@@ -37,9 +39,38 @@ const auditTrailModules = sharedAuditTrailModules;
 function createComponentHarness(): TestHarness {
 	process.env.DISABLE_CASH_LEDGER_HASHCHAIN = "true";
 	const t = convexTest(schema, modules);
-	registerAuditLogComponent(t, "auditLog");
+	auditLogTest.register(t, "auditLog");
 	t.registerComponent("auditTrail", auditTrailSchema, auditTrailModules);
 	return t;
+}
+
+async function createConfirmedAttempt(
+	t: TestHarness,
+	args: {
+		obligationId: Id<"obligations">;
+		amount: number;
+	}
+) {
+	return t.run(async (ctx) => {
+		const planEntryId = await ctx.db.insert("collectionPlanEntries", {
+			obligationIds: [args.obligationId],
+			amount: args.amount,
+			method: "manual",
+			scheduledDate: Date.parse("2026-03-15T00:00:00Z"),
+			status: "completed",
+			source: "default_schedule",
+			createdAt: Date.now(),
+		});
+
+		return ctx.db.insert("collectionAttempts", {
+			planEntryId,
+			amount: args.amount,
+			method: "manual",
+			status: "confirmed",
+			machineContext: { retryCount: 0, maxRetries: 3 },
+			initiatedAt: Date.now(),
+		});
+	});
 }
 
 // ── T-017: checkOrphanedConfirmedTransfers ─────────────────────
@@ -105,6 +136,65 @@ describe("checkOrphanedConfirmedTransfers", () => {
 		expect(result.isHealthy).toBe(false);
 		expect(result.count).toBe(1);
 		expect(result.items[0]?.amount).toBe(50_000);
+	});
+
+	it("treats attempt-linked inbound transfers as healthy when attempt-owned cash receipt exists", async () => {
+		const t = createHarness(modules);
+		const seeded = await seedMinimalEntities(t);
+		const obligationId = await createDueObligation(t, {
+			mortgageId: seeded.mortgageId,
+			borrowerId: seeded.borrowerId,
+			amount: 50_000,
+		});
+		const attemptId = await createConfirmedAttempt(t, {
+			obligationId,
+			amount: 50_000,
+		});
+
+		const transferId = await createConfirmedTransfer(t, {
+			direction: "inbound",
+			amount: 50_000,
+			mortgageId: seeded.mortgageId,
+			obligationId,
+			borrowerId: seeded.borrowerId,
+		});
+
+		await t.run(async (ctx) => {
+			await ctx.db.patch(transferId, {
+				collectionAttemptId: attemptId,
+			});
+		});
+
+		const trustCash = await createTestAccount(t, {
+			family: "TRUST_CASH",
+		});
+		const borrowerReceivable = await createTestAccount(t, {
+			family: "BORROWER_RECEIVABLE",
+			mortgageId: seeded.mortgageId,
+			borrowerId: seeded.borrowerId,
+			obligationId,
+			initialDebitBalance: 100_000n,
+		});
+
+		await postTestEntry(t, {
+			entryType: "CASH_RECEIVED",
+			effectiveDate: "2026-03-01",
+			amount: 50_000,
+			debitAccountId: trustCash._id,
+			creditAccountId: borrowerReceivable._id,
+			idempotencyKey: `cash-ledger:cash-received:attempt-health:${attemptId}`,
+			mortgageId: seeded.mortgageId,
+			obligationId,
+			attemptId,
+			postingGroupId: `cash-receipt:${attemptId}`,
+			source: SYSTEM_SOURCE,
+		});
+
+		const result = await t.run(async (ctx) =>
+			checkOrphanedConfirmedTransfers(ctx)
+		);
+		expect(result.isHealthy).toBe(true);
+		expect(result.count).toBe(0);
 	});
 
 	it("skips recently confirmed transfers (within 5-minute threshold)", async () => {
@@ -201,6 +291,87 @@ describe("checkOrphanedReversedTransfers", () => {
 		expect(result.isHealthy).toBe(false);
 		expect(result.count).toBe(1);
 		expect(result.items[0]?.amount).toBe(30_000);
+	});
+
+	it("treats attempt-linked inbound reversals as healthy when attempt-owned reversal entries exist", async () => {
+		const t = createHarness(modules);
+		const seeded = await seedMinimalEntities(t);
+		const obligationId = await createDueObligation(t, {
+			mortgageId: seeded.mortgageId,
+			borrowerId: seeded.borrowerId,
+			amount: 30_000,
+		});
+		const attemptId = await createConfirmedAttempt(t, {
+			obligationId,
+			amount: 30_000,
+		});
+
+		await t.run(async (ctx) => {
+			await ctx.db.patch(attemptId, {
+				status: "reversed",
+			});
+		});
+
+		const transferId = await createReversedTransfer(t, {
+			direction: "inbound",
+			amount: 30_000,
+			mortgageId: seeded.mortgageId,
+		});
+
+		await t.run(async (ctx) => {
+			await ctx.db.patch(transferId, {
+				collectionAttemptId: attemptId,
+				obligationId,
+				borrowerId: seeded.borrowerId,
+			});
+		});
+
+		const trustCash = await createTestAccount(t, {
+			family: "TRUST_CASH",
+			initialDebitBalance: 100_000n,
+		});
+		const borrowerReceivable = await createTestAccount(t, {
+			family: "BORROWER_RECEIVABLE",
+			mortgageId: seeded.mortgageId,
+			borrowerId: seeded.borrowerId,
+			obligationId,
+			initialDebitBalance: 100_000n,
+		});
+
+		const original = await postTestEntry(t, {
+			entryType: "CASH_RECEIVED",
+			effectiveDate: "2026-02-15",
+			amount: 30_000,
+			debitAccountId: trustCash._id,
+			creditAccountId: borrowerReceivable._id,
+			idempotencyKey: `cash-ledger:cash-received:attempt-reversal-original:${attemptId}`,
+			mortgageId: seeded.mortgageId,
+			obligationId,
+			attemptId,
+			postingGroupId: `cash-receipt:${attemptId}`,
+			source: SYSTEM_SOURCE,
+		});
+
+		await postTestEntry(t, {
+			entryType: "REVERSAL",
+			effectiveDate: "2026-03-01",
+			amount: 30_000,
+			debitAccountId: borrowerReceivable._id,
+			creditAccountId: trustCash._id,
+			idempotencyKey: `cash-ledger:reversal:attempt-health:${attemptId}`,
+			causedBy: original.entry._id,
+			mortgageId: seeded.mortgageId,
+			obligationId,
+			attemptId,
+			postingGroupId: `reversal-group:${attemptId}`,
+			source: SYSTEM_SOURCE,
+		});
+
+		const result = await t.run(async (ctx) =>
+			checkOrphanedReversedTransfers(ctx)
+		);
+		expect(result.isHealthy).toBe(true);
+		expect(result.count).toBe(0);
 	});
 });
 
