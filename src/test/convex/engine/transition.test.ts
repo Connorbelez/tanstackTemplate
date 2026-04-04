@@ -17,6 +17,12 @@ import {
 	seedDefaultGovernedActors,
 } from "../onboarding/helpers";
 import {
+	seedBorrowerProfile,
+	seedCollectionAttempt,
+	seedObligation,
+	seedPlanEntry,
+} from "../payments/helpers";
+import {
 	getAuditJournalForEntity,
 	getEntity,
 } from "./helpers";
@@ -884,6 +890,50 @@ describe("transition engine", () => {
 			expect.stringContaining('No handler registered for effect "missingEffect"')
 		);
 		expect((await getRequest(t, requestId))?.status).toBe("approved");
+	});
+
+	it("does not warn or schedule effects for XState assign actions", async () => {
+		const t = createGovernedTestConvex();
+		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+		const borrowerId = await seedBorrowerProfile(t);
+		const mortgageId = await seedMortgage(t);
+		const obligationId = await seedObligation(t, mortgageId, borrowerId, {
+			status: "due",
+		});
+		const planEntryId = await seedPlanEntry(t, {
+			obligationIds: [obligationId],
+			amount: 300_000,
+			method: "manual",
+		});
+		const attemptId = await seedCollectionAttempt(t, {
+			planEntryId,
+			method: "manual",
+			amount: 300_000,
+		});
+
+		const result = await t.mutation(
+			internal.engine.transitionMutation.transitionMutation,
+			{
+				entityType: "collectionAttempt",
+				entityId: attemptId,
+				eventType: "DRAW_FAILED",
+				payload: { reason: "NSF", code: "R01" },
+				source: {
+					actorType: "system",
+					channel: "scheduler",
+				},
+			}
+		);
+
+		expect(result.success).toBe(true);
+		expect(result.newState).toBe("failed");
+		expect(result.effectsScheduled ?? []).toEqual([]);
+		expect(warnSpy).not.toHaveBeenCalledWith(
+			expect.stringContaining('No handler registered for effect "incrementRetryCount"')
+		);
+
+		const attempt = await t.run((ctx) => ctx.db.get(attemptId));
+		expect(attempt?.machineContext?.retryCount).toBe(1);
 	});
 
 	it("schedules nested compound-state effects for deal sub-state transitions", async () => {

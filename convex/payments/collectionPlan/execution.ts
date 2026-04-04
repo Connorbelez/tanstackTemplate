@@ -3,8 +3,10 @@
  *
  * This is the AMPS-owned business command for taking one eligible
  * `collectionPlanEntries` row and turning it into exactly one business
- * `collectionAttempts` record. It stops at the Unified Payment Rails handoff
- * boundary by creating a transfer request through the transfer domain contract.
+ * `collectionAttempts` record. The page-03 spine now carries that execution
+ * through transfer-request creation, Unified Payment Rails initiation, and the
+ * initial Collection Attempt GT progression that reflects real initiation
+ * outcomes.
  *
  * Spec: https://www.notion.so/337fc1b440248115b4d3c21577f27601
  */
@@ -12,7 +14,7 @@
 import { v } from "convex/values";
 import { internal } from "../../_generated/api";
 import type { Doc, Id } from "../../_generated/dataModel";
-import type { MutationCtx } from "../../_generated/server";
+import type { ActionCtx, MutationCtx } from "../../_generated/server";
 import { auditLog } from "../../auditLog";
 import { convex } from "../../fluent";
 import {
@@ -234,6 +236,26 @@ const stagePlanEntryExecution = convex
 				existingAttempt.executionIdempotencyKey ?? normalizedIdempotencyKey;
 			const reconciledExecutedAt =
 				existingAttempt.executionRequestedAt ?? existingAttempt.initiatedAt;
+			let recoveredTransferRequestId = existingAttempt.transferRequestId;
+			if (!recoveredTransferRequestId) {
+				const existingTransfer = await ctx.db
+					.query("transferRequests")
+					.withIndex("by_idempotency", (q) =>
+						q.eq(
+							"idempotencyKey",
+							buildTransferHandoffIdempotencyKey(planEntry._id)
+						)
+					)
+					.first();
+
+				if (existingTransfer) {
+					recoveredTransferRequestId = existingTransfer._id;
+					await ctx.db.patch(existingAttempt._id, {
+						transferRequestId: existingTransfer._id,
+					});
+				}
+			}
+
 			if (
 				planEntry.collectionAttemptId !== existingAttempt._id ||
 				planEntry.executedAt !== reconciledExecutedAt ||
@@ -256,14 +278,15 @@ const stagePlanEntryExecution = convex
 				planEntryStatusAfter: "executing",
 				collectionAttemptId: existingAttempt._id,
 				attemptStatusAfter: existingAttempt.status,
-				transferRequestId: existingAttempt.transferRequestId,
+				transferRequestId: recoveredTransferRequestId,
 				reasonCode: "plan_entry_already_executed",
 				reasonDetail:
 					"Collection plan entry already has a business collection attempt.",
 			});
-			if (existingAttempt.transferRequestId) {
+			if (recoveredTransferRequestId) {
 				await logPlanEntryExecutionAudit(ctx, args, result);
 				return {
+					existingTransferRequestId: recoveredTransferRequestId,
 					result,
 				};
 			}
@@ -291,6 +314,7 @@ const stagePlanEntryExecution = convex
 
 			await logPlanEntryExecutionAudit(ctx, args, result);
 			return {
+				existingTransferRequestId: recoveredTransferRequestId,
 				result,
 				transferHandoffRequest: buildTransferHandoffRequest({
 					context: handoffContext,
@@ -407,6 +431,165 @@ const stagePlanEntryExecution = convex
 export const stagePlanEntryExecutionMutation =
 	stagePlanEntryExecution.internal();
 
+const getCollectionAttemptForExecution = convex
+	.query()
+	.input({
+		attemptId: v.id("collectionAttempts"),
+	})
+	.handler(async (ctx, args) => {
+		return ctx.db.get(args.attemptId);
+	});
+export const getCollectionAttemptForExecutionQuery =
+	getCollectionAttemptForExecution.internal();
+
+type ExecutionActionCtx = Pick<
+	ActionCtx,
+	"runAction" | "runMutation" | "runQuery"
+>;
+
+interface TransferExecutionState {
+	providerRef?: string;
+	settledAt?: number;
+	status: string;
+}
+
+interface AttemptExecutionState {
+	machineContext?: Record<string, unknown>;
+	status: string;
+}
+
+async function fireCollectionAttemptTransition(args: {
+	attemptId: Id<"collectionAttempts">;
+	ctx: ExecutionActionCtx;
+	eventType:
+		| "DRAW_FAILED"
+		| "DRAW_INITIATED"
+		| "FUNDS_SETTLED"
+		| "MAX_RETRIES_EXCEEDED"
+		| "RETRY_ELIGIBLE";
+	payload?: Record<string, unknown>;
+	source: ReturnType<typeof buildExecutionSource>;
+}) {
+	return args.ctx.runMutation(
+		internal.engine.transitionMutation.transitionMutation,
+		{
+			entityType: "collectionAttempt",
+			entityId: args.attemptId,
+			eventType: args.eventType,
+			payload: args.payload ?? {},
+			source: args.source,
+		}
+	);
+}
+
+async function advanceAttemptForTransferState(args: {
+	attemptId: Id<"collectionAttempts">;
+	ctx: ExecutionActionCtx;
+	source: ReturnType<typeof buildExecutionSource>;
+	transferRequestId: Id<"transferRequests">;
+}) {
+	const transfer = (await args.ctx.runQuery(
+		internal.payments.transfers.queries.getTransferInternal,
+		{
+			transferId: args.transferRequestId,
+		}
+	)) as TransferExecutionState | null;
+	if (!transfer) {
+		return "initiated";
+	}
+
+	let attemptStatusAfter = "initiated";
+
+	if (
+		transfer.providerRef &&
+		(transfer.status === "pending" ||
+			transfer.status === "processing" ||
+			transfer.status === "confirmed")
+	) {
+		const drawInitiated = await fireCollectionAttemptTransition({
+			ctx: args.ctx,
+			attemptId: args.attemptId,
+			eventType: "DRAW_INITIATED",
+			payload: { providerRef: transfer.providerRef },
+			source: args.source,
+		});
+
+		attemptStatusAfter = drawInitiated.success
+			? drawInitiated.newState
+			: drawInitiated.previousState;
+	}
+
+	if (transfer.status === "confirmed") {
+		const fundsSettled = await fireCollectionAttemptTransition({
+			ctx: args.ctx,
+			attemptId: args.attemptId,
+			eventType: "FUNDS_SETTLED",
+			payload: { settledAt: transfer.settledAt ?? Date.now() },
+			source: args.source,
+		});
+
+		attemptStatusAfter = fundsSettled.success
+			? fundsSettled.newState
+			: attemptStatusAfter;
+	}
+
+	return attemptStatusAfter;
+}
+
+async function progressAttemptFailure(args: {
+	attemptId: Id<"collectionAttempts">;
+	ctx: ExecutionActionCtx;
+	failureCode: ExecutePlanEntryReasonCode;
+	failureReason: string;
+	source: ReturnType<typeof buildExecutionSource>;
+}) {
+	const drawFailed = await fireCollectionAttemptTransition({
+		ctx: args.ctx,
+		attemptId: args.attemptId,
+		eventType: "DRAW_FAILED",
+		payload: {
+			code: args.failureCode,
+			reason: args.failureReason,
+		},
+		source: args.source,
+	});
+
+	const attemptStatusAfter = drawFailed.success
+		? drawFailed.newState
+		: drawFailed.previousState;
+
+	const attempt = (await args.ctx.runQuery(
+		internal.payments.collectionPlan.execution
+			.getCollectionAttemptForExecutionQuery,
+		{
+			attemptId: args.attemptId,
+		}
+	)) as AttemptExecutionState | null;
+	if (!attempt || attempt.status !== "failed") {
+		return attemptStatusAfter;
+	}
+
+	const retryCount =
+		typeof attempt.machineContext?.retryCount === "number"
+			? attempt.machineContext.retryCount
+			: 0;
+	const maxRetries =
+		typeof attempt.machineContext?.maxRetries === "number"
+			? attempt.machineContext.maxRetries
+			: 3;
+	const followupEvent =
+		retryCount < maxRetries ? "RETRY_ELIGIBLE" : "MAX_RETRIES_EXCEEDED";
+
+	const followup = await fireCollectionAttemptTransition({
+		ctx: args.ctx,
+		attemptId: args.attemptId,
+		eventType: followupEvent,
+		source: args.source,
+	});
+
+	return followup.success ? followup.newState : attemptStatusAfter;
+}
+
 export const recordTransferHandoffSuccess = convex
 	.mutation()
 	.input({
@@ -468,7 +651,13 @@ export const executePlanEntry = convex
 				.stagePlanEntryExecutionMutation,
 			args
 		);
-		const { result, transferHandoffRequest } = staged;
+		const { existingTransferRequestId, result, transferHandoffRequest } =
+			staged;
+		const executionSource = buildExecutionSource({
+			triggerSource: args.triggerSource,
+			requestedByActorId: args.requestedByActorId,
+		});
+
 		if (
 			result.outcome !== "attempt_created" &&
 			result.outcome !== "already_executed"
@@ -476,50 +665,70 @@ export const executePlanEntry = convex
 			return result;
 		}
 
-		if (!transferHandoffRequest || result.transferRequestId) {
-			return result;
-		}
+		let transferRequestId =
+			existingTransferRequestId ?? result.transferRequestId;
 
 		try {
-			const firstObligationId = transferHandoffRequest.obligationIds[0];
-			const transferRequestId = await ctx.runMutation(
-				internal.payments.transfers.mutations.createTransferRequestInternal,
+			if (!transferRequestId && transferHandoffRequest) {
+				const firstObligationId = transferHandoffRequest.obligationIds[0];
+				transferRequestId = await ctx.runMutation(
+					internal.payments.transfers.mutations.createTransferRequestInternal,
+					{
+						direction: "inbound",
+						transferType: obligationTypeToTransferType(
+							transferHandoffRequest.primaryObligationType
+						),
+						amount: transferHandoffRequest.amount,
+						counterpartyType: "borrower",
+						counterpartyId: transferHandoffRequest.counterpartyId,
+						mortgageId: transferHandoffRequest.mortgageId,
+						obligationId: firstObligationId,
+						planEntryId: transferHandoffRequest.planEntryId,
+						collectionAttemptId: transferHandoffRequest.collectionAttemptId,
+						borrowerId: transferHandoffRequest.borrowerId,
+						providerCode: transferHandoffRequest.providerCode,
+						idempotencyKey: buildTransferHandoffIdempotencyKey(
+							transferHandoffRequest.planEntryId
+						),
+						metadata: buildTransferHandoffMetadata(
+							transferHandoffRequest,
+							transferHandoffRequest.primaryObligationType
+						),
+						source: transferHandoffRequest.source,
+					}
+				);
+
+				await ctx.runMutation(
+					internal.payments.collectionPlan.execution
+						.recordTransferHandoffSuccessMutation,
+					{
+						attemptId: result.collectionAttemptId,
+						transferRequestId,
+					}
+				);
+			}
+
+			if (!transferRequestId) {
+				return result;
+			}
+
+			await ctx.runAction(
+				internal.payments.transfers.mutations.initiateTransferInternal,
 				{
-					direction: "inbound",
-					transferType: obligationTypeToTransferType(
-						transferHandoffRequest.primaryObligationType
-					),
-					amount: transferHandoffRequest.amount,
-					counterpartyType: "borrower",
-					counterpartyId: transferHandoffRequest.counterpartyId,
-					mortgageId: transferHandoffRequest.mortgageId,
-					obligationId: firstObligationId,
-					planEntryId: transferHandoffRequest.planEntryId,
-					collectionAttemptId: transferHandoffRequest.collectionAttemptId,
-					borrowerId: transferHandoffRequest.borrowerId,
-					providerCode: transferHandoffRequest.providerCode,
-					idempotencyKey: buildTransferHandoffIdempotencyKey(
-						transferHandoffRequest.planEntryId
-					),
-					metadata: buildTransferHandoffMetadata(
-						transferHandoffRequest,
-						transferHandoffRequest.primaryObligationType
-					),
-					source: transferHandoffRequest.source,
+					transferId: transferRequestId,
 				}
 			);
 
-			await ctx.runMutation(
-				internal.payments.collectionPlan.execution
-					.recordTransferHandoffSuccessMutation,
-				{
-					attemptId: result.collectionAttemptId,
-					transferRequestId,
-				}
-			);
+			const attemptStatusAfter = await advanceAttemptForTransferState({
+				attemptId: result.collectionAttemptId,
+				ctx,
+				source: executionSource,
+				transferRequestId,
+			});
 
 			return {
 				...result,
+				attemptStatusAfter,
 				transferRequestId,
 			};
 		} catch (error) {
@@ -535,11 +744,22 @@ export const executePlanEntry = convex
 				}
 			);
 
+			const attemptStatusAfter = await progressAttemptFailure({
+				attemptId: result.collectionAttemptId,
+				ctx,
+				failureCode:
+					"transfer_handoff_failed" satisfies ExecutePlanEntryReasonCode,
+				failureReason: reasonDetail,
+				source: executionSource,
+			});
+
 			return {
 				...result,
+				attemptStatusAfter,
 				reasonCode:
 					"transfer_handoff_failed" satisfies ExecutePlanEntryReasonCode,
 				reasonDetail,
+				transferRequestId,
 			};
 		}
 	})

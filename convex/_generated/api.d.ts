@@ -203,6 +203,7 @@ import type * as payments_collectionPlan_queries from "../payments/collectionPla
 import type * as payments_collectionPlan_rules_lateFeeRule from "../payments/collectionPlan/rules/lateFeeRule.js";
 import type * as payments_collectionPlan_rules_retryRule from "../payments/collectionPlan/rules/retryRule.js";
 import type * as payments_collectionPlan_rules_scheduleRule from "../payments/collectionPlan/rules/scheduleRule.js";
+import type * as payments_collectionPlan_runner from "../payments/collectionPlan/runner.js";
 import type * as payments_collectionPlan_seed from "../payments/collectionPlan/seed.js";
 import type * as payments_collectionPlan_stubs from "../payments/collectionPlan/stubs.js";
 import type * as payments_dispersal_stubs from "../payments/dispersal/stubs.js";
@@ -468,6 +469,7 @@ declare const fullApi: ApiFromModules<{
   "payments/collectionPlan/rules/lateFeeRule": typeof payments_collectionPlan_rules_lateFeeRule;
   "payments/collectionPlan/rules/retryRule": typeof payments_collectionPlan_rules_retryRule;
   "payments/collectionPlan/rules/scheduleRule": typeof payments_collectionPlan_rules_scheduleRule;
+  "payments/collectionPlan/runner": typeof payments_collectionPlan_runner;
   "payments/collectionPlan/seed": typeof payments_collectionPlan_seed;
   "payments/collectionPlan/stubs": typeof payments_collectionPlan_stubs;
   "payments/dispersal/stubs": typeof payments_dispersal_stubs;

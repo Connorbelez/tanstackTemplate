@@ -113,6 +113,29 @@ export const getPlanEntriesByStatus = internalQuery({
 });
 
 /**
+ * Returns due `planned` collection plan entries up to a bounded limit.
+ *
+ * This is the production-safe scheduler selection path for the page-03
+ * execution spine. It intentionally returns only rows that are still in the
+ * `planned` state so cron reruns naturally skip already-consumed work.
+ */
+export const getDuePlannedEntries = internalQuery({
+	args: {
+		asOf: v.number(),
+		limit: v.optional(v.number()),
+	},
+	handler: async (ctx, { asOf, limit }) => {
+		const boundedLimit = Math.max(1, Math.min(limit ?? 25, 100));
+
+		return await ctx.db
+			.query("collectionPlanEntries")
+			.withIndex("by_scheduled_date", (q) => q.lte("scheduledDate", asOf))
+			.filter((q) => q.eq(q.field("status"), "planned"))
+			.take(boundedLimit);
+	},
+});
+
+/**
  * Idempotency check for the retry rule.
  * Returns the first retry-sourced plan entry that was rescheduled from the
  * given plan entry ID. Used to prevent duplicate retry entries on re-delivery.

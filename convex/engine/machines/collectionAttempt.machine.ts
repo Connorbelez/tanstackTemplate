@@ -1,6 +1,6 @@
 import { assign, setup } from "xstate";
 
-export const COLLECTION_ATTEMPT_MACHINE_VERSION = "1.1.0";
+export const COLLECTION_ATTEMPT_MACHINE_VERSION = "1.2.0";
 
 export const collectionAttemptMachine = setup({
 	types: {
@@ -61,6 +61,10 @@ export const collectionAttemptMachine = setup({
 				DRAW_INITIATED: {
 					target: "pending",
 					actions: ["recordProviderRef"],
+				},
+				DRAW_FAILED: {
+					target: "failed",
+					actions: ["incrementRetryCount"],
 				},
 				FUNDS_SETTLED: {
 					target: "confirmed",

@@ -59,6 +59,42 @@ async function loadAttemptAndPlanEntry(
 	return { attempt, planEntry };
 }
 
+async function scheduleCollectionFailedRuleEvaluation(
+	ctx: MutationCtx,
+	args: CollectionAttemptEffectArgs,
+	attempt: {
+		amount: number;
+		method: string;
+		planEntryId: Id<"collectionPlanEntries">;
+		machineContext?: Record<string, unknown>;
+	},
+	planEntry: { obligationIds: Id<"obligations">[] },
+	effectLabel: string
+) {
+	await ctx.scheduler.runAfter(
+		0,
+		internal.payments.collectionPlan.engine.evaluateRules,
+		{
+			trigger: "event" as const,
+			eventType: "COLLECTION_FAILED",
+			eventPayload: {
+				planEntryId: attempt.planEntryId,
+				obligationIds: planEntry.obligationIds,
+				amount: attempt.amount,
+				method: attempt.method,
+				retryCount:
+					typeof attempt.machineContext?.retryCount === "number"
+						? attempt.machineContext.retryCount
+						: 0,
+			},
+		}
+	);
+
+	console.info(
+		`[${effectLabel}] Scheduled COLLECTION_FAILED rules evaluation for attempt=${args.entityId}`
+	);
+}
+
 /**
  * Cross-entity effect: fires PAYMENT_APPLIED at each linked obligation.
  * Triggered when a collection attempt transitions to `confirmed` via FUNDS_SETTLED.
@@ -147,65 +183,71 @@ export const emitPaymentReceived = internalMutation({
 		// Decision D4: Bridged transfers skip cash posting in publishTransferConfirmed
 		// because the collection attempt path already posted via postCashReceiptForObligation().
 		//
-		// The bridge creates the transfer at "initiated" then immediately fires
-		// FUNDS_SETTLED via executeTransition, maintaining GT compliance:
-		// audit journal, hash chain, and effect scheduling all go through the engine.
-		const bridgeIdempotencyKey = `transfer:bridge:${args.entityId}`;
-		const existingBridge = await ctx.db
-			.query("transferRequests")
-			.withIndex("by_idempotency", (q) =>
-				q.eq("idempotencyKey", bridgeIdempotencyKey)
-			)
-			.first();
+		// The page-03 execution spine links real transfer requests directly onto the
+		// attempt. When that canonical linkage exists, skip the legacy bridge path to
+		// avoid duplicate transfer records for the same collection attempt.
+		if (attempt.transferRequestId) {
+			console.info(
+				`[emitPaymentReceived] Attempt ${args.entityId} already linked to transfer ${attempt.transferRequestId}; skipping legacy bridge transfer creation.`
+			);
+		} else {
+			const bridgeIdempotencyKey = `transfer:bridge:${args.entityId}`;
+			const existingBridge = await ctx.db
+				.query("transferRequests")
+				.withIndex("by_idempotency", (q) =>
+					q.eq("idempotencyKey", bridgeIdempotencyKey)
+				)
+				.first();
 
-		if (!existingBridge) {
-			const firstOblForBridge = await ctx.db.get(planEntry.obligationIds[0]);
-			if (firstOblForBridge?.borrowerId) {
-				const now = Date.now();
-				const bridgeOrgId =
-					firstOblForBridge.orgId ??
-					(firstOblForBridge.mortgageId
-						? await orgIdFromMortgageId(ctx, firstOblForBridge.mortgageId)
-						: undefined);
-				const bridgeTransferId = await ctx.db.insert("transferRequests", {
-					orgId: bridgeOrgId,
-					status: "initiated",
-					direction: "inbound",
-					transferType: obligationTypeToTransferType(firstOblForBridge.type),
-					amount: attempt.amount,
-					currency: "CAD",
-					counterpartyType: "borrower",
-					counterpartyId: String(firstOblForBridge.borrowerId),
-					mortgageId: firstOblForBridge.mortgageId,
-					obligationId: planEntry.obligationIds[0],
-					planEntryId: planEntry._id,
-					collectionAttemptId: args.entityId,
-					providerCode: (PROVIDER_CODES as readonly string[]).includes(
-						planEntry.method ?? ""
-					)
-						? (planEntry.method as (typeof PROVIDER_CODES)[number])
-						: "manual",
-					providerRef: attempt.providerRef ?? `bridge_${args.entityId}`,
-					idempotencyKey: bridgeIdempotencyKey,
-					source: args.source,
-					createdAt: now,
-					lastTransitionAt: now,
-				});
+			if (!existingBridge) {
+				const firstOblForBridge = await ctx.db.get(planEntry.obligationIds[0]);
+				if (firstOblForBridge?.borrowerId) {
+					const now = Date.now();
+					const bridgeOrgId =
+						firstOblForBridge.orgId ??
+						(firstOblForBridge.mortgageId
+							? await orgIdFromMortgageId(ctx, firstOblForBridge.mortgageId)
+							: undefined);
+					const bridgeTransferId = await ctx.db.insert("transferRequests", {
+						orgId: bridgeOrgId,
+						status: "initiated",
+						direction: "inbound",
+						transferType: obligationTypeToTransferType(firstOblForBridge.type),
+						amount: attempt.amount,
+						currency: "CAD",
+						counterpartyType: "borrower",
+						counterpartyId: String(firstOblForBridge.borrowerId),
+						mortgageId: firstOblForBridge.mortgageId,
+						obligationId: planEntry.obligationIds[0],
+						planEntryId: planEntry._id,
+						collectionAttemptId: args.entityId,
+						providerCode: (PROVIDER_CODES as readonly string[]).includes(
+							planEntry.method ?? ""
+						)
+							? (planEntry.method as (typeof PROVIDER_CODES)[number])
+							: "manual",
+						providerRef: attempt.providerRef ?? `bridge_${args.entityId}`,
+						idempotencyKey: bridgeIdempotencyKey,
+						source: args.source,
+						createdAt: now,
+						lastTransitionAt: now,
+					});
 
-				// Fire GT transition to reach confirmed state — creates audit journal
-				// + hash chain entry. publishTransferConfirmed will see collectionAttemptId
-				// and skip cash posting (D4 conditional).
-				await executeTransition(ctx, {
-					entityType: "transfer",
-					entityId: bridgeTransferId,
-					eventType: "FUNDS_SETTLED",
-					payload: { settledAt: now, providerData: { bridged: true } },
-					source: args.source,
-				});
-			} else {
-				console.warn(
-					`[emitPaymentReceived] Cannot create bridge transfer for attempt=${args.entityId}: no borrowerId on obligation ${planEntry.obligationIds[0]}`
-				);
+					// Fire GT transition to reach confirmed state — creates audit journal
+					// + hash chain entry. publishTransferConfirmed will see
+					// collectionAttemptId and skip cash posting (D4 conditional).
+					await executeTransition(ctx, {
+						entityType: "transfer",
+						entityId: bridgeTransferId,
+						eventType: "FUNDS_SETTLED",
+						payload: { settledAt: now, providerData: { bridged: true } },
+						source: args.source,
+					});
+				} else {
+					console.warn(
+						`[emitPaymentReceived] Cannot create bridge transfer for attempt=${args.entityId}: no borrowerId on obligation ${planEntry.obligationIds[0]}`
+					);
+				}
 			}
 		}
 	},
@@ -224,27 +266,31 @@ export const emitCollectionFailed = internalMutation({
 			"emitCollectionFailed"
 		);
 
-		await ctx.scheduler.runAfter(
-			0,
-			internal.payments.collectionPlan.engine.evaluateRules,
-			{
-				trigger: "event" as const,
-				eventType: "COLLECTION_FAILED",
-				eventPayload: {
-					planEntryId: attempt.planEntryId,
-					obligationIds: planEntry.obligationIds,
-					amount: attempt.amount,
-					method: attempt.method,
-					retryCount:
-						typeof attempt.machineContext?.retryCount === "number"
-							? attempt.machineContext.retryCount
-							: 0,
-				},
-			}
+		await scheduleCollectionFailedRuleEvaluation(
+			ctx,
+			args,
+			attempt,
+			planEntry,
+			"emitCollectionFailed"
+		);
+	},
+});
+
+export const scheduleRetryEntry = internalMutation({
+	args: collectionAttemptEffectValidator,
+	handler: async (ctx, args) => {
+		const { attempt, planEntry } = await loadAttemptAndPlanEntry(
+			ctx,
+			args,
+			"scheduleRetryEntry"
 		);
 
-		console.info(
-			`[emitCollectionFailed] Scheduled COLLECTION_FAILED rules evaluation for attempt=${args.entityId}`
+		await scheduleCollectionFailedRuleEvaluation(
+			ctx,
+			args,
+			attempt,
+			planEntry,
+			"scheduleRetryEntry"
 		);
 	},
 });

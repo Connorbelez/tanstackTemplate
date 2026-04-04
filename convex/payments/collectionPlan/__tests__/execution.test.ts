@@ -18,11 +18,13 @@
  * - REQ-8: Contract-focused tests lock the behavior
  */
 
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
 	createGovernedTestConvex,
+	drainScheduledWork,
 	seedBorrowerProfile,
 	seedCollectionAttempt,
+	seedCollectionRules,
 	seedMortgage,
 	seedObligation,
 	seedPlanEntry,
@@ -30,8 +32,15 @@ import {
 import { internal } from "../../../_generated/api";
 import type { Doc, Id } from "../../../_generated/dataModel";
 
+beforeEach(() => {
+	vi.useFakeTimers();
+});
+
 afterEach(() => {
 	vi.unstubAllEnvs();
+	vi.restoreAllMocks();
+	vi.clearAllTimers();
+	vi.useRealTimers();
 });
 
 type GovernedTestConvex = ReturnType<typeof createGovernedTestConvex>;
@@ -98,10 +107,22 @@ async function getTransferCountForPlanEntry(
 	);
 }
 
+async function getTransfersForAttempt(
+	t: GovernedTestConvex,
+	attemptId: Id<"collectionAttempts">
+) {
+	return t.run(async (ctx) =>
+		ctx.db
+			.query("transferRequests")
+			.filter((q) => q.eq(q.field("collectionAttemptId"), attemptId))
+			.collect()
+	);
+}
+
 describe("executePlanEntry", () => {
 	it("creates exactly one collection attempt for an eligible plan entry", async () => {
 		const t = createGovernedTestConvex();
-		const { planEntryId } = await seedExecutionFixture(t);
+		const { obligationId, planEntryId } = await seedExecutionFixture(t);
 		const requestedAt = Date.now();
 
 		const result = await t.action(
@@ -116,12 +137,13 @@ describe("executePlanEntry", () => {
 				reason: "manual collection execution",
 			}
 		);
+		await drainScheduledWork(t);
 
 		expect(result.outcome).toBe("attempt_created");
 		expect(result.planEntryId).toBe(planEntryId);
 		expect(result.planEntryStatusAfter).toBe("executing");
 		expect(result.collectionAttemptId).toBeTruthy();
-		expect(result.attemptStatusAfter).toBe("initiated");
+		expect(result.attemptStatusAfter).toBe("confirmed");
 		expect(result.transferRequestId).toBeTruthy();
 
 		const planEntry = await t.run((ctx) => ctx.db.get(planEntryId));
@@ -138,6 +160,8 @@ describe("executePlanEntry", () => {
 		expect(attempts[0]?.requestedByActorType).toBe("admin");
 		expect(attempts[0]?.requestedByActorId).toBe("user_fairlend_admin");
 		expect(attempts[0]?.triggerSource).toBe("admin_manual");
+		expect(attempts[0]?.status).toBe("confirmed");
+		expect(attempts[0]?.providerRef).toBeTruthy();
 		expect(attempts[0]?.transferRequestId).toBe(result.transferRequestId);
 
 		const transfer = await getTransferForAttempt(
@@ -146,11 +170,23 @@ describe("executePlanEntry", () => {
 		);
 		expect(transfer?._id).toBe(result.transferRequestId);
 		expect(transfer?.planEntryId).toBe(planEntryId);
+		expect(transfer?.status).toBe("confirmed");
+		expect(transfer?.providerRef).toBeTruthy();
+
+		const allTransfers = await getTransfersForAttempt(
+			t,
+			result.collectionAttemptId as Id<"collectionAttempts">
+		);
+		expect(allTransfers).toHaveLength(1);
+
+		const obligation = await t.run((ctx) => ctx.db.get(obligationId));
+		expect(obligation?.status).toBe("settled");
+		expect(obligation?.amountSettled).toBe(300_000);
 	});
 
 	it("returns already_executed on replay without creating a duplicate attempt", async () => {
 		const t = createGovernedTestConvex();
-		const { planEntryId } = await seedExecutionFixture(t);
+		const { obligationId, planEntryId } = await seedExecutionFixture(t);
 		const args = {
 			planEntryId,
 			triggerSource: "system_scheduler" as const,
@@ -168,10 +204,13 @@ describe("executePlanEntry", () => {
 			internal.payments.collectionPlan.execution.executePlanEntry,
 			args
 		);
+		await drainScheduledWork(t);
 
 		expect(first.outcome).toBe("attempt_created");
+		expect(first.attemptStatusAfter).toBe("confirmed");
 		expect(replay.outcome).toBe("already_executed");
 		expect(replay.collectionAttemptId).toBe(first.collectionAttemptId);
+		expect(replay.attemptStatusAfter).toBe("confirmed");
 		expect(replay.transferRequestId).toBe(first.transferRequestId);
 
 		const attempts = await getAttemptsForPlanEntry(t, planEntryId);
@@ -182,6 +221,15 @@ describe("executePlanEntry", () => {
 			first.collectionAttemptId as Id<"collectionAttempts">
 		);
 		expect(transfer?._id).toBe(first.transferRequestId);
+
+		const allTransfers = await getTransfersForAttempt(
+			t,
+			first.collectionAttemptId as Id<"collectionAttempts">
+		);
+		expect(allTransfers).toHaveLength(1);
+
+		const obligation = await t.run((ctx) => ctx.db.get(obligationId));
+		expect(obligation?.amountSettled).toBe(300_000);
 	});
 
 	it("reconciles an existing attempt when the plan entry has no collectionAttemptId", async () => {
@@ -205,6 +253,7 @@ describe("executePlanEntry", () => {
 				requestedByActorId: "workflow:collection-plan-replay",
 			}
 		);
+		await drainScheduledWork(t);
 
 		expect(result.outcome).toBe("already_executed");
 		expect(result.collectionAttemptId).toBe(existingAttemptId);
@@ -383,6 +432,7 @@ describe("executePlanEntry", () => {
 		const { planEntryId } = await seedExecutionFixture(t, {
 			method: "mock_pad",
 		});
+		await seedCollectionRules(t);
 
 		const result = await t.action(
 			internal.payments.collectionPlan.execution.executePlanEntry,
@@ -395,10 +445,12 @@ describe("executePlanEntry", () => {
 				requestedByActorId: "workflow:collection-plan-replay",
 			}
 		);
+		await drainScheduledWork(t);
 
 		expect(result.outcome).toBe("attempt_created");
 		expect(result.reasonCode).toBe("transfer_handoff_failed");
 		expect(result.collectionAttemptId).toBeTruthy();
+		expect(result.attemptStatusAfter).toBe("retry_scheduled");
 		expect(result.transferRequestId).toBeUndefined();
 
 		const planEntry = await t.run((ctx) => ctx.db.get(planEntryId));
@@ -407,6 +459,7 @@ describe("executePlanEntry", () => {
 
 		const attempts = await getAttemptsForPlanEntry(t, planEntryId);
 		expect(attempts).toHaveLength(1);
+		expect(attempts[0]?.status).toBe("retry_scheduled");
 		expect(attempts[0]?.failureReason).toContain("disabled by default");
 		expect(attempts[0]?.triggerSource).toBe("workflow_replay");
 
@@ -415,5 +468,16 @@ describe("executePlanEntry", () => {
 			result.collectionAttemptId as Id<"collectionAttempts">
 		);
 		expect(transfer).toBeNull();
+
+		const retryEntry = await t.run(async (ctx) =>
+			ctx.db
+				.query("collectionPlanEntries")
+				.withIndex("by_rescheduled_from", (q) =>
+					q.eq("rescheduledFromId", planEntryId).eq("source", "retry_rule")
+				)
+				.first()
+		);
+		expect(retryEntry?._id).toBeTruthy();
+		expect(retryEntry?.status).toBe("planned");
 	});
 });
