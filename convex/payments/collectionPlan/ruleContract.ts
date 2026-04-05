@@ -1,5 +1,9 @@
 import { v } from "convex/values";
 import type { Doc, Id } from "../../_generated/dataModel";
+import {
+	type BalancePreCheckBlockingDecision,
+	balancePreCheckSignalSourceValidator,
+} from "./balancePreCheckContract";
 
 export type CollectionRuleKind =
 	| "schedule"
@@ -32,7 +36,35 @@ export interface LateFeeRuleConfig {
 	kind: "late_fee";
 }
 
-export interface BalancePreCheckRuleConfig {
+interface BalancePreCheckRuleConfigBase {
+	failureCountThreshold: number;
+	kind: "balance_pre_check";
+	lookbackDays: number;
+	signalSource: "recent_transfer_failures";
+}
+
+export interface DeferBalancePreCheckRuleConfig
+	extends BalancePreCheckRuleConfigBase {
+	blockingDecision: "defer";
+	deferDays: number;
+}
+
+export interface SuppressBalancePreCheckRuleConfig
+	extends BalancePreCheckRuleConfigBase {
+	blockingDecision: "suppress";
+}
+
+export interface RequireOperatorReviewBalancePreCheckRuleConfig
+	extends BalancePreCheckRuleConfigBase {
+	blockingDecision: "require_operator_review";
+}
+
+export type BalancePreCheckRuleConfig =
+	| DeferBalancePreCheckRuleConfig
+	| SuppressBalancePreCheckRuleConfig
+	| RequireOperatorReviewBalancePreCheckRuleConfig;
+
+export interface LegacyBalancePreCheckRuleConfig {
 	kind: "balance_pre_check";
 	mode: "placeholder";
 }
@@ -52,6 +84,7 @@ export type CollectionRuleConfig =
 	| RetryRuleConfig
 	| LateFeeRuleConfig
 	| BalancePreCheckRuleConfig
+	| LegacyBalancePreCheckRuleConfig
 	| ReschedulePolicyRuleConfig
 	| WorkoutPolicyRuleConfig;
 
@@ -98,6 +131,28 @@ export const collectionRuleConfigValidator = v.union(
 	}),
 	v.object({
 		kind: v.literal("balance_pre_check"),
+		signalSource: balancePreCheckSignalSourceValidator,
+		lookbackDays: v.number(),
+		failureCountThreshold: v.number(),
+		blockingDecision: v.literal("defer"),
+		deferDays: v.number(),
+	}),
+	v.object({
+		kind: v.literal("balance_pre_check"),
+		signalSource: balancePreCheckSignalSourceValidator,
+		lookbackDays: v.number(),
+		failureCountThreshold: v.number(),
+		blockingDecision: v.literal("suppress"),
+	}),
+	v.object({
+		kind: v.literal("balance_pre_check"),
+		signalSource: balancePreCheckSignalSourceValidator,
+		lookbackDays: v.number(),
+		failureCountThreshold: v.number(),
+		blockingDecision: v.literal("require_operator_review"),
+	}),
+	v.object({
+		kind: v.literal("balance_pre_check"),
 		mode: v.literal("placeholder"),
 	}),
 	v.object({
@@ -137,6 +192,16 @@ const DEFAULT_LATE_FEE_CONFIG: LateFeeRuleConfig = {
 	feeSurface: "borrower_charge",
 };
 
+export const DEFAULT_BALANCE_PRE_CHECK_CONFIG: DeferBalancePreCheckRuleConfig =
+	{
+		kind: "balance_pre_check",
+		signalSource: "recent_transfer_failures",
+		lookbackDays: 14,
+		failureCountThreshold: 1,
+		blockingDecision: "defer",
+		deferDays: 3,
+	};
+
 function isCollectionRuleKind(value: unknown): value is CollectionRuleKind {
 	return (
 		value === "schedule" ||
@@ -164,6 +229,32 @@ function readLegacyNumberParameter(
 	}
 
 	return undefined;
+}
+
+function readLegacyStringParameter(
+	parameters: unknown,
+	key: string
+): string | undefined {
+	if (
+		parameters &&
+		typeof parameters === "object" &&
+		!Array.isArray(parameters) &&
+		typeof (parameters as Record<string, unknown>)[key] === "string"
+	) {
+		return (parameters as Record<string, string>)[key];
+	}
+
+	return undefined;
+}
+
+function isBalancePreCheckBlockingDecision(
+	value: unknown
+): value is BalancePreCheckBlockingDecision {
+	return (
+		value === "defer" ||
+		value === "suppress" ||
+		value === "require_operator_review"
+	);
 }
 
 export function getCollectionRuleKind(
@@ -326,4 +417,75 @@ export function getLateFeeRuleConfig(
 	}
 
 	return DEFAULT_LATE_FEE_CONFIG;
+}
+
+export function getBalancePreCheckRuleConfig(
+	rule: Doc<"collectionRules">
+): BalancePreCheckRuleConfig | null {
+	if (
+		rule.config?.kind === "balance_pre_check" &&
+		"signalSource" in rule.config
+	) {
+		if (rule.config.blockingDecision === "defer") {
+			return {
+				kind: "balance_pre_check",
+				signalSource: rule.config.signalSource,
+				lookbackDays: rule.config.lookbackDays,
+				failureCountThreshold: rule.config.failureCountThreshold,
+				blockingDecision: "defer",
+				deferDays: rule.config.deferDays,
+			};
+		}
+
+		return {
+			kind: "balance_pre_check",
+			signalSource: rule.config.signalSource,
+			lookbackDays: rule.config.lookbackDays,
+			failureCountThreshold: rule.config.failureCountThreshold,
+			blockingDecision: rule.config.blockingDecision,
+		};
+	}
+
+	const kind = getCollectionRuleKind(rule);
+	if (kind !== "balance_pre_check") {
+		return null;
+	}
+
+	const blockingDecision = readLegacyStringParameter(
+		rule.parameters,
+		"blockingDecision"
+	);
+	const resolvedBlockingDecision = isBalancePreCheckBlockingDecision(
+		blockingDecision
+	)
+		? blockingDecision
+		: DEFAULT_BALANCE_PRE_CHECK_CONFIG.blockingDecision;
+	const lookbackDays =
+		readLegacyNumberParameter(rule.parameters, "lookbackDays") ??
+		DEFAULT_BALANCE_PRE_CHECK_CONFIG.lookbackDays;
+	const failureCountThreshold =
+		readLegacyNumberParameter(rule.parameters, "failureCountThreshold") ??
+		DEFAULT_BALANCE_PRE_CHECK_CONFIG.failureCountThreshold;
+	const deferDays =
+		readLegacyNumberParameter(rule.parameters, "deferDays") ??
+		DEFAULT_BALANCE_PRE_CHECK_CONFIG.deferDays;
+
+	if (resolvedBlockingDecision === "defer") {
+		return {
+			kind: "balance_pre_check",
+			signalSource: DEFAULT_BALANCE_PRE_CHECK_CONFIG.signalSource,
+			lookbackDays,
+			failureCountThreshold,
+			blockingDecision: "defer",
+			deferDays,
+		};
+	}
+
+	return {
+		kind: "balance_pre_check",
+		signalSource: DEFAULT_BALANCE_PRE_CHECK_CONFIG.signalSource,
+		lookbackDays,
+		failureCountThreshold,
+		blockingDecision: resolvedBlockingDecision,
+	};
 }

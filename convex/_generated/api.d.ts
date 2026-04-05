@@ -195,6 +195,8 @@ import type * as payments_cashLedger_transferReconciliationCron from "../payment
 import type * as payments_cashLedger_types from "../payments/cashLedger/types.js";
 import type * as payments_cashLedger_validators from "../payments/cashLedger/validators.js";
 import type * as payments_cashLedger_waiveObligationBalanceHandler from "../payments/cashLedger/waiveObligationBalanceHandler.js";
+import type * as payments_collectionPlan_balancePreCheck from "../payments/collectionPlan/balancePreCheck.js";
+import type * as payments_collectionPlan_balancePreCheckContract from "../payments/collectionPlan/balancePreCheckContract.js";
 import type * as payments_collectionPlan_defaultRules from "../payments/collectionPlan/defaultRules.js";
 import type * as payments_collectionPlan_engine from "../payments/collectionPlan/engine.js";
 import type * as payments_collectionPlan_execution from "../payments/collectionPlan/execution.js";
@@ -203,7 +205,9 @@ import type * as payments_collectionPlan_executionGuards from "../payments/colle
 import type * as payments_collectionPlan_initialScheduling from "../payments/collectionPlan/initialScheduling.js";
 import type * as payments_collectionPlan_mutations from "../payments/collectionPlan/mutations.js";
 import type * as payments_collectionPlan_queries from "../payments/collectionPlan/queries.js";
+import type * as payments_collectionPlan_reschedule from "../payments/collectionPlan/reschedule.js";
 import type * as payments_collectionPlan_ruleContract from "../payments/collectionPlan/ruleContract.js";
+import type * as payments_collectionPlan_rules_balancePreCheckRule from "../payments/collectionPlan/rules/balancePreCheckRule.js";
 import type * as payments_collectionPlan_rules_lateFeeRule from "../payments/collectionPlan/rules/lateFeeRule.js";
 import type * as payments_collectionPlan_rules_retryRule from "../payments/collectionPlan/rules/retryRule.js";
 import type * as payments_collectionPlan_rules_scheduleRule from "../payments/collectionPlan/rules/scheduleRule.js";
@@ -466,6 +470,8 @@ declare const fullApi: ApiFromModules<{
   "payments/cashLedger/types": typeof payments_cashLedger_types;
   "payments/cashLedger/validators": typeof payments_cashLedger_validators;
   "payments/cashLedger/waiveObligationBalanceHandler": typeof payments_cashLedger_waiveObligationBalanceHandler;
+  "payments/collectionPlan/balancePreCheck": typeof payments_collectionPlan_balancePreCheck;
+  "payments/collectionPlan/balancePreCheckContract": typeof payments_collectionPlan_balancePreCheckContract;
   "payments/collectionPlan/defaultRules": typeof payments_collectionPlan_defaultRules;
   "payments/collectionPlan/engine": typeof payments_collectionPlan_engine;
   "payments/collectionPlan/execution": typeof payments_collectionPlan_execution;
@@ -474,7 +480,9 @@ declare const fullApi: ApiFromModules<{
   "payments/collectionPlan/initialScheduling": typeof payments_collectionPlan_initialScheduling;
   "payments/collectionPlan/mutations": typeof payments_collectionPlan_mutations;
   "payments/collectionPlan/queries": typeof payments_collectionPlan_queries;
+  "payments/collectionPlan/reschedule": typeof payments_collectionPlan_reschedule;
   "payments/collectionPlan/ruleContract": typeof payments_collectionPlan_ruleContract;
+  "payments/collectionPlan/rules/balancePreCheckRule": typeof payments_collectionPlan_rules_balancePreCheckRule;
   "payments/collectionPlan/rules/lateFeeRule": typeof payments_collectionPlan_rules_lateFeeRule;
   "payments/collectionPlan/rules/retryRule": typeof payments_collectionPlan_rules_retryRule;
   "payments/collectionPlan/rules/scheduleRule": typeof payments_collectionPlan_rules_scheduleRule;

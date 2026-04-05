@@ -23,10 +23,15 @@ import {
 	type ProviderCode,
 } from "../transfers/types";
 import {
+	buildBalancePreCheckPatch,
+	evaluateBalancePreCheckForPlanEntry,
+} from "./balancePreCheck";
+import {
 	buildAlreadyExecutedResult,
 	buildAttemptCreatedResult,
 	buildExecutionSource,
 	buildNoopResult,
+	buildNotEligibleResult,
 	buildRejectedResult,
 	buildTransferHandoffIdempotencyKey,
 	buildTransferHandoffMetadata,
@@ -371,6 +376,33 @@ const stagePlanEntryExecution = convex
 			return {
 				result,
 			};
+		}
+
+		const balancePreCheck = await evaluateBalancePreCheckForPlanEntry(ctx, {
+			borrowerId: handoffContext.borrowerId,
+			mortgageId: handoffContext.mortgageId,
+			requestedAt: args.requestedAt,
+		});
+		if (balancePreCheck) {
+			await ctx.db.patch(
+				planEntry._id,
+				buildBalancePreCheckPatch(balancePreCheck.snapshot)
+			);
+
+			if (balancePreCheck.outcome === "block") {
+				const result = buildNotEligibleResult({
+					executionRecordedAt,
+					idempotencyKey: normalizedIdempotencyKey,
+					planEntryId: planEntry._id,
+					planEntryStatusAfter: planEntry.status,
+					reasonCode: balancePreCheck.executionReasonCode,
+					reasonDetail: balancePreCheck.executionReasonDetail,
+				});
+				await logPlanEntryExecutionAudit(ctx, args, result);
+				return {
+					result,
+				};
+			}
 		}
 
 		const attemptId = await ctx.db.insert("collectionAttempts", {

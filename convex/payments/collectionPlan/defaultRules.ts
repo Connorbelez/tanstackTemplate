@@ -5,8 +5,10 @@ import {
 	type CollectionRuleKind,
 	type CollectionRuleScope,
 	type CollectionRuleStatus,
+	DEFAULT_BALANCE_PRE_CHECK_CONFIG,
 	DEFAULT_COLLECTION_RULE_SCOPE,
 	DEFAULT_COLLECTION_RULE_STATUS,
+	getBalancePreCheckRuleConfig,
 	getCollectionRuleCode,
 	getCollectionRuleKind,
 	getCollectionRuleScope,
@@ -16,7 +18,11 @@ import {
 	getScheduleRuleConfig,
 } from "./ruleContract";
 
-type DefaultRuleCode = "late_fee_rule" | "retry_rule" | "schedule_rule";
+type DefaultRuleCode =
+	| "balance_pre_check_rule"
+	| "late_fee_rule"
+	| "retry_rule"
+	| "schedule_rule";
 
 interface DefaultCollectionRuleDefinition {
 	action: string;
@@ -48,6 +54,20 @@ export const DEFAULT_COLLECTION_RULES: readonly DefaultCollectionRuleDefinition[
 			scope: DEFAULT_COLLECTION_RULE_SCOPE,
 			status: DEFAULT_COLLECTION_RULE_STATUS,
 			trigger: "schedule",
+			version: 1,
+		},
+		{
+			action: "balance_pre_check",
+			code: "balance_pre_check_rule",
+			config: DEFAULT_BALANCE_PRE_CHECK_CONFIG,
+			description:
+				"Evaluates recent failed inbound transfer history before attempt creation and defers or blocks collection when the balance-risk signal is active.",
+			displayName: "Balance pre-check",
+			kind: "balance_pre_check",
+			priority: 15,
+			scope: DEFAULT_COLLECTION_RULE_SCOPE,
+			status: DEFAULT_COLLECTION_RULE_STATUS,
+			trigger: "event",
 			version: 1,
 		},
 		{
@@ -87,6 +107,7 @@ export const DEFAULT_COLLECTION_RULES: readonly DefaultCollectionRuleDefinition[
 export interface SeedCollectionRulesResult {
 	created: number;
 	ruleIdsByCode: {
+		balance_pre_check_rule: Id<"collectionRules">;
 		late_fee_rule: Id<"collectionRules">;
 		retry_rule: Id<"collectionRules">;
 		schedule_rule: Id<"collectionRules">;
@@ -97,7 +118,7 @@ export interface SeedCollectionRulesResult {
 
 function buildLegacyParameters(
 	config: CollectionRuleConfig
-): Record<string, number> {
+): Record<string, unknown> {
 	switch (config.kind) {
 		case "schedule":
 			return { delayDays: config.delayDays };
@@ -106,8 +127,19 @@ function buildLegacyParameters(
 				backoffBaseDays: config.backoffBaseDays,
 				maxRetries: config.maxRetries,
 			};
-		case "late_fee":
 		case "balance_pre_check":
+			if ("mode" in config) {
+				return {};
+			}
+			return {
+				blockingDecision: config.blockingDecision,
+				lookbackDays: config.lookbackDays,
+				failureCountThreshold: config.failureCountThreshold,
+				...(config.blockingDecision === "defer"
+					? { deferDays: config.deferDays }
+					: {}),
+			};
+		case "late_fee":
 		case "reschedule_policy":
 		case "workout_policy":
 			return {};
@@ -128,6 +160,11 @@ function resolveConfigForExistingRule(
 	const retryConfig = getRetryRuleConfig(rule);
 	if (retryConfig) {
 		return retryConfig;
+	}
+
+	const balancePreCheckConfig = getBalancePreCheckRuleConfig(rule);
+	if (balancePreCheckConfig) {
+		return balancePreCheckConfig;
 	}
 
 	const lateFeeConfig = getLateFeeRuleConfig(rule);
@@ -154,7 +191,7 @@ function shouldPatchRule(
 		kind: CollectionRuleKind;
 		name: DefaultRuleCode;
 		priority: number;
-		parameters: Record<string, number>;
+		parameters: Record<string, unknown>;
 		scope: CollectionRuleScope;
 		status: CollectionRuleStatus;
 		trigger: "event" | "schedule";
@@ -223,7 +260,7 @@ export async function seedCollectionRulesImpl(
 			typeof existing.parameters === "object" &&
 			!Array.isArray(existing.parameters) &&
 			Object.keys(existing.parameters).length > 0
-				? (existing.parameters as Record<string, number>)
+				? (existing.parameters as Record<string, unknown>)
 				: buildLegacyParameters(resolvedConfig);
 		const priority = existing?.priority ?? ruleDef.priority;
 

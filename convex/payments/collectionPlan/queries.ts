@@ -145,6 +145,19 @@ export const getDuePlannedEntries = internalQuery({
 			.withIndex("by_status_scheduled_date", (q) =>
 				q.eq("status", "planned").lte("scheduledDate", asOf)
 			)
+			.filter((q) =>
+				q.or(
+					q.eq(q.field("balancePreCheckDecision"), undefined),
+					q.eq(q.field("balancePreCheckDecision"), "proceed"),
+					q.and(
+						q.eq(q.field("balancePreCheckDecision"), "defer"),
+						q.or(
+							q.eq(q.field("balancePreCheckNextEvaluationAt"), undefined),
+							q.lte(q.field("balancePreCheckNextEvaluationAt"), asOf)
+						)
+					)
+				)
+			)
 			.take(boundedLimit);
 	},
 });

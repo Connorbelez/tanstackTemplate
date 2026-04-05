@@ -38,13 +38,15 @@ export {
 // ── Collection Rules Seeding ────────────────────────────────────────
 
 export interface SeededRules {
+	balancePreCheckRuleId: Id<"collectionRules">;
 	scheduleRuleId: Id<"collectionRules">;
 	retryRuleId: Id<"collectionRules">;
 	lateFeeRuleId: Id<"collectionRules">;
 }
 
 /**
- * Seeds the three standard collection rules:
+ * Seeds the canonical collection rules:
+ * - balance_pre_check_rule (trigger="event", priority=15)
  * - schedule_rule (trigger="schedule", priority=10)
  * - retry_rule (trigger="event", priority=20)
  * - late_fee_rule (trigger="event", priority=30)
@@ -71,10 +73,94 @@ export async function seedCollectionRules(
 	};
 
 	const scheduleRuleId = getCanonicalRuleId("schedule_rule");
+	const balancePreCheckRuleId = getCanonicalRuleId("balance_pre_check_rule");
 	const retryRuleId = getCanonicalRuleId("retry_rule");
 	const lateFeeRuleId = getCanonicalRuleId("late_fee_rule");
 
-	return { scheduleRuleId, retryRuleId, lateFeeRuleId };
+	return {
+		balancePreCheckRuleId,
+		scheduleRuleId,
+		retryRuleId,
+		lateFeeRuleId,
+	};
+}
+
+export async function seedBalancePreCheckRule(
+	t: GovernedTestConvex,
+	options?: {
+		blockingDecision?: "defer" | "suppress" | "require_operator_review";
+		deferDays?: number;
+		failureCountThreshold?: number;
+		lookbackDays?: number;
+	}
+): Promise<Id<"collectionRules">> {
+	return t.run(async (ctx) =>
+		ctx.db.insert("collectionRules", {
+			kind: "balance_pre_check",
+			code: `balance_pre_check_${options?.blockingDecision ?? "defer"}`,
+			displayName: "Balance pre-check",
+			description:
+				"Blocks or defers collection when recent failed inbound transfer history indicates insufficient funds risk.",
+			trigger: "event",
+			status: "active",
+			scope: { scopeType: "global" },
+			config: {
+				kind: "balance_pre_check",
+				signalSource: "recent_transfer_failures",
+				lookbackDays: options?.lookbackDays ?? 14,
+				failureCountThreshold: options?.failureCountThreshold ?? 1,
+				blockingDecision: options?.blockingDecision ?? "defer",
+				deferDays:
+					options?.blockingDecision === "defer"
+						? (options?.deferDays ?? 3)
+						: undefined,
+			},
+			version: 1,
+			createdByActorId: "test",
+			updatedByActorId: "test",
+			name: "balance_pre_check_rule",
+			action: "balance_pre_check",
+			parameters: {},
+			priority: 15,
+			enabled: true,
+			createdAt: Date.now(),
+			updatedAt: Date.now(),
+		}),
+	);
+}
+
+export async function seedRecentFailedInboundTransfer(
+	t: GovernedTestConvex,
+	args: {
+		borrowerId: Id<"borrowers">;
+		mortgageId: Id<"mortgages">;
+		createdAt?: number;
+		failureCode?: string;
+		failureReason?: string;
+	}
+): Promise<Id<"transferRequests">> {
+	const createdAt = args.createdAt ?? Date.now() - 60_000;
+	return t.run(async (ctx) =>
+		ctx.db.insert("transferRequests", {
+			status: "failed",
+			direction: "inbound",
+			transferType: "borrower_interest_collection",
+			amount: 300_000,
+			currency: "CAD",
+			counterpartyType: "borrower",
+			counterpartyId: `${args.borrowerId}`,
+			providerCode: "manual",
+			idempotencyKey: `balance-pre-check:${args.borrowerId}:${createdAt}`,
+			source: { channel: "scheduler", actorType: "system" },
+			mortgageId: args.mortgageId,
+			borrowerId: args.borrowerId,
+			createdAt,
+			lastTransitionAt: createdAt,
+			failedAt: createdAt,
+			failureCode: args.failureCode ?? "NSF",
+			failureReason: args.failureReason ?? "insufficient_funds",
+		}),
+	);
 }
 
 // ── Plan Entry Seeding ──────────────────────────────────────────────
@@ -90,8 +176,22 @@ interface SeedPlanEntryOptions {
 		| "completed"
 		| "cancelled"
 		| "rescheduled";
-	source?: "default_schedule" | "retry_rule" | "late_fee_rule" | "admin";
+	source?:
+		| "default_schedule"
+		| "retry_rule"
+		| "late_fee_rule"
+		| "admin"
+		| "admin_reschedule";
 	ruleId?: Id<"collectionRules">;
+	rescheduleReason?: string;
+	rescheduleRequestedAt?: number;
+	rescheduleRequestedByActorId?: string;
+	rescheduleRequestedByActorType?:
+		| "admin"
+		| "borrower"
+		| "broker"
+		| "member"
+		| "system";
 	rescheduledFromId?: Id<"collectionPlanEntries">;
 }
 
@@ -112,6 +212,10 @@ export async function seedPlanEntry(
 			source: opts.source ?? "default_schedule",
 			ruleId: opts.ruleId,
 			rescheduledFromId: opts.rescheduledFromId,
+			rescheduleReason: opts.rescheduleReason,
+			rescheduleRequestedAt: opts.rescheduleRequestedAt,
+			rescheduleRequestedByActorId: opts.rescheduleRequestedByActorId,
+			rescheduleRequestedByActorType: opts.rescheduleRequestedByActorType,
 			createdAt: Date.now(),
 		}),
 	);

@@ -59,6 +59,9 @@ export interface ExecutePlanEntryArgs {
 }
 
 export type ExecutePlanEntryReasonCode =
+	| "balance_pre_check_deferred"
+	| "balance_pre_check_operator_review_required"
+	| "balance_pre_check_suppressed"
 	| "dry_run_requested"
 	| "invalid_idempotency_key"
 	| "missing_execution_metadata"

@@ -16,9 +16,23 @@ interface CreateCollectionPlanEntryArgs {
 	method: string;
 	obligationIds: Id<"obligations">[];
 	rescheduledFromId?: Id<"collectionPlanEntries">;
+	rescheduleReason?: string;
+	rescheduleRequestedAt?: number;
+	rescheduleRequestedByActorId?: string;
+	rescheduleRequestedByActorType?:
+		| "admin"
+		| "borrower"
+		| "broker"
+		| "member"
+		| "system";
 	ruleId?: Id<"collectionRules">;
 	scheduledDate: number;
-	source: "default_schedule" | "retry_rule" | "late_fee_rule" | "admin";
+	source:
+		| "default_schedule"
+		| "retry_rule"
+		| "late_fee_rule"
+		| "admin"
+		| "admin_reschedule";
 	status: "planned" | "executing" | "completed" | "cancelled" | "rescheduled";
 }
 
@@ -50,6 +64,10 @@ async function createEntryImpl(
 		source: args.source,
 		ruleId: args.ruleId,
 		rescheduledFromId: args.rescheduledFromId,
+		rescheduleReason: args.rescheduleReason,
+		rescheduleRequestedAt: args.rescheduleRequestedAt,
+		rescheduleRequestedByActorId: args.rescheduleRequestedByActorId,
+		rescheduleRequestedByActorType: args.rescheduleRequestedByActorType,
 		createdAt: Date.now(),
 	});
 }

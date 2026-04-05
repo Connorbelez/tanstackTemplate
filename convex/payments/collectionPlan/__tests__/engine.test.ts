@@ -34,6 +34,21 @@ interface RuleInsertOptions {
 		| { kind: "schedule"; delayDays: number }
 		| { kind: "retry"; maxRetries: number; backoffBaseDays: number }
 		| { kind: "late_fee"; feeCode: "late_fee"; feeSurface: "borrower_charge" }
+		| {
+				kind: "balance_pre_check";
+				signalSource: "recent_transfer_failures";
+				lookbackDays: number;
+				failureCountThreshold: number;
+				blockingDecision: "defer";
+				deferDays: number;
+		  }
+		| {
+				kind: "balance_pre_check";
+				signalSource: "recent_transfer_failures";
+				lookbackDays: number;
+				failureCountThreshold: number;
+				blockingDecision: "suppress" | "require_operator_review";
+		  }
 		| { kind: "balance_pre_check"; mode: "placeholder" }
 		| { kind: "reschedule_policy"; mode: "placeholder" }
 		| { kind: "workout_policy"; mode: "placeholder" };
@@ -134,7 +149,13 @@ describe("typed collection-rule engine", () => {
 			kind: "balance_pre_check",
 			priority: 15,
 			trigger: "event",
-			config: { kind: "balance_pre_check", mode: "placeholder" },
+			config: {
+				kind: "balance_pre_check",
+				signalSource: "recent_transfer_failures",
+				lookbackDays: 14,
+				failureCountThreshold: 1,
+				blockingDecision: "require_operator_review",
+			},
 		});
 		await insertCollectionRule(t, {
 			code: "retry_scoped",
@@ -265,6 +286,39 @@ describe("typed collection-rule engine", () => {
 			kind: "retry",
 			maxRetries: 7,
 			backoffBaseDays: 2,
+		});
+	});
+
+	it("seedCollectionRules creates the canonical balance pre-check rule with typed config", async () => {
+		const t = createGovernedTestConvex();
+
+		await t.mutation(
+			internal.payments.collectionPlan.seed.seedCollectionRules,
+			{}
+		);
+
+		const balanceRule = await t.run(async (ctx) =>
+			ctx.db
+				.query("collectionRules")
+				.collect()
+				.then(
+					(rules) =>
+						rules.find(
+							(rule) => (rule.code ?? rule.name) === "balance_pre_check_rule"
+						) ?? null
+				)
+		);
+
+		expect(balanceRule?._id).toBeTruthy();
+		expect(balanceRule?.kind).toBe("balance_pre_check");
+		expect(balanceRule?.status).toBe("active");
+		expect(balanceRule?.config).toEqual({
+			kind: "balance_pre_check",
+			signalSource: "recent_transfer_failures",
+			lookbackDays: 14,
+			failureCountThreshold: 1,
+			blockingDecision: "defer",
+			deferDays: 3,
 		});
 	});
 });

@@ -23,10 +23,23 @@ export const createEntry = internalMutation({
 			v.literal("default_schedule"),
 			v.literal("retry_rule"),
 			v.literal("late_fee_rule"),
-			v.literal("admin")
+			v.literal("admin"),
+			v.literal("admin_reschedule")
 		),
 		ruleId: v.optional(v.id("collectionRules")),
 		rescheduledFromId: v.optional(v.id("collectionPlanEntries")),
+		rescheduleReason: v.optional(v.string()),
+		rescheduleRequestedAt: v.optional(v.number()),
+		rescheduleRequestedByActorId: v.optional(v.string()),
+		rescheduleRequestedByActorType: v.optional(
+			v.union(
+				v.literal("admin"),
+				v.literal("borrower"),
+				v.literal("broker"),
+				v.literal("member"),
+				v.literal("system")
+			)
+		),
 	},
 	handler: async (ctx, args) =>
 		await ctx.db.insert("collectionPlanEntries", {
@@ -38,6 +51,10 @@ export const createEntry = internalMutation({
 			source: args.source,
 			ruleId: args.ruleId,
 			rescheduledFromId: args.rescheduledFromId,
+			rescheduleReason: args.rescheduleReason,
+			rescheduleRequestedAt: args.rescheduleRequestedAt,
+			rescheduleRequestedByActorId: args.rescheduleRequestedByActorId,
+			rescheduleRequestedByActorType: args.rescheduleRequestedByActorType,
 			createdAt: Date.now(),
 		}),
 });

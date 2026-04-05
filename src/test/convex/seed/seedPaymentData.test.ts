@@ -103,6 +103,7 @@ describe("seedPaymentDataInternal", () => {
 		});
 
 		expect(state.rules.map((rule) => rule.code ?? rule.name).sort()).toEqual([
+			"balance_pre_check_rule",
 			"late_fee_rule",
 			"retry_rule",
 			"schedule_rule",
@@ -116,6 +117,11 @@ describe("seedPaymentDataInternal", () => {
 				}))
 				.sort((left, right) => (left.code ?? "").localeCompare(right.code ?? ""))
 		).toEqual([
+			{
+				code: "balance_pre_check_rule",
+				kind: "balance_pre_check",
+				status: "active",
+			},
 			{ code: "late_fee_rule", kind: "late_fee", status: "active" },
 			{ code: "retry_rule", kind: "retry", status: "active" },
 			{ code: "schedule_rule", kind: "schedule", status: "active" },
@@ -148,7 +154,7 @@ describe("seedPaymentDataInternal", () => {
 			return { ruleCount: rules.length, entryCount: entries.length };
 		});
 
-		expect(state.ruleCount).toBe(3);
+		expect(state.ruleCount).toBe(4);
 		expect(state.entryCount).toBe(1);
 	});
 

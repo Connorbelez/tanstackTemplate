@@ -8,6 +8,7 @@ import {
 	getCollectionRuleCode,
 	getCollectionRuleKind,
 } from "./ruleContract";
+import { balancePreCheckRuleHandler } from "./rules/balancePreCheckRule";
 import { lateFeeRuleHandler } from "./rules/lateFeeRule";
 import { retryRuleHandler } from "./rules/retryRule";
 import { scheduleRuleHandler } from "./rules/scheduleRule";
@@ -28,6 +29,7 @@ export interface RuleHandler {
 // ─── Handler Registry ────────────────────────────────────
 
 const ruleHandlerRegistry: Partial<Record<CollectionRuleKind, RuleHandler>> = {
+	balance_pre_check: balancePreCheckRuleHandler,
 	schedule: scheduleRuleHandler,
 	retry: retryRuleHandler,
 	late_fee: lateFeeRuleHandler,

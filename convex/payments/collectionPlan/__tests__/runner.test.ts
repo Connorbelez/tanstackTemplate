@@ -21,11 +21,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
 	createGovernedTestConvex,
 	drainScheduledWork,
+	seedBalancePreCheckRule,
 	seedBorrowerProfile,
 	seedCollectionRules,
 	seedMortgage,
 	seedObligation,
 	seedPlanEntry,
+	seedRecentFailedInboundTransfer,
 } from "../../../../src/test/convex/payments/helpers";
 import { internal } from "../../../_generated/api";
 import type { Id } from "../../../_generated/dataModel";
@@ -66,7 +68,7 @@ async function seedExecutionFixture(
 		status: "planned",
 		source: "default_schedule",
 	});
-	return { obligationId, planEntryId };
+	return { borrowerId, mortgageId, obligationId, planEntryId };
 }
 
 async function getAttemptsForPlanEntry(
@@ -233,5 +235,66 @@ describe("processDuePlanEntries", () => {
 		);
 		expect(retryEntry?._id).toBeTruthy();
 		expect(retryEntry?.status).toBe("planned");
+	});
+
+	it("does not thrash deferred entries across immediate scheduler reruns", async () => {
+		const t = createGovernedTestConvex();
+		const asOf = new Date("2026-04-01T12:00:00.000Z").getTime();
+		vi.setSystemTime(asOf);
+		const { borrowerId, mortgageId, planEntryId } = await seedExecutionFixture(
+			t,
+			{
+				method: "manual",
+				scheduledDate: asOf - 1000,
+			}
+		);
+		await seedBalancePreCheckRule(t, {
+			blockingDecision: "defer",
+			deferDays: 3,
+		});
+		await seedRecentFailedInboundTransfer(t, {
+			borrowerId,
+			mortgageId,
+			createdAt: asOf - 60_000,
+		});
+
+		const first = await t.action(
+			internal.payments.collectionPlan.runner.processDuePlanEntries,
+			{
+				asOf,
+				batchSize: 10,
+			}
+		);
+		await drainScheduledWork(t);
+
+		const second = await t.action(
+			internal.payments.collectionPlan.runner.processDuePlanEntries,
+			{
+				asOf: asOf + 60_000,
+				batchSize: 10,
+			}
+		);
+		await drainScheduledWork(t);
+
+		expect(first.selectedCount).toBe(1);
+		expect(first.attemptedCount).toBe(1);
+		expect(first.notEligibleCount).toBe(1);
+		expect(first.attemptCreatedCount).toBe(0);
+		expect(second.selectedCount).toBe(0);
+		expect(second.attemptedCount).toBe(0);
+		expect(second.notEligibleCount).toBe(0);
+
+		const attempts = await getAttemptsForPlanEntry(t, planEntryId);
+		expect(attempts).toHaveLength(0);
+
+		const planEntry = (await t.run((ctx) => ctx.db.get(planEntryId))) as Record<
+			string,
+			unknown
+		> | null;
+		expect(planEntry?.status).toBe("planned");
+		expect(planEntry?.balancePreCheckDecision).toBe("defer");
+		expect(planEntry?.balancePreCheckNextEvaluationAt).toBe(
+			asOf + 3 * 86_400_000
+		);
 	});
 });

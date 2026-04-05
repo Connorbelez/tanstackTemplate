@@ -58,6 +58,11 @@ import {
 	listingStatusValidator,
 } from "./listings/validators";
 import {
+	balancePreCheckDecisionValidator,
+	balancePreCheckReasonCodeValidator,
+	balancePreCheckSignalSourceValidator,
+} from "./payments/collectionPlan/balancePreCheckContract";
+import {
 	collectionRuleConfigValidator,
 	collectionRuleKindValidator,
 	collectionRuleScopeValidator,
@@ -801,13 +806,35 @@ export default defineSchema({
 			v.literal("default_schedule"),
 			v.literal("retry_rule"),
 			v.literal("late_fee_rule"),
-			v.literal("admin")
+			v.literal("admin"),
+			v.literal("admin_reschedule")
 		),
 		ruleId: v.optional(v.id("collectionRules")),
 		rescheduledFromId: v.optional(v.id("collectionPlanEntries")),
+		rescheduleReason: v.optional(v.string()),
+		rescheduleRequestedAt: v.optional(v.number()),
+		rescheduleRequestedByActorId: v.optional(v.string()),
+		rescheduleRequestedByActorType: v.optional(
+			v.union(
+				v.literal("admin"),
+				v.literal("borrower"),
+				v.literal("broker"),
+				v.literal("member"),
+				v.literal("system")
+			)
+		),
 		executedAt: v.optional(v.number()),
 		executionIdempotencyKey: v.optional(v.string()),
 		collectionAttemptId: v.optional(v.id("collectionAttempts")),
+		balancePreCheckDecision: v.optional(balancePreCheckDecisionValidator),
+		balancePreCheckReasonCode: v.optional(balancePreCheckReasonCodeValidator),
+		balancePreCheckReasonDetail: v.optional(v.string()),
+		balancePreCheckSignalSource: v.optional(
+			balancePreCheckSignalSourceValidator
+		),
+		balancePreCheckRuleId: v.optional(v.id("collectionRules")),
+		balancePreCheckEvaluatedAt: v.optional(v.number()),
+		balancePreCheckNextEvaluationAt: v.optional(v.number()),
 		createdAt: v.number(),
 	})
 		.index("by_scheduled_date", ["scheduledDate", "status"])

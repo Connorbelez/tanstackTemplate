@@ -22,12 +22,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
 	createGovernedTestConvex,
 	drainScheduledWork,
+	seedBalancePreCheckRule,
 	seedBorrowerProfile,
 	seedCollectionAttempt,
 	seedCollectionRules,
 	seedMortgage,
 	seedObligation,
 	seedPlanEntry,
+	seedRecentFailedInboundTransfer,
 } from "../../../../src/test/convex/payments/helpers";
 import { internal } from "../../../_generated/api";
 import type { Doc, Id } from "../../../_generated/dataModel";
@@ -423,6 +425,156 @@ describe("executePlanEntry", () => {
 
 		const attempts = await getAttemptsForPlanEntry(t, planEntryId);
 		expect(attempts).toHaveLength(0);
+	});
+
+	it("defers execution before attempt creation when balance pre-check blocks with a defer decision", async () => {
+		const t = createGovernedTestConvex();
+		const requestedAt = new Date("2026-04-01T12:00:00.000Z").getTime();
+		vi.setSystemTime(requestedAt);
+		const { borrowerId, mortgageId, planEntryId } = await seedExecutionFixture(
+			t,
+			{
+				scheduledDate: requestedAt - 1000,
+			}
+		);
+		await seedBalancePreCheckRule(t, {
+			blockingDecision: "defer",
+			deferDays: 3,
+		});
+		await seedRecentFailedInboundTransfer(t, {
+			borrowerId,
+			mortgageId,
+			createdAt: requestedAt - 60_000,
+		});
+
+		const result = await t.action(
+			internal.payments.collectionPlan.execution.executePlanEntry,
+			{
+				planEntryId,
+				triggerSource: "system_scheduler",
+				requestedAt,
+				idempotencyKey: "exec-plan-entry-balance-defer-1",
+			}
+		);
+
+		expect(result.outcome).toBe("not_eligible");
+		expect(result.reasonCode).toBe("balance_pre_check_deferred");
+		expect(result.collectionAttemptId).toBeUndefined();
+
+		const attempts = await getAttemptsForPlanEntry(t, planEntryId);
+		expect(attempts).toHaveLength(0);
+
+		const planEntry = (await t.run((ctx) => ctx.db.get(planEntryId))) as
+			| (Doc<"collectionPlanEntries"> & Record<string, unknown>)
+			| null;
+		expect(planEntry?.status).toBe("planned");
+		expect(planEntry?.collectionAttemptId).toBeUndefined();
+		expect(planEntry?.balancePreCheckDecision).toBe("defer");
+		expect(planEntry?.balancePreCheckReasonCode).toBe(
+			"recent_failed_inbound_transfer"
+		);
+		expect(planEntry?.balancePreCheckSignalSource).toBe(
+			"recent_transfer_failures"
+		);
+		expect(planEntry?.balancePreCheckNextEvaluationAt).toBe(
+			requestedAt + 3 * 86_400_000
+		);
+	});
+
+	it("suppresses execution before attempt creation when balance pre-check blocks with a suppress decision", async () => {
+		const t = createGovernedTestConvex();
+		const requestedAt = new Date("2026-04-01T12:00:00.000Z").getTime();
+		vi.setSystemTime(requestedAt);
+		const { borrowerId, mortgageId, planEntryId } = await seedExecutionFixture(
+			t,
+			{
+				scheduledDate: requestedAt - 1000,
+			}
+		);
+		await seedBalancePreCheckRule(t, {
+			blockingDecision: "suppress",
+		});
+		await seedRecentFailedInboundTransfer(t, {
+			borrowerId,
+			mortgageId,
+			createdAt: requestedAt - 60_000,
+		});
+
+		const result = await t.action(
+			internal.payments.collectionPlan.execution.executePlanEntry,
+			{
+				planEntryId,
+				triggerSource: "system_scheduler",
+				requestedAt,
+				idempotencyKey: "exec-plan-entry-balance-suppress-1",
+			}
+		);
+
+		expect(result.outcome).toBe("not_eligible");
+		expect(result.reasonCode).toBe("balance_pre_check_suppressed");
+		expect(result.collectionAttemptId).toBeUndefined();
+
+		const attempts = await getAttemptsForPlanEntry(t, planEntryId);
+		expect(attempts).toHaveLength(0);
+
+		const planEntry = (await t.run((ctx) => ctx.db.get(planEntryId))) as
+			| (Doc<"collectionPlanEntries"> & Record<string, unknown>)
+			| null;
+		expect(planEntry?.status).toBe("planned");
+		expect(planEntry?.balancePreCheckDecision).toBe("suppress");
+		expect(planEntry?.balancePreCheckReasonCode).toBe(
+			"recent_failed_inbound_transfer"
+		);
+		expect(planEntry?.balancePreCheckNextEvaluationAt).toBeUndefined();
+	});
+
+	it("requires operator review before attempt creation when balance pre-check blocks with a review decision", async () => {
+		const t = createGovernedTestConvex();
+		const requestedAt = new Date("2026-04-01T12:00:00.000Z").getTime();
+		vi.setSystemTime(requestedAt);
+		const { borrowerId, mortgageId, planEntryId } = await seedExecutionFixture(
+			t,
+			{
+				scheduledDate: requestedAt - 1000,
+			}
+		);
+		await seedBalancePreCheckRule(t, {
+			blockingDecision: "require_operator_review",
+		});
+		await seedRecentFailedInboundTransfer(t, {
+			borrowerId,
+			mortgageId,
+			createdAt: requestedAt - 60_000,
+		});
+
+		const result = await t.action(
+			internal.payments.collectionPlan.execution.executePlanEntry,
+			{
+				planEntryId,
+				triggerSource: "system_scheduler",
+				requestedAt,
+				idempotencyKey: "exec-plan-entry-balance-review-1",
+			}
+		);
+
+		expect(result.outcome).toBe("not_eligible");
+		expect(result.reasonCode).toBe(
+			"balance_pre_check_operator_review_required"
+		);
+		expect(result.collectionAttemptId).toBeUndefined();
+
+		const attempts = await getAttemptsForPlanEntry(t, planEntryId);
+		expect(attempts).toHaveLength(0);
+
+		const planEntry = (await t.run((ctx) => ctx.db.get(planEntryId))) as
+			| (Doc<"collectionPlanEntries"> & Record<string, unknown>)
+			| null;
+		expect(planEntry?.status).toBe("planned");
+		expect(planEntry?.balancePreCheckDecision).toBe("require_operator_review");
+		expect(planEntry?.balancePreCheckReasonCode).toBe(
+			"recent_failed_inbound_transfer"
+		);
+		expect(planEntry?.balancePreCheckNextEvaluationAt).toBeUndefined();
 	});
 
 	it("preserves the created attempt when Payment Rails handoff fails", async () => {
