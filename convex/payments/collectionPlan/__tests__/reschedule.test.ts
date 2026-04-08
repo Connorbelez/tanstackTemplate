@@ -5,6 +5,7 @@ import {
 	drainScheduledWork,
 	seedBorrowerProfile,
 	seedCollectionRules,
+	seedCollectionSettlementPrereqs,
 	seedMortgage,
 	seedObligation,
 	seedPlanEntry,
@@ -15,8 +16,13 @@ import { auditLog } from "../../../auditLog";
 
 type GovernedTestConvex = ReturnType<typeof createGovernedTestConvex>;
 
+function createBackendTestConvex() {
+	return createGovernedTestConvex({ includeWorkflowComponents: false });
+}
+
 beforeEach(() => {
 	vi.useFakeTimers();
+	vi.stubEnv("DISABLE_CASH_LEDGER_HASHCHAIN", "true");
 });
 
 afterEach(() => {
@@ -44,6 +50,10 @@ async function seedFuturePlanEntryFixture(
 	const obligationId = await seedObligation(t, mortgageId, borrowerId, {
 		status: "due",
 	});
+	await seedCollectionSettlementPrereqs(t, {
+		mortgageId,
+		obligationId,
+	});
 	const scheduledDate = options?.scheduledDate ?? Date.now() + 5 * 86_400_000;
 	const planEntryId = await seedPlanEntry(t, {
 		obligationIds: [obligationId],
@@ -70,7 +80,7 @@ async function getAttemptsForPlanEntry(
 
 describe("reschedulePlanEntry", () => {
 	it("creates a replacement planned entry and preserves the original as rescheduled", async () => {
-		const t = createGovernedTestConvex();
+		const t = createBackendTestConvex();
 		const requestedAt = new Date("2026-04-05T12:00:00.000Z").getTime();
 		vi.setSystemTime(requestedAt);
 
@@ -148,7 +158,7 @@ describe("reschedulePlanEntry", () => {
 	});
 
 	it("rejects entries that are already due for execution or already linked to execution state", async () => {
-		const t = createGovernedTestConvex();
+		const t = createBackendTestConvex();
 		const requestedAt = new Date("2026-04-05T12:00:00.000Z").getTime();
 		vi.setSystemTime(requestedAt);
 
@@ -193,7 +203,7 @@ describe("reschedulePlanEntry", () => {
 	});
 
 	it("allows reschedule of a blocked planned entry that is not currently scheduler-eligible", async () => {
-		const t = createGovernedTestConvex();
+		const t = createBackendTestConvex();
 		const requestedAt = new Date("2026-04-05T12:00:00.000Z").getTime();
 		vi.setSystemTime(requestedAt);
 
@@ -219,7 +229,7 @@ describe("reschedulePlanEntry", () => {
 	});
 
 	it("keeps the original entry non-executable and lets the replacement execute through the runner", async () => {
-		const t = createGovernedTestConvex();
+		const t = createBackendTestConvex();
 		const requestedAt = new Date("2026-04-05T12:00:00.000Z").getTime();
 		vi.setSystemTime(requestedAt);
 
@@ -283,7 +293,7 @@ describe("reschedulePlanEntry", () => {
 	it("keeps retry lineage attached to the replacement entry when a rescheduled execution fails", async () => {
 		vi.stubEnv("ENABLE_MOCK_PROVIDERS", "false");
 
-		const t = createGovernedTestConvex();
+		const t = createBackendTestConvex();
 		const requestedAt = new Date("2026-04-05T12:00:00.000Z").getTime();
 		vi.setSystemTime(requestedAt);
 
@@ -321,9 +331,9 @@ describe("reschedulePlanEntry", () => {
 		const retryFromReplacement = await t.run(async (ctx) =>
 			ctx.db
 				.query("collectionPlanEntries")
-				.withIndex("by_rescheduled_from", (q) =>
+				.withIndex("by_retry_of", (q) =>
 					q
-						.eq("rescheduledFromId", reschedule.replacementPlanEntryId)
+						.eq("retryOfId", reschedule.replacementPlanEntryId)
 						.eq("source", "retry_rule")
 				)
 				.first()
@@ -333,8 +343,8 @@ describe("reschedulePlanEntry", () => {
 		const retryFromOriginal = await t.run(async (ctx) =>
 			ctx.db
 				.query("collectionPlanEntries")
-				.withIndex("by_rescheduled_from", (q) =>
-					q.eq("rescheduledFromId", planEntryId).eq("source", "retry_rule")
+				.withIndex("by_retry_of", (q) =>
+					q.eq("retryOfId", planEntryId).eq("source", "retry_rule")
 				)
 				.first()
 		);

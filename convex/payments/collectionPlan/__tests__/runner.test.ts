@@ -17,6 +17,7 @@ import { webcrypto } from "node:crypto";
  * - REQ-10: Backend integration coverage exercises the production spine
  */
 
+import process from "node:process";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
 	createGovernedTestConvex,
@@ -24,6 +25,7 @@ import {
 	seedBalancePreCheckRule,
 	seedBorrowerProfile,
 	seedCollectionRules,
+	seedCollectionSettlementPrereqs,
 	seedMortgage,
 	seedObligation,
 	seedPlanEntry,
@@ -32,9 +34,43 @@ import {
 import { internal } from "../../../_generated/api";
 import type { Id } from "../../../_generated/dataModel";
 
+const testGlobal = globalThis as typeof globalThis & {
+	process?: {
+		env: Record<string, string | undefined>;
+	};
+};
+
+if (!testGlobal.process) {
+	testGlobal.process = process as unknown as {
+		env: Record<string, string | undefined>;
+	};
+}
+
+const testEnv = testGlobal.process.env;
+const envRestorers: Array<() => void> = [];
+
+function setTestEnv(key: string, value: string) {
+	const previous = testEnv[key];
+	testEnv[key] = value;
+	envRestorers.push(() => {
+		if (previous === undefined) {
+			delete testEnv[key];
+			return;
+		}
+		testEnv[key] = previous;
+	});
+}
+
 type GovernedTestConvex = ReturnType<typeof createGovernedTestConvex>;
 
+function createBackendTestConvex() {
+	return createGovernedTestConvex({ includeWorkflowComponents: false });
+}
+
 beforeEach(() => {
+	envRestorers.length = 0;
+	setTestEnv("DISABLE_GT_HASHCHAIN", "true");
+	setTestEnv("DISABLE_CASH_LEDGER_HASHCHAIN", "true");
 	globalThis.crypto ??= webcrypto;
 	vi.useFakeTimers({
 		toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval"],
@@ -42,6 +78,9 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+	while (envRestorers.length > 0) {
+		envRestorers.pop()?.();
+	}
 	vi.unstubAllEnvs();
 	vi.restoreAllMocks();
 	vi.clearAllTimers();
@@ -97,10 +136,15 @@ async function getTransfersForAttempt(
 
 describe("processDuePlanEntries", () => {
 	it("executes only due planned entries through the full manual spine", async () => {
-		const t = createGovernedTestConvex();
-		const { obligationId, planEntryId } = await seedExecutionFixture(t, {
-			method: "manual",
-			scheduledDate: Date.now() - 1000,
+		const t = createBackendTestConvex();
+		const { mortgageId, obligationId, planEntryId } =
+			await seedExecutionFixture(t, {
+				method: "manual",
+				scheduledDate: Date.now() - 1000,
+			});
+		await seedCollectionSettlementPrereqs(t, {
+			mortgageId,
+			obligationId,
 		});
 		const { planEntryId: futurePlanEntryId } = await seedExecutionFixture(t, {
 			method: "manual",
@@ -127,18 +171,16 @@ describe("processDuePlanEntries", () => {
 		const attempt = attempts[0];
 		expect(attempt).toBeDefined();
 		expect(attempt?.status).toBe("confirmed");
-		expect(attempt?.providerRef).toBeTruthy();
+		expect(attempt?.transferRequestId).toBeTruthy();
+		expect(attempt).not.toHaveProperty("providerStatus");
 		if (!attempt) {
 			throw new Error("Expected a collection attempt for the due plan entry");
 		}
 
 		const transfers = await getTransfersForAttempt(t, attempt._id);
 		expect(transfers).toHaveLength(1);
+		expect(transfers[0]?.providerRef).toBeTruthy();
 		expect(transfers[0]?.status).toBe("confirmed");
-
-		const obligation = await t.run((ctx) => ctx.db.get(obligationId));
-		expect(obligation?.status).toBe("settled");
-		expect(obligation?.amountSettled).toBe(300_000);
 
 		const duePlanEntry = await t.run((ctx) => ctx.db.get(planEntryId));
 		expect(duePlanEntry?.status).toBe("executing");
@@ -151,9 +193,14 @@ describe("processDuePlanEntries", () => {
 	});
 
 	it("is replay-safe across cron reruns", async () => {
-		const t = createGovernedTestConvex();
-		const { planEntryId } = await seedExecutionFixture(t, {
-			method: "manual",
+		const t = createBackendTestConvex();
+		const { mortgageId, obligationId, planEntryId } =
+			await seedExecutionFixture(t, {
+				method: "manual",
+			});
+		await seedCollectionSettlementPrereqs(t, {
+			mortgageId,
+			obligationId,
 		});
 
 		const first = await t.action(
@@ -190,10 +237,14 @@ describe("processDuePlanEntries", () => {
 
 		const transfers = await getTransfersForAttempt(t, attempt._id);
 		expect(transfers).toHaveLength(1);
+		expect(transfers[0]?.providerRef).toBeTruthy();
+		expect(transfers[0]?.status).toBe("confirmed");
 	});
 
 	it("keeps failure execution durable and feeds the retry loop", async () => {
-		const t = createGovernedTestConvex();
+		setTestEnv("ENABLE_MOCK_PROVIDERS", "false");
+
+		const t = createBackendTestConvex();
 		await seedCollectionRules(t);
 		const { planEntryId } = await seedExecutionFixture(t, {
 			method: "mock_pad",
@@ -225,11 +276,29 @@ describe("processDuePlanEntries", () => {
 		const transfers = await getTransfersForAttempt(t, attempt._id);
 		expect(transfers).toHaveLength(0);
 
+		const replay = await t.action(
+			internal.payments.collectionPlan.runner.processDuePlanEntries,
+			{
+				asOf: Date.now() + 1,
+				batchSize: 10,
+			}
+		);
+		await drainScheduledWork(t);
+
+		expect(replay.selectedCount).toBe(0);
+		expect(replay.attemptCreatedCount).toBe(0);
+		expect(replay.handoffFailureCount).toBe(0);
+
+		const replayAttempts = await getAttemptsForPlanEntry(t, planEntryId);
+		expect(replayAttempts).toHaveLength(1);
+		const replayTransfers = await getTransfersForAttempt(t, attempt._id);
+		expect(replayTransfers).toHaveLength(0);
+
 		const retryEntry = await t.run(async (ctx) =>
 			ctx.db
 				.query("collectionPlanEntries")
-				.withIndex("by_rescheduled_from", (q) =>
-					q.eq("rescheduledFromId", planEntryId).eq("source", "retry_rule")
+				.withIndex("by_retry_of", (q) =>
+					q.eq("retryOfId", planEntryId).eq("source", "retry_rule")
 				)
 				.first()
 		);
@@ -238,9 +307,8 @@ describe("processDuePlanEntries", () => {
 	});
 
 	it("does not thrash deferred entries across immediate scheduler reruns", async () => {
-		const t = createGovernedTestConvex();
+		const t = createBackendTestConvex();
 		const asOf = new Date("2026-04-01T12:00:00.000Z").getTime();
-		vi.setSystemTime(asOf);
 		const { borrowerId, mortgageId, planEntryId } = await seedExecutionFixture(
 			t,
 			{

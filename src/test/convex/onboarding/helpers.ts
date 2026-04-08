@@ -11,8 +11,10 @@ const auditTrail = new AuditTrail(components.auditTrail);
 
 export type GovernedTestConvex = ReturnType<typeof createTestConvex>;
 
-export function createGovernedTestConvex() {
-	return createTestConvex();
+export function createGovernedTestConvex(options?: {
+	includeWorkflowComponents?: boolean;
+}) {
+	return createTestConvex(options);
 }
 
 export async function seedDefaultGovernedActors(t: GovernedTestConvex) {

@@ -1,9 +1,6 @@
 import { v } from "convex/values";
 import type { Doc, Id } from "../../_generated/dataModel";
-import {
-	type BalancePreCheckBlockingDecision,
-	balancePreCheckSignalSourceValidator,
-} from "./balancePreCheckContract";
+import { balancePreCheckSignalSourceValidator } from "./balancePreCheckContract";
 
 export type CollectionRuleKind =
 	| "schedule"
@@ -171,12 +168,6 @@ export const DEFAULT_COLLECTION_RULE_SCOPE: CollectionRuleScope = {
 
 export const DEFAULT_COLLECTION_RULE_STATUS: CollectionRuleStatus = "active";
 
-const LEGACY_RULE_NAME_TO_KIND: Record<string, CollectionRuleKind> = {
-	late_fee_rule: "late_fee",
-	retry_rule: "retry",
-	schedule_rule: "schedule",
-};
-
 const DEFAULT_RULE_DISPLAY_NAMES: Record<CollectionRuleKind, string> = {
 	balance_pre_check: "Balance pre-check",
 	late_fee: "Late fee assessment",
@@ -184,12 +175,6 @@ const DEFAULT_RULE_DISPLAY_NAMES: Record<CollectionRuleKind, string> = {
 	retry: "Retry collection",
 	schedule: "Initial scheduling",
 	workout_policy: "Workout strategy",
-};
-
-const DEFAULT_LATE_FEE_CONFIG: LateFeeRuleConfig = {
-	kind: "late_fee",
-	feeCode: "late_fee",
-	feeSurface: "borrower_charge",
 };
 
 export const DEFAULT_BALANCE_PRE_CHECK_CONFIG: DeferBalancePreCheckRuleConfig =
@@ -202,6 +187,11 @@ export const DEFAULT_BALANCE_PRE_CHECK_CONFIG: DeferBalancePreCheckRuleConfig =
 		deferDays: 3,
 	};
 
+export const DEFAULT_SCHEDULE_RULE_CONFIG: ScheduleRuleConfig = {
+	kind: "schedule",
+	delayDays: 5,
+};
+
 function isCollectionRuleKind(value: unknown): value is CollectionRuleKind {
 	return (
 		value === "schedule" ||
@@ -210,50 +200,6 @@ function isCollectionRuleKind(value: unknown): value is CollectionRuleKind {
 		value === "balance_pre_check" ||
 		value === "reschedule_policy" ||
 		value === "workout_policy"
-	);
-}
-
-function readLegacyNumberParameter(
-	parameters: unknown,
-	key: string
-): number | undefined {
-	if (
-		parameters &&
-		typeof parameters === "object" &&
-		!Array.isArray(parameters)
-	) {
-		const value = (parameters as Record<string, unknown>)[key];
-		if (typeof value === "number" && Number.isInteger(value) && value >= 0) {
-			return value;
-		}
-	}
-
-	return undefined;
-}
-
-function readLegacyStringParameter(
-	parameters: unknown,
-	key: string
-): string | undefined {
-	if (
-		parameters &&
-		typeof parameters === "object" &&
-		!Array.isArray(parameters) &&
-		typeof (parameters as Record<string, unknown>)[key] === "string"
-	) {
-		return (parameters as Record<string, string>)[key];
-	}
-
-	return undefined;
-}
-
-function isBalancePreCheckBlockingDecision(
-	value: unknown
-): value is BalancePreCheckBlockingDecision {
-	return (
-		value === "defer" ||
-		value === "suppress" ||
-		value === "require_operator_review"
 	);
 }
 
@@ -270,13 +216,8 @@ export function getCollectionRuleKind(
 	if (rule.kind) {
 		return rule.kind;
 	}
-
 	if (isCollectionRuleKind(configKind)) {
 		return configKind;
-	}
-
-	if (rule.name) {
-		return LEGACY_RULE_NAME_TO_KIND[rule.name] ?? null;
 	}
 
 	return null;
@@ -284,7 +225,7 @@ export function getCollectionRuleKind(
 
 export function getCollectionRuleCode(rule: Doc<"collectionRules">): string {
 	const kind = getCollectionRuleKind(rule);
-	return rule.code ?? rule.name ?? (kind ? `${kind}_rule` : String(rule._id));
+	return rule.code ?? (kind ? `${kind}_rule` : String(rule._id));
 }
 
 export function getCollectionRuleDisplayName(
@@ -297,11 +238,7 @@ export function getCollectionRuleDisplayName(
 export function getCollectionRuleStatus(
 	rule: Doc<"collectionRules">
 ): CollectionRuleStatus {
-	if (rule.status) {
-		return rule.status;
-	}
-
-	return rule.enabled === false ? "disabled" : "active";
+	return rule.status;
 }
 
 export function isCollectionRuleActive(rule: Doc<"collectionRules">): boolean {
@@ -369,54 +306,19 @@ export function compareCollectionRules(
 export function getScheduleRuleConfig(
 	rule: Doc<"collectionRules">
 ): ScheduleRuleConfig | null {
-	if (rule.config?.kind === "schedule") {
-		return rule.config;
-	}
-
-	const kind = getCollectionRuleKind(rule);
-	if (kind !== "schedule") {
-		return null;
-	}
-
-	return {
-		kind: "schedule",
-		delayDays: readLegacyNumberParameter(rule.parameters, "delayDays") ?? 5,
-	};
+	return rule.config?.kind === "schedule" ? rule.config : null;
 }
 
 export function getRetryRuleConfig(
 	rule: Doc<"collectionRules">
 ): RetryRuleConfig | null {
-	if (rule.config?.kind === "retry") {
-		return rule.config;
-	}
-
-	const kind = getCollectionRuleKind(rule);
-	if (kind !== "retry") {
-		return null;
-	}
-
-	return {
-		kind: "retry",
-		maxRetries: readLegacyNumberParameter(rule.parameters, "maxRetries") ?? 3,
-		backoffBaseDays:
-			readLegacyNumberParameter(rule.parameters, "backoffBaseDays") ?? 3,
-	};
+	return rule.config?.kind === "retry" ? rule.config : null;
 }
 
 export function getLateFeeRuleConfig(
 	rule: Doc<"collectionRules">
 ): LateFeeRuleConfig | null {
-	if (rule.config?.kind === "late_fee") {
-		return rule.config;
-	}
-
-	const kind = getCollectionRuleKind(rule);
-	if (kind !== "late_fee") {
-		return null;
-	}
-
-	return DEFAULT_LATE_FEE_CONFIG;
+	return rule.config?.kind === "late_fee" ? rule.config : null;
 }
 
 export function getBalancePreCheckRuleConfig(
@@ -446,46 +348,5 @@ export function getBalancePreCheckRuleConfig(
 		};
 	}
 
-	const kind = getCollectionRuleKind(rule);
-	if (kind !== "balance_pre_check") {
-		return null;
-	}
-
-	const blockingDecision = readLegacyStringParameter(
-		rule.parameters,
-		"blockingDecision"
-	);
-	const resolvedBlockingDecision = isBalancePreCheckBlockingDecision(
-		blockingDecision
-	)
-		? blockingDecision
-		: DEFAULT_BALANCE_PRE_CHECK_CONFIG.blockingDecision;
-	const lookbackDays =
-		readLegacyNumberParameter(rule.parameters, "lookbackDays") ??
-		DEFAULT_BALANCE_PRE_CHECK_CONFIG.lookbackDays;
-	const failureCountThreshold =
-		readLegacyNumberParameter(rule.parameters, "failureCountThreshold") ??
-		DEFAULT_BALANCE_PRE_CHECK_CONFIG.failureCountThreshold;
-	const deferDays =
-		readLegacyNumberParameter(rule.parameters, "deferDays") ??
-		DEFAULT_BALANCE_PRE_CHECK_CONFIG.deferDays;
-
-	if (resolvedBlockingDecision === "defer") {
-		return {
-			kind: "balance_pre_check",
-			signalSource: DEFAULT_BALANCE_PRE_CHECK_CONFIG.signalSource,
-			lookbackDays,
-			failureCountThreshold,
-			blockingDecision: "defer",
-			deferDays,
-		};
-	}
-
-	return {
-		kind: "balance_pre_check",
-		signalSource: DEFAULT_BALANCE_PRE_CHECK_CONFIG.signalSource,
-		lookbackDays,
-		failureCountThreshold,
-		blockingDecision: resolvedBlockingDecision,
-	};
+	return null;
 }

@@ -1,36 +1,49 @@
-import { v } from "convex/values";
 import { internal } from "../../_generated/api";
-import { type ActionCtx, internalQuery } from "../../_generated/server";
+import type { ActionCtx } from "../../_generated/server";
+import type { ProviderCode } from "../transfers/types";
 import type { ReversalResult, ReversalWebhookPayload } from "./types";
 
-// ── Internal Queries ─────────────────────────────────────────────────
+const REVERSAL_PROVIDER_CODE_MAP: Record<
+	ReversalWebhookPayload["provider"],
+	ProviderCode[]
+> = {
+	rotessa: ["pad_rotessa"],
+	pad_vopay: ["pad_vopay"],
+	stripe: [],
+};
 
-/** Look up a collection attempt by its provider reference. */
-export const getAttemptByProviderRef = internalQuery({
-	args: { providerRef: v.string() },
-	handler: async (ctx, args) => {
-		return ctx.db
-			.query("collectionAttempts")
-			.withIndex("by_provider_ref", (q) =>
-				q.eq("providerRef", args.providerRef)
-			)
-			.first();
-	},
-});
+async function getTransferByProviderRef(
+	ctx: ActionCtx,
+	payload: ReversalWebhookPayload
+) {
+	for (const providerCode of REVERSAL_PROVIDER_CODE_MAP[payload.provider]) {
+		const transfer = await ctx.runQuery(
+			internal.payments.webhooks.transferCore.getTransferRequestByProviderRef,
+			{
+				providerCode,
+				providerRef: payload.providerRef,
+			}
+		);
+		if (transfer) {
+			return transfer;
+		}
+	}
+
+	return null;
+}
 
 // ── Main Handler ─────────────────────────────────────────────────────
 
 /**
- * Shared reversal handler used by both Rotessa and Stripe httpAction handlers.
+ * Shared reversal handler used by legacy reversal webhook endpoints.
  *
  * Orchestrates:
- * 1. Looks up the collection attempt by providerRef
- * 2. Validates attempt state (must be `confirmed`)
- * 3. Fires the GT transition once via `processReversalCascade`
+ * 1. Looks up the transfer by canonical providerCode + providerRef
+ * 2. Validates transfer state (must be `confirmed`)
+ * 3. Fires the transfer GT transition once via `processReversalCascade`
  *
- * The GT transition's `emitPaymentReversed` effect handles the per-obligation
- * cash ledger reversal cascade automatically. This handler fires the transition
- * exactly once — never per-obligation.
+ * Transfer effects then reconcile any linked collection attempt and the
+ * per-obligation cash-ledger reversal cascade automatically.
  *
  * This is a plain async function (NOT a Convex registered function) that
  * receives an ActionCtx from the calling httpAction.
@@ -39,39 +52,41 @@ export async function handlePaymentReversal(
 	ctx: ActionCtx,
 	payload: ReversalWebhookPayload
 ): Promise<ReversalResult> {
-	// 1. Look up collection attempt by providerRef
-	const attempt = await ctx.runQuery(
-		internal.payments.webhooks.handleReversal.getAttemptByProviderRef,
-		{ providerRef: payload.providerRef }
-	);
+	// 1. Look up transfer by canonical provider boundary
+	const transfer = await getTransferByProviderRef(ctx, payload);
 
-	if (!attempt) {
-		return { success: false, reason: "attempt_not_found" };
+	if (!transfer) {
+		if (REVERSAL_PROVIDER_CODE_MAP[payload.provider].length === 0) {
+			return { success: false, reason: "unsupported_provider" };
+		}
+		return { success: false, reason: "transfer_not_found" };
 	}
 
-	// 2. Validate attempt state
-	if (attempt.status === "reversed") {
+	// 2. Validate transfer state
+	if (transfer.status === "reversed") {
 		return {
 			success: true,
 			reason: "already_reversed",
-			attemptId: attempt._id,
+			attemptId: transfer.collectionAttemptId,
+			transferId: transfer._id,
 		};
 	}
 
-	if (attempt.status !== "confirmed") {
+	if (transfer.status !== "confirmed") {
 		return {
 			success: false,
 			reason: "invalid_state",
-			attemptId: attempt._id,
+			attemptId: transfer.collectionAttemptId,
+			transferId: transfer._id,
 		};
 	}
 
-	// 3. Fire the GT transition once — the emitPaymentReversed effect
-	//    handles per-obligation cash ledger reversal cascade automatically.
+	// 3. Fire the transfer transition once — transfer effects reconcile the
+	//    linked collection attempt and the per-obligation cash reversal cascade.
 	const result = await ctx.runMutation(
 		internal.payments.webhooks.processReversal.processReversalCascade,
 		{
-			attemptId: attempt._id,
+			transferId: transfer._id,
 			effectiveDate: payload.reversalDate,
 			reason: payload.reversalReason,
 			provider: payload.provider,
@@ -83,12 +98,14 @@ export async function handlePaymentReversal(
 		return {
 			success: false,
 			reason: "transition_failed",
-			attemptId: attempt._id,
+			attemptId: transfer.collectionAttemptId,
+			transferId: transfer._id,
 		};
 	}
 
 	return {
 		success: true,
-		attemptId: attempt._id,
+		attemptId: transfer.collectionAttemptId,
+		transferId: transfer._id,
 	};
 }

@@ -251,10 +251,11 @@ describe("ENG-164 reconciliation suite — checks 5–8", () => {
 
 	it("checkStuckCollections flags executing attempts older than 7 days", async () => {
 		const t = createHarness(modules);
-		await seedMinimalEntities(t);
+		const seeded = await seedMinimalEntities(t);
 
 		await t.run(async (ctx) => {
 			const planEntryId = await ctx.db.insert("collectionPlanEntries", {
+				mortgageId: seeded.mortgageId,
 				obligationIds: [] as Id<"obligations">[],
 				amount: 10_000,
 				method: "manual",
@@ -267,6 +268,8 @@ describe("ENG-164 reconciliation suite — checks 5–8", () => {
 			await ctx.db.insert("collectionAttempts", {
 				status: "executing",
 				planEntryId,
+				mortgageId: seeded.mortgageId,
+				obligationIds: [] as Id<"obligations">[],
 				method: "manual",
 				amount: 10_000,
 				initiatedAt: Date.now() - 10 * MS_PER_DAY,
@@ -283,13 +286,14 @@ describe("ENG-164 reconciliation suite — checks 5–8", () => {
 
 	it("checkStuckCollections is healthy at exactly 7 days (boundary — not strictly older)", async () => {
 		const t = createHarness(modules);
-		await seedMinimalEntities(t);
+		const seeded = await seedMinimalEntities(t);
 
 		const nowAtStart = Date.now();
 		const sevenDaysAgo = nowAtStart - 7 * MS_PER_DAY;
 
 		await t.run(async (ctx) => {
 			const planEntryId = await ctx.db.insert("collectionPlanEntries", {
+				mortgageId: seeded.mortgageId,
 				obligationIds: [] as Id<"obligations">[],
 				amount: 10_000,
 				method: "manual",
@@ -302,6 +306,8 @@ describe("ENG-164 reconciliation suite — checks 5–8", () => {
 			await ctx.db.insert("collectionAttempts", {
 				status: "executing",
 				planEntryId,
+				mortgageId: seeded.mortgageId,
+				obligationIds: [] as Id<"obligations">[],
 				method: "manual",
 				amount: 10_000,
 				initiatedAt: sevenDaysAgo,
@@ -607,9 +613,10 @@ describe("ENG-164 conservation checks and query filters", () => {
 		expect(unmatched.count).toBe(1);
 
 		// Non-existent mortgage should return no matches
+		const otherSeeded = await seedMinimalEntities(t);
 		const wrong = await asCashLedgerUser(t).query(
 			api.payments.cashLedger.reconciliationQueries.reconciliationUnappliedCash,
-			{ mortgageId: "non-existent-mortgage" as Id<"mortgages"> }
+			{ mortgageId: otherSeeded.mortgageId }
 		);
 		expect(wrong.count).toBe(0);
 	});
@@ -691,12 +698,13 @@ describe("ENG-164 conservation checks and query filters", () => {
 
 	it("reconciliationStuckCollections filters by date range", async () => {
 		const t = createHarness(modules);
-		await seedMinimalEntities(t);
+		const seeded = await seedMinimalEntities(t);
 
 		const nowAtStart = Date.now();
 
 		await t.run(async (ctx) => {
 			const planEntryId = await ctx.db.insert("collectionPlanEntries", {
+				mortgageId: seeded.mortgageId,
 				obligationIds: [] as Id<"obligations">[],
 				amount: 10_000,
 				method: "manual",
@@ -708,6 +716,8 @@ describe("ENG-164 conservation checks and query filters", () => {
 			await ctx.db.insert("collectionAttempts", {
 				status: "executing",
 				planEntryId,
+				mortgageId: seeded.mortgageId,
+				obligationIds: [] as Id<"obligations">[],
 				method: "manual",
 				amount: 10_000,
 				initiatedAt: nowAtStart - 10 * MS_PER_DAY,

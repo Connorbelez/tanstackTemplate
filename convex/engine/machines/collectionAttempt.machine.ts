@@ -10,13 +10,13 @@ export const collectionAttemptMachine = setup({
 			maxRetries: number;
 		},
 		events: {} as
-			| { type: "DRAW_INITIATED"; providerRef: string }
-			| { type: "PROVIDER_ACKNOWLEDGED"; providerRef: string }
+			| { type: "DRAW_INITIATED" }
+			| { type: "PROVIDER_ACKNOWLEDGED" }
 			| { type: "FUNDS_SETTLED"; settledAt: number }
 			| { type: "DRAW_FAILED"; reason: string; code: string }
 			| { type: "RETRY_ELIGIBLE" }
 			| { type: "MAX_RETRIES_EXCEEDED" }
-			| { type: "RETRY_INITIATED"; providerRef: string }
+			| { type: "RETRY_INITIATED" }
 			| { type: "ATTEMPT_CANCELLED"; reason: string }
 			| { type: "PAYMENT_REVERSED"; reason: string },
 	},
@@ -24,9 +24,6 @@ export const collectionAttemptMachine = setup({
 		canRetry: ({ context }) => context.retryCount < context.maxRetries,
 	},
 	actions: {
-		recordProviderRef: () => {
-			/* resolved by GT effect registry */
-		},
 		emitPaymentReceived: () => {
 			/* resolved by GT effect registry */
 		},
@@ -60,7 +57,6 @@ export const collectionAttemptMachine = setup({
 			on: {
 				DRAW_INITIATED: {
 					target: "pending",
-					actions: ["recordProviderRef"],
 				},
 				DRAW_FAILED: {
 					target: "failed",
@@ -104,7 +100,6 @@ export const collectionAttemptMachine = setup({
 			on: {
 				RETRY_INITIATED: {
 					target: "pending",
-					actions: ["recordProviderRef"],
 				},
 			},
 		},

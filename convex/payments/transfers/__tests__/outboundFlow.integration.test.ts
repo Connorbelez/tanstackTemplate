@@ -12,8 +12,6 @@
 
 import { convexTest } from "convex-test";
 import { describe, expect, it } from "vitest";
-import workflowSchema from "../../../../node_modules/@convex-dev/workflow/dist/component/schema.js";
-import workpoolSchema from "../../../../node_modules/@convex-dev/workpool/dist/component/schema.js";
 import type { Id } from "../../../_generated/dataModel";
 import type { MutationCtx } from "../../../_generated/server";
 import auditTrailSchema from "../../../components/auditTrail/schema";
@@ -26,8 +24,6 @@ import schema from "../../../schema";
 import {
 	convexModules,
 	auditTrailModules as sharedAuditTrailModules,
-	workflowModules as sharedWorkflowModules,
-	workpoolModules as sharedWorkpoolModules,
 } from "../../../test/moduleMaps";
 import { registerAuditLogComponent } from "../../../test/registerAuditLogComponent";
 
@@ -35,19 +31,17 @@ import { registerAuditLogComponent } from "../../../test/registerAuditLogCompone
 
 const modules = convexModules;
 const auditTrailModules = sharedAuditTrailModules;
-const workflowModules = sharedWorkflowModules;
-const workpoolModules = sharedWorkpoolModules;
 
 // ── Test harness ────────────────────────────────────────────────────
 
 type TestHarness = ReturnType<typeof createFullHarness>;
 
 function createFullHarness() {
+	process.env.DISABLE_CASH_LEDGER_HASHCHAIN = "true";
+	process.env.DISABLE_GT_HASHCHAIN = "true";
 	const t = convexTest(schema, modules);
 	registerAuditLogComponent(t, "auditLog");
 	t.registerComponent("auditTrail", auditTrailSchema, auditTrailModules);
-	t.registerComponent("workflow", workflowSchema, workflowModules);
-	t.registerComponent("workflow/workpool", workpoolSchema, workpoolModules);
 	return t;
 }
 

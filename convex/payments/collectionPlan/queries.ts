@@ -20,7 +20,9 @@ export const getEnabledRules = internalQuery({
 	handler: async (ctx, { trigger, mortgageId, asOfMs }) => {
 		const ruleCandidates = await ctx.db
 			.query("collectionRules")
-			.withIndex("by_trigger", (q) => q.eq("trigger", trigger))
+			.withIndex("by_trigger", (q) =>
+				q.eq("trigger", trigger).eq("status", "active")
+			)
 			.collect();
 
 		const effectiveAt = asOfMs ?? Date.now();
@@ -175,8 +177,8 @@ export const getRetryEntryForPlanEntry = internalQuery({
 		return (
 			(await ctx.db
 				.query("collectionPlanEntries")
-				.withIndex("by_rescheduled_from", (q) =>
-					q.eq("rescheduledFromId", planEntryId).eq("source", "retry_rule")
+				.withIndex("by_retry_of", (q) =>
+					q.eq("retryOfId", planEntryId).eq("source", "retry_rule")
 				)
 				.first()) ?? null
 		);

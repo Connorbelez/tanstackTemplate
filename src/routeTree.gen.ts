@@ -56,6 +56,7 @@ import { Route as DemoGovernedTransitionsRouteRouteImport } from './routes/demo/
 import { Route as DemoDocumentEngineRouteRouteImport } from './routes/demo/document-engine/route'
 import { Route as DemoCrmRouteRouteImport } from './routes/demo/crm/route'
 import { Route as DemoAuditTraceabilityRouteRouteImport } from './routes/demo/audit-traceability/route'
+import { Route as DemoAmpsRouteRouteImport } from './routes/demo/amps/route'
 import { Route as AdminUnderwritingRouteRouteImport } from './routes/admin/underwriting/route'
 import { Route as AdminPropertiesRouteRouteImport } from './routes/admin/properties/route'
 import { Route as AdminObligationsRouteRouteImport } from './routes/admin/obligations/route'
@@ -69,6 +70,7 @@ import { Route as DemoGovernedTransitionsIndexRouteImport } from './routes/demo/
 import { Route as DemoDocumentEngineIndexRouteImport } from './routes/demo/document-engine/index'
 import { Route as DemoCrmIndexRouteImport } from './routes/demo/crm/index'
 import { Route as DemoAuditTraceabilityIndexRouteImport } from './routes/demo/audit-traceability/index'
+import { Route as DemoAmpsIndexRouteImport } from './routes/demo/amps/index'
 import { Route as DemoRbacAuthRolesRouteImport } from './routes/demo/rbac-auth/roles'
 import { Route as DemoRbacAuthOnboardingRouteImport } from './routes/demo/rbac-auth/onboarding'
 import { Route as DemoRbacAuthAuditRouteImport } from './routes/demo/rbac-auth/audit'
@@ -89,6 +91,9 @@ import { Route as DemoAuditTraceabilityPipelineRouteImport } from './routes/demo
 import { Route as DemoAuditTraceabilityHashChainRouteImport } from './routes/demo/audit-traceability/hash-chain'
 import { Route as DemoAuditTraceabilityAuditTrailRouteImport } from './routes/demo/audit-traceability/audit-trail'
 import { Route as DemoAuditTraceabilityAccessLogRouteImport } from './routes/demo/audit-traceability/access-log'
+import { Route as DemoAmpsRulesRouteImport } from './routes/demo/amps/rules'
+import { Route as DemoAmpsCollectionPlanRouteImport } from './routes/demo/amps/collection-plan'
+import { Route as DemoAmpsCollectionAttemptsRouteImport } from './routes/demo/amps/collection-attempts'
 import { Route as AdminPropertiesRecordidRouteImport } from './routes/admin/properties/$recordid'
 import { Route as AdminObligationsRecordidRouteImport } from './routes/admin/obligations/$recordid'
 import { Route as AdminMortgagesRecordidRouteImport } from './routes/admin/mortgages/$recordid'
@@ -104,6 +109,7 @@ import { Route as DemoRbacAdminRouteRouteImport } from './routes/demo/rbac/admin
 import { Route as DemoDocumentEngineDesignerTemplateIdRouteImport } from './routes/demo/document-engine/designer.$templateId'
 import { Route as DemoCrmObjectDefIdRecordIdRouteImport } from './routes/demo/crm/$objectDefId.$recordId'
 import { Route as DemoRbacAdminUnderwritingRouteRouteImport } from './routes/demo/rbac/admin/underwriting/route'
+import { Route as DemoAmpsMortgagesMortgageIdPaymentsRouteImport } from './routes/demo/amps/mortgages.$mortgageId.payments'
 
 const UnauthorizedRoute = UnauthorizedRouteImport.update({
   id: '/unauthorized',
@@ -346,6 +352,11 @@ const DemoAuditTraceabilityRouteRoute =
     path: '/demo/audit-traceability',
     getParentRoute: () => rootRouteImport,
   } as any)
+const DemoAmpsRouteRoute = DemoAmpsRouteRouteImport.update({
+  id: '/demo/amps',
+  path: '/demo/amps',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AdminUnderwritingRouteRoute = AdminUnderwritingRouteRouteImport.update({
   id: '/underwriting',
   path: '/underwriting',
@@ -413,6 +424,11 @@ const DemoAuditTraceabilityIndexRoute =
     path: '/',
     getParentRoute: () => DemoAuditTraceabilityRouteRoute,
   } as any)
+const DemoAmpsIndexRoute = DemoAmpsIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => DemoAmpsRouteRoute,
+} as any)
 const DemoRbacAuthRolesRoute = DemoRbacAuthRolesRouteImport.update({
   id: '/roles',
   path: '/roles',
@@ -526,6 +542,22 @@ const DemoAuditTraceabilityAccessLogRoute =
     path: '/access-log',
     getParentRoute: () => DemoAuditTraceabilityRouteRoute,
   } as any)
+const DemoAmpsRulesRoute = DemoAmpsRulesRouteImport.update({
+  id: '/rules',
+  path: '/rules',
+  getParentRoute: () => DemoAmpsRouteRoute,
+} as any)
+const DemoAmpsCollectionPlanRoute = DemoAmpsCollectionPlanRouteImport.update({
+  id: '/collection-plan',
+  path: '/collection-plan',
+  getParentRoute: () => DemoAmpsRouteRoute,
+} as any)
+const DemoAmpsCollectionAttemptsRoute =
+  DemoAmpsCollectionAttemptsRouteImport.update({
+    id: '/collection-attempts',
+    path: '/collection-attempts',
+    getParentRoute: () => DemoAmpsRouteRoute,
+  } as any)
 const AdminPropertiesRecordidRoute = AdminPropertiesRecordidRouteImport.update({
   id: '/$recordid',
   path: '/$recordid',
@@ -605,6 +637,12 @@ const DemoRbacAdminUnderwritingRouteRoute =
     path: '/underwriting',
     getParentRoute: () => DemoRbacAdminRouteRoute,
   } as any)
+const DemoAmpsMortgagesMortgageIdPaymentsRoute =
+  DemoAmpsMortgagesMortgageIdPaymentsRouteImport.update({
+    id: '/mortgages/$mortgageId/payments',
+    path: '/mortgages/$mortgageId/payments',
+    getParentRoute: () => DemoAmpsRouteRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -627,6 +665,7 @@ export interface FileRoutesByFullPath {
   '/admin/obligations': typeof AdminObligationsRouteRouteWithChildren
   '/admin/properties': typeof AdminPropertiesRouteRouteWithChildren
   '/admin/underwriting': typeof AdminUnderwritingRouteRoute
+  '/demo/amps': typeof DemoAmpsRouteRouteWithChildren
   '/demo/audit-traceability': typeof DemoAuditTraceabilityRouteRouteWithChildren
   '/demo/crm': typeof DemoCrmRouteRouteWithChildren
   '/demo/document-engine': typeof DemoDocumentEngineRouteRouteWithChildren
@@ -673,6 +712,9 @@ export interface FileRoutesByFullPath {
   '/admin/mortgages/$recordid': typeof AdminMortgagesRecordidRoute
   '/admin/obligations/$recordid': typeof AdminObligationsRecordidRoute
   '/admin/properties/$recordid': typeof AdminPropertiesRecordidRoute
+  '/demo/amps/collection-attempts': typeof DemoAmpsCollectionAttemptsRoute
+  '/demo/amps/collection-plan': typeof DemoAmpsCollectionPlanRoute
+  '/demo/amps/rules': typeof DemoAmpsRulesRoute
   '/demo/audit-traceability/access-log': typeof DemoAuditTraceabilityAccessLogRoute
   '/demo/audit-traceability/audit-trail': typeof DemoAuditTraceabilityAuditTrailRoute
   '/demo/audit-traceability/hash-chain': typeof DemoAuditTraceabilityHashChainRoute
@@ -693,6 +735,7 @@ export interface FileRoutesByFullPath {
   '/demo/rbac-auth/audit': typeof DemoRbacAuthAuditRoute
   '/demo/rbac-auth/onboarding': typeof DemoRbacAuthOnboardingRoute
   '/demo/rbac-auth/roles': typeof DemoRbacAuthRolesRoute
+  '/demo/amps/': typeof DemoAmpsIndexRoute
   '/demo/audit-traceability/': typeof DemoAuditTraceabilityIndexRoute
   '/demo/crm/': typeof DemoCrmIndexRoute
   '/demo/document-engine/': typeof DemoDocumentEngineIndexRoute
@@ -702,6 +745,7 @@ export interface FileRoutesByFullPath {
   '/demo/rbac/admin/underwriting': typeof DemoRbacAdminUnderwritingRouteRoute
   '/demo/crm/$objectDefId/$recordId': typeof DemoCrmObjectDefIdRecordIdRoute
   '/demo/document-engine/designer/$templateId': typeof DemoDocumentEngineDesignerTemplateIdRoute
+  '/demo/amps/mortgages/$mortgageId/payments': typeof DemoAmpsMortgagesMortgageIdPaymentsRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -764,6 +808,9 @@ export interface FileRoutesByTo {
   '/admin/mortgages/$recordid': typeof AdminMortgagesRecordidRoute
   '/admin/obligations/$recordid': typeof AdminObligationsRecordidRoute
   '/admin/properties/$recordid': typeof AdminPropertiesRecordidRoute
+  '/demo/amps/collection-attempts': typeof DemoAmpsCollectionAttemptsRoute
+  '/demo/amps/collection-plan': typeof DemoAmpsCollectionPlanRoute
+  '/demo/amps/rules': typeof DemoAmpsRulesRoute
   '/demo/audit-traceability/access-log': typeof DemoAuditTraceabilityAccessLogRoute
   '/demo/audit-traceability/audit-trail': typeof DemoAuditTraceabilityAuditTrailRoute
   '/demo/audit-traceability/hash-chain': typeof DemoAuditTraceabilityHashChainRoute
@@ -784,6 +831,7 @@ export interface FileRoutesByTo {
   '/demo/rbac-auth/audit': typeof DemoRbacAuthAuditRoute
   '/demo/rbac-auth/onboarding': typeof DemoRbacAuthOnboardingRoute
   '/demo/rbac-auth/roles': typeof DemoRbacAuthRolesRoute
+  '/demo/amps': typeof DemoAmpsIndexRoute
   '/demo/audit-traceability': typeof DemoAuditTraceabilityIndexRoute
   '/demo/crm': typeof DemoCrmIndexRoute
   '/demo/document-engine': typeof DemoDocumentEngineIndexRoute
@@ -793,6 +841,7 @@ export interface FileRoutesByTo {
   '/demo/rbac/admin/underwriting': typeof DemoRbacAdminUnderwritingRouteRoute
   '/demo/crm/$objectDefId/$recordId': typeof DemoCrmObjectDefIdRecordIdRoute
   '/demo/document-engine/designer/$templateId': typeof DemoDocumentEngineDesignerTemplateIdRoute
+  '/demo/amps/mortgages/$mortgageId/payments': typeof DemoAmpsMortgagesMortgageIdPaymentsRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -816,6 +865,7 @@ export interface FileRoutesById {
   '/admin/obligations': typeof AdminObligationsRouteRouteWithChildren
   '/admin/properties': typeof AdminPropertiesRouteRouteWithChildren
   '/admin/underwriting': typeof AdminUnderwritingRouteRoute
+  '/demo/amps': typeof DemoAmpsRouteRouteWithChildren
   '/demo/audit-traceability': typeof DemoAuditTraceabilityRouteRouteWithChildren
   '/demo/crm': typeof DemoCrmRouteRouteWithChildren
   '/demo/document-engine': typeof DemoDocumentEngineRouteRouteWithChildren
@@ -862,6 +912,9 @@ export interface FileRoutesById {
   '/admin/mortgages/$recordid': typeof AdminMortgagesRecordidRoute
   '/admin/obligations/$recordid': typeof AdminObligationsRecordidRoute
   '/admin/properties/$recordid': typeof AdminPropertiesRecordidRoute
+  '/demo/amps/collection-attempts': typeof DemoAmpsCollectionAttemptsRoute
+  '/demo/amps/collection-plan': typeof DemoAmpsCollectionPlanRoute
+  '/demo/amps/rules': typeof DemoAmpsRulesRoute
   '/demo/audit-traceability/access-log': typeof DemoAuditTraceabilityAccessLogRoute
   '/demo/audit-traceability/audit-trail': typeof DemoAuditTraceabilityAuditTrailRoute
   '/demo/audit-traceability/hash-chain': typeof DemoAuditTraceabilityHashChainRoute
@@ -882,6 +935,7 @@ export interface FileRoutesById {
   '/demo/rbac-auth/audit': typeof DemoRbacAuthAuditRoute
   '/demo/rbac-auth/onboarding': typeof DemoRbacAuthOnboardingRoute
   '/demo/rbac-auth/roles': typeof DemoRbacAuthRolesRoute
+  '/demo/amps/': typeof DemoAmpsIndexRoute
   '/demo/audit-traceability/': typeof DemoAuditTraceabilityIndexRoute
   '/demo/crm/': typeof DemoCrmIndexRoute
   '/demo/document-engine/': typeof DemoDocumentEngineIndexRoute
@@ -891,6 +945,7 @@ export interface FileRoutesById {
   '/demo/rbac/admin/underwriting': typeof DemoRbacAdminUnderwritingRouteRoute
   '/demo/crm/$objectDefId/$recordId': typeof DemoCrmObjectDefIdRecordIdRoute
   '/demo/document-engine/designer/$templateId': typeof DemoDocumentEngineDesignerTemplateIdRoute
+  '/demo/amps/mortgages/$mortgageId/payments': typeof DemoAmpsMortgagesMortgageIdPaymentsRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -915,6 +970,7 @@ export interface FileRouteTypes {
     | '/admin/obligations'
     | '/admin/properties'
     | '/admin/underwriting'
+    | '/demo/amps'
     | '/demo/audit-traceability'
     | '/demo/crm'
     | '/demo/document-engine'
@@ -961,6 +1017,9 @@ export interface FileRouteTypes {
     | '/admin/mortgages/$recordid'
     | '/admin/obligations/$recordid'
     | '/admin/properties/$recordid'
+    | '/demo/amps/collection-attempts'
+    | '/demo/amps/collection-plan'
+    | '/demo/amps/rules'
     | '/demo/audit-traceability/access-log'
     | '/demo/audit-traceability/audit-trail'
     | '/demo/audit-traceability/hash-chain'
@@ -981,6 +1040,7 @@ export interface FileRouteTypes {
     | '/demo/rbac-auth/audit'
     | '/demo/rbac-auth/onboarding'
     | '/demo/rbac-auth/roles'
+    | '/demo/amps/'
     | '/demo/audit-traceability/'
     | '/demo/crm/'
     | '/demo/document-engine/'
@@ -990,6 +1050,7 @@ export interface FileRouteTypes {
     | '/demo/rbac/admin/underwriting'
     | '/demo/crm/$objectDefId/$recordId'
     | '/demo/document-engine/designer/$templateId'
+    | '/demo/amps/mortgages/$mortgageId/payments'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -1052,6 +1113,9 @@ export interface FileRouteTypes {
     | '/admin/mortgages/$recordid'
     | '/admin/obligations/$recordid'
     | '/admin/properties/$recordid'
+    | '/demo/amps/collection-attempts'
+    | '/demo/amps/collection-plan'
+    | '/demo/amps/rules'
     | '/demo/audit-traceability/access-log'
     | '/demo/audit-traceability/audit-trail'
     | '/demo/audit-traceability/hash-chain'
@@ -1072,6 +1136,7 @@ export interface FileRouteTypes {
     | '/demo/rbac-auth/audit'
     | '/demo/rbac-auth/onboarding'
     | '/demo/rbac-auth/roles'
+    | '/demo/amps'
     | '/demo/audit-traceability'
     | '/demo/crm'
     | '/demo/document-engine'
@@ -1081,6 +1146,7 @@ export interface FileRouteTypes {
     | '/demo/rbac/admin/underwriting'
     | '/demo/crm/$objectDefId/$recordId'
     | '/demo/document-engine/designer/$templateId'
+    | '/demo/amps/mortgages/$mortgageId/payments'
   id:
     | '__root__'
     | '/'
@@ -1103,6 +1169,7 @@ export interface FileRouteTypes {
     | '/admin/obligations'
     | '/admin/properties'
     | '/admin/underwriting'
+    | '/demo/amps'
     | '/demo/audit-traceability'
     | '/demo/crm'
     | '/demo/document-engine'
@@ -1149,6 +1216,9 @@ export interface FileRouteTypes {
     | '/admin/mortgages/$recordid'
     | '/admin/obligations/$recordid'
     | '/admin/properties/$recordid'
+    | '/demo/amps/collection-attempts'
+    | '/demo/amps/collection-plan'
+    | '/demo/amps/rules'
     | '/demo/audit-traceability/access-log'
     | '/demo/audit-traceability/audit-trail'
     | '/demo/audit-traceability/hash-chain'
@@ -1169,6 +1239,7 @@ export interface FileRouteTypes {
     | '/demo/rbac-auth/audit'
     | '/demo/rbac-auth/onboarding'
     | '/demo/rbac-auth/roles'
+    | '/demo/amps/'
     | '/demo/audit-traceability/'
     | '/demo/crm/'
     | '/demo/document-engine/'
@@ -1178,6 +1249,7 @@ export interface FileRouteTypes {
     | '/demo/rbac/admin/underwriting'
     | '/demo/crm/$objectDefId/$recordId'
     | '/demo/document-engine/designer/$templateId'
+    | '/demo/amps/mortgages/$mortgageId/payments'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -1194,6 +1266,7 @@ export interface RootRouteChildren {
   SignOutRoute: typeof SignOutRoute
   SignUpRoute: typeof SignUpRoute
   UnauthorizedRoute: typeof UnauthorizedRoute
+  DemoAmpsRouteRoute: typeof DemoAmpsRouteRouteWithChildren
   DemoAuditTraceabilityRouteRoute: typeof DemoAuditTraceabilityRouteRouteWithChildren
   DemoCrmRouteRoute: typeof DemoCrmRouteRouteWithChildren
   DemoDocumentEngineRouteRoute: typeof DemoDocumentEngineRouteRouteWithChildren
@@ -1562,6 +1635,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DemoAuditTraceabilityRouteRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/demo/amps': {
+      id: '/demo/amps'
+      path: '/demo/amps'
+      fullPath: '/demo/amps'
+      preLoaderRoute: typeof DemoAmpsRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/admin/underwriting': {
       id: '/admin/underwriting'
       path: '/underwriting'
@@ -1652,6 +1732,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/demo/audit-traceability/'
       preLoaderRoute: typeof DemoAuditTraceabilityIndexRouteImport
       parentRoute: typeof DemoAuditTraceabilityRouteRoute
+    }
+    '/demo/amps/': {
+      id: '/demo/amps/'
+      path: '/'
+      fullPath: '/demo/amps/'
+      preLoaderRoute: typeof DemoAmpsIndexRouteImport
+      parentRoute: typeof DemoAmpsRouteRoute
     }
     '/demo/rbac-auth/roles': {
       id: '/demo/rbac-auth/roles'
@@ -1793,6 +1880,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DemoAuditTraceabilityAccessLogRouteImport
       parentRoute: typeof DemoAuditTraceabilityRouteRoute
     }
+    '/demo/amps/rules': {
+      id: '/demo/amps/rules'
+      path: '/rules'
+      fullPath: '/demo/amps/rules'
+      preLoaderRoute: typeof DemoAmpsRulesRouteImport
+      parentRoute: typeof DemoAmpsRouteRoute
+    }
+    '/demo/amps/collection-plan': {
+      id: '/demo/amps/collection-plan'
+      path: '/collection-plan'
+      fullPath: '/demo/amps/collection-plan'
+      preLoaderRoute: typeof DemoAmpsCollectionPlanRouteImport
+      parentRoute: typeof DemoAmpsRouteRoute
+    }
+    '/demo/amps/collection-attempts': {
+      id: '/demo/amps/collection-attempts'
+      path: '/collection-attempts'
+      fullPath: '/demo/amps/collection-attempts'
+      preLoaderRoute: typeof DemoAmpsCollectionAttemptsRouteImport
+      parentRoute: typeof DemoAmpsRouteRoute
+    }
     '/admin/properties/$recordid': {
       id: '/admin/properties/$recordid'
       path: '/$recordid'
@@ -1897,6 +2005,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/demo/rbac/admin/underwriting'
       preLoaderRoute: typeof DemoRbacAdminUnderwritingRouteRouteImport
       parentRoute: typeof DemoRbacAdminRouteRoute
+    }
+    '/demo/amps/mortgages/$mortgageId/payments': {
+      id: '/demo/amps/mortgages/$mortgageId/payments'
+      path: '/mortgages/$mortgageId/payments'
+      fullPath: '/demo/amps/mortgages/$mortgageId/payments'
+      preLoaderRoute: typeof DemoAmpsMortgagesMortgageIdPaymentsRouteImport
+      parentRoute: typeof DemoAmpsRouteRoute
     }
   }
 }
@@ -2006,6 +2121,27 @@ const AdminRouteRouteChildren: AdminRouteRouteChildren = {
 
 const AdminRouteRouteWithChildren = AdminRouteRoute._addFileChildren(
   AdminRouteRouteChildren,
+)
+
+interface DemoAmpsRouteRouteChildren {
+  DemoAmpsCollectionAttemptsRoute: typeof DemoAmpsCollectionAttemptsRoute
+  DemoAmpsCollectionPlanRoute: typeof DemoAmpsCollectionPlanRoute
+  DemoAmpsRulesRoute: typeof DemoAmpsRulesRoute
+  DemoAmpsIndexRoute: typeof DemoAmpsIndexRoute
+  DemoAmpsMortgagesMortgageIdPaymentsRoute: typeof DemoAmpsMortgagesMortgageIdPaymentsRoute
+}
+
+const DemoAmpsRouteRouteChildren: DemoAmpsRouteRouteChildren = {
+  DemoAmpsCollectionAttemptsRoute: DemoAmpsCollectionAttemptsRoute,
+  DemoAmpsCollectionPlanRoute: DemoAmpsCollectionPlanRoute,
+  DemoAmpsRulesRoute: DemoAmpsRulesRoute,
+  DemoAmpsIndexRoute: DemoAmpsIndexRoute,
+  DemoAmpsMortgagesMortgageIdPaymentsRoute:
+    DemoAmpsMortgagesMortgageIdPaymentsRoute,
+}
+
+const DemoAmpsRouteRouteWithChildren = DemoAmpsRouteRoute._addFileChildren(
+  DemoAmpsRouteRouteChildren,
 )
 
 interface DemoAuditTraceabilityRouteRouteChildren {
@@ -2161,6 +2297,7 @@ const rootRouteChildren: RootRouteChildren = {
   SignOutRoute: SignOutRoute,
   SignUpRoute: SignUpRoute,
   UnauthorizedRoute: UnauthorizedRoute,
+  DemoAmpsRouteRoute: DemoAmpsRouteRouteWithChildren,
   DemoAuditTraceabilityRouteRoute: DemoAuditTraceabilityRouteRouteWithChildren,
   DemoCrmRouteRoute: DemoCrmRouteRouteWithChildren,
   DemoDocumentEngineRouteRoute: DemoDocumentEngineRouteRouteWithChildren,

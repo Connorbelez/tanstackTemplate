@@ -8,14 +8,7 @@ import {
 	DEFAULT_BALANCE_PRE_CHECK_CONFIG,
 	DEFAULT_COLLECTION_RULE_SCOPE,
 	DEFAULT_COLLECTION_RULE_STATUS,
-	getBalancePreCheckRuleConfig,
-	getCollectionRuleCode,
-	getCollectionRuleKind,
-	getCollectionRuleScope,
-	getCollectionRuleStatus,
-	getLateFeeRuleConfig,
-	getRetryRuleConfig,
-	getScheduleRuleConfig,
+	DEFAULT_SCHEDULE_RULE_CONFIG,
 } from "./ruleContract";
 
 type DefaultRuleCode =
@@ -25,7 +18,6 @@ type DefaultRuleCode =
 	| "schedule_rule";
 
 interface DefaultCollectionRuleDefinition {
-	action: string;
 	code: DefaultRuleCode;
 	config: CollectionRuleConfig;
 	description: string;
@@ -43,9 +35,8 @@ const SYSTEM_RULE_ACTOR_ID = "system:collection-rule-seed";
 export const DEFAULT_COLLECTION_RULES: readonly DefaultCollectionRuleDefinition[] =
 	[
 		{
-			action: "create_plan_entry",
 			code: "schedule_rule",
-			config: { kind: "schedule", delayDays: 5 },
+			config: DEFAULT_SCHEDULE_RULE_CONFIG,
 			description:
 				"Creates initial collection plan entries for upcoming obligations inside the scheduling window.",
 			displayName: "Initial scheduling",
@@ -57,7 +48,6 @@ export const DEFAULT_COLLECTION_RULES: readonly DefaultCollectionRuleDefinition[
 			version: 1,
 		},
 		{
-			action: "balance_pre_check",
 			code: "balance_pre_check_rule",
 			config: DEFAULT_BALANCE_PRE_CHECK_CONFIG,
 			description:
@@ -71,7 +61,6 @@ export const DEFAULT_COLLECTION_RULES: readonly DefaultCollectionRuleDefinition[
 			version: 1,
 		},
 		{
-			action: "create_retry_entry",
 			code: "retry_rule",
 			config: { kind: "retry", maxRetries: 3, backoffBaseDays: 3 },
 			description:
@@ -85,7 +74,6 @@ export const DEFAULT_COLLECTION_RULES: readonly DefaultCollectionRuleDefinition[
 			version: 1,
 		},
 		{
-			action: "create_late_fee",
 			code: "late_fee_rule",
 			config: {
 				kind: "late_fee",
@@ -116,65 +104,6 @@ export interface SeedCollectionRulesResult {
 	updated: number;
 }
 
-function buildLegacyParameters(
-	config: CollectionRuleConfig
-): Record<string, unknown> {
-	switch (config.kind) {
-		case "schedule":
-			return { delayDays: config.delayDays };
-		case "retry":
-			return {
-				backoffBaseDays: config.backoffBaseDays,
-				maxRetries: config.maxRetries,
-			};
-		case "balance_pre_check":
-			if ("mode" in config) {
-				return {};
-			}
-			return {
-				blockingDecision: config.blockingDecision,
-				lookbackDays: config.lookbackDays,
-				failureCountThreshold: config.failureCountThreshold,
-				...(config.blockingDecision === "defer"
-					? { deferDays: config.deferDays }
-					: {}),
-			};
-		case "late_fee":
-		case "reschedule_policy":
-		case "workout_policy":
-			return {};
-		default:
-			return {};
-	}
-}
-
-function resolveConfigForExistingRule(
-	rule: Doc<"collectionRules">,
-	ruleDef: DefaultCollectionRuleDefinition
-): CollectionRuleConfig {
-	const scheduleConfig = getScheduleRuleConfig(rule);
-	if (scheduleConfig) {
-		return scheduleConfig;
-	}
-
-	const retryConfig = getRetryRuleConfig(rule);
-	if (retryConfig) {
-		return retryConfig;
-	}
-
-	const balancePreCheckConfig = getBalancePreCheckRuleConfig(rule);
-	if (balancePreCheckConfig) {
-		return balancePreCheckConfig;
-	}
-
-	const lateFeeConfig = getLateFeeRuleConfig(rule);
-	if (lateFeeConfig) {
-		return lateFeeConfig;
-	}
-
-	return ruleDef.config;
-}
-
 function serialize(value: unknown) {
 	return JSON.stringify(value);
 }
@@ -182,16 +111,12 @@ function serialize(value: unknown) {
 function shouldPatchRule(
 	rule: Doc<"collectionRules">,
 	nextFields: {
-		action: string;
 		code: DefaultRuleCode;
 		config: CollectionRuleConfig;
 		description: string;
 		displayName: string;
-		enabled: boolean;
 		kind: CollectionRuleKind;
-		name: DefaultRuleCode;
 		priority: number;
-		parameters: Record<string, unknown>;
 		scope: CollectionRuleScope;
 		status: CollectionRuleStatus;
 		trigger: "event" | "schedule";
@@ -205,19 +130,10 @@ function shouldPatchRule(
 		rule.description !== nextFields.description ||
 		rule.trigger !== nextFields.trigger ||
 		rule.priority !== nextFields.priority ||
-		getCollectionRuleStatus(rule) !== nextFields.status ||
-		serialize(getCollectionRuleScope(rule)) !== serialize(nextFields.scope) ||
-		serialize(
-			resolveConfigForExistingRule(rule, {
-				...nextFields,
-				priority: rule.priority,
-			})
-		) !== serialize(nextFields.config) ||
-		rule.version !== nextFields.version ||
-		rule.name !== nextFields.name ||
-		rule.action !== nextFields.action ||
-		serialize(rule.parameters ?? {}) !== serialize(nextFields.parameters) ||
-		rule.enabled !== nextFields.enabled
+		rule.status !== nextFields.status ||
+		serialize(rule.scope) !== serialize(nextFields.scope) ||
+		serialize(rule.config) !== serialize(nextFields.config) ||
+		rule.version !== nextFields.version
 	);
 }
 
@@ -233,48 +149,23 @@ export async function seedCollectionRulesImpl(
 
 	for (const ruleDef of DEFAULT_COLLECTION_RULES) {
 		const existing =
-			allRules.find(
-				(rule) =>
-					getCollectionRuleCode(rule) === ruleDef.code ||
-					rule.name === ruleDef.code
-			) ?? null;
-
-		const resolvedConfig =
-			existing !== null
-				? resolveConfigForExistingRule(existing, ruleDef)
-				: ruleDef.config;
-		const resolvedStatus =
-			existing !== null ? getCollectionRuleStatus(existing) : ruleDef.status;
-		const resolvedScope =
-			existing !== null ? getCollectionRuleScope(existing) : ruleDef.scope;
-		const resolvedKind =
-			existing !== null
-				? (getCollectionRuleKind(existing) ?? ruleDef.kind)
-				: ruleDef.kind;
+			allRules.find((rule) => rule.code === ruleDef.code) ?? null;
+		const resolvedConfig = existing?.config ?? ruleDef.config;
+		const resolvedStatus = existing?.status ?? ruleDef.status;
+		const resolvedScope = existing?.scope ?? ruleDef.scope;
+		const resolvedKind = existing?.kind ?? ruleDef.kind;
 		const resolvedDisplayName = existing?.displayName ?? ruleDef.displayName;
 		const resolvedDescription = existing?.description ?? ruleDef.description;
 		const resolvedVersion = existing?.version ?? ruleDef.version;
-		const enabled = resolvedStatus === "active";
-		const parameters =
-			existing?.parameters &&
-			typeof existing.parameters === "object" &&
-			!Array.isArray(existing.parameters) &&
-			Object.keys(existing.parameters).length > 0
-				? (existing.parameters as Record<string, unknown>)
-				: buildLegacyParameters(resolvedConfig);
 		const priority = existing?.priority ?? ruleDef.priority;
 
 		const patch = {
-			action: existing?.action ?? ruleDef.action,
 			code: ruleDef.code,
 			config: resolvedConfig,
 			description: resolvedDescription,
 			displayName: resolvedDisplayName,
-			enabled,
 			kind: resolvedKind,
-			name: ruleDef.code,
 			priority,
-			parameters,
 			scope: resolvedScope,
 			status: resolvedStatus,
 			trigger: existing?.trigger ?? ruleDef.trigger,

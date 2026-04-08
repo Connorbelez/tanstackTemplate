@@ -1,18 +1,34 @@
 import { ConvexError } from "convex/values";
-import type { Id } from "../../_generated/dataModel";
+import type { Doc, Id } from "../../_generated/dataModel";
 import type { MutationCtx } from "../../_generated/server";
+import {
+	compareCollectionRules,
+	DEFAULT_SCHEDULE_RULE_CONFIG,
+	getCollectionRuleKind,
+	isCollectionRuleActive,
+	isCollectionRuleEffectiveAt,
+	matchesCollectionRuleScope,
+} from "./ruleContract";
 
 const MS_PER_DAY = 86_400_000;
 
-const NON_CANCELLED_PLAN_ENTRY_STATUSES = [
-	"planned",
-	"executing",
-	"completed",
-	"rescheduled",
-] as const;
+const LIVE_COVERING_PLAN_ENTRY_STATUSES = ["planned", "executing"] as const;
 
-interface CreateCollectionPlanEntryArgs {
+const DEFAULT_SCHEDULABLE_OBLIGATION_STATUSES = new Set<
+	Doc<"obligations">["status"]
+>(["upcoming", "due", "overdue", "partially_settled"]);
+
+export type CollectionPlanEntrySource =
+	| "default_schedule"
+	| "retry_rule"
+	| "late_fee_rule"
+	| "admin"
+	| "admin_reschedule"
+	| "admin_workout";
+
+export interface CreateCollectionPlanEntryArgs {
 	amount: number;
+	createdByRuleId?: Id<"collectionRules">;
 	method: string;
 	obligationIds: Id<"obligations">[];
 	rescheduledFromId?: Id<"collectionPlanEntries">;
@@ -25,22 +41,18 @@ interface CreateCollectionPlanEntryArgs {
 		| "broker"
 		| "member"
 		| "system";
-	ruleId?: Id<"collectionRules">;
+	retryOfId?: Id<"collectionPlanEntries">;
 	scheduledDate: number;
-	source:
-		| "default_schedule"
-		| "retry_rule"
-		| "late_fee_rule"
-		| "admin"
-		| "admin_reschedule";
+	source: CollectionPlanEntrySource;
 	status: "planned" | "executing" | "completed" | "cancelled" | "rescheduled";
+	workoutPlanId?: Id<"workoutPlans">;
 }
 
 export interface ScheduleInitialEntriesArgs {
+	createdByRuleId?: Id<"collectionRules">;
 	delayDays: number;
 	mortgageId?: Id<"mortgages">;
 	nowMs?: number;
-	ruleId?: Id<"collectionRules">;
 }
 
 export interface ScheduleInitialEntriesResult {
@@ -51,18 +63,65 @@ export interface ScheduleInitialEntriesResult {
 	reusedPlanEntryIds: Id<"collectionPlanEntries">[];
 }
 
-async function createEntryImpl(
+export interface EnsureDefaultEntriesForObligationsArgs {
+	createdByRuleId?: Id<"collectionRules">;
+	delayDays?: number;
+	mortgageId?: Id<"mortgages">;
+	nowMs?: number;
+	obligations: Pick<
+		Doc<"obligations">,
+		"_id" | "amount" | "amountSettled" | "dueDate" | "mortgageId" | "status"
+	>[];
+}
+
+export interface EnsureDefaultEntriesForObligationsResult
+	extends ScheduleInitialEntriesResult {
+	scheduleRuleMissing: boolean;
+}
+
+export async function createEntryImpl(
 	ctx: Pick<MutationCtx, "db">,
 	args: CreateCollectionPlanEntryArgs
 ): Promise<Id<"collectionPlanEntries">> {
+	const [firstObligationId] = args.obligationIds;
+	if (!firstObligationId) {
+		throw new ConvexError(
+			"Collection plan entries require at least one obligation"
+		);
+	}
+
+	const firstObligation = await ctx.db.get(firstObligationId);
+	if (!firstObligation) {
+		throw new ConvexError(
+			`Collection plan entry obligation not found: ${String(firstObligationId)}`
+		);
+	}
+
+	for (const obligationId of args.obligationIds.slice(1)) {
+		const obligation = await ctx.db.get(obligationId);
+		if (!obligation) {
+			throw new ConvexError(
+				`Collection plan entry obligation not found: ${String(obligationId)}`
+			);
+		}
+		if (obligation.mortgageId !== firstObligation.mortgageId) {
+			throw new ConvexError(
+				"Collection plan entry obligations must all belong to the same mortgage"
+			);
+		}
+	}
+
 	return await ctx.db.insert("collectionPlanEntries", {
+		mortgageId: firstObligation.mortgageId,
 		obligationIds: args.obligationIds,
 		amount: args.amount,
 		method: args.method,
 		scheduledDate: args.scheduledDate,
 		status: args.status,
 		source: args.source,
-		ruleId: args.ruleId,
+		createdByRuleId: args.createdByRuleId,
+		retryOfId: args.retryOfId,
+		workoutPlanId: args.workoutPlanId,
 		rescheduledFromId: args.rescheduledFromId,
 		rescheduleReason: args.rescheduleReason,
 		rescheduleRequestedAt: args.rescheduleRequestedAt,
@@ -98,7 +157,7 @@ async function getUpcomingObligationsInWindow(
 async function getCoveredPlanEntriesForObligations(
 	ctx: Pick<MutationCtx, "db">,
 	obligationIds: readonly Id<"obligations">[],
-	scheduledBefore: number
+	scheduledBefore?: number
 ): Promise<Record<string, Id<"collectionPlanEntries">>> {
 	if (obligationIds.length === 0) {
 		return {};
@@ -107,13 +166,18 @@ async function getCoveredPlanEntriesForObligations(
 	const lookupSet = new Set(obligationIds);
 	const existingEntries = (
 		await Promise.all(
-			NON_CANCELLED_PLAN_ENTRY_STATUSES.map((status) =>
-				ctx.db
-					.query("collectionPlanEntries")
-					.withIndex("by_status_scheduled_date", (q) =>
-						q.eq("status", status).lte("scheduledDate", scheduledBefore)
-					)
-					.collect()
+			LIVE_COVERING_PLAN_ENTRY_STATUSES.map((status) =>
+				scheduledBefore === undefined
+					? ctx.db
+							.query("collectionPlanEntries")
+							.withIndex("by_status", (q) => q.eq("status", status))
+							.collect()
+					: ctx.db
+							.query("collectionPlanEntries")
+							.withIndex("by_status_scheduled_date", (q) =>
+								q.eq("status", status).lte("scheduledDate", scheduledBefore)
+							)
+							.collect()
 			)
 		)
 	).flat();
@@ -129,6 +193,120 @@ async function getCoveredPlanEntriesForObligations(
 	}
 
 	return result;
+}
+
+function getCollectibleOutstandingAmount(
+	obligation: Pick<Doc<"obligations">, "amount" | "amountSettled">
+) {
+	return Math.max(0, obligation.amount - (obligation.amountSettled ?? 0));
+}
+
+async function resolveApplicableScheduleRule(
+	ctx: Pick<MutationCtx, "db">,
+	args: {
+		asOfMs: number;
+		mortgageId?: Id<"mortgages">;
+	}
+) {
+	const candidates = await ctx.db
+		.query("collectionRules")
+		.withIndex("by_trigger", (q) =>
+			q.eq("trigger", "schedule").eq("status", "active")
+		)
+		.collect();
+
+	return (
+		candidates
+			.filter((rule) => getCollectionRuleKind(rule) === "schedule")
+			.filter((rule) => isCollectionRuleActive(rule))
+			.filter((rule) => isCollectionRuleEffectiveAt(rule, args.asOfMs))
+			.filter((rule) => matchesCollectionRuleScope(rule, args.mortgageId))
+			.sort(compareCollectionRules)[0] ?? null
+	);
+}
+
+export async function ensureDefaultEntriesForObligationsImpl(
+	ctx: Pick<MutationCtx, "db">,
+	args: EnsureDefaultEntriesForObligationsArgs
+): Promise<EnsureDefaultEntriesForObligationsResult> {
+	const now = args.nowMs ?? Date.now();
+	const eligibleObligations = args.obligations.filter(
+		(obligation) =>
+			DEFAULT_SCHEDULABLE_OBLIGATION_STATUSES.has(obligation.status) &&
+			getCollectibleOutstandingAmount(obligation) > 0
+	);
+
+	if (eligibleObligations.length === 0) {
+		return {
+			created: 0,
+			createdPlanEntryIds: [],
+			obligationIds: [],
+			reused: 0,
+			reusedPlanEntryIds: [],
+			scheduleRuleMissing: false,
+		};
+	}
+
+	const scheduleRule =
+		args.delayDays === undefined
+			? await resolveApplicableScheduleRule(ctx, {
+					asOfMs: now,
+					mortgageId: args.mortgageId ?? eligibleObligations[0]?.mortgageId,
+				})
+			: null;
+	const delayDays =
+		args.delayDays ??
+		(scheduleRule?.config.kind === "schedule"
+			? scheduleRule.config.delayDays
+			: DEFAULT_SCHEDULE_RULE_CONFIG.delayDays);
+	const createdByRuleId =
+		args.createdByRuleId ??
+		(scheduleRule?.config.kind === "schedule" ? scheduleRule._id : undefined);
+	const scheduleRuleMissing =
+		args.delayDays === undefined && scheduleRule === null;
+	const scheduledBeforeForCoverage =
+		args.delayDays === undefined ? undefined : now + delayDays * MS_PER_DAY;
+
+	const coveredObligations = await getCoveredPlanEntriesForObligations(
+		ctx,
+		eligibleObligations.map((obligation) => obligation._id),
+		scheduledBeforeForCoverage
+	);
+
+	const createdPlanEntryIds: Id<"collectionPlanEntries">[] = [];
+	const reusedPlanEntryIds: Id<"collectionPlanEntries">[] = [];
+
+	for (const obligation of eligibleObligations) {
+		const existingEntryId = coveredObligations[obligation._id];
+		if (existingEntryId) {
+			reusedPlanEntryIds.push(existingEntryId);
+			continue;
+		}
+
+		const scheduledDate =
+			obligation.status === "upcoming"
+				? obligation.dueDate - delayDays * MS_PER_DAY
+				: now;
+		const entryId = await createEntryImpl(ctx, {
+			obligationIds: [obligation._id],
+			amount: getCollectibleOutstandingAmount(obligation),
+			method: "manual",
+			scheduledDate,
+			status: "planned",
+			source: "default_schedule",
+			createdByRuleId,
+		});
+		createdPlanEntryIds.push(entryId);
+	}
+
+	return {
+		created: createdPlanEntryIds.length,
+		createdPlanEntryIds,
+		obligationIds: eligibleObligations.map((obligation) => obligation._id),
+		reused: reusedPlanEntryIds.length,
+		reusedPlanEntryIds,
+		scheduleRuleMissing,
+	};
 }
 
 export async function scheduleInitialEntriesImpl(
@@ -147,50 +325,19 @@ export async function scheduleInitialEntriesImpl(
 		mortgageId: args.mortgageId,
 		dueBefore,
 	});
-
-	if (obligations.length === 0) {
-		return {
-			created: 0,
-			createdPlanEntryIds: [],
-			obligationIds: [],
-			reused: 0,
-			reusedPlanEntryIds: [],
-		};
-	}
-
-	const coveredObligations = await getCoveredPlanEntriesForObligations(
-		ctx,
-		obligations.map((obligation) => obligation._id),
-		dueBefore
-	);
-
-	const createdPlanEntryIds: Id<"collectionPlanEntries">[] = [];
-	const reusedPlanEntryIds: Id<"collectionPlanEntries">[] = [];
-
-	for (const obligation of obligations) {
-		const existingEntryId = coveredObligations[obligation._id];
-		if (existingEntryId) {
-			reusedPlanEntryIds.push(existingEntryId);
-			continue;
-		}
-
-		const entryId = await createEntryImpl(ctx, {
-			obligationIds: [obligation._id],
-			amount: obligation.amount,
-			method: "manual",
-			scheduledDate: obligation.dueDate - args.delayDays * MS_PER_DAY,
-			status: "planned",
-			source: "default_schedule",
-			ruleId: args.ruleId,
-		});
-		createdPlanEntryIds.push(entryId);
-	}
+	const result = await ensureDefaultEntriesForObligationsImpl(ctx, {
+		obligations,
+		mortgageId: args.mortgageId,
+		nowMs: now,
+		delayDays: args.delayDays,
+		createdByRuleId: args.createdByRuleId,
+	});
 
 	return {
-		created: createdPlanEntryIds.length,
-		createdPlanEntryIds,
-		obligationIds: obligations.map((obligation) => obligation._id),
-		reused: reusedPlanEntryIds.length,
-		reusedPlanEntryIds,
+		created: result.created,
+		createdPlanEntryIds: result.createdPlanEntryIds,
+		obligationIds: result.obligationIds,
+		reused: result.reused,
+		reusedPlanEntryIds: result.reusedPlanEntryIds,
 	};
 }

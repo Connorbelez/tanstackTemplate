@@ -24,7 +24,7 @@ export const scheduleRuleHandler: RuleHandler = {
 			{
 				mortgageId: evalCtx.mortgageId as Id<"mortgages"> | undefined,
 				delayDays: config.delayDays,
-				ruleId: evalCtx.rule._id,
+				createdByRuleId: evalCtx.rule._id,
 			}
 		);
 	},

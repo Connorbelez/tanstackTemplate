@@ -530,6 +530,7 @@ describe("writeOffObligationBalance mutation", () => {
 		// Create an active collection plan entry referencing the obligation
 		await t.run(async (ctx) => {
 			const planEntryId = await ctx.db.insert("collectionPlanEntries", {
+				mortgageId: seeded.mortgageId,
 				obligationIds: [obligationId],
 				amount: 50_000,
 				method: "manual",
@@ -543,6 +544,8 @@ describe("writeOffObligationBalance mutation", () => {
 			await ctx.db.insert("collectionAttempts", {
 				status: "pending",
 				planEntryId,
+				mortgageId: seeded.mortgageId,
+				obligationIds: [obligationId],
 				method: "manual",
 				amount: 50_000,
 				initiatedAt: Date.now(),

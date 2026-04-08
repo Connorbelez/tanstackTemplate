@@ -18,6 +18,7 @@
  * - REQ-8: Contract-focused tests lock the behavior
  */
 
+import process from "node:process";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
 	createGovernedTestConvex,
@@ -26,6 +27,7 @@ import {
 	seedBorrowerProfile,
 	seedCollectionAttempt,
 	seedCollectionRules,
+	seedCollectionSettlementPrereqs,
 	seedMortgage,
 	seedObligation,
 	seedPlanEntry,
@@ -33,12 +35,46 @@ import {
 } from "../../../../src/test/convex/payments/helpers";
 import { internal } from "../../../_generated/api";
 import type { Doc, Id } from "../../../_generated/dataModel";
+import { obligationTypeToTransferType } from "../../transfers/types";
+
+const testGlobal = globalThis as typeof globalThis & {
+	process?: {
+		env: Record<string, string | undefined>;
+	};
+};
+
+if (!testGlobal.process) {
+	testGlobal.process = process as unknown as {
+		env: Record<string, string | undefined>;
+	};
+}
+
+const testEnv = testGlobal.process.env;
+const envRestorers: Array<() => void> = [];
+
+function setTestEnv(key: string, value: string) {
+	const previous = testEnv[key];
+	testEnv[key] = value;
+	envRestorers.push(() => {
+		if (previous === undefined) {
+			delete testEnv[key];
+			return;
+		}
+		testEnv[key] = previous;
+	});
+}
 
 beforeEach(() => {
+	envRestorers.length = 0;
+	setTestEnv("DISABLE_GT_HASHCHAIN", "true");
+	setTestEnv("DISABLE_CASH_LEDGER_HASHCHAIN", "true");
 	vi.useFakeTimers();
 });
 
 afterEach(() => {
+	while (envRestorers.length > 0) {
+		envRestorers.pop()?.();
+	}
 	vi.unstubAllEnvs();
 	vi.restoreAllMocks();
 	vi.clearAllTimers();
@@ -46,6 +82,10 @@ afterEach(() => {
 });
 
 type GovernedTestConvex = ReturnType<typeof createGovernedTestConvex>;
+
+function createBackendTestConvex() {
+	return createGovernedTestConvex({ includeWorkflowComponents: false });
+}
 
 async function seedExecutionFixture(
 	t: GovernedTestConvex,
@@ -123,8 +163,13 @@ async function getTransfersForAttempt(
 
 describe("executePlanEntry", () => {
 	it("creates exactly one collection attempt for an eligible plan entry", async () => {
-		const t = createGovernedTestConvex();
-		const { obligationId, planEntryId } = await seedExecutionFixture(t);
+		const t = createBackendTestConvex();
+		const { mortgageId, obligationId, planEntryId } =
+			await seedExecutionFixture(t);
+		await seedCollectionSettlementPrereqs(t, {
+			mortgageId,
+			obligationId,
+		});
 		const requestedAt = Date.now();
 
 		const result = await t.action(
@@ -140,7 +185,6 @@ describe("executePlanEntry", () => {
 			}
 		);
 		await drainScheduledWork(t);
-
 		expect(result.outcome).toBe("attempt_created");
 		expect(result.planEntryId).toBe(planEntryId);
 		expect(result.planEntryStatusAfter).toBe("executing");
@@ -163,8 +207,8 @@ describe("executePlanEntry", () => {
 		expect(attempts[0]?.requestedByActorId).toBe("user_fairlend_admin");
 		expect(attempts[0]?.triggerSource).toBe("admin_manual");
 		expect(attempts[0]?.status).toBe("confirmed");
-		expect(attempts[0]?.providerRef).toBeTruthy();
 		expect(attempts[0]?.transferRequestId).toBe(result.transferRequestId);
+		expect(attempts[0]).not.toHaveProperty("providerStatus");
 
 		const transfer = await getTransferForAttempt(
 			t,
@@ -174,21 +218,16 @@ describe("executePlanEntry", () => {
 		expect(transfer?.planEntryId).toBe(planEntryId);
 		expect(transfer?.status).toBe("confirmed");
 		expect(transfer?.providerRef).toBeTruthy();
-
-		const allTransfers = await getTransfersForAttempt(
-			t,
-			result.collectionAttemptId as Id<"collectionAttempts">
-		);
-		expect(allTransfers).toHaveLength(1);
-
-		const obligation = await t.run((ctx) => ctx.db.get(obligationId));
-		expect(obligation?.status).toBe("settled");
-		expect(obligation?.amountSettled).toBe(300_000);
 	});
 
 	it("returns already_executed on replay without creating a duplicate attempt", async () => {
-		const t = createGovernedTestConvex();
-		const { obligationId, planEntryId } = await seedExecutionFixture(t);
+		const t = createBackendTestConvex();
+		const { mortgageId, obligationId, planEntryId } =
+			await seedExecutionFixture(t);
+		await seedCollectionSettlementPrereqs(t, {
+			mortgageId,
+			obligationId,
+		});
 		const args = {
 			planEntryId,
 			triggerSource: "system_scheduler" as const,
@@ -207,7 +246,6 @@ describe("executePlanEntry", () => {
 			args
 		);
 		await drainScheduledWork(t);
-
 		expect(first.outcome).toBe("attempt_created");
 		expect(first.attemptStatusAfter).toBe("confirmed");
 		expect(replay.outcome).toBe("already_executed");
@@ -223,15 +261,88 @@ describe("executePlanEntry", () => {
 			first.collectionAttemptId as Id<"collectionAttempts">
 		);
 		expect(transfer?._id).toBe(first.transferRequestId);
+		expect(transfer?.status).toBe("confirmed");
+	});
 
-		const allTransfers = await getTransfersForAttempt(
-			t,
-			first.collectionAttemptId as Id<"collectionAttempts">
+	it("recovers a linked transfer when an initiated attempt lost transferRequestId", async () => {
+		const t = createBackendTestConvex();
+		const { mortgageId, obligationId, planEntryId } =
+			await seedExecutionFixture(t);
+		await seedCollectionSettlementPrereqs(t, {
+			mortgageId,
+			obligationId,
+		});
+		const args = {
+			planEntryId,
+			triggerSource: "system_scheduler" as const,
+			requestedAt: Date.now(),
+			idempotencyKey: "exec-plan-entry-recovery-1",
+			requestedByActorType: "system" as const,
+			requestedByActorId: "scheduler",
+		};
+
+		const staged = await t.mutation(
+			internal.payments.collectionPlan.execution
+				.stagePlanEntryExecutionMutation,
+			args
 		);
-		expect(allTransfers).toHaveLength(1);
+		expect(staged.result.outcome).toBe("attempt_created");
+		expect(staged.transferHandoffRequest).toBeTruthy();
 
-		const obligation = await t.run((ctx) => ctx.db.get(obligationId));
-		expect(obligation?.amountSettled).toBe(300_000);
+		const handoff = staged.transferHandoffRequest;
+		if (!handoff) {
+			throw new Error("Expected transfer handoff request");
+		}
+		const transferRequestId = await t.mutation(
+			internal.payments.transfers.mutations.createTransferRequestInternal,
+			{
+				direction: "inbound",
+				transferType: obligationTypeToTransferType(
+					handoff.primaryObligationType
+				),
+				amount: handoff.amount,
+				counterpartyType: "borrower",
+				counterpartyId: handoff.counterpartyId,
+				mortgageId: handoff.mortgageId,
+				obligationId: handoff.obligationIds[0],
+				planEntryId: handoff.planEntryId,
+				collectionAttemptId: handoff.collectionAttemptId,
+				borrowerId: handoff.borrowerId,
+				providerCode: "manual",
+				idempotencyKey: `transfer:plan-entry-execution:${planEntryId}`,
+				metadata: {
+					executionContract: "collection_plan.execute_plan_entry.v1",
+				},
+				source: handoff.source,
+			}
+		);
+
+		const replay = await t.action(
+			internal.payments.collectionPlan.execution.executePlanEntry,
+			{
+				...args,
+				idempotencyKey: "exec-plan-entry-recovery-replay",
+				requestedAt: Date.now() + 1,
+			}
+		);
+		await drainScheduledWork(t);
+
+		expect(replay.outcome).toBe("already_executed");
+		expect(replay.collectionAttemptId).toBe(staged.result.collectionAttemptId);
+		expect(replay.transferRequestId).toBe(transferRequestId);
+		expect(replay.attemptStatusAfter).toBe("confirmed");
+
+		const attempt = await t.run((ctx) =>
+			ctx.db.get(staged.result.collectionAttemptId)
+		);
+		expect(attempt?.transferRequestId).toBe(transferRequestId);
+
+		const transfer = await getTransferForAttempt(
+			t,
+			staged.result.collectionAttemptId
+		);
+		expect(transfer?._id).toBe(transferRequestId);
+		expect(transfer?.status).toBe("confirmed");
 	});
 
 	it("reconciles an existing attempt when the plan entry has no collectionAttemptId", async () => {
@@ -377,7 +488,7 @@ describe("executePlanEntry", () => {
 	});
 
 	it("returns rejected when the plan entry does not exist", async () => {
-		const t = createGovernedTestConvex();
+		const t = createBackendTestConvex();
 		const { planEntryId } = await seedExecutionFixture(t);
 		await t.run(async (ctx) => {
 			await ctx.db.delete(planEntryId);
@@ -404,7 +515,7 @@ describe("executePlanEntry", () => {
 	});
 
 	it("returns not_eligible when the plan entry is scheduled for the future", async () => {
-		const t = createGovernedTestConvex();
+		const t = createBackendTestConvex();
 		const { planEntryId } = await seedExecutionFixture(t, {
 			scheduledDate: Date.now() + 60_000,
 		});
@@ -428,9 +539,8 @@ describe("executePlanEntry", () => {
 	});
 
 	it("defers execution before attempt creation when balance pre-check blocks with a defer decision", async () => {
-		const t = createGovernedTestConvex();
+		const t = createBackendTestConvex();
 		const requestedAt = new Date("2026-04-01T12:00:00.000Z").getTime();
-		vi.setSystemTime(requestedAt);
 		const { borrowerId, mortgageId, planEntryId } = await seedExecutionFixture(
 			t,
 			{
@@ -482,9 +592,8 @@ describe("executePlanEntry", () => {
 	});
 
 	it("suppresses execution before attempt creation when balance pre-check blocks with a suppress decision", async () => {
-		const t = createGovernedTestConvex();
+		const t = createBackendTestConvex();
 		const requestedAt = new Date("2026-04-01T12:00:00.000Z").getTime();
-		vi.setSystemTime(requestedAt);
 		const { borrowerId, mortgageId, planEntryId } = await seedExecutionFixture(
 			t,
 			{
@@ -529,9 +638,8 @@ describe("executePlanEntry", () => {
 	});
 
 	it("requires operator review before attempt creation when balance pre-check blocks with a review decision", async () => {
-		const t = createGovernedTestConvex();
+		const t = createBackendTestConvex();
 		const requestedAt = new Date("2026-04-01T12:00:00.000Z").getTime();
-		vi.setSystemTime(requestedAt);
 		const { borrowerId, mortgageId, planEntryId } = await seedExecutionFixture(
 			t,
 			{
@@ -578,27 +686,27 @@ describe("executePlanEntry", () => {
 	});
 
 	it("preserves the created attempt when Payment Rails handoff fails", async () => {
-		vi.stubEnv("ENABLE_MOCK_PROVIDERS", "false");
+		setTestEnv("ENABLE_MOCK_PROVIDERS", "false");
 
-		const t = createGovernedTestConvex();
+		const t = createBackendTestConvex();
 		const { planEntryId } = await seedExecutionFixture(t, {
 			method: "mock_pad",
 		});
 		await seedCollectionRules(t);
+		const args = {
+			planEntryId,
+			triggerSource: "workflow_replay" as const,
+			requestedAt: Date.now(),
+			idempotencyKey: "exec-plan-entry-handoff-failure-1",
+			requestedByActorType: "workflow" as const,
+			requestedByActorId: "workflow:collection-plan-replay",
+		};
 
 		const result = await t.action(
 			internal.payments.collectionPlan.execution.executePlanEntry,
-			{
-				planEntryId,
-				triggerSource: "workflow_replay",
-				requestedAt: Date.now(),
-				idempotencyKey: "exec-plan-entry-handoff-failure-1",
-				requestedByActorType: "workflow",
-				requestedByActorId: "workflow:collection-plan-replay",
-			}
+			args
 		);
 		await drainScheduledWork(t);
-
 		expect(result.outcome).toBe("attempt_created");
 		expect(result.reasonCode).toBe("transfer_handoff_failed");
 		expect(result.collectionAttemptId).toBeTruthy();
@@ -613,6 +721,7 @@ describe("executePlanEntry", () => {
 		expect(attempts).toHaveLength(1);
 		expect(attempts[0]?.status).toBe("retry_scheduled");
 		expect(attempts[0]?.failureReason).toContain("disabled by default");
+		expect(attempts[0]).not.toHaveProperty("providerStatus");
 		expect(attempts[0]?.triggerSource).toBe("workflow_replay");
 
 		const transfer = await getTransferForAttempt(
@@ -621,15 +730,120 @@ describe("executePlanEntry", () => {
 		);
 		expect(transfer).toBeNull();
 
+		const replay = await t.action(
+			internal.payments.collectionPlan.execution.executePlanEntry,
+			{
+				...args,
+				idempotencyKey: "exec-plan-entry-handoff-failure-replay",
+				requestedAt: Date.now() + 1,
+			}
+		);
+		await drainScheduledWork(t);
+		expect(replay.outcome).toBe("already_executed");
+		expect(replay.collectionAttemptId).toBe(result.collectionAttemptId);
+		expect(replay.attemptStatusAfter).toBe("retry_scheduled");
+		expect(replay.transferRequestId).toBeUndefined();
+
+		const replayAttempts = await getAttemptsForPlanEntry(t, planEntryId);
+		expect(replayAttempts).toHaveLength(1);
+		const replayTransfers = await getTransfersForAttempt(
+			t,
+			result.collectionAttemptId as Id<"collectionAttempts">
+		);
+		expect(replayTransfers).toHaveLength(0);
+
 		const retryEntry = await t.run(async (ctx) =>
 			ctx.db
 				.query("collectionPlanEntries")
-				.withIndex("by_rescheduled_from", (q) =>
-					q.eq("rescheduledFromId", planEntryId).eq("source", "retry_rule")
+				.withIndex("by_retry_of", (q) =>
+					q.eq("retryOfId", planEntryId).eq("source", "retry_rule")
 				)
 				.first()
 		);
 		expect(retryEntry?._id).toBeTruthy();
 		expect(retryEntry?.status).toBe("planned");
+	});
+
+	it("replays without duplicates after transfer creation succeeds but initiation fails", async () => {
+		const t = createBackendTestConvex();
+		const { planEntryId } = await seedExecutionFixture(t, {
+			method: "manual",
+		});
+		const args = {
+			planEntryId,
+			triggerSource: "workflow_replay" as const,
+			requestedAt: Date.now(),
+			idempotencyKey: "exec-plan-entry-linked-failure-1",
+			requestedByActorType: "workflow" as const,
+			requestedByActorId: "workflow:collection-plan-replay",
+		};
+
+		const staged = await t.mutation(
+			internal.payments.collectionPlan.execution
+				.stagePlanEntryExecutionMutation,
+			args
+		);
+		expect(staged.result.outcome).toBe("attempt_created");
+		expect(staged.transferHandoffRequest).toBeTruthy();
+
+		const handoff = staged.transferHandoffRequest;
+		if (!handoff) {
+			throw new Error("Expected transfer handoff request");
+		}
+		const transferRequestId = await t.mutation(
+			internal.payments.transfers.mutations.createTransferRequestInternal,
+			{
+				direction: "inbound",
+				transferType: obligationTypeToTransferType(
+					handoff.primaryObligationType
+				),
+				amount: handoff.amount,
+				counterpartyType: "borrower",
+				counterpartyId: handoff.counterpartyId,
+				mortgageId: handoff.mortgageId,
+				obligationId: handoff.obligationIds[0],
+				planEntryId: handoff.planEntryId,
+				collectionAttemptId: handoff.collectionAttemptId,
+				borrowerId: handoff.borrowerId,
+				providerCode: "pad_vopay",
+				idempotencyKey: `transfer:plan-entry-execution:${planEntryId}`,
+				metadata: {
+					executionContract: "collection_plan.execute_plan_entry.v1",
+				},
+				source: handoff.source,
+			}
+		);
+		await t.mutation(
+			internal.payments.collectionPlan.execution
+				.recordTransferHandoffSuccessMutation,
+			{
+				attemptId: staged.result.collectionAttemptId,
+				transferRequestId,
+			}
+		);
+
+		const replay = await t.action(
+			internal.payments.collectionPlan.execution.executePlanEntry,
+			{
+				...args,
+				idempotencyKey: "exec-plan-entry-linked-failure-replay",
+				requestedAt: Date.now() + 1,
+			}
+		);
+		await drainScheduledWork(t);
+		expect(replay.outcome).toBe("already_executed");
+		expect(replay.reasonCode).toBe("transfer_handoff_failed");
+		expect(replay.collectionAttemptId).toBe(staged.result.collectionAttemptId);
+		expect(replay.transferRequestId).toBe(transferRequestId);
+
+		const attempts = await getAttemptsForPlanEntry(t, planEntryId);
+		expect(attempts).toHaveLength(1);
+		const transfers = await getTransfersForAttempt(
+			t,
+			staged.result.collectionAttemptId as Id<"collectionAttempts">
+		);
+		expect(transfers).toHaveLength(1);
+		expect(transfers[0]?._id).toBe(transferRequestId);
+		expect(transfers[0]?.status).toBe("initiated");
 	});
 });

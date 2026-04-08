@@ -118,11 +118,7 @@ export async function seedBalancePreCheckRule(
 			version: 1,
 			createdByActorId: "test",
 			updatedByActorId: "test",
-			name: "balance_pre_check_rule",
-			action: "balance_pre_check",
-			parameters: {},
 			priority: 15,
-			enabled: true,
 			createdAt: Date.now(),
 			updatedAt: Date.now(),
 		}),
@@ -181,8 +177,11 @@ interface SeedPlanEntryOptions {
 		| "retry_rule"
 		| "late_fee_rule"
 		| "admin"
-		| "admin_reschedule";
-	ruleId?: Id<"collectionRules">;
+		| "admin_reschedule"
+		| "admin_workout";
+	createdByRuleId?: Id<"collectionRules">;
+	retryOfId?: Id<"collectionPlanEntries">;
+	workoutPlanId?: Id<"workoutPlans">;
 	rescheduleReason?: string;
 	rescheduleRequestedAt?: number;
 	rescheduleRequestedByActorId?: string;
@@ -202,23 +201,47 @@ export async function seedPlanEntry(
 	t: GovernedTestConvex,
 	opts: SeedPlanEntryOptions,
 ): Promise<Id<"collectionPlanEntries">> {
-	return t.run(async (ctx) =>
-		ctx.db.insert("collectionPlanEntries", {
+	return t.run(async (ctx) => {
+		if (opts.obligationIds.length === 0) {
+			throw new Error("seedPlanEntry requires at least one obligation");
+		}
+
+		const firstObligation = await ctx.db.get(opts.obligationIds[0]);
+		if (!firstObligation) {
+			throw new Error("seedPlanEntry could not load the first obligation");
+		}
+
+		for (const obligationId of opts.obligationIds.slice(1)) {
+			const obligation = await ctx.db.get(obligationId);
+			if (!obligation) {
+				throw new Error("seedPlanEntry could not load an obligation");
+			}
+			if (obligation.mortgageId !== firstObligation.mortgageId) {
+				throw new Error(
+					"seedPlanEntry expects all obligations to belong to the same mortgage"
+				);
+			}
+		}
+
+		return ctx.db.insert("collectionPlanEntries", {
+			mortgageId: firstObligation.mortgageId,
 			obligationIds: opts.obligationIds,
 			amount: opts.amount,
 			method: opts.method,
 			scheduledDate: opts.scheduledDate ?? Date.now(),
 			status: opts.status ?? "planned",
 			source: opts.source ?? "default_schedule",
-			ruleId: opts.ruleId,
+			createdByRuleId: opts.createdByRuleId,
+			retryOfId: opts.retryOfId,
+			workoutPlanId: opts.workoutPlanId,
 			rescheduledFromId: opts.rescheduledFromId,
 			rescheduleReason: opts.rescheduleReason,
 			rescheduleRequestedAt: opts.rescheduleRequestedAt,
 			rescheduleRequestedByActorId: opts.rescheduleRequestedByActorId,
 			rescheduleRequestedByActorType: opts.rescheduleRequestedByActorType,
 			createdAt: Date.now(),
-		}),
-	);
+		});
+	});
 }
 
 // ── Collection Attempt Seeding ──────────────────────────────────────
@@ -239,8 +262,13 @@ export async function seedCollectionAttempt(
 	t: GovernedTestConvex,
 	opts: SeedCollectionAttemptOptions,
 ): Promise<Id<"collectionAttempts">> {
-	return t.run(async (ctx) =>
-		ctx.db.insert("collectionAttempts", {
+	return t.run(async (ctx) => {
+		const planEntry = await ctx.db.get(opts.planEntryId);
+		if (!planEntry) {
+			throw new Error("seedCollectionAttempt requires an existing plan entry");
+		}
+
+		return ctx.db.insert("collectionAttempts", {
 			status: opts.status ?? "initiated",
 			machineContext: opts.machineContext ?? {
 				attemptId: "",
@@ -248,12 +276,147 @@ export async function seedCollectionAttempt(
 				maxRetries: 3,
 			},
 			planEntryId: opts.planEntryId,
+			mortgageId: planEntry.mortgageId,
+			obligationIds: planEntry.obligationIds,
 			method: opts.method,
 			amount: opts.amount,
 			providerRef: opts.providerRef,
 			initiatedAt: Date.now(),
-		}),
-	);
+		});
+	});
+}
+
+// ── Settlement / Dispersal Prerequisites ───────────────────────────
+
+export async function ensureBorrowerReceivableAccount(
+	t: GovernedTestConvex,
+	args: {
+		initialDebitBalance?: bigint;
+		obligationId: Id<"obligations">;
+	}
+): Promise<Id<"cash_ledger_accounts">> {
+	return t.run(async (ctx) => {
+		const obligation = await ctx.db.get(args.obligationId);
+		if (!obligation) {
+			throw new Error(
+				"ensureBorrowerReceivableAccount requires an existing obligation"
+			);
+		}
+
+		const existing = await ctx.db
+			.query("cash_ledger_accounts")
+			.withIndex("by_family_and_obligation", (q) =>
+				q.eq("family", "BORROWER_RECEIVABLE").eq("obligationId", args.obligationId)
+			)
+			.first();
+		if (existing) {
+			return existing._id;
+		}
+
+		return ctx.db.insert("cash_ledger_accounts", {
+			family: "BORROWER_RECEIVABLE",
+			mortgageId: obligation.mortgageId,
+			obligationId: args.obligationId,
+			borrowerId: obligation.borrowerId,
+			cumulativeDebits:
+				args.initialDebitBalance ?? BigInt(obligation.amount),
+			cumulativeCredits: 0n,
+			createdAt: Date.now(),
+		});
+	});
+}
+
+export async function ensureActivePositionForMortgage(
+	t: GovernedTestConvex,
+	args: {
+		mortgageId: Id<"mortgages">;
+		units?: bigint;
+	}
+): Promise<{
+	accountId: Id<"ledger_accounts">;
+	lenderAuthId: string;
+	lenderId: Id<"lenders">;
+}> {
+	const brokerId = await seedBrokerProfile(t);
+	return t.run(async (ctx) => {
+		const lenderAuthId = `test-active-position-${args.mortgageId}`;
+		const existingAccount = await ctx.db
+			.query("ledger_accounts")
+			.withIndex("by_mortgage_and_lender", (q) =>
+				q.eq("mortgageId", String(args.mortgageId)).eq("lenderId", lenderAuthId)
+			)
+			.first();
+
+		let lenderId =
+			(
+				await ctx.db
+					.query("lenders")
+					.filter((q) => q.eq(q.field("onboardingEntryPath"), lenderAuthId))
+					.first()
+			)?._id ?? null;
+
+		if (!lenderId) {
+			const userId = await ctx.db.insert("users", {
+				authId: lenderAuthId,
+				email: `${lenderAuthId}@fairlend.test`,
+				firstName: "Active",
+				lastName: "Position",
+			});
+			lenderId = await ctx.db.insert("lenders", {
+				userId,
+				brokerId,
+				accreditationStatus: "accredited",
+				onboardingEntryPath: lenderAuthId,
+				status: "active",
+				createdAt: Date.now(),
+			});
+		}
+
+		if (existingAccount) {
+			return {
+				accountId: existingAccount._id,
+				lenderAuthId,
+				lenderId,
+			};
+		}
+
+		const accountId = await ctx.db.insert("ledger_accounts", {
+			type: "POSITION",
+			mortgageId: String(args.mortgageId),
+			lenderId: lenderAuthId,
+			cumulativeDebits: args.units ?? 10_000n,
+			cumulativeCredits: 0n,
+			pendingDebits: 0n,
+			pendingCredits: 0n,
+			createdAt: Date.now(),
+		});
+
+		return { accountId, lenderAuthId, lenderId };
+	});
+}
+
+export async function seedCollectionSettlementPrereqs(
+	t: GovernedTestConvex,
+	args: {
+		mortgageId: Id<"mortgages">;
+		obligationId: Id<"obligations">;
+		initialReceivableBalance?: bigint;
+		positionUnits?: bigint;
+	}
+) {
+	const borrowerReceivableAccountId = await ensureBorrowerReceivableAccount(t, {
+		obligationId: args.obligationId,
+		initialDebitBalance: args.initialReceivableBalance,
+	});
+	const activePosition = await ensureActivePositionForMortgage(t, {
+		mortgageId: args.mortgageId,
+		units: args.positionUnits,
+	});
+
+	return {
+		activePosition,
+		borrowerReceivableAccountId,
+	};
 }
 
 // ── Transition Wrapper ──────────────────────────────────────────────

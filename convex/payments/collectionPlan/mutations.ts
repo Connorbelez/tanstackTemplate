@@ -1,6 +1,9 @@
 import { v } from "convex/values";
 import { internalMutation } from "../../_generated/server";
-import { scheduleInitialEntriesImpl } from "./initialScheduling";
+import {
+	createEntryImpl,
+	scheduleInitialEntriesImpl,
+} from "./initialScheduling";
 
 /**
  * Creates a new collection plan entry.
@@ -24,9 +27,12 @@ export const createEntry = internalMutation({
 			v.literal("retry_rule"),
 			v.literal("late_fee_rule"),
 			v.literal("admin"),
-			v.literal("admin_reschedule")
+			v.literal("admin_reschedule"),
+			v.literal("admin_workout")
 		),
-		ruleId: v.optional(v.id("collectionRules")),
+		createdByRuleId: v.optional(v.id("collectionRules")),
+		retryOfId: v.optional(v.id("collectionPlanEntries")),
+		workoutPlanId: v.optional(v.id("workoutPlans")),
 		rescheduledFromId: v.optional(v.id("collectionPlanEntries")),
 		rescheduleReason: v.optional(v.string()),
 		rescheduleRequestedAt: v.optional(v.number()),
@@ -41,22 +47,7 @@ export const createEntry = internalMutation({
 			)
 		),
 	},
-	handler: async (ctx, args) =>
-		await ctx.db.insert("collectionPlanEntries", {
-			obligationIds: args.obligationIds,
-			amount: args.amount,
-			method: args.method,
-			scheduledDate: args.scheduledDate,
-			status: args.status,
-			source: args.source,
-			ruleId: args.ruleId,
-			rescheduledFromId: args.rescheduledFromId,
-			rescheduleReason: args.rescheduleReason,
-			rescheduleRequestedAt: args.rescheduleRequestedAt,
-			rescheduleRequestedByActorId: args.rescheduleRequestedByActorId,
-			rescheduleRequestedByActorType: args.rescheduleRequestedByActorType,
-			createdAt: Date.now(),
-		}),
+	handler: async (ctx, args) => await createEntryImpl(ctx, args),
 });
 
 /**
@@ -68,7 +59,7 @@ export const scheduleInitialEntries = internalMutation({
 		delayDays: v.number(),
 		mortgageId: v.optional(v.id("mortgages")),
 		nowMs: v.optional(v.number()),
-		ruleId: v.optional(v.id("collectionRules")),
+		createdByRuleId: v.optional(v.id("collectionRules")),
 	},
 	handler: async (ctx, args) => await scheduleInitialEntriesImpl(ctx, args),
 });

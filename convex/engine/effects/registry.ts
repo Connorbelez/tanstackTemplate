@@ -59,8 +59,6 @@ export const effectRegistry: Record<
 		internal.engine.effects.collectionAttempt.scheduleRetryEntry,
 	emitCollectionFailed:
 		internal.engine.effects.collectionAttempt.emitCollectionFailed,
-	recordProviderRef:
-		internal.engine.effects.collectionAttempt.recordProviderRef,
 	notifyAdmin: internal.engine.effects.collectionAttempt.notifyAdmin,
 	// Collection Attempt reversal effect (ENG-173)
 	emitPaymentReversed:

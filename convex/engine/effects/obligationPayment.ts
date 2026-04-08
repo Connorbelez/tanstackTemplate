@@ -57,8 +57,9 @@ export const applyPayment = internalMutation({
 
 		await ctx.db.patch(args.entityId, patch);
 
-		// Preserve traceability: pass attemptId from PAYMENT_APPLIED payload
-		// so cash receipts link back to the originating collection attempt.
+		// Preserve traceability only: attemptId/postingGroupId help reconciliation,
+		// but the journal meaning is still resolved from the obligation and cash
+		// accounts rather than from collection strategy state.
 		const attemptId = args.payload?.attemptId as
 			| Id<"collectionAttempts">
 			| undefined;

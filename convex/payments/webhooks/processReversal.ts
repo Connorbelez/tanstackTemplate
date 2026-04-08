@@ -4,20 +4,18 @@ import { executeTransition } from "../../engine/transition";
 import type { CommandSource } from "../../engine/types";
 
 /**
- * Internal mutation that fires the GT transition `confirmed → reversed`.
+ * Internal mutation that fires the transfer GT transition `confirmed → reversed`.
  *
- * The GT engine's `emitPaymentReversed` effect (registered in ENG-173)
- * handles the per-obligation cash-ledger reversal cascade automatically
- * by iterating `planEntry.obligationIds` and calling
- * `postPaymentReversalCascade()` for each one. Each call is idempotent
- * via `postingGroupId`.
+ * The transfer effect reconciles any linked collection attempt back through
+ * the borrower-payment reversal path, including the per-obligation cash-ledger
+ * reversal cascade. This mutation therefore transitions the canonical transfer
+ * record once and lets the downstream effects fan out.
  *
- * This mutation fires the transition exactly ONCE per collection attempt.
- * It should NOT be called per-obligation.
+ * This mutation fires the transition exactly ONCE per transfer request.
  */
 export const processReversalCascade = internalMutation({
 	args: {
-		attemptId: v.id("collectionAttempts"),
+		transferId: v.id("transferRequests"),
 		effectiveDate: v.string(),
 		reason: v.string(),
 		provider: v.union(
@@ -34,14 +32,13 @@ export const processReversalCascade = internalMutation({
 			actorId: `webhook:${args.provider}`,
 		};
 
-		// Fire the GT transition: confirmed → reversed
-		// The emitPaymentReversed effect handles the per-obligation
-		// cash ledger reversal cascade (via postPaymentReversalCascade).
+		// Fire the canonical transfer transition: confirmed → reversed.
 		const transitionResult = await executeTransition(ctx, {
-			entityType: "collectionAttempt",
-			entityId: args.attemptId,
-			eventType: "PAYMENT_REVERSED",
+			entityType: "transfer",
+			entityId: args.transferId,
+			eventType: "TRANSFER_REVERSED",
 			payload: {
+				reversalRef: args.providerEventId,
 				reason: args.reason,
 				provider: args.provider,
 				providerEventId: args.providerEventId,

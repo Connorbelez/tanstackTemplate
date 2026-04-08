@@ -62,6 +62,7 @@ import type * as deals_mutations from "../deals/mutations.js";
 import type * as deals_queries from "../deals/queries.js";
 import type * as demo_actionCache from "../demo/actionCache.js";
 import type * as demo_aggregate from "../demo/aggregate.js";
+import type * as demo_amps from "../demo/amps.js";
 import type * as demo_apiCredentials from "../demo/apiCredentials.js";
 import type * as demo_auditLog from "../demo/auditLog.js";
 import type * as demo_auditTraceability from "../demo/auditTraceability.js";
@@ -195,6 +196,7 @@ import type * as payments_cashLedger_transferReconciliationCron from "../payment
 import type * as payments_cashLedger_types from "../payments/cashLedger/types.js";
 import type * as payments_cashLedger_validators from "../payments/cashLedger/validators.js";
 import type * as payments_cashLedger_waiveObligationBalanceHandler from "../payments/cashLedger/waiveObligationBalanceHandler.js";
+import type * as payments_collectionPlan_admin from "../payments/collectionPlan/admin.js";
 import type * as payments_collectionPlan_balancePreCheck from "../payments/collectionPlan/balancePreCheck.js";
 import type * as payments_collectionPlan_balancePreCheckContract from "../payments/collectionPlan/balancePreCheckContract.js";
 import type * as payments_collectionPlan_defaultRules from "../payments/collectionPlan/defaultRules.js";
@@ -204,6 +206,7 @@ import type * as payments_collectionPlan_executionContract from "../payments/col
 import type * as payments_collectionPlan_executionGuards from "../payments/collectionPlan/executionGuards.js";
 import type * as payments_collectionPlan_initialScheduling from "../payments/collectionPlan/initialScheduling.js";
 import type * as payments_collectionPlan_mutations from "../payments/collectionPlan/mutations.js";
+import type * as payments_collectionPlan_planEntrySafety from "../payments/collectionPlan/planEntrySafety.js";
 import type * as payments_collectionPlan_queries from "../payments/collectionPlan/queries.js";
 import type * as payments_collectionPlan_reschedule from "../payments/collectionPlan/reschedule.js";
 import type * as payments_collectionPlan_ruleContract from "../payments/collectionPlan/ruleContract.js";
@@ -214,11 +217,9 @@ import type * as payments_collectionPlan_rules_scheduleRule from "../payments/co
 import type * as payments_collectionPlan_runner from "../payments/collectionPlan/runner.js";
 import type * as payments_collectionPlan_seed from "../payments/collectionPlan/seed.js";
 import type * as payments_collectionPlan_stubs from "../payments/collectionPlan/stubs.js";
+import type * as payments_collectionPlan_workout from "../payments/collectionPlan/workout.js";
+import type * as payments_collectionPlan_workoutContract from "../payments/collectionPlan/workoutContract.js";
 import type * as payments_dispersal_stubs from "../payments/dispersal/stubs.js";
-import type * as payments_methods_interface from "../payments/methods/interface.js";
-import type * as payments_methods_manual from "../payments/methods/manual.js";
-import type * as payments_methods_mockPAD from "../payments/methods/mockPAD.js";
-import type * as payments_methods_registry from "../payments/methods/registry.js";
 import type * as payments_obligations_createCorrectiveObligation from "../payments/obligations/createCorrectiveObligation.js";
 import type * as payments_obligations_crons from "../payments/obligations/crons.js";
 import type * as payments_obligations_generate from "../payments/obligations/generate.js";
@@ -239,7 +240,6 @@ import type * as payments_transfers_mockProviders from "../payments/transfers/mo
 import type * as payments_transfers_mutations from "../payments/transfers/mutations.js";
 import type * as payments_transfers_pipeline from "../payments/transfers/pipeline.js";
 import type * as payments_transfers_principalReturn from "../payments/transfers/principalReturn.js";
-import type * as payments_transfers_providers_adapter from "../payments/transfers/providers/adapter.js";
 import type * as payments_transfers_providers_manual from "../payments/transfers/providers/manual.js";
 import type * as payments_transfers_providers_mock from "../payments/transfers/providers/mock.js";
 import type * as payments_transfers_providers_registry from "../payments/transfers/providers/registry.js";
@@ -337,6 +337,7 @@ declare const fullApi: ApiFromModules<{
   "deals/queries": typeof deals_queries;
   "demo/actionCache": typeof demo_actionCache;
   "demo/aggregate": typeof demo_aggregate;
+  "demo/amps": typeof demo_amps;
   "demo/apiCredentials": typeof demo_apiCredentials;
   "demo/auditLog": typeof demo_auditLog;
   "demo/auditTraceability": typeof demo_auditTraceability;
@@ -470,6 +471,7 @@ declare const fullApi: ApiFromModules<{
   "payments/cashLedger/types": typeof payments_cashLedger_types;
   "payments/cashLedger/validators": typeof payments_cashLedger_validators;
   "payments/cashLedger/waiveObligationBalanceHandler": typeof payments_cashLedger_waiveObligationBalanceHandler;
+  "payments/collectionPlan/admin": typeof payments_collectionPlan_admin;
   "payments/collectionPlan/balancePreCheck": typeof payments_collectionPlan_balancePreCheck;
   "payments/collectionPlan/balancePreCheckContract": typeof payments_collectionPlan_balancePreCheckContract;
   "payments/collectionPlan/defaultRules": typeof payments_collectionPlan_defaultRules;
@@ -479,6 +481,7 @@ declare const fullApi: ApiFromModules<{
   "payments/collectionPlan/executionGuards": typeof payments_collectionPlan_executionGuards;
   "payments/collectionPlan/initialScheduling": typeof payments_collectionPlan_initialScheduling;
   "payments/collectionPlan/mutations": typeof payments_collectionPlan_mutations;
+  "payments/collectionPlan/planEntrySafety": typeof payments_collectionPlan_planEntrySafety;
   "payments/collectionPlan/queries": typeof payments_collectionPlan_queries;
   "payments/collectionPlan/reschedule": typeof payments_collectionPlan_reschedule;
   "payments/collectionPlan/ruleContract": typeof payments_collectionPlan_ruleContract;
@@ -489,11 +492,9 @@ declare const fullApi: ApiFromModules<{
   "payments/collectionPlan/runner": typeof payments_collectionPlan_runner;
   "payments/collectionPlan/seed": typeof payments_collectionPlan_seed;
   "payments/collectionPlan/stubs": typeof payments_collectionPlan_stubs;
+  "payments/collectionPlan/workout": typeof payments_collectionPlan_workout;
+  "payments/collectionPlan/workoutContract": typeof payments_collectionPlan_workoutContract;
   "payments/dispersal/stubs": typeof payments_dispersal_stubs;
-  "payments/methods/interface": typeof payments_methods_interface;
-  "payments/methods/manual": typeof payments_methods_manual;
-  "payments/methods/mockPAD": typeof payments_methods_mockPAD;
-  "payments/methods/registry": typeof payments_methods_registry;
   "payments/obligations/createCorrectiveObligation": typeof payments_obligations_createCorrectiveObligation;
   "payments/obligations/crons": typeof payments_obligations_crons;
   "payments/obligations/generate": typeof payments_obligations_generate;
@@ -514,7 +515,6 @@ declare const fullApi: ApiFromModules<{
   "payments/transfers/mutations": typeof payments_transfers_mutations;
   "payments/transfers/pipeline": typeof payments_transfers_pipeline;
   "payments/transfers/principalReturn": typeof payments_transfers_principalReturn;
-  "payments/transfers/providers/adapter": typeof payments_transfers_providers_adapter;
   "payments/transfers/providers/manual": typeof payments_transfers_providers_manual;
   "payments/transfers/providers/mock": typeof payments_transfers_providers_mock;
   "payments/transfers/providers/registry": typeof payments_transfers_providers_registry;

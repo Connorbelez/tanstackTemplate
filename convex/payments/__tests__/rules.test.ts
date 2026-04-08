@@ -27,16 +27,14 @@ function mockRule(
 		displayName: "Initial scheduling",
 		description:
 			"Creates initial collection plan entries for upcoming obligations.",
-		name: "schedule_rule",
 		status: "active",
 		scope: { scopeType: "global" },
 		trigger: "schedule",
 		config: { kind: "schedule", delayDays: 5 },
 		version: 1,
-		action: "create_plan_entry",
-		parameters: { delayDays: 5 },
 		priority: 10,
-		enabled: true,
+		createdByActorId: "test",
+		updatedByActorId: "test",
 		createdAt: Date.now(),
 		updatedAt: Date.now(),
 		...overrides,
@@ -90,7 +88,7 @@ describe("ScheduleRule", () => {
 			expect.objectContaining({
 				mortgageId: "mortgage_1",
 				delayDays: 5,
-				ruleId: rule._id,
+				createdByRuleId: rule._id,
 			})
 		);
 	});
@@ -99,7 +97,6 @@ describe("ScheduleRule", () => {
 		await scheduleRuleHandler.evaluate(ctx, {
 			rule: mockRule({
 				config: { kind: "schedule", delayDays: 9 },
-				parameters: { delayDays: 5 },
 			}),
 			mortgageId: "mortgage_1" as Id<"mortgages">,
 		});
@@ -140,15 +137,14 @@ describe("RetryRule", () => {
 				displayName: "Retry collection",
 				description:
 					"Schedules retry collection plan entries after failed attempts.",
-				name: "retry_rule",
 				status: "active",
 				scope: { scopeType: "global" },
 				trigger: "event",
 				config: { kind: "retry", maxRetries: 3, backoffBaseDays: 3 },
 				version: 1,
-				action: "create_retry_entry",
-				parameters: { maxRetries: 3, backoffBaseDays: 3 },
 				priority: 20,
+				createdByActorId: "test",
+				updatedByActorId: "test",
 			}),
 			eventType: "COLLECTION_FAILED",
 			eventPayload: {
@@ -172,7 +168,7 @@ describe("RetryRule", () => {
 		const args = runMutation.mock.calls[0][1] as Record<string, unknown>;
 		expect(args.status).toBe("planned");
 		expect(args.source).toBe("retry_rule");
-		expect(args.rescheduledFromId).toBe("entry_1");
+		expect(args.retryOfId).toBe("entry_1");
 		// retryCount=0, backoffBaseDays=3 => delay = 3 * 2^0 * MS_PER_DAY = 3 days
 		const expectedDelay = 3 * 2 ** 0 * MS_PER_DAY;
 		expect(args.scheduledDate).toBeGreaterThanOrEqual(before + expectedDelay);
@@ -200,15 +196,14 @@ describe("RetryRule", () => {
 			kind: "retry",
 			code: "retry_rule",
 			displayName: "Retry collection",
-			name: "retry_rule",
 			status: "active",
 			scope: { scopeType: "global" },
 			trigger: "event",
 			config: { kind: "retry", maxRetries: 5, backoffBaseDays },
 			version: 1,
-			action: "create_retry_entry",
-			parameters: { maxRetries: 5, backoffBaseDays },
 			priority: 20,
+			createdByActorId: "test",
+			updatedByActorId: "test",
 		});
 
 		for (const retryCount of [0, 1, 2]) {
@@ -249,7 +244,7 @@ describe("RetryRule", () => {
 		runMutation.mockClear();
 		runQuery.mockResolvedValueOnce({
 			_id: "existing_retry_entry" as Id<"collectionPlanEntries">,
-			rescheduledFromId: "entry_1",
+			retryOfId: "entry_1",
 			source: "retry_rule",
 			status: "planned",
 		});
@@ -290,7 +285,6 @@ describe("LateFeeRule", () => {
 				code: "late_fee_rule",
 				displayName: "Late fee assessment",
 				description: "Creates late-fee obligations after overdue events.",
-				name: "late_fee_rule",
 				status: "active",
 				scope: { scopeType: "global" },
 				trigger: "event",
@@ -300,9 +294,9 @@ describe("LateFeeRule", () => {
 					feeSurface: "borrower_charge",
 				},
 				version: 1,
-				action: "create_late_fee",
-				parameters: {},
 				priority: 30,
+				createdByActorId: "test",
+				updatedByActorId: "test",
 			}),
 			eventType: "OBLIGATION_OVERDUE",
 			eventPayload: {

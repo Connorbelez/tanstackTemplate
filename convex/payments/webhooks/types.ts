@@ -32,7 +32,7 @@ export interface ReversalWebhookPayload {
 	provider: "rotessa" | "stripe" | "pad_vopay";
 	/** For idempotency dedup */
 	providerEventId: string;
-	/** Maps to collectionAttempts.providerRef */
+	/** Maps to transferRequests.providerRef */
 	providerRef: string;
 	/** Provider-specific code (e.g., "NSF", "R01") */
 	reversalCode?: string;
@@ -50,4 +50,5 @@ export interface ReversalResult {
 	/** If not successful, why */
 	reason?: string;
 	success: boolean;
+	transferId?: Id<"transferRequests">;
 }

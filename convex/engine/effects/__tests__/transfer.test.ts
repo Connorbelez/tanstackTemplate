@@ -1,7 +1,10 @@
 import auditLogTest from "convex-audit-log/test";
 import { afterAll, describe, expect, it, vi } from "vitest";
+import workflowSchema from "../../../../node_modules/@convex-dev/workflow/dist/component/schema.js";
+import workpoolSchema from "../../../../node_modules/@convex-dev/workpool/dist/component/schema.js";
 import type { Id } from "../../../_generated/dataModel";
 import type { MutationCtx } from "../../../_generated/server";
+import auditTrailSchema from "../../../components/auditTrail/schema";
 import {
 	createHarness,
 	createTestAccount,
@@ -9,7 +12,12 @@ import {
 	seedMinimalEntities,
 	type TestHarness,
 } from "../../../payments/cashLedger/__tests__/testUtils";
-import { convexModules } from "../../../test/moduleMaps";
+import {
+	auditTrailModules,
+	convexModules,
+	workflowModules,
+	workpoolModules,
+} from "../../../test/moduleMaps";
 import { effectRegistry } from "../registry";
 import {
 	publishTransferConfirmed,
@@ -55,6 +63,9 @@ const publishTransferReversedMutation =
 function createTransferHarness() {
 	const t = createHarness(modules);
 	auditLogTest.register(t, "auditLog");
+	t.registerComponent("auditTrail", auditTrailSchema, auditTrailModules);
+	t.registerComponent("workflow", workflowSchema, workflowModules);
+	t.registerComponent("workflow/workpool", workpoolSchema, workpoolModules);
 	return t;
 }
 
@@ -114,7 +125,15 @@ async function createCollectionAttempt(
 	}
 ) {
 	return t.run(async (ctx) => {
+		const firstObligation = await ctx.db.get(args.obligationIds[0]);
+		if (!firstObligation) {
+			throw new Error(
+				"Expected at least one obligation for collection attempt setup"
+			);
+		}
+
 		const planEntryId = await ctx.db.insert("collectionPlanEntries", {
+			mortgageId: firstObligation.mortgageId,
 			obligationIds: args.obligationIds,
 			amount: args.amount,
 			method: "manual",
@@ -126,6 +145,8 @@ async function createCollectionAttempt(
 
 		return ctx.db.insert("collectionAttempts", {
 			planEntryId,
+			mortgageId: firstObligation.mortgageId,
+			obligationIds: args.obligationIds,
 			amount: args.amount,
 			method: "manual",
 			status: "confirmed",

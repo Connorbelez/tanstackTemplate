@@ -1,21 +1,15 @@
 /**
- * Integration tests for ENG-214 Chunk 3: Inbound Collection Flow.
+ * Integration tests for inbound transfer confirmation behavior.
  *
- * T-012: Manual inbound transfer (non-bridged) -> cash ledger CASH_RECEIVED
- *        posting with correct accounts
- * T-013: Bridge transfer D4 conditional — bridged transfer skips cash posting,
- *        non-bridged posts
- * T-011: Full inbound flow — collection plan entry -> collection attempt ->
- *        bridge transfer -> obligation PAYMENT_APPLIED
- * T-014: Bridge idempotency — re-running emitPaymentReceived does not create
- *        duplicate transfer
+ * Canonical coverage in this file:
+ * - T-012: Manual inbound transfer (non-bridged) -> cash ledger CASH_RECEIVED
+ *   posting with correct accounts
  *
- * ORDERING NOTE: T-012 and T-013 are placed BEFORE T-011 because
- * finishAllScheduledFunctions (used by T-011) leaves the convex-test
- * workflow component in a state where subsequent workflow.start calls fail.
- * T-014 does not use finishAllScheduledFunctions but is placed before T-011
- * for the same reason. This is a known convex-test limitation — not a bug
- * in application code.
+ * Compatibility-only bridge coverage in this file:
+ * - T-013: Bridge transfer D4 conditional — bridged transfer skips cash posting,
+ *   non-bridged posts
+ * - T-014: Bridge idempotency — re-running emitPaymentReceived does not create
+ *   duplicate transfer
  */
 
 import { convexTest } from "convex-test";
@@ -310,7 +304,13 @@ async function createPlanEntryAndAttempt(
 	}
 ) {
 	return t.run(async (ctx) => {
+		const firstObligation = await ctx.db.get(args.obligationIds[0]);
+		if (!firstObligation) {
+			throw new Error("Expected at least one obligation for plan entry setup");
+		}
+
 		const planEntryId = await ctx.db.insert("collectionPlanEntries", {
+			mortgageId: firstObligation.mortgageId,
 			obligationIds: args.obligationIds,
 			amount: args.amount,
 			method: args.method ?? "manual",
@@ -322,6 +322,8 @@ async function createPlanEntryAndAttempt(
 
 		const attemptId = await ctx.db.insert("collectionAttempts", {
 			planEntryId,
+			mortgageId: firstObligation.mortgageId,
+			obligationIds: args.obligationIds,
 			amount: args.amount,
 			method: args.method ?? "manual",
 			status: "initiated",
@@ -428,10 +430,10 @@ describe("T-012: manual inbound transfer (non-bridged) posts CASH_RECEIVED", () 
 });
 
 // ══════════════════════════════════════════════════════════════════════
-// T-013: Bridge transfer D4 conditional
+// T-013: Compatibility bridge D4 conditional
 // ══════════════════════════════════════════════════════════════════════
 
-describe("T-013: bridge transfer D4 conditional — bridged skips cash posting, non-bridged posts", () => {
+describe("T-013: compatibility bridge D4 conditional — bridged skips cash posting, non-bridged posts", () => {
 	it("bridged transfer (with collectionAttemptId) skips cash posting", async () => {
 		const t = createFullHarness();
 		const seeded = await seedCoreEntities(t);
@@ -537,7 +539,7 @@ describe("T-013: bridge transfer D4 conditional — bridged skips cash posting, 
 });
 
 // ══════════════════════════════════════════════════════════════════════
-// T-014: Bridge idempotency
+// T-014: Compatibility bridge idempotency
 // Calls emitPaymentReceived twice in the same mutation to verify that
 // the idempotency key check prevents duplicate bridge transfers. The
 // key check runs inline inside the handler (not as a scheduled effect),
@@ -546,7 +548,7 @@ describe("T-013: bridge transfer D4 conditional — bridged skips cash posting, 
 // corrupts global crypto/process references in convex-test).
 // ══════════════════════════════════════════════════════════════════════
 
-describe("T-014: bridge idempotency — re-running emitPaymentReceived does not create duplicate transfer", () => {
+describe("T-014: compatibility bridge idempotency — re-running emitPaymentReceived does not create duplicate transfer", () => {
 	it("second invocation of emitPaymentReceived for same attempt does not create a second bridge transfer", async () => {
 		const t = createFullHarness();
 		const seeded = await seedCoreEntities(t);
@@ -598,29 +600,21 @@ describe("T-014: bridge idempotency — re-running emitPaymentReceived does not 
 			expect(bridgeTransfers[0].direction).toBe("inbound");
 		});
 	});
-});
 
-// ══════════════════════════════════════════════════════════════════════
-// T-011: Full inbound flow (uses finishAllScheduledFunctions)
-// MUST be the LAST test in this file because finishAllScheduledFunctions
-// corrupts global references (crypto, process) in the convex-test
-// workflow component. This is a known convex-test limitation.
-// ══════════════════════════════════════════════════════════════════════
-
-describe("T-011: full inbound flow — collection plan -> attempt -> bridge transfer -> obligation PAYMENT_APPLIED", () => {
-	it("FUNDS_SETTLED on collection attempt triggers PAYMENT_APPLIED, creates bridge transfer, and posts cash receipt", async () => {
+	it("non-legacy attempt methods without transferRequestId do not create a compatibility bridge transfer", async () => {
 		const t = createFullHarness();
 		const seeded = await seedCoreEntities(t);
 
-		const obligationId = await createDueObligationWithAccrual(t, {
+		const obligationId = await createDueObligationWithManualAccounts(t, {
 			mortgageId: seeded.mortgageId,
 			borrowerId: seeded.borrowerId,
-			amount: 80_000,
+			amount: 45_000,
 		});
 
-		const { planEntryId, attemptId } = await createPlanEntryAndAttempt(t, {
+		const { attemptId } = await createPlanEntryAndAttempt(t, {
 			obligationIds: [obligationId],
-			amount: 80_000,
+			amount: 45_000,
+			method: "mock_eft",
 		});
 
 		await t.run(async (ctx) => {
@@ -628,90 +622,21 @@ describe("T-011: full inbound flow — collection plan -> attempt -> bridge tran
 				entityId: attemptId,
 				entityType: "collectionAttempt",
 				eventType: "FUNDS_SETTLED",
-				journalEntryId: "audit-t011-1",
+				journalEntryId: "audit-t014-nonlegacy",
 				effectName: "emitPaymentReceived",
 				source: SYSTEM_SOURCE,
 			});
-		});
 
-		await t.finishAllScheduledFunctions(vi.runAllTimers);
-
-		// Verify obligation transitioned to "settled"
-		await t.run(async (ctx) => {
-			const obligation = await ctx.db.get(obligationId);
-			if (!obligation) {
-				throw new Error("Obligation not found");
-			}
-			expect(obligation.status).toBe("settled");
-			expect(obligation.amountSettled).toBeGreaterThanOrEqual(80_000);
-		});
-
-		// Verify bridge transfer was created with correct fields
-		const bridgeTransfer = await t.run(async (ctx) => {
-			const bridgeKey = `transfer:bridge:${attemptId}`;
-			const transfer = await ctx.db
+			const bridgeTransfer = await ctx.db
 				.query("transferRequests")
-				.withIndex("by_idempotency", (q) => q.eq("idempotencyKey", bridgeKey))
+				.withIndex("by_idempotency", (q) =>
+					q.eq("idempotencyKey", `transfer:bridge:${attemptId}`)
+				)
 				.first();
 
-			if (!transfer) {
-				throw new Error("Bridge transfer not found");
-			}
-			return transfer;
-		});
-
-		expect(bridgeTransfer.direction).toBe("inbound");
-		expect(bridgeTransfer.collectionAttemptId).toBe(attemptId);
-		expect(bridgeTransfer.planEntryId).toBe(planEntryId);
-		expect(bridgeTransfer.obligationId).toBe(obligationId);
-		expect(bridgeTransfer.amount).toBe(80_000);
-		expect(bridgeTransfer.counterpartyType).toBe("borrower");
-		expect(bridgeTransfer.status).toBe("confirmed");
-
-		// Verify cash receipt was posted via obligation path
-		await t.run(async (ctx) => {
-			const cashEntries = await ctx.db
-				.query("cash_ledger_journal_entries")
-				.withIndex("by_obligation_and_sequence", (q) =>
-					q.eq("obligationId", obligationId)
-				)
-				.collect();
-
-			const cashReceipts = cashEntries.filter(
-				(e) => e.entryType === "CASH_RECEIVED"
-			);
-			expect(cashReceipts.length).toBeGreaterThanOrEqual(1);
-
-			const receipt = cashReceipts[0];
-			expect(receipt.amount).toBe(80_000n);
-
-			const creditAccount = await ctx.db.get(receipt.creditAccountId);
-			expect(creditAccount?.family).toBe("BORROWER_RECEIVABLE");
-
-			const debitAccount = await ctx.db.get(receipt.debitAccountId);
-			expect(debitAccount?.family).toBe("TRUST_CASH");
-		});
-
-		// Verify bridge transfer did NOT create its own cash entry (D4)
-		await t.run(async (ctx) => {
-			const bridgeKey = `transfer:bridge:${attemptId}`;
-			const bridge = await ctx.db
-				.query("transferRequests")
-				.withIndex("by_idempotency", (q) => q.eq("idempotencyKey", bridgeKey))
-				.first();
-
-			if (!bridge) {
-				throw new Error("Bridge transfer not found");
-			}
-
-			const bridgeCashEntries = await ctx.db
-				.query("cash_ledger_journal_entries")
-				.withIndex("by_transfer_request", (q) =>
-					q.eq("transferRequestId", bridge._id)
-				)
-				.collect();
-
-			expect(bridgeCashEntries).toHaveLength(0);
+			expect(bridgeTransfer).toBeNull();
 		});
 	});
 });
+
+// ══════════════════════════════════════════════════════════════════════

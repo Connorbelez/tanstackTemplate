@@ -9,6 +9,7 @@
 import { describe, expect, it } from "vitest";
 import { createWebhookTestHarness } from "../../../../src/test/convex/payments/webhooks/convexTestHarness";
 import { internal } from "../../../_generated/api";
+import { seedMinimalEntities } from "../../cashLedger/__tests__/testUtils";
 import {
 	buildVoPayTransitionPayload,
 	mapVoPayStatusToTransferEvent,
@@ -253,8 +254,11 @@ async function seedBridgedTransfer(
 	},
 	t = createWebhookTestHarness()
 ) {
+	const { mortgageId } = await seedMinimalEntities(t);
+
 	const seeded = await t.run(async (ctx) => {
 		const planEntryId = await ctx.db.insert("collectionPlanEntries", {
+			mortgageId,
 			obligationIds: [],
 			amount: 50_000,
 			method: opts.providerCode,
@@ -269,6 +273,8 @@ async function seedBridgedTransfer(
 			machineContext: {},
 			lastTransitionAt: Date.now(),
 			planEntryId,
+			mortgageId,
+			obligationIds: [],
 			method: opts.providerCode,
 			amount: 50_000,
 			providerRef: opts.providerRef,
@@ -291,6 +297,7 @@ async function seedBridgedTransfer(
 			providerRef: opts.providerRef,
 			idempotencyKey: `${opts.providerCode}-${opts.providerRef}`,
 			source: TEST_SOURCE,
+			mortgageId,
 			createdAt: Date.now(),
 			lastTransitionAt: Date.now(),
 			collectionAttemptId: attemptId,

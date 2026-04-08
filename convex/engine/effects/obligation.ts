@@ -96,6 +96,9 @@ async function forwardObligationEventToMortgage(
 		eventType: "OBLIGATION_OVERDUE" | "PAYMENT_CONFIRMED";
 	}
 ): Promise<ObligationRecord> {
+	// Page 14 boundary lock: obligation effects are the only mortgage-lifecycle
+	// bridge in AMPS. Plan-entry, attempt, reschedule, and workout paths must
+	// route through obligation state before they can mutate mortgage status.
 	const obligation = await loadObligationOrThrow(ctx, args, config.effectLabel);
 	const result = await executeTransition(ctx, {
 		entityType: "mortgage",

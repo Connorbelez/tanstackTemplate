@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createWebhookTestHarness } from "../../../../src/test/convex/payments/webhooks/convexTestHarness";
 import { internal } from "../../../_generated/api";
 import type { Id } from "../../../_generated/dataModel";
+import { seedMinimalEntities } from "../../cashLedger/__tests__/testUtils";
 
 const TEST_SOURCE = {
 	channel: "api_webhook" as const,
@@ -21,8 +22,11 @@ async function seedBridgedTransfer(
 		status?: "pending" | "confirmed";
 	}
 ) {
+	const { mortgageId } = await seedMinimalEntities(t);
+
 	return t.run(async (ctx) => {
 		const planEntryId = await ctx.db.insert("collectionPlanEntries", {
+			mortgageId,
 			obligationIds: [],
 			amount: 50_000,
 			method: args.providerCode,
@@ -37,6 +41,8 @@ async function seedBridgedTransfer(
 			machineContext: {},
 			lastTransitionAt: Date.now(),
 			planEntryId,
+			mortgageId,
+			obligationIds: [],
 			method: args.providerCode,
 			amount: 50_000,
 			providerRef: args.providerRef,
@@ -59,6 +65,7 @@ async function seedBridgedTransfer(
 			providerRef: args.providerRef,
 			idempotencyKey: `${args.providerCode}-${args.providerRef}`,
 			source: TEST_SOURCE,
+			mortgageId,
 			createdAt: Date.now(),
 			lastTransitionAt: Date.now(),
 			collectionAttemptId: attemptId,

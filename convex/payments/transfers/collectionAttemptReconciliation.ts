@@ -197,7 +197,6 @@ export async function reconcileAttemptLinkedInboundFailure(
 
 	await ctx.db.patch(args.transfer.collectionAttemptId, {
 		failureReason: args.failureReason,
-		providerStatus: "transfer_failed",
 	});
 
 	await transitionAttempt(ctx, {
@@ -246,10 +245,6 @@ export async function reconcileAttemptLinkedInboundCancellation(
 		return false;
 	}
 
-	await ctx.db.patch(args.transfer.collectionAttemptId, {
-		providerStatus: "transfer_cancelled",
-	});
-
 	await transitionAttempt(ctx, {
 		transfer: args.transfer,
 		eventType: "ATTEMPT_CANCELLED",
@@ -272,10 +267,6 @@ export async function reconcileAttemptLinkedInboundReversal(
 	if (!isAttemptLinkedInboundTransfer(args.transfer)) {
 		return false;
 	}
-
-	await ctx.db.patch(args.transfer.collectionAttemptId, {
-		providerStatus: "transfer_reversed",
-	});
 
 	await transitionAttempt(ctx, {
 		transfer: args.transfer,
