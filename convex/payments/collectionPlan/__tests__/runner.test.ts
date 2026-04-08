@@ -298,6 +298,24 @@ describe("processDuePlanEntries", () => {
 		const replayTransfers = await getTransfersForAttempt(t, attempt._id);
 		expect(replayTransfers).toHaveLength(1);
 
+		const replay = await t.action(
+			internal.payments.collectionPlan.runner.processDuePlanEntries,
+			{
+				asOf: Date.now() + 1,
+				batchSize: 10,
+			}
+		);
+		await drainScheduledWork(t);
+
+		expect(replay.selectedCount).toBe(0);
+		expect(replay.attemptCreatedCount).toBe(0);
+		expect(replay.handoffFailureCount).toBe(0);
+
+		const replayAttempts = await getAttemptsForPlanEntry(t, planEntryId);
+		expect(replayAttempts).toHaveLength(1);
+		const replayTransfers = await getTransfersForAttempt(t, attempt._id);
+		expect(replayTransfers).toHaveLength(0);
+
 		const retryEntry = await t.run(async (ctx) =>
 			ctx.db
 				.query("collectionPlanEntries")
