@@ -27,6 +27,11 @@ import {
 	getAdminEntityByType,
 	getAdminEntityForObjectDef,
 } from "./entity-registry";
+import {
+	type RecordSidebarEntityAdapter,
+	type RecordTabRenderArgs,
+	resolveRecordSidebarEntityAdapter,
+} from "./entity-view-adapters";
 import { FieldRenderer } from "./FieldRenderer";
 import { LinkedRecordsPanel } from "./LinkedRecordsPanel";
 import {
@@ -44,30 +49,6 @@ const FIELD_SKELETON_IDS = [
 	"field-skeleton-3",
 	"field-skeleton-4",
 ] as const;
-
-export interface RecordSidebarEntityAdapter {
-	readonly getRecordStatus?: (args: {
-		entity: ReturnType<typeof getAdminEntityByType> | undefined;
-		objectDef: ObjectDef | undefined;
-		record: RecordDetailRecord | undefined;
-	}) => string | undefined;
-	readonly getRecordTitle?: (args: {
-		entity: ReturnType<typeof getAdminEntityByType> | undefined;
-		objectDef: ObjectDef | undefined;
-		record: RecordDetailRecord | undefined;
-		recordId: string;
-	}) => string;
-	readonly renderFilesTab?: (args: RecordTabRenderArgs) => ReactNode;
-	readonly renderNotesTab?: (args: RecordTabRenderArgs) => ReactNode;
-}
-
-interface RecordTabRenderArgs {
-	readonly entity: ReturnType<typeof getAdminEntityByType> | undefined;
-	readonly fieldDefs: readonly FieldDef[];
-	readonly objectDef: ObjectDef | undefined;
-	readonly record: RecordDetailRecord | undefined;
-	readonly reference: SidebarRecordRef;
-}
 
 interface RecordDetailSurfaceProps {
 	readonly adapters?: Partial<Record<string, RecordSidebarEntityAdapter>>;
@@ -140,9 +121,15 @@ export function AdminRecordDetailSurface({
 		[objectDef, reference.entityType]
 	);
 	const resolvedEntityType = entity?.entityType ?? reference.entityType;
-	const adapter = resolvedEntityType
-		? adapters?.[resolvedEntityType]
-		: undefined;
+	const adapter = useMemo(
+		() =>
+			resolveRecordSidebarEntityAdapter({
+				entityType: resolvedEntityType,
+				objectDef,
+				overrides: adapters,
+			}),
+		[adapters, objectDef, resolvedEntityType]
+	);
 	const recordKind =
 		reference.recordKind ?? (objectDef?.isSystem ? "native" : "record");
 	const shouldLoadLiveRecord =
@@ -285,6 +272,7 @@ export function AdminRecordDetailSurface({
 
 					<TabsContent className="space-y-4 p-4 sm:p-6" value="details">
 						<DetailsTab
+							adapter={adapter}
 							entity={entity}
 							fieldDefs={fieldDefs}
 							objectDef={objectDef}
@@ -398,12 +386,14 @@ function RecordMetaRow({
 }
 
 function DetailsTab({
+	adapter,
 	entity,
 	fieldDefs,
 	objectDef,
 	record,
 	recordId,
 }: {
+	readonly adapter: RecordSidebarEntityAdapter | undefined;
 	readonly entity: ReturnType<typeof getAdminEntityByType> | undefined;
 	readonly fieldDefs: readonly FieldDef[] | undefined;
 	readonly objectDef: ObjectDef | undefined;
@@ -452,6 +442,17 @@ function DetailsTab({
 				</div>
 			</div>
 		);
+	}
+
+	const adapterDetails = adapter?.renderDetailsTab?.({
+		entity,
+		fieldDefs,
+		objectDef,
+		record,
+		recordId,
+	});
+	if (adapterDetails != null) {
+		return adapterDetails;
 	}
 
 	const visibleFields = fieldDefs.filter((fieldDef) => {

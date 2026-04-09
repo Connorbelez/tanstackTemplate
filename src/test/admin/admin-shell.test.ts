@@ -1,14 +1,97 @@
+import type { Doc, Id } from "../../../../convex/_generated/dataModel";
+import type { UnifiedRecord } from "../../../../convex/crm/types";
+import { Children, isValidElement } from "react";
 import { describe, expect, it } from "vitest";
 import {
 	buildAdminPreviewRecords,
 	getAdminPreviewRecord,
 } from "#/components/admin/shell/admin-preview-records";
+import { resolveRecordSidebarEntityAdapter } from "#/components/admin/shell/entity-view-adapters";
 import {
 	getAdminNavigationSections,
 	isAdminRouteActive,
 } from "#/components/admin/shell/entity-registry";
 import { canAccessAdminPath } from "#/lib/auth";
 import { isAdminPathname } from "#/lib/admin-routes";
+
+function buildFieldDef(args: {
+	displayOrder: number;
+	fieldType?: Doc<"fieldDefs">["fieldType"];
+	label: string;
+	name: string;
+}): Doc<"fieldDefs"> {
+	return {
+		_id: `field_${args.name}` as Id<"fieldDefs">,
+		_creationTime: 0,
+		aggregation: {
+			enabled: false,
+			reason: "Test fixture",
+			supportedFunctions: [],
+		},
+		computed: undefined,
+		createdAt: 0,
+		defaultValue: undefined,
+		description: undefined,
+		displayOrder: args.displayOrder,
+		editability: { mode: "editable" },
+		fieldType: args.fieldType ?? "text",
+		isActive: true,
+		isRequired: false,
+		isUnique: false,
+		isVisibleByDefault: true,
+		label: args.label,
+		layoutEligibility: {
+			calendar: { enabled: false, reason: "Test fixture" },
+			groupBy: { enabled: false, reason: "Test fixture" },
+			kanban: { enabled: false, reason: "Test fixture" },
+			table: { enabled: true },
+		},
+		name: args.name,
+		nativeColumnPath: undefined,
+		nativeReadOnly: false,
+		normalizedFieldKind: "primitive",
+		objectDefId: "object_borrower" as Id<"objectDefs">,
+		options: undefined,
+		orgId: "org_test",
+		relation: undefined,
+		rendererHint: "text",
+		updatedAt: 0,
+	};
+}
+
+function buildBorrowerObjectDef(): Doc<"objectDefs"> {
+	return {
+		_id: "object_borrower" as Id<"objectDefs">,
+		_creationTime: 0,
+		createdAt: 0,
+		createdBy: "user_test",
+		description: "Test borrower object",
+		icon: "user",
+		isActive: true,
+		isSystem: true,
+		name: "borrower",
+		nativeTable: "borrowers",
+		orgId: "org_test",
+		pluralLabel: "Borrowers",
+		singularLabel: "Borrower",
+		updatedAt: 0,
+	};
+}
+
+function buildBorrowerRecord(): UnifiedRecord {
+	return {
+		_id: "borrower_1",
+		_kind: "native",
+		createdAt: 0,
+		fields: {
+			idvStatus: "verified",
+			notes: "Follow up tomorrow",
+			status: "active",
+		},
+		objectDefId: "object_borrower" as Id<"objectDefs">,
+		updatedAt: 0,
+	};
+}
 
 describe("admin shell helpers", () => {
 	it("matches dashboard routes exactly instead of every admin page", () => {
@@ -118,5 +201,70 @@ describe("admin shell helpers", () => {
 		});
 		expect(getAdminPreviewRecord("mortgages", "99")).toBeUndefined();
 		expect(getAdminPreviewRecord("ghost", "1")).toBeUndefined();
+	});
+
+	it("resolves dedicated adapters from object definitions and preserves overrides", () => {
+		const adapter = resolveRecordSidebarEntityAdapter({
+			objectDef: buildBorrowerObjectDef(),
+			overrides: {
+				borrowers: {
+					getRecordTitle: () => "Overridden Borrower",
+				},
+			},
+			entityType: undefined,
+		});
+
+		expect(adapter).toBeDefined();
+		expect(adapter?.renderDetailsTab).toBeTypeOf("function");
+		expect(
+			adapter?.getRecordTitle?.({
+				entity: undefined,
+				objectDef: buildBorrowerObjectDef(),
+				record: buildBorrowerRecord(),
+				recordId: "borrower_1",
+			})
+		).toBe("Overridden Borrower");
+	});
+
+	it("renders dedicated detail fields in the configured priority order", () => {
+		const adapter = resolveRecordSidebarEntityAdapter({
+			entityType: "borrowers",
+			objectDef: undefined,
+		});
+		expect(adapter?.renderDetailsTab).toBeTypeOf("function");
+		if (!adapter?.renderDetailsTab) {
+			throw new Error("Borrower adapter not found");
+		}
+
+		const fieldDefs = [
+			buildFieldDef({ displayOrder: 2, label: "Notes", name: "notes" }),
+			buildFieldDef({ displayOrder: 1, label: "IDV Status", name: "idvStatus" }),
+			buildFieldDef({ displayOrder: 0, label: "Status", name: "status" }),
+		];
+		const record = buildBorrowerRecord();
+
+		const content = adapter.renderDetailsTab({
+			entity: undefined,
+			fieldDefs,
+			objectDef: buildBorrowerObjectDef(),
+			record,
+			recordId: record._id,
+		});
+		expect(isValidElement(content)).toBe(true);
+		if (!isValidElement(content)) {
+			throw new Error("Expected dedicated details renderer to return an element");
+		}
+
+		const labels = Children.toArray(content.props.children).flatMap((child) => {
+			if (
+				!isValidElement<{ label?: string }>(child) ||
+				typeof child.props.label !== "string"
+			) {
+				return [];
+			}
+
+			return [child.props.label];
+		});
+		expect(labels).toEqual(["Status", "IDV Status", "Notes"]);
 	});
 });
