@@ -275,9 +275,7 @@ export const updateField = crmAdminMutation
 		if (args.computed !== undefined) {
 			patch.computed = args.computed;
 		}
-		if (args.isVisibleByDefault !== undefined) {
-			patch.isVisibleByDefault = args.isVisibleByDefault;
-		}
+		patch.isVisibleByDefault = effectiveFieldContract.isVisibleByDefault;
 		patch.normalizedFieldKind = effectiveFieldContract.normalizedFieldKind;
 		patch.rendererHint = effectiveFieldContract.rendererHint;
 		patch.layoutEligibility = effectiveFieldContract.layoutEligibility;
