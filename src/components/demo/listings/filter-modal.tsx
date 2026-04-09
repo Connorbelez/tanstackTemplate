@@ -77,6 +77,7 @@ export default function FilterModal({
 	items = [],
 }: FilterModalProps) {
 	const [isOpen, setIsOpen] = React.useState(false);
+	const [draftFilters, setDraftFilters] = React.useState<FilterState>(filters);
 
 	React.useEffect(() => {
 		if (!isOpen) {
@@ -84,12 +85,12 @@ export default function FilterModal({
 		}
 
 		const style = document.createElement("style");
+		style.id = "tooltip-z-index-fix";
 		style.textContent = `
       [data-radix-tooltip-content] {
         z-index: 9999 !important;
       }
     `;
-		style.id = "tooltip-z-index-fix";
 		document.head.appendChild(style);
 
 		return () => {
@@ -133,6 +134,7 @@ export default function FilterModal({
 			),
 		[calculateHistogram]
 	);
+
 	const aprHistogram = React.useMemo(
 		() =>
 			calculateHistogram(
@@ -143,6 +145,7 @@ export default function FilterModal({
 			),
 		[calculateHistogram]
 	);
+
 	const principalHistogram = React.useMemo(
 		() =>
 			calculateHistogram(
@@ -154,42 +157,54 @@ export default function FilterModal({
 		[calculateHistogram]
 	);
 
-	const handleMortgageTypeToggle = (type: MortgageType) => {
-		const newTypes = filters.mortgageTypes.includes(type)
-			? filters.mortgageTypes.filter((item) => item !== type)
-			: [...filters.mortgageTypes, type];
+	const handleOpenChange = (nextOpen: boolean) => {
+		if (nextOpen) {
+			setDraftFilters(filters);
+		}
 
-		onFiltersChange({
-			...filters,
-			mortgageTypes: newTypes,
+		setIsOpen(nextOpen);
+	};
+
+	const handleMortgageTypeToggle = (type: MortgageType) => {
+		setDraftFilters((current) => {
+			const newTypes = current.mortgageTypes.includes(type)
+				? current.mortgageTypes.filter((item) => item !== type)
+				: [...current.mortgageTypes, type];
+
+			return {
+				...current,
+				mortgageTypes: newTypes,
+			};
 		});
 	};
 
 	const handlePropertyTypeToggle = (type: PropertyType) => {
-		const newTypes = filters.propertyTypes.includes(type)
-			? filters.propertyTypes.filter((item) => item !== type)
-			: [...filters.propertyTypes, type];
+		setDraftFilters((current) => {
+			const newTypes = current.propertyTypes.includes(type)
+				? current.propertyTypes.filter((item) => item !== type)
+				: [...current.propertyTypes, type];
 
-		onFiltersChange({
-			...filters,
-			propertyTypes: newTypes,
+			return {
+				...current,
+				propertyTypes: newTypes,
+			};
 		});
 	};
 
 	const handleClearFilters = () => {
-		onFiltersChange(DEFAULT_FILTERS);
+		setDraftFilters(DEFAULT_FILTERS);
 	};
 
 	const hasActiveFilters =
-		filters.ltvRange[0] > FILTER_BOUNDS.ltvRange[0] ||
-		filters.ltvRange[1] < FILTER_BOUNDS.ltvRange[1] ||
-		filters.interestRateRange[0] > FILTER_BOUNDS.interestRateRange[0] ||
-		filters.interestRateRange[1] < FILTER_BOUNDS.interestRateRange[1] ||
-		filters.loanAmountRange[0] > FILTER_BOUNDS.loanAmountRange[0] ||
-		filters.loanAmountRange[1] < FILTER_BOUNDS.loanAmountRange[1] ||
-		filters.mortgageTypes.length > 0 ||
-		filters.propertyTypes.length > 0 ||
-		filters.maturityDate !== undefined;
+		draftFilters.ltvRange[0] > FILTER_BOUNDS.ltvRange[0] ||
+		draftFilters.ltvRange[1] < FILTER_BOUNDS.ltvRange[1] ||
+		draftFilters.interestRateRange[0] > FILTER_BOUNDS.interestRateRange[0] ||
+		draftFilters.interestRateRange[1] < FILTER_BOUNDS.interestRateRange[1] ||
+		draftFilters.loanAmountRange[0] > FILTER_BOUNDS.loanAmountRange[0] ||
+		draftFilters.loanAmountRange[1] < FILTER_BOUNDS.loanAmountRange[1] ||
+		draftFilters.mortgageTypes.length > 0 ||
+		draftFilters.propertyTypes.length > 0 ||
+		draftFilters.maturityDate !== undefined;
 
 	const mortgageTypeOptions: Array<{
 		displayLabel: string;
@@ -218,7 +233,7 @@ export default function FilterModal({
 	];
 
 	return (
-		<Dialog onOpenChange={setIsOpen} open={isOpen}>
+		<Dialog onOpenChange={handleOpenChange} open={isOpen}>
 			<DialogTrigger asChild>
 				<Button className="rounded-full" size="lg" variant="outline">
 					Filters
@@ -248,14 +263,18 @@ export default function FilterModal({
 							<div className="relative z-[105] w-full overflow-x-hidden">
 								<RangeSliderWithHistogram
 									className="w-full"
-									defaultValue={filters.ltvRange}
+									defaultValue={draftFilters.ltvRange}
 									formatValue={(value) => `${value}%`}
 									histogramData={ltvHistogram}
 									max={FILTER_BOUNDS.ltvRange[1]}
 									min={FILTER_BOUNDS.ltvRange[0]}
 									onValueChange={(values) =>
-										onFiltersChange({ ...filters, ltvRange: values })
+										setDraftFilters((current) => ({
+											...current,
+											ltvRange: values,
+										}))
 									}
+									showCard={false}
 									showTitle={false}
 									step={1}
 									targetBarCount={20}
@@ -274,17 +293,18 @@ export default function FilterModal({
 							<div className="relative z-[105] w-full overflow-x-hidden">
 								<RangeSliderWithHistogram
 									className="w-full"
-									defaultValue={filters.interestRateRange}
+									defaultValue={draftFilters.interestRateRange}
 									formatValue={(value) => `${value}%`}
 									histogramData={aprHistogram}
 									max={FILTER_BOUNDS.interestRateRange[1]}
 									min={FILTER_BOUNDS.interestRateRange[0]}
 									onValueChange={(values) =>
-										onFiltersChange({
-											...filters,
+										setDraftFilters((current) => ({
+											...current,
 											interestRateRange: values,
-										})
+										}))
 									}
+									showCard={false}
 									showTitle={false}
 									step={0.1}
 									targetBarCount={20}
@@ -303,14 +323,18 @@ export default function FilterModal({
 							<div className="relative z-[105] w-full overflow-x-hidden">
 								<RangeSliderWithHistogram
 									className="w-full"
-									defaultValue={filters.loanAmountRange}
+									defaultValue={draftFilters.loanAmountRange}
 									formatValue={(value) => `$${value.toLocaleString()}`}
 									histogramData={principalHistogram}
 									max={FILTER_BOUNDS.loanAmountRange[1]}
 									min={FILTER_BOUNDS.loanAmountRange[0]}
 									onValueChange={(values) =>
-										onFiltersChange({ ...filters, loanAmountRange: values })
+										setDraftFilters((current) => ({
+											...current,
+											loanAmountRange: values,
+										}))
 									}
+									showCard={false}
 									showTitle={false}
 									step={10_000}
 									targetBarCount={20}
@@ -329,7 +353,7 @@ export default function FilterModal({
 							<div className="grid grid-cols-1 items-center justify-center gap-2 py-4 sm:grid-cols-3 sm:gap-3">
 								{mortgageTypeOptions.map((option) => (
 									<CheckboxRoot
-										checked={filters.mortgageTypes.includes(option.value)}
+										checked={draftFilters.mortgageTypes.includes(option.value)}
 										className="relative rounded-lg px-2 py-2 text-center text-muted-foreground ring-[1px] ring-border transition-all data-[state=checked]:text-primary data-[state=checked]:ring-2 data-[state=checked]:ring-primary sm:px-4 sm:py-3"
 										key={option.value}
 										onCheckedChange={() =>
@@ -340,7 +364,10 @@ export default function FilterModal({
 											<span className="font-semibold text-2xl">
 												{option.label}
 											</span>
-											<span className="font-medium text-sm tracking-tight">
+											<span
+												aria-hidden="true"
+												className="font-medium text-sm tracking-tight"
+											>
 												{option.displayLabel}
 											</span>
 										</div>
@@ -362,7 +389,7 @@ export default function FilterModal({
 							<div className="grid grid-cols-1 items-center justify-center gap-2 py-4 sm:grid-cols-3 sm:gap-3 lg:grid-cols-4">
 								{propertyTypeOptions.map((option) => (
 									<CheckboxRoot
-										checked={filters.propertyTypes.includes(option.value)}
+										checked={draftFilters.propertyTypes.includes(option.value)}
 										className="relative h-16 rounded-lg px-4 py-3 text-center text-muted-foreground ring-[1px] ring-border transition-all data-[state=checked]:text-primary data-[state=checked]:ring-2 data-[state=checked]:ring-primary"
 										key={option.value}
 										onCheckedChange={() =>
@@ -392,9 +419,12 @@ export default function FilterModal({
 							</h2>
 							<div className="flex justify-center">
 								<DatePicker
-									date={filters.maturityDate}
+									date={draftFilters.maturityDate}
 									onDateChange={(date) =>
-										onFiltersChange({ ...filters, maturityDate: date })
+										setDraftFilters((current) => ({
+											...current,
+											maturityDate: date,
+										}))
 									}
 								/>
 							</div>
@@ -419,7 +449,13 @@ export default function FilterModal({
 								Clear Filters
 							</Button>
 						) : null}
-						<Button onClick={() => setIsOpen(false)} size="sm">
+						<Button
+							onClick={() => {
+								onFiltersChange(draftFilters);
+								setIsOpen(false);
+							}}
+							size="sm"
+						>
 							Apply
 						</Button>
 					</DialogFooter>

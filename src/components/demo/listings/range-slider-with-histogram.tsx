@@ -61,7 +61,7 @@ const RangeSliderWithHistogram: React.FC<RangeSliderWithHistogramProps> = ({
 	}, [defaultValue]);
 
 	const [minValue, maxValue] = currentValue;
-	const numBars = targetBarCount;
+	const numBars = Math.max(1, targetBarCount);
 	const bucketSize = (max - min) / numBars;
 
 	const histogramDataToUse = useMemo(() => {
@@ -93,30 +93,31 @@ const RangeSliderWithHistogram: React.FC<RangeSliderWithHistogramProps> = ({
 	const histogramHeight = isCompact ? "h-28" : "h-32";
 
 	return (
-		<div className={containerClass}>
-			{showTitle ? <h2 className={titleClass}>{title}</h2> : null}
+		<TooltipProvider delayDuration={0}>
+			<div className={containerClass}>
+				{showTitle ? <h2 className={titleClass}>{title}</h2> : null}
 
-			<div className="mb-2 flex justify-between">
-				<span className={valueClass}>{formatValue(minValue)}</span>
-				<span className={valueClass}>{formatValue(maxValue)}</span>
-			</div>
+				<div className="mb-2 flex justify-between">
+					<span className={valueClass}>{formatValue(minValue)}</span>
+					<span className={valueClass}>{formatValue(maxValue)}</span>
+				</div>
 
-			<div className={`relative overflow-hidden ${histogramHeight}`}>
-				<div className="flex h-full items-end">
-					{histogramDataToUse.map((count, index) => {
-						const bucketStart = min + index * bucketSize;
-						const bucketEnd = min + (index + 1) * bucketSize;
-						const currentBucketValue = (bucketStart + bucketEnd) / 2;
-						const isInRange =
-							currentBucketValue >= minValue && currentBucketValue <= maxValue;
-						const isInView =
-							currentBucketValue >= viewMin && currentBucketValue <= viewMax;
-						const barColor =
-							isInRange || isInView ? inRangeClass : outOfRangeClass;
+				<div className={`relative overflow-hidden ${histogramHeight}`}>
+					<div className="flex h-full items-end">
+						{histogramDataToUse.map((count, index) => {
+							const bucketStart = min + index * bucketSize;
+							const bucketEnd = min + (index + 1) * bucketSize;
+							const currentBucketValue = (bucketStart + bucketEnd) / 2;
+							const isInRange =
+								currentBucketValue >= minValue &&
+								currentBucketValue <= maxValue;
+							const isInView =
+								currentBucketValue >= viewMin && currentBucketValue <= viewMax;
+							const barColor =
+								isInRange || isInView ? inRangeClass : outOfRangeClass;
 
-						return (
-							<TooltipProvider key={`${bucketStart}-${bucketEnd}`}>
-								<Tooltip>
+							return (
+								<Tooltip key={`${bucketStart}-${bucketEnd}`}>
 									<TooltipTrigger asChild>
 										<motion.div
 											animate={{ height: `${(count / maxCount) * 100}%` }}
@@ -137,30 +138,30 @@ const RangeSliderWithHistogram: React.FC<RangeSliderWithHistogramProps> = ({
 										)}
 									</TooltipContent>
 								</Tooltip>
-							</TooltipProvider>
-						);
-					})}
+							);
+						})}
+					</div>
 				</div>
-			</div>
 
-			<div className="relative mt-2">
-				<Slider
-					max={max}
-					min={min}
-					onValueChange={(values) => {
-						const nextValue = values as [number, number];
-						setCurrentValue(nextValue);
-						onValueChange?.(nextValue);
-					}}
-					step={step}
-					value={currentValue}
-				/>
-				<div className="mt-2 flex justify-between">
-					<span className="text-gray-400">{minLabel}</span>
-					<span className="text-gray-400">{maxLabel}</span>
+				<div className="relative mt-2">
+					<Slider
+						max={max}
+						min={min}
+						onValueChange={(values) => {
+							const nextValue = values as [number, number];
+							setCurrentValue(nextValue);
+							onValueChange?.(nextValue);
+						}}
+						step={step}
+						value={currentValue}
+					/>
+					<div className="mt-2 flex justify-between">
+						<span className="text-gray-400">{minLabel}</span>
+						<span className="text-gray-400">{maxLabel}</span>
+					</div>
 				</div>
 			</div>
-		</div>
+		</TooltipProvider>
 	);
 };
 
