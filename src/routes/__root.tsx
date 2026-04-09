@@ -108,7 +108,6 @@ function RootComponent() {
 		<RootDocument>
 			{isAdminRoute ? null : <Header />}
 			<Outlet />
-			{/* <Footer /> */}
 		</RootDocument>
 	);
 }
