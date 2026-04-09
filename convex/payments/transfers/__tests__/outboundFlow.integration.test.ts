@@ -11,7 +11,7 @@
  */
 
 import { convexTest } from "convex-test";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Id } from "../../../_generated/dataModel";
 import type { MutationCtx } from "../../../_generated/server";
 import auditTrailSchema from "../../../components/auditTrail/schema";
@@ -36,9 +36,16 @@ const auditTrailModules = sharedAuditTrailModules;
 
 type TestHarness = ReturnType<typeof createFullHarness>;
 
+beforeEach(() => {
+	vi.stubEnv("DISABLE_CASH_LEDGER_HASHCHAIN", "true");
+	vi.stubEnv("DISABLE_GT_HASHCHAIN", "true");
+});
+
+afterEach(() => {
+	vi.unstubAllEnvs();
+});
+
 function createFullHarness() {
-	process.env.DISABLE_CASH_LEDGER_HASHCHAIN = "true";
-	process.env.DISABLE_GT_HASHCHAIN = "true";
 	const t = convexTest(schema, modules);
 	registerAuditLogComponent(t, "auditLog");
 	t.registerComponent("auditTrail", auditTrailSchema, auditTrailModules);
