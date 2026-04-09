@@ -71,11 +71,26 @@ async function scheduleCollectionFailedRuleEvaluation(
 	planEntry: { obligationIds: Id<"obligations">[] },
 	effectLabel: string
 ) {
+	const firstObligationId = planEntry.obligationIds[0];
+	if (!firstObligationId) {
+		throw new Error(
+			`[${effectLabel}] Cannot schedule COLLECTION_FAILED rules evaluation without a linked obligation (attempt=${args.entityId})`
+		);
+	}
+
+	const firstObligation = await ctx.db.get(firstObligationId);
+	if (!firstObligation) {
+		throw new Error(
+			`[${effectLabel}] Linked obligation not found for attempt=${args.entityId}: ${firstObligationId}`
+		);
+	}
+
 	await ctx.scheduler.runAfter(
 		0,
 		internal.payments.collectionPlan.engine.evaluateRules,
 		{
 			trigger: "event" as const,
+			mortgageId: firstObligation.mortgageId,
 			eventType: "COLLECTION_FAILED",
 			eventPayload: {
 				planEntryId: attempt.planEntryId,
