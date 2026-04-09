@@ -29,7 +29,7 @@ export interface TransferWebhookMetadataPatch {
 export interface ReversalWebhookPayload {
 	/** Original amount in cents */
 	originalAmount: number;
-	provider: "rotessa" | "stripe" | "pad_vopay";
+	provider: "rotessa" | "pad_vopay";
 	/** For idempotency dedup */
 	providerEventId: string;
 	/** Maps to transferRequests.providerRef */

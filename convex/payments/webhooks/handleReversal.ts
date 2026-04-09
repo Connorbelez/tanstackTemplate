@@ -9,7 +9,6 @@ const REVERSAL_PROVIDER_CODE_MAP: Record<
 > = {
 	rotessa: ["pad_rotessa"],
 	pad_vopay: ["pad_vopay"],
-	stripe: [],
 };
 
 async function getTransferByProviderRef(
@@ -56,9 +55,6 @@ export async function handlePaymentReversal(
 	const transfer = await getTransferByProviderRef(ctx, payload);
 
 	if (!transfer) {
-		if (REVERSAL_PROVIDER_CODE_MAP[payload.provider].length === 0) {
-			return { success: false, reason: "unsupported_provider" };
-		}
 		return { success: false, reason: "transfer_not_found" };
 	}
 
