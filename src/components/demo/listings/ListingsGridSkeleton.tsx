@@ -4,11 +4,11 @@ import { Skeleton } from "#/components/ui/skeleton";
 
 export function ListingsGridSkeleton() {
 	return (
-		<section className="grid w-full grid-cols-12 gap-x-4 px-4 pt-4">
+		<section className="grid w-full grid-cols-12 gap-x-4 pt-4">
 			<div className="col-span-8">
 				<ScrollArea className="relative h-[calc(100vh-7rem)]">
 					<ProgressiveBlur />
-					<div className="grid grid-cols-1 gap-3 pr-4 pb-32 2xl:grid-cols-2">
+					<div className="grid grid-cols-1 gap-3 px-4 pt-4 pb-32 min-[98rem]:grid-cols-2">
 						{Array.from({ length: 10 }, (_, index) => index).map((item) => (
 							<div
 								className="space-y-3 rounded-[1.35rem] border p-4"
@@ -37,7 +37,7 @@ export function ListingsGridSkeleton() {
 				</ScrollArea>
 			</div>
 
-			<div className="col-span-4">
+			<div className="col-span-4 pr-4">
 				<div className="sticky top-24 h-[calc(100vh-8rem)]">
 					<Skeleton className="mt-4 h-[calc(100vh-9rem)] w-full rounded-xl" />
 				</div>

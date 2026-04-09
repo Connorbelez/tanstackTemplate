@@ -1,6 +1,12 @@
 import { AnimatePresence, motion, type Variants } from "framer-motion";
 import { Map as MapIcon } from "lucide-react";
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import {
+	type ReactNode,
+	useCallback,
+	useEffect,
+	useMemo,
+	useState,
+} from "react";
 import { Button } from "#/components/ui/button";
 import {
 	Drawer,
@@ -228,9 +234,9 @@ export function ListingGridShell<T extends WithLatLng>({
 		setItems(items as readonly FilterableItem[]);
 	}, [items, setItems]);
 
-	const handleViewportChange = (bounds: ViewportBounds) => {
+	const handleViewportChange = useCallback((bounds: ViewportBounds) => {
 		setViewportBounds(bounds);
-	};
+	}, []);
 
 	if (isMobile) {
 		return (
@@ -248,10 +254,11 @@ export function ListingGridShell<T extends WithLatLng>({
 						<Drawer onOpenChange={setIsMapDrawerOpen} open={isMapDrawerOpen}>
 							<DrawerTrigger asChild>
 								<Button
+									aria-label="Open map view"
 									className="h-14 w-14 rounded-full p-0 shadow-lg"
 									size="lg"
 								>
-									<MapIcon className="h-6 w-6" />
+									<MapIcon aria-hidden="true" className="h-6 w-6" />
 								</Button>
 							</DrawerTrigger>
 							<DrawerContent className="h-[85vh] rounded-t-2xl">

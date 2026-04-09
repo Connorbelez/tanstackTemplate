@@ -72,8 +72,15 @@ export function ListingMap<T extends LatLng>({
 	const mapContainerRef = useRef<HTMLDivElement>(null);
 	const mapRef = useRef<mapboxgl.Map | null>(null);
 	const markersRef = useRef<ManagedMarker[]>([]);
+	const onViewportChangeRef = useRef(onViewportChange);
+	const renderPopupRef = useRef(renderPopup);
 	const [isMapLoaded, setIsMapLoaded] = useState(false);
 	const hasSetInitialViewRef = useRef(false);
+
+	useEffect(() => {
+		onViewportChangeRef.current = onViewportChange;
+		renderPopupRef.current = renderPopup;
+	}, [onViewportChange, renderPopup]);
 
 	useEffect(() => {
 		if (!(mapContainerRef.current && MAPBOX_TOKEN)) {
@@ -95,15 +102,11 @@ export function ListingMap<T extends LatLng>({
 		map.on("load", () => {
 			setIsMapLoaded(true);
 
-			if (onViewportChange) {
-				onViewportChange(toBounds(map));
-			}
+			onViewportChangeRef.current?.(toBounds(map));
 		});
 
 		map.on("moveend", () => {
-			if (onViewportChange) {
-				onViewportChange(toBounds(map));
-			}
+			onViewportChangeRef.current?.(toBounds(map));
 		});
 
 		return () => {
@@ -120,7 +123,7 @@ export function ListingMap<T extends LatLng>({
 				mapRef.current = null;
 			}
 		};
-	}, [initialCenter.lat, initialCenter.lng, initialZoom, onViewportChange]);
+	}, [initialCenter.lat, initialCenter.lng, initialZoom]);
 
 	useEffect(() => {
 		if (!(mapRef.current && isMapLoaded)) {
@@ -139,7 +142,7 @@ export function ListingMap<T extends LatLng>({
 		for (const item of items) {
 			const popupContainer = document.createElement("div");
 			const root = createRoot(popupContainer);
-			root.render(renderPopup(item));
+			root.render(renderPopupRef.current(item));
 
 			const popup = new mapboxgl.Popup({
 				offset: 25,
@@ -198,7 +201,7 @@ export function ListingMap<T extends LatLng>({
 				hasSetInitialViewRef.current = true;
 			}
 		}
-	}, [items, isMapLoaded, renderPopup]);
+	}, [items, isMapLoaded]);
 
 	if (!MAPBOX_TOKEN) {
 		return (

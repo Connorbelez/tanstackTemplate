@@ -74,7 +74,7 @@ export function Horizontal({
 					</div>
 					<div className="flex min-w-0 flex-1 flex-col gap-3">
 						<CardHeader className="min-w-0 space-y-1 p-0">
-							<CardTitle className="wrap-break-word line-clamp-2 leading-tight">
+							<CardTitle className="line-clamp-2 break-words leading-tight">
 								{title}
 							</CardTitle>
 							<CardDescription className="flex w-full min-w-0 items-center gap-2 align-middle text-foreground/70">
@@ -89,7 +89,7 @@ export function Horizontal({
 							<span className="flex min-w-0 items-center">
 								<CirclePercent className="h-5 w-5 shrink-0" />
 								<span className="ml-1 flex min-w-0 flex-col justify-around py-1 align-middle sm:ml-2">
-									<CardDescription className="text-xs">LTFV</CardDescription>
+									<CardDescription className="text-xs">LTV</CardDescription>
 									<span className="font-bold text-sm tabular-nums">{ltv}</span>
 								</span>
 							</span>

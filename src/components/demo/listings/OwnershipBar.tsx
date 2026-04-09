@@ -25,7 +25,7 @@ export function OwnershipBar({
 			<span className="ml-0 flex min-w-0 flex-col justify-around py-1 sm:ml-2">
 				<div className="flex min-w-0 items-center gap-2">
 					<p className="shrink-0 font-semibold text-emerald-500 text-sm tabular-nums">
-						{Math.round(availablePercent)}%
+						{Math.round(available)}%
 					</p>
 					<div className="flex h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-foreground/10">
 						{sold > 0 && (
@@ -50,7 +50,7 @@ export function OwnershipBar({
 				</div>
 				{lockedPercent > 0 ? (
 					<p className="text-[10px] text-amber-500">
-						{Math.round(lockedPercent)}% locked
+						{Math.round(locked)}% locked
 					</p>
 				) : null}
 			</span>
