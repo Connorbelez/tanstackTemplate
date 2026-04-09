@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import type { Doc } from "../_generated/dataModel";
+import type { Doc, Id } from "../_generated/dataModel";
 import {
 	internalMutation,
 	internalQuery,
@@ -25,6 +25,15 @@ interface AuditEvidenceScope {
 	mortgageId?: string;
 	obligationId?: string;
 	transferRequestId?: string;
+}
+
+interface RawAuditEvidenceScope {
+	entityId?: string;
+	entityType?: Doc<"auditJournal">["entityType"];
+	lenderId?: Id<"lenders">;
+	mortgageId?: Id<"mortgages">;
+	obligationId?: Id<"obligations">;
+	transferRequestId?: Id<"transferRequests">;
 }
 
 function normalizeScope(
@@ -70,6 +79,111 @@ function toCsv(headers: string[], rows: Record<string, unknown>[]) {
 		lines.push(headers.map((header) => csvEscape(row[header])).join(","));
 	}
 	return lines.join("\n");
+}
+
+const ARTIFACT_CHUNK_SIZE = 64_000;
+
+async function sha256Hex(value: string) {
+	const bytes = new TextEncoder().encode(value);
+	const digest = await crypto.subtle.digest("SHA-256", bytes);
+	return Array.from(new Uint8Array(digest))
+		.map((byte) => byte.toString(16).padStart(2, "0"))
+		.join("");
+}
+
+function chunkArtifactContent(content: string) {
+	const chunks: string[] = [];
+	for (let offset = 0; offset < content.length; offset += ARTIFACT_CHUNK_SIZE) {
+		chunks.push(content.slice(offset, offset + ARTIFACT_CHUNK_SIZE));
+	}
+	return chunks.length > 0 ? chunks : [""];
+}
+
+async function loadAuditEvidenceArtifacts(
+	ctx: Pick<QueryCtx, "db">,
+	packageId: Doc<"auditEvidencePackages">["_id"]
+) {
+	const artifactChunks = await ctx.db
+		.query("auditEvidencePackageArtifacts")
+		.withIndex("by_package", (q) => q.eq("packageId", packageId))
+		.collect();
+
+	const grouped = new Map<
+		string,
+		{
+			chunks: string[];
+			contentType: string;
+		}
+	>();
+	for (const chunk of artifactChunks.sort((left, right) => {
+		if (left.artifactName === right.artifactName) {
+			return left.chunkIndex - right.chunkIndex;
+		}
+		return left.artifactName.localeCompare(right.artifactName);
+	})) {
+		const existing = grouped.get(chunk.artifactName);
+		if (existing) {
+			existing.chunks.push(chunk.content);
+			continue;
+		}
+		grouped.set(chunk.artifactName, {
+			chunks: [chunk.content],
+			contentType: chunk.contentType,
+		});
+	}
+
+	return Object.fromEntries(
+		Array.from(grouped.entries()).map(([name, artifact]) => [
+			name,
+			{
+				content: artifact.chunks.join(""),
+				contentType: artifact.contentType,
+			},
+		])
+	);
+}
+
+async function persistAuditEvidenceArtifacts(
+	ctx: Pick<MutationCtx, "db">,
+	args: {
+		artifacts: Array<{
+			content: string;
+			contentType: string;
+			name: string;
+		}>;
+		packageId: Doc<"auditEvidencePackages">["_id"];
+	}
+) {
+	const createdAt = Date.now();
+	const manifest: Doc<"auditEvidencePackages">["artifactManifest"] = [];
+
+	for (const artifact of args.artifacts) {
+		const chunks = chunkArtifactContent(artifact.content);
+		const checksum = await sha256Hex(artifact.content);
+
+		for (const [chunkIndex, chunkContent] of chunks.entries()) {
+			await ctx.db.insert("auditEvidencePackageArtifacts", {
+				packageId: args.packageId,
+				artifactName: artifact.name,
+				byteLength: artifact.content.length,
+				checksum,
+				chunkIndex,
+				content: chunkContent,
+				contentType: artifact.contentType,
+				createdAt,
+			});
+		}
+
+		manifest.push({
+			byteLength: artifact.content.length,
+			checksum,
+			chunkCount: chunks.length,
+			contentType: artifact.contentType,
+			name: artifact.name,
+		});
+	}
+
+	return manifest;
 }
 
 function scopeMatchesEvent(
@@ -121,6 +235,18 @@ function scopeMatchesCashEntry(
 	entry: Doc<"cash_ledger_journal_entries">,
 	scope: AuditEvidenceScope
 ) {
+	if (scope.entityType === "mortgage" && scope.entityId) {
+		return `${entry.mortgageId}` === scope.entityId;
+	}
+	if (scope.entityType === "obligation" && scope.entityId) {
+		return `${entry.obligationId}` === scope.entityId;
+	}
+	if (scope.entityType === "lender" && scope.entityId) {
+		return `${entry.lenderId}` === scope.entityId;
+	}
+	if (scope.entityType === "transfer" && scope.entityId) {
+		return `${entry.transferRequestId}` === scope.entityId;
+	}
 	if (scope.mortgageId && `${entry.mortgageId}` !== scope.mortgageId) {
 		return false;
 	}
@@ -189,16 +315,97 @@ async function collectAuditEvidenceDataImpl(
 		scope: unknown;
 	}
 ) {
-	const scope = normalizeScope(
-		(args.scope as Parameters<typeof normalizeScope>[0] | undefined) ?? null
-	);
+	const rawScope = (args.scope as RawAuditEvidenceScope | undefined) ?? null;
+	const scope = normalizeScope(rawScope);
+	const auditJournalQuery = (() => {
+		if (scope.entityType && scope.entityId && rawScope?.entityType) {
+			const entityType = rawScope.entityType;
+			const entityId = scope.entityId;
+			return ctx.db
+				.query("auditJournal")
+				.withIndex("by_entity", (q) =>
+					q.eq("entityType", entityType).eq("entityId", entityId)
+				);
+		}
+		if (rawScope?.transferRequestId) {
+			const transferRequestId = rawScope.transferRequestId;
+			return ctx.db
+				.query("auditJournal")
+				.withIndex("by_transfer_request", (q) =>
+					q.eq("transferRequestId", `${transferRequestId}`)
+				);
+		}
+		if (rawScope?.obligationId) {
+			const obligationId = rawScope.obligationId;
+			return ctx.db
+				.query("auditJournal")
+				.withIndex("by_obligation", (q) =>
+					q.eq("obligationId", `${obligationId}`)
+				);
+		}
+		if (rawScope?.mortgageId) {
+			const mortgageId = rawScope.mortgageId;
+			return ctx.db
+				.query("auditJournal")
+				.withIndex("by_mortgage", (q) => q.eq("mortgageId", `${mortgageId}`));
+		}
+		if (rawScope?.lenderId) {
+			const lenderId = rawScope.lenderId;
+			return ctx.db
+				.query("auditJournal")
+				.withIndex("by_lender", (q) => q.eq("lenderId", `${lenderId}`));
+		}
+		if (rawScope?.entityType) {
+			const entityType = rawScope.entityType;
+			return ctx.db
+				.query("auditJournal")
+				.withIndex("by_type_and_time", (q) => q.eq("entityType", entityType));
+		}
+		return ctx.db.query("auditJournal").withIndex("by_sequence");
+	})();
+	const cashLedgerQuery = (() => {
+		if (rawScope?.transferRequestId) {
+			const transferRequestId = rawScope.transferRequestId;
+			return ctx.db
+				.query("cash_ledger_journal_entries")
+				.withIndex("by_transfer_request", (q) =>
+					q.eq("transferRequestId", transferRequestId)
+				);
+		}
+		if (rawScope?.obligationId) {
+			const obligationId = rawScope.obligationId;
+			return ctx.db
+				.query("cash_ledger_journal_entries")
+				.withIndex("by_obligation_and_sequence", (q) =>
+					q.eq("obligationId", obligationId)
+				);
+		}
+		if (rawScope?.mortgageId) {
+			const mortgageId = rawScope.mortgageId;
+			return ctx.db
+				.query("cash_ledger_journal_entries")
+				.withIndex("by_mortgage_and_sequence", (q) =>
+					q.eq("mortgageId", mortgageId)
+				);
+		}
+		if (rawScope?.lenderId) {
+			const lenderId = rawScope.lenderId;
+			return ctx.db
+				.query("cash_ledger_journal_entries")
+				.withIndex("by_lender_and_sequence", (q) => q.eq("lenderId", lenderId));
+		}
+		return ctx.db.query("cash_ledger_journal_entries").withIndex("by_sequence");
+	})();
 	const [journalEvents, cashEntries] = await Promise.all([
-		ctx.db.query("auditJournal").collect(),
-		ctx.db.query("cash_ledger_journal_entries").collect(),
+		auditJournalQuery
+			.filter((q) => q.lte(q.field("timestamp"), args.asOf))
+			.collect(),
+		cashLedgerQuery
+			.filter((q) => q.lte(q.field("timestamp"), args.asOf))
+			.collect(),
 	]);
 
 	const filteredEvents = journalEvents
-		.filter((event) => event.timestamp <= args.asOf)
 		.filter((event) => scopeMatchesEvent(event, scope))
 		.sort((left, right) => {
 			if (left.sequenceNumber < right.sequenceNumber) {
@@ -211,7 +418,6 @@ async function collectAuditEvidenceDataImpl(
 		});
 
 	const filteredCashEntries = cashEntries
-		.filter((entry) => entry.timestamp <= args.asOf)
 		.filter((entry) => scopeMatchesCashEntry(entry, scope))
 		.sort((left, right) => {
 			if (left.sequenceNumber < right.sequenceNumber) {
@@ -297,16 +503,55 @@ async function persistAuditEvidencePackageImpl(
 		),
 		asOf: args.asOf,
 		format: args.format,
-		manifestJson: args.manifestJson,
-		eventsJson: args.eventsJson,
-		eventsCsv: args.eventsCsv,
-		entitiesCsv: args.entitiesCsv,
-		balancesCsv: args.balancesCsv,
-		linkageCsv: args.linkageCsv,
-		reconstructionNotes: args.reconstructionNotes,
+		artifactManifest: [],
 		verificationJson: args.verificationJson,
 		createdAt: Date.now(),
 		createdBy: args.createdBy,
+	});
+
+	const artifactManifest = await persistAuditEvidenceArtifacts(ctx, {
+		packageId,
+		artifacts: [
+			{
+				name: "manifest.json",
+				contentType: "application/json",
+				content: args.manifestJson,
+			},
+			{
+				name: "events.json",
+				contentType: "application/json",
+				content: args.eventsJson,
+			},
+			{
+				name: "events.csv",
+				contentType: "text/csv",
+				content: args.eventsCsv,
+			},
+			{
+				name: "entities.csv",
+				contentType: "text/csv",
+				content: args.entitiesCsv,
+			},
+			{
+				name: "balances.csv",
+				contentType: "text/csv",
+				content: args.balancesCsv,
+			},
+			{
+				name: "linkage.csv",
+				contentType: "text/csv",
+				content: args.linkageCsv,
+			},
+			{
+				name: "reconstruction-notes.md",
+				contentType: "text/markdown",
+				content: args.reconstructionNotes,
+			},
+		],
+	});
+
+	await ctx.db.patch(packageId, {
+		artifactManifest,
 	});
 
 	await appendAuditJournalEntry(ctx as MutationCtx, {
@@ -381,7 +626,14 @@ export const persistAuditEvidencePackage = internalMutation({
 export const getAuditEvidencePackage = internalQuery({
 	args: { packageId: v.id("auditEvidencePackages") },
 	handler: async (ctx, args) => {
-		return ctx.db.get(args.packageId);
+		const packageDoc = await ctx.db.get(args.packageId);
+		if (!packageDoc) {
+			return null;
+		}
+		return {
+			...packageDoc,
+			artifacts: await loadAuditEvidenceArtifacts(ctx, args.packageId),
+		};
 	},
 });
 
@@ -404,6 +656,21 @@ export const listAuditPackages = internalMutation({
 				return false;
 			}
 			if (scope.entityId && pkg.scope.entityId !== scope.entityId) {
+				return false;
+			}
+			if (scope.lenderId && pkg.scope.lenderId !== scope.lenderId) {
+				return false;
+			}
+			if (scope.mortgageId && pkg.scope.mortgageId !== scope.mortgageId) {
+				return false;
+			}
+			if (scope.obligationId && pkg.scope.obligationId !== scope.obligationId) {
+				return false;
+			}
+			if (
+				scope.transferRequestId &&
+				pkg.scope.transferRequestId !== scope.transferRequestId
+			) {
 				return false;
 			}
 			return true;

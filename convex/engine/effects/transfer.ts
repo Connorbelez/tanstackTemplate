@@ -3,6 +3,7 @@ import { internal } from "../../_generated/api";
 import type { Id } from "../../_generated/dataModel";
 import type { MutationCtx } from "../../_generated/server";
 import { internalMutation } from "../../_generated/server";
+import { auditLog } from "../../auditLog";
 import { safeBigintToNumber } from "../../payments/cashLedger/accounts";
 import {
 	postCashReceiptForTransfer,
@@ -211,6 +212,13 @@ export const publishTransferConfirmed = internalMutation({
 	args: transferEffectValidator,
 	handler: async (ctx, args) => {
 		const transfer = await loadTransfer(ctx, args, "publishTransferConfirmed");
+		const direction = transfer.direction;
+		if (direction !== "inbound" && direction !== "outbound") {
+			throw new Error(
+				`[publishTransferConfirmed] Transfer ${args.entityId} has no direction set. ` +
+					"Cannot post cash entry — this is a data integrity violation."
+			);
+		}
 
 		// Preserve the provider's settlement timestamp when available (e.g. webhook/reconciliation replays).
 		// Falls back to current time for real-time confirmations.
@@ -244,23 +252,18 @@ export const publishTransferConfirmed = internalMutation({
 		});
 
 		let cashEntryId: Id<"cash_ledger_journal_entries"> | undefined;
-		if (transfer.direction === "inbound") {
+		if (direction === "inbound") {
 			const receiptEntry = await postCashReceiptForTransfer(ctx, {
 				transferRequestId: args.entityId,
 				source: args.source,
 			});
 			cashEntryId = receiptEntry._id;
-		} else if (transfer.direction === "outbound") {
+		} else {
 			const payoutEntry = await postLenderPayoutForTransfer(ctx, {
 				transferRequestId: args.entityId,
 				source: args.source,
 			});
 			cashEntryId = payoutEntry._id;
-		} else {
-			throw new Error(
-				`[publishTransferConfirmed] Transfer ${args.entityId} has no direction set. ` +
-					"Cannot post cash entry — this is a data integrity violation."
-			);
 		}
 
 		if (cashEntryId) {
@@ -270,7 +273,7 @@ export const publishTransferConfirmed = internalMutation({
 			});
 		}
 
-		if (transfer.direction === "inbound" && transfer.collectionAttemptId) {
+		if (direction === "inbound" && transfer.collectionAttemptId) {
 			const reconciledAttempt = await reconcileAttemptLinkedInboundSettlement(
 				ctx,
 				{
@@ -280,8 +283,22 @@ export const publishTransferConfirmed = internalMutation({
 				}
 			);
 			if (!reconciledAttempt) {
-				throw new Error(
-					`[publishTransferConfirmed] Linked collection attempt ${transfer.collectionAttemptId} could not be settled for transfer ${args.entityId}`
+				await auditLog.log(ctx, {
+					action:
+						"transfer.integrity_defect.collection_attempt_reconciliation_failed",
+					actorId: args.source.actorId ?? "system",
+					resourceType: "transferRequest",
+					resourceId: args.entityId,
+					severity: "error",
+					metadata: {
+						collectionAttemptId: transfer.collectionAttemptId,
+						reason:
+							"Transfer settlement posted authoritative ledger state, but linked collection attempt reconciliation failed.",
+						settledAt,
+					},
+				});
+				console.error(
+					`[publishTransferConfirmed] Linked collection attempt ${transfer.collectionAttemptId} could not be settled for transfer ${args.entityId}. Cash posting preserved; manual investigation required.`
 				);
 			}
 		}
@@ -528,8 +545,9 @@ export const publishTransferFailed = internalMutation({
 			);
 		}
 
+		const failedAt = Date.now();
 		await ctx.db.patch(args.entityId, {
-			failedAt: Date.now(),
+			failedAt,
 			failureReason: reason,
 			failureCode: errorCode,
 		});
@@ -541,7 +559,7 @@ export const publishTransferFailed = internalMutation({
 			afterState: {
 				...transfer,
 				_id: `${transfer._id}`,
-				failedAt: Date.now(),
+				failedAt,
 				failureCode: errorCode,
 				failureReason: reason,
 			},
@@ -752,9 +770,10 @@ export const publishTransferReversed = internalMutation({
 			typeof args.payload?.effectiveDate === "string"
 				? args.payload.effectiveDate
 				: new Date().toISOString().slice(0, 10);
+		const reversedAt = Date.now();
 
 		await ctx.db.patch(args.entityId, {
-			reversedAt: Date.now(),
+			reversedAt,
 			reversalRef,
 		});
 		await appendTransferMutationAuditEntry(ctx, {
@@ -765,7 +784,7 @@ export const publishTransferReversed = internalMutation({
 			afterState: {
 				...transfer,
 				_id: `${transfer._id}`,
-				reversedAt: Date.now(),
+				reversedAt,
 				reversalRef,
 			},
 			eventType: "REVERSAL_RECORDED",

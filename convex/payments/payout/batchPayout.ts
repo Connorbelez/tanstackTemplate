@@ -164,12 +164,21 @@ export const processPayoutBatch = internalAction({
 				failures.push(...result.failures);
 			}
 
+			const lenderHadFailures = failures.some(
+				(failure) => failure.lenderId === `${lender._id}`
+			);
+
 			if (lenderPayoutCount > 0) {
+				totalPayouts += lenderPayoutCount;
+			}
+
+			if (lenderPayoutCount > 0 && !lenderHadFailures) {
 				await ctx.runMutation(updateLenderPayoutDateRef, {
 					lenderId: lender._id,
 					payoutDate: today,
 				});
-				totalPayouts += lenderPayoutCount;
+				lendersProcessed++;
+			} else if (lenderPayoutCount > 0) {
 				lendersProcessed++;
 			} else {
 				lendersSkipped++;

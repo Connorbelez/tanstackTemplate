@@ -65,10 +65,6 @@ export const collectionAttemptMachine = setup({
 					target: "failed",
 					actions: ["incrementRetryCount"],
 				},
-				DRAW_FAILED: {
-					target: "failed",
-					actions: ["incrementRetryCount"],
-				},
 				FUNDS_SETTLED: {
 					target: "confirmed",
 					actions: ["emitPaymentReceived"],

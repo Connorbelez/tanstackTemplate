@@ -33,7 +33,23 @@ class ComponentTableAuditEvidenceSink implements AuditEvidenceSink {
 			.first();
 
 		if (existing) {
+			if (
+				existing.eventId !== args.eventId ||
+				existing.contentType !== args.contentType ||
+				existing.payload !== args.payload
+			) {
+				throw new Error(
+					`Audit evidence idempotency collision for key ${args.idempotencyKey}`
+				);
+			}
 			return { sinkReference: existing.sinkReference };
+		}
+
+		const event = await ctx.db.get(args.eventId);
+		if (!event) {
+			throw new Error(
+				`Cannot emit audit evidence for missing event ${args.eventId}`
+			);
 		}
 
 		const sinkReference = `component_table://${args.eventId}`;
@@ -43,6 +59,7 @@ class ComponentTableAuditEvidenceSink implements AuditEvidenceSink {
 			sinkReference,
 			contentType: args.contentType,
 			payload: args.payload,
+			retentionUntilAt: event.retentionUntilAt,
 			createdAt: Date.now(),
 		});
 		return { sinkReference };
@@ -55,13 +72,13 @@ function getConfiguredSinkName() {
 		return configuredSink;
 	}
 
-	if (process.env.NODE_ENV === "production") {
-		throw new Error(
-			"AUDIT_EVIDENCE_SINK must be configured in production. Refusing to emit audit evidence without a durable sink."
-		);
+	if (process.env.ALLOW_INMEMORY_AUDIT_EVIDENCE_SINK === "true") {
+		return "component_table";
 	}
 
-	return "component_table";
+	throw new Error(
+		"AUDIT_EVIDENCE_SINK must be configured. Set ALLOW_INMEMORY_AUDIT_EVIDENCE_SINK=true only in local/test environments."
+	);
 }
 
 function getConfiguredSink(): AuditEvidenceSink {

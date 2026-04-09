@@ -426,7 +426,7 @@ describe("publishTransferConfirmed effect", () => {
 		});
 	});
 
-	it("skips duplicate cash posting for bridged transfers", async () => {
+	it("posts the authoritative cash receipt once for bridged transfers", async () => {
 		const t = createTransferHarness();
 		const seeded = await seedMinimalEntities(t);
 		const obligationId = await createObligation(t, {
@@ -460,11 +460,76 @@ describe("publishTransferConfirmed effect", () => {
 			);
 
 			const entries = await loadTransferEntries(ctx, transferId);
-			expect(entries).toHaveLength(0);
+			expect(entries).toHaveLength(1);
+			expect(entries[0]?.entryType).toBe("CASH_RECEIVED");
 
 			const transfer = await ctx.db.get(transferId);
 			expect(transfer?.settledAt).toBeTypeOf("number");
 		});
+	});
+
+	it("preserves ledger posting when bridged reconciliation reports a failure", async () => {
+		const t = createTransferHarness();
+		const seeded = await seedMinimalEntities(t);
+		const obligationId = await createObligation(t, {
+			mortgageId: seeded.mortgageId,
+			borrowerId: seeded.borrowerId,
+			amount: 75_000,
+		});
+		await createTestAccount(t, {
+			family: "BORROWER_RECEIVABLE",
+			mortgageId: seeded.mortgageId,
+			obligationId,
+			borrowerId: seeded.borrowerId,
+			initialDebitBalance: 75_000n,
+		});
+		const collectionAttemptId = await createCollectionAttempt(t, {
+			obligationIds: [obligationId],
+			amount: 75_000,
+		});
+		const transferId = await createTransferRequest(t, {
+			amount: 75_000,
+			counterpartyId: seeded.borrowerId,
+			counterpartyType: "borrower",
+			direction: "inbound",
+			mortgageId: seeded.mortgageId,
+			transferType: "borrower_interest_collection",
+			borrowerId: seeded.borrowerId,
+			obligationId,
+			collectionAttemptId,
+		});
+		const collectionAttemptReconciliation = await import(
+			"../../../payments/transfers/collectionAttemptReconciliation"
+		);
+		const reconcileSpy = vi
+			.spyOn(
+				collectionAttemptReconciliation,
+				"reconcileAttemptLinkedInboundSettlement"
+			)
+			.mockResolvedValueOnce(false);
+
+		try {
+			await t.run(async (ctx) => {
+				await expect(
+					publishTransferConfirmedMutation._handler(
+						ctx,
+						buildEffectArgs(transferId, {
+							effectName: "publishTransferConfirmed",
+							eventType: "FUNDS_SETTLED",
+						})
+					)
+				).resolves.toBeUndefined();
+
+				const entries = await loadTransferEntries(ctx, transferId);
+				expect(entries).toHaveLength(1);
+				expect(entries[0]?.entryType).toBe("CASH_RECEIVED");
+
+				const transfer = await ctx.db.get(transferId);
+				expect(transfer?.settledAt).toBeTypeOf("number");
+			});
+		} finally {
+			reconcileSpy.mockRestore();
+		}
 	});
 
 	it("fails loudly when a malformed non-bridged transfer has no direction", async () => {

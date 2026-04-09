@@ -58,9 +58,12 @@ export const processOutbox = internalMutation({
 						error instanceof Error ? error.message : String(error),
 					status: newFailures >= 5 ? ("failed" as const) : ("pending" as const),
 				});
-				await ctx.db.patch(entry.eventId, {
-					emitFailures: newFailures,
-				});
+				const event = await ctx.db.get(entry.eventId);
+				if (event) {
+					await ctx.db.patch(entry.eventId, {
+						emitFailures: newFailures,
+					});
+				}
 				failedCount++;
 			}
 		}
@@ -78,6 +81,7 @@ export const processRetention = internalMutation({
 		const expired = await ctx.db
 			.query("audit_events")
 			.withIndex("by_retention", (q) => q.lte("retentionUntilAt", now))
+			.filter((q) => q.eq(q.field("archivedAt"), undefined))
 			.take(100);
 
 		let archivedCount = 0;
@@ -92,9 +96,21 @@ export const processRetention = internalMutation({
 			const outboxEntry = await ctx.db
 				.query("audit_outbox")
 				.withIndex("by_event", (q) => q.eq("eventId", event._id))
+				.filter((q) => q.eq(q.field("archivedAt"), undefined))
 				.first();
 			if (outboxEntry && !outboxEntry.archivedAt) {
 				await ctx.db.patch(outboxEntry._id, {
+					archivedAt: now,
+				});
+			}
+
+			const evidenceObjects = await ctx.db
+				.query("audit_evidence_objects")
+				.withIndex("by_event", (q) => q.eq("eventId", event._id))
+				.filter((q) => q.eq(q.field("archivedAt"), undefined))
+				.collect();
+			for (const evidenceObject of evidenceObjects) {
+				await ctx.db.patch(evidenceObject._id, {
 					archivedAt: now,
 				});
 			}

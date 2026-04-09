@@ -20,6 +20,7 @@ import { getActiveLenders, getEligibleDispersalEntries } from "../queries";
 const modules = convexModules;
 const auditTrailModules = sharedAuditTrailModules;
 const EXPECTED_PENDING_ERROR = /expected "pending"/;
+const FAILURE_RE = /failure/i;
 
 // ── Type wrappers for _handler access ────────────────────────────────
 
@@ -526,6 +527,8 @@ async function seedPayoutScenario(
 	opts?: {
 		/** Create a second mortgage with separate entries to test grouping. */
 		twoMortgages?: boolean;
+		/** Leave the second mortgage unfunded to simulate a partial payout failure. */
+		omitMortgageBCashAccounts?: boolean;
 	}
 ) {
 	return t.run(async (ctx) => {
@@ -732,22 +735,24 @@ async function seedPayoutScenario(
 				createdAt: now,
 			});
 
-			// Cash ledger accounts for mortgage B
-			await ctx.db.insert("cash_ledger_accounts", {
-				family: "LENDER_PAYABLE",
-				mortgageId: mortgageBId,
-				lenderId,
-				cumulativeDebits: 0n,
-				cumulativeCredits: 300_000n,
-				createdAt: now,
-			});
-			await ctx.db.insert("cash_ledger_accounts", {
-				family: "TRUST_CASH",
-				mortgageId: mortgageBId,
-				cumulativeDebits: 500_000n,
-				cumulativeCredits: 0n,
-				createdAt: now,
-			});
+			if (!opts.omitMortgageBCashAccounts) {
+				// Cash ledger accounts for mortgage B
+				await ctx.db.insert("cash_ledger_accounts", {
+					family: "LENDER_PAYABLE",
+					mortgageId: mortgageBId,
+					lenderId,
+					cumulativeDebits: 0n,
+					cumulativeCredits: 300_000n,
+					createdAt: now,
+				});
+				await ctx.db.insert("cash_ledger_accounts", {
+					family: "TRUST_CASH",
+					mortgageId: mortgageBId,
+					cumulativeDebits: 500_000n,
+					cumulativeCredits: 0n,
+					createdAt: now,
+				});
+			}
 
 			const obligationBId = await ctx.db.insert("obligations", {
 				status: "settled",
@@ -915,6 +920,40 @@ describe("processPayoutBatch — E2E integration", () => {
 			await t.run(async (ctx) => {
 				const lender = await ctx.db.get(seeded.lenderId);
 				expect(lender?.lastPayoutDate).toBe("2026-03-20");
+			});
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it("does not advance lastPayoutDate when a lender has partial batch failures", async () => {
+		vi.useFakeTimers();
+		vi.setSystemTime(new Date("2026-03-20T08:00:00.000Z"));
+
+		try {
+			const t = createActionHarness();
+			const seeded = await seedPayoutScenario(t, {
+				twoMortgages: true,
+				omitMortgageBCashAccounts: true,
+			});
+
+			await expect(
+				t.action(internal.payments.payout.batchPayout.processPayoutBatch, {})
+			).rejects.toThrow(FAILURE_RE);
+
+			await t.run(async (ctx) => {
+				const lender = await ctx.db.get(seeded.lenderId);
+				expect(lender?.lastPayoutDate).toBeUndefined();
+
+				const entryA1 = await ctx.db.get(seeded.entryA1Id);
+				const entryA2 = await ctx.db.get(seeded.entryA2Id);
+				const entryB1 = seeded.entryB1Id
+					? await ctx.db.get(seeded.entryB1Id)
+					: null;
+
+				expect(entryA1?.status).toBe("disbursed");
+				expect(entryA2?.status).toBe("disbursed");
+				expect(entryB1?.status).toBe("pending");
 			});
 		} finally {
 			vi.useRealTimers();

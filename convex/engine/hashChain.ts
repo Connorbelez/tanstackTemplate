@@ -66,10 +66,14 @@ export function buildAuditTrailInsertArgs(entry: {
 		entityType: entry.entityType,
 		eventType: entry.eventType,
 		actorId: entry.actorId,
-		beforeState: JSON.stringify(
-			entry.beforeState ?? { status: entry.previousState }
-		),
-		afterState: JSON.stringify(entry.afterState ?? { status: entry.newState }),
+		beforeState:
+			entry.beforeState === undefined && entry.previousState === "none"
+				? undefined
+				: JSON.stringify(entry.beforeState ?? { status: entry.previousState }),
+		afterState:
+			entry.afterState === undefined && entry.newState === "none"
+				? undefined
+				: JSON.stringify(entry.afterState ?? { status: entry.newState }),
 		canonicalEnvelope: JSON.stringify(canonicalEnvelope),
 		metadata: JSON.stringify({
 			canonicalEnvelope,

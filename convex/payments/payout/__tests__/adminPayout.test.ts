@@ -719,6 +719,11 @@ describe("admin payout — integration tests (triggerImmediatePayout)", () => {
 				secondMortgageId as unknown as string
 			);
 		}
+
+		const lenderAfter = await t.run(async (ctx) =>
+			ctx.db.get(seeded.lenderAId)
+		);
+		expect(lenderAfter?.lastPayoutDate).toBeUndefined();
 	});
 
 	it("handles multiple entries per mortgage by creating one canonical payout transfer per entry", async () => {

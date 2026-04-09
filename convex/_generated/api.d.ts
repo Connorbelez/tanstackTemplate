@@ -18,6 +18,7 @@ import type * as accrual_queryHelpers from "../accrual/queryHelpers.js";
 import type * as accrual_types from "../accrual/types.js";
 import type * as admin_queries from "../admin/queries.js";
 import type * as audit_queries from "../audit/queries.js";
+import type * as auditEvidence_services from "../auditEvidence/services.js";
 import type * as auditLog from "../auditLog.js";
 import type * as auditTrailClient from "../auditTrailClient.js";
 import type * as auth from "../auth.js";
@@ -300,6 +301,7 @@ declare const fullApi: ApiFromModules<{
   "accrual/types": typeof accrual_types;
   "admin/queries": typeof admin_queries;
   "audit/queries": typeof audit_queries;
+  "auditEvidence/services": typeof auditEvidence_services;
   auditLog: typeof auditLog;
   auditTrailClient: typeof auditTrailClient;
   auth: typeof auth;
@@ -4232,6 +4234,7 @@ export declare const components: {
           actorId: string;
           afterState?: string;
           beforeState?: string;
+          canonicalEnvelope?: string;
           entityId: string;
           entityType: string;
           eventType: string;
@@ -4249,7 +4252,9 @@ export declare const components: {
           _id: string;
           actorId: string;
           afterState?: string;
+          archivedAt?: number;
           beforeState?: string;
+          canonicalEnvelope?: string;
           emitFailures?: number;
           emitted: boolean;
           emittedAt?: number;
@@ -4259,6 +4264,8 @@ export declare const components: {
           hash: string;
           metadata?: string;
           prevHash: string;
+          retentionUntilAt: number;
+          sinkReference?: string;
           timestamp: number;
         }>
       >;

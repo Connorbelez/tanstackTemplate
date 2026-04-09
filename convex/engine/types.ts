@@ -169,10 +169,13 @@ export interface AuditJournalEntry {
 	ip?: string;
 	/** WorkOS organization id or other legal-entity scope for compliance exports. */
 	legalEntityId?: string;
+	lenderId?: string;
 	/** Linked record IDs that tie the event to related domain/ledger entities. */
 	linkedRecordIds?: Record<string, unknown>;
 	machineVersion?: string;
+	mortgageId?: string;
 	newState: string;
+	obligationId?: string;
 	organizationId?: string;
 	/** WorkOS organization id for org-scoped audit queries */
 	originSystem: string;
@@ -184,6 +187,7 @@ export interface AuditJournalEntry {
 	sequenceNumber: bigint;
 	sessionId?: string;
 	timestamp: number;
+	transferRequestId?: string;
 }
 
 // ── Entity Type → Table Name Mapping ────────────────────────────────

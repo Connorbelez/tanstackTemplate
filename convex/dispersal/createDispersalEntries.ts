@@ -475,6 +475,16 @@ export const createDispersalEntries = internalMutation({
 			)
 			.first();
 
+		if (
+			existingCalculationRun &&
+			(existingCalculationRun.mortgageId !== args.mortgageId ||
+				existingCalculationRun.obligationId !== args.obligationId)
+		) {
+			throw new ConvexError(
+				`createDispersalEntries: idempotency key collision for calculation run ${existingCalculationRun._id}`
+			);
+		}
+
 		const calculationInputs = {
 			distributableAmount,
 			feeCashApplied,

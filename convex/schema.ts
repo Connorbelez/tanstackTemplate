@@ -1454,7 +1454,10 @@ export default defineSchema({
 		eventType: v.string(),
 		idempotencyKey: v.optional(v.string()),
 		legalEntityId: v.optional(v.string()),
+		lenderId: v.optional(v.string()),
 		linkedRecordIds: v.optional(v.any()),
+		mortgageId: v.optional(v.string()),
+		obligationId: v.optional(v.string()),
 		originSystem: v.string(),
 		payload: v.optional(v.any()),
 		previousState: v.string(),
@@ -1471,11 +1474,16 @@ export default defineSchema({
 		machineVersion: v.optional(v.string()),
 		effectsScheduled: v.optional(v.array(v.string())),
 		timestamp: v.number(),
+		transferRequestId: v.optional(v.string()),
 	})
 		.index("by_event_id", ["eventId"])
 		.index("by_sequence", ["sequenceNumber"])
 		.index("by_entity", ["entityType", "entityId", "timestamp"])
 		.index("by_actor", ["actorId", "timestamp"])
+		.index("by_lender", ["lenderId", "timestamp"])
+		.index("by_mortgage", ["mortgageId", "timestamp"])
+		.index("by_obligation", ["obligationId", "timestamp"])
+		.index("by_transfer_request", ["transferRequestId", "timestamp"])
 		.index("by_type_and_time", ["entityType", "timestamp"])
 		.index("by_org_and_time", ["organizationId", "timestamp"]),
 
@@ -1489,17 +1497,36 @@ export default defineSchema({
 		scope: v.any(),
 		asOf: v.number(),
 		format: v.union(v.literal("json"), v.literal("json_and_csv")),
-		manifestJson: v.string(),
-		eventsJson: v.string(),
-		eventsCsv: v.string(),
-		entitiesCsv: v.string(),
-		balancesCsv: v.string(),
-		linkageCsv: v.string(),
-		reconstructionNotes: v.string(),
+		artifactManifest: v.array(
+			v.object({
+				byteLength: v.number(),
+				checksum: v.string(),
+				chunkCount: v.number(),
+				contentType: v.string(),
+				name: v.string(),
+			})
+		),
 		verificationJson: v.optional(v.string()),
 		createdAt: v.number(),
 		createdBy: v.string(),
 	}).index("by_created_at", ["createdAt"]),
+
+	auditEvidencePackageArtifacts: defineTable({
+		packageId: v.id("auditEvidencePackages"),
+		artifactName: v.string(),
+		byteLength: v.number(),
+		checksum: v.string(),
+		chunkIndex: v.number(),
+		content: v.string(),
+		contentType: v.string(),
+		createdAt: v.number(),
+	})
+		.index("by_package", ["packageId"])
+		.index("by_package_and_artifact", [
+			"packageId",
+			"artifactName",
+			"chunkIndex",
+		]),
 
 	// ══════════════════════════════════════════════════════════
 	// MORTGAGE OWNERSHIP LEDGER

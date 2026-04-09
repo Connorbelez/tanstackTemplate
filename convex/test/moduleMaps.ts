@@ -1,6 +1,8 @@
 type ModuleLoader = () => Promise<unknown>;
 type ModuleMap = Record<string, ModuleLoader>;
 
+process.env.ALLOW_INMEMORY_AUDIT_EVIDENCE_SINK ??= "true";
+
 function withModuleAliases(modules: ModuleMap): ModuleMap {
 	const aliasedModules: ModuleMap = { ...modules };
 

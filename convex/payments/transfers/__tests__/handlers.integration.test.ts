@@ -656,7 +656,7 @@ describe("transfer handlers integration: mutations", () => {
 			await t.finishAllScheduledFunctions(vi.runAllTimers);
 
 			await auth.mutation(
-				api.payments.transfers.mutations.confirmManualTransfer as never,
+				api.payments.transfers.mutations.confirmManualTransfer,
 				{
 					transferId,
 					manualSettlement: {
@@ -667,7 +667,7 @@ describe("transfer handlers integration: mutations", () => {
 						location: "Toronto HQ",
 						evidenceAttachmentIds: ["storage_1", "storage_2"],
 					},
-				} as never
+				}
 			);
 
 			await t.finishAllScheduledFunctions(vi.runAllTimers);

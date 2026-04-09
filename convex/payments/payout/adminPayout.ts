@@ -124,7 +124,7 @@ export const triggerImmediatePayout = adminAction
 		}
 
 		// 6. Update lender's last payout date (if any payouts were made)
-		if (payoutCount > 0) {
+		if (payoutCount > 0 && failures.length === 0) {
 			await ctx.runMutation(updateLenderPayoutDateRef, {
 				lenderId: args.lenderId,
 				payoutDate: today,

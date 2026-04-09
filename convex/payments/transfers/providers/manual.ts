@@ -27,7 +27,11 @@ function isOutboundManualProviderRef(ref: string) {
 
 export class ManualTransferProvider implements TransferProvider {
 	async initiate(request: TransferRequestInput): Promise<InitiateResult> {
-		const settledAt = request.manualSettlement?.settlementOccurredAt;
+		const status = request.direction === "outbound" ? "pending" : "confirmed";
+		const settledAt =
+			status === "confirmed"
+				? (request.manualSettlement?.settlementOccurredAt ?? Date.now())
+				: undefined;
 		const providerData = request.manualSettlement
 			? {
 					method: "manual",
@@ -39,7 +43,7 @@ export class ManualTransferProvider implements TransferProvider {
 			// Inbound manual entries assert receipt at initiation time. Outbound
 			// manual entries require a separate admin confirmation step after the
 			// transfer is initiated.
-			status: request.direction === "outbound" ? "pending" : "confirmed",
+			status,
 			providerData,
 			settledAt,
 		};

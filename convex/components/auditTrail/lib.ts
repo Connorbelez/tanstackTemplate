@@ -58,16 +58,19 @@ async function computeHash(parts: {
 	timestamp: number;
 	afterState: string;
 }): Promise<string> {
-	const payload =
-		parts.canonicalEnvelope ??
-		JSON.stringify({
-			p: parts.prevHash,
-			t: parts.eventType,
-			e: parts.entityId,
-			a: parts.actorId,
-			ts: parts.timestamp,
-			s: parts.afterState,
-		});
+	const payload = parts.canonicalEnvelope
+		? JSON.stringify({
+				p: parts.prevHash,
+				c: parts.canonicalEnvelope,
+			})
+		: JSON.stringify({
+				p: parts.prevHash,
+				t: parts.eventType,
+				e: parts.entityId,
+				a: parts.actorId,
+				ts: parts.timestamp,
+				s: parts.afterState,
+			});
 
 	const data = new TextEncoder().encode(payload);
 	const hashBuffer = await crypto.subtle.digest("SHA-256", data);
@@ -343,6 +346,15 @@ export const emitPending = mutation({
 		for (const entry of pending) {
 			const event = await ctx.db.get(entry.eventId);
 			if (!event) {
+				await ctx.db.patch(entry._id, {
+					status: "failed" as const,
+					emitFailures: entry.emitFailures + 1,
+					lastFailureAt: emittedAt,
+					lastFailureReason: `Missing audit_event ${entry.eventId}`,
+				});
+				console.warn(
+					`[auditTrail.emitPending] Missing audit_event for outbox ${entry._id}; marked failed.`
+				);
 				continue;
 			}
 			const sinkResult = await emitAuditEvidence(ctx, {

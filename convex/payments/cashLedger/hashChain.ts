@@ -81,7 +81,10 @@ export function buildCashLedgerAuditArgs(
 		}),
 		canonicalEnvelope: JSON.stringify(canonicalEnvelope),
 		metadata: JSON.stringify({
+			causedBy: entry.causedBy ? `${entry.causedBy}` : undefined,
 			canonicalEnvelope,
+			effectiveDate: entry.effectiveDate,
+			reason: entry.reason,
 		}),
 		timestamp: entry.timestamp,
 	};

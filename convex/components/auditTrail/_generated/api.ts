@@ -11,6 +11,7 @@
 import type * as crons from "../crons.js";
 import type * as internal_ from "../internal.js";
 import type * as lib from "../lib.js";
+import type * as sink from "../sink.js";
 
 import type {
   ApiFromModules,
@@ -23,6 +24,7 @@ const fullApi: ApiFromModules<{
   crons: typeof crons;
   internal: typeof internal_;
   lib: typeof lib;
+  sink: typeof sink;
 }> = anyApi as any;
 
 /**

@@ -48,10 +48,18 @@ function unixMsToBusinessDate(timestamp: number) {
 async function getNextAuditJournalSequenceNumber(
 	ctx: Pick<MutationCtx, "db">
 ): Promise<bigint> {
-	const existingCounter = await ctx.db
+	const existingCounters = await ctx.db
 		.query("auditJournalSequenceCounters")
 		.withIndex("by_name", (q) => q.eq("name", AUDIT_JOURNAL_SEQUENCE_NAME))
-		.first();
+		.collect();
+
+	if (existingCounters.length > 1) {
+		throw new Error(
+			`Multiple audit journal sequence counters found for ${AUDIT_JOURNAL_SEQUENCE_NAME}`
+		);
+	}
+
+	const existingCounter = existingCounters[0];
 
 	if (existingCounter) {
 		const nextSequenceNumber = existingCounter.nextSequenceNumber;
@@ -67,11 +75,38 @@ async function getNextAuditJournalSequenceNumber(
 		nextSequenceNumber: 2n,
 		updatedAt: Date.now(),
 	});
+
+	const initializedCounters = await ctx.db
+		.query("auditJournalSequenceCounters")
+		.withIndex("by_name", (q) => q.eq("name", AUDIT_JOURNAL_SEQUENCE_NAME))
+		.collect();
+
+	if (initializedCounters.length !== 1) {
+		throw new Error(
+			`Failed to initialize a singleton audit journal sequence counter for ${AUDIT_JOURNAL_SEQUENCE_NAME}`
+		);
+	}
+
 	return 1n;
 }
 
 function defaultStateSnapshot(state: string) {
 	return { status: state };
+}
+
+function resolveScopedAuditId(
+	entry: Pick<
+		AuditJournalEntryInput,
+		"entityId" | "entityType" | "linkedRecordIds"
+	>,
+	key: "lenderId" | "mortgageId" | "obligationId" | "transferRequestId",
+	entityType: AuditJournalEntryInput["entityType"]
+) {
+	const linkedValue = entry.linkedRecordIds?.[key];
+	if (linkedValue != null) {
+		return `${linkedValue}`;
+	}
+	return entry.entityType === entityType ? entry.entityId : undefined;
 }
 
 function normalizeAuditJournalEntry(
@@ -95,10 +130,18 @@ function normalizeAuditJournalEntry(
 		eventCategory: entry.eventCategory ?? "governed_transition",
 		eventId: entry.eventId ?? randomAuditEventId(),
 		legalEntityId: entry.legalEntityId ?? entry.organizationId,
+		lenderId: resolveScopedAuditId(entry, "lenderId", "lender"),
 		linkedRecordIds: entry.linkedRecordIds ?? { entityId: entry.entityId },
+		mortgageId: resolveScopedAuditId(entry, "mortgageId", "mortgage"),
+		obligationId: resolveScopedAuditId(entry, "obligationId", "obligation"),
 		originSystem: entry.originSystem ?? "convex",
 		requestId: entry.requestId ?? entry.sessionId,
 		sequenceNumber,
+		transferRequestId: resolveScopedAuditId(
+			entry,
+			"transferRequestId",
+			"transfer"
+		),
 	};
 }
 

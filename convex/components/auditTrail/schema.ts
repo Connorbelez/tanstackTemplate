@@ -54,8 +54,11 @@ export default defineSchema({
 		sinkReference: v.string(),
 		contentType: v.string(),
 		payload: v.string(),
+		archivedAt: v.optional(v.number()),
+		retentionUntilAt: v.number(),
 		createdAt: v.number(),
 	})
 		.index("by_event", ["eventId"])
-		.index("by_idempotency_key", ["idempotencyKey"]),
+		.index("by_idempotency_key", ["idempotencyKey"])
+		.index("by_retention", ["retentionUntilAt"]),
 });
