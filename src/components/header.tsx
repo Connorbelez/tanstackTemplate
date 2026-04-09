@@ -2,7 +2,13 @@ import { Link } from "@tanstack/react-router";
 import ThemeToggle from "./theme-toggle";
 import WorkOSHeader from "./workos-user.tsx";
 
-const demoSections = [
+type DemoLink = { label: string; to: string } | { label: string; href: string };
+interface DemoSection {
+	label: string;
+	links: DemoLink[];
+}
+
+const demoSections: DemoSection[] = [
 	{
 		label: "Frontend",
 		links: [
@@ -52,7 +58,7 @@ const demoSections = [
 	{
 		label: "Platform",
 		links: [
-			{ href: "/demo/amps", label: "AMPS Demo" },
+			{ to: "/demo/amps", label: "AMPS Demo" },
 			{ to: "/demo/document-engine", label: "Document Engine" },
 			{ to: "/demo/audit-traceability", label: "Audit & Traceability" },
 			{ to: "/demo/governed-transitions", label: "Governed Transitions" },
