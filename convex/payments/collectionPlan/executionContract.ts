@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import type { Id } from "../../_generated/dataModel";
 import type { CommandSource } from "../../engine/types";
+import type { ProviderCode } from "../transfers/types";
 import { obligationTypeToTransferType } from "../transfers/types";
 
 export const executionTriggerSourceValues = [
@@ -67,6 +68,7 @@ export type ExecutePlanEntryReasonCode =
 	| "plan_entry_not_executable_state"
 	| "plan_entry_not_found"
 	| "plan_entry_already_executed"
+	| "unsupported_plan_entry_method"
 	| "transfer_handoff_failed";
 
 export type PlanEntryExecutionOutcome =
@@ -137,6 +139,7 @@ export interface TransferHandoffRequest {
 	obligationIds: Id<"obligations">[];
 	planEntryId: Id<"collectionPlanEntries">;
 	primaryObligationType?: string;
+	providerCode: ProviderCode;
 	source: CommandSource;
 }
 
@@ -154,6 +157,12 @@ export function buildExecutionSource(
 				channel: "admin_dashboard",
 				actorId: args.requestedByActorId,
 				actorType: "admin",
+			};
+		case "workflow_replay":
+			return {
+				channel: "simulation",
+				actorId: args.requestedByActorId,
+				actorType: "system",
 			};
 		case "migration_backfill":
 			return {

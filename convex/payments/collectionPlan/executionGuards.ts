@@ -90,10 +90,6 @@ export function classifyExecutionEligibility(args: {
 		return null;
 	}
 
-	if (request.dryRun) {
-		return null;
-	}
-
 	if (planEntry.status !== "planned") {
 		return buildNotEligibleResult({
 			executionRecordedAt,

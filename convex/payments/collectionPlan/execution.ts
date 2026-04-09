@@ -11,6 +11,7 @@
 
 import { v } from "convex/values";
 import { internal } from "../../_generated/api";
+import type { Doc, Id } from "../../_generated/dataModel";
 import type { MutationCtx } from "../../_generated/server";
 import { auditLog } from "../../auditLog";
 import { convex } from "../../fluent";
@@ -40,9 +41,15 @@ import {
 } from "./executionGuards";
 
 function mapMethodToProviderCode(method: string): ProviderCode {
-	return (PROVIDER_CODES as readonly string[]).includes(method)
-		? (method as ProviderCode)
-		: "manual";
+	if ((PROVIDER_CODES as readonly string[]).includes(method)) {
+		return method as ProviderCode;
+	}
+
+	if (method === "rotessa_pad") {
+		return "pad_rotessa";
+	}
+
+	throw new Error(`Unsupported collection plan method "${method}".`);
 }
 
 function buildAuditActorId(
@@ -52,6 +59,96 @@ function buildAuditActorId(
 		args.requestedByActorId ??
 		(args.triggerSource === "admin_manual" ? "admin" : "system")
 	);
+}
+
+interface TransferHandoffContextSuccess {
+	borrowerId: Id<"borrowers">;
+	mortgageId: Id<"mortgages">;
+	primaryObligationType?: string;
+	providerCode: ProviderCode;
+	source: ReturnType<typeof buildExecutionSource>;
+}
+
+type TransferHandoffContext =
+	| TransferHandoffContextSuccess
+	| {
+			reasonCode:
+				| "missing_execution_metadata"
+				| "unsupported_plan_entry_method";
+			reasonDetail: string;
+	  };
+
+function prepareTransferHandoffContext(args: {
+	obligations: Doc<"obligations">[];
+	planEntry: Doc<"collectionPlanEntries">;
+	triggerSource: ExecutePlanEntryArgs["triggerSource"];
+	requestedByActorId?: string;
+}): TransferHandoffContext {
+	const firstObligation = args.obligations[0];
+	if (!(firstObligation?.borrowerId && firstObligation.mortgageId)) {
+		return {
+			reasonCode: "missing_execution_metadata" as const,
+			reasonDetail:
+				"Plan entry obligations do not provide the borrower or mortgage context required for Payment Rails handoff.",
+		};
+	}
+
+	for (const obligation of args.obligations.slice(1)) {
+		if (
+			obligation.borrowerId !== firstObligation.borrowerId ||
+			obligation.mortgageId !== firstObligation.mortgageId ||
+			obligation.type !== firstObligation.type
+		) {
+			return {
+				reasonCode: "missing_execution_metadata" as const,
+				reasonDetail:
+					"Plan entry obligations must share one borrower, one mortgage, and one primary obligation type before AMPS can hand off to Payment Rails.",
+			};
+		}
+	}
+
+	let providerCode: ProviderCode;
+	try {
+		providerCode = mapMethodToProviderCode(args.planEntry.method);
+	} catch {
+		return {
+			reasonCode: "unsupported_plan_entry_method" as const,
+			reasonDetail: `Collection plan entry method "${args.planEntry.method}" is not supported for Payment Rails handoff.`,
+		};
+	}
+
+	return {
+		borrowerId: firstObligation.borrowerId,
+		mortgageId: firstObligation.mortgageId,
+		primaryObligationType: firstObligation.type,
+		providerCode,
+		source: buildExecutionSource({
+			triggerSource: args.triggerSource,
+			requestedByActorId: args.requestedByActorId,
+		}),
+	};
+}
+
+function buildTransferHandoffRequest(args: {
+	context: TransferHandoffContextSuccess;
+	collectionAttemptId: Id<"collectionAttempts">;
+	idempotencyKey: string;
+	planEntry: Doc<"collectionPlanEntries">;
+}) {
+	return {
+		amount: args.planEntry.amount,
+		borrowerId: args.context.borrowerId,
+		collectionAttemptId: args.collectionAttemptId,
+		counterpartyId: `${args.context.borrowerId}`,
+		idempotencyKey: args.idempotencyKey,
+		method: args.planEntry.method,
+		mortgageId: args.context.mortgageId,
+		obligationIds: args.planEntry.obligationIds,
+		primaryObligationType: args.context.primaryObligationType,
+		providerCode: args.context.providerCode,
+		planEntryId: args.planEntry._id,
+		source: args.context.source,
+	};
 }
 
 async function logPlanEntryExecutionAudit(
@@ -133,19 +230,22 @@ const stagePlanEntryExecution = convex
 
 		const { existingAttempt, obligations, planEntry } = loaded;
 		if (existingAttempt) {
-			if (planEntry.collectionAttemptId !== existingAttempt._id) {
+			const reconciledExecutionIdempotencyKey =
+				existingAttempt.executionIdempotencyKey ?? normalizedIdempotencyKey;
+			const reconciledExecutedAt =
+				existingAttempt.executionRequestedAt ?? existingAttempt.initiatedAt;
+			if (
+				planEntry.collectionAttemptId !== existingAttempt._id ||
+				planEntry.executedAt !== reconciledExecutedAt ||
+				planEntry.executionIdempotencyKey !==
+					reconciledExecutionIdempotencyKey ||
+				planEntry.status !== "executing"
+			) {
 				await ctx.db.patch(planEntry._id, {
 					collectionAttemptId: existingAttempt._id,
-					executedAt:
-						planEntry.executedAt ??
-						existingAttempt.executionRequestedAt ??
-						existingAttempt.initiatedAt,
-					executionIdempotencyKey:
-						planEntry.executionIdempotencyKey ??
-						existingAttempt.executionIdempotencyKey ??
-						normalizedIdempotencyKey,
-					status:
-						planEntry.status === "planned" ? "executing" : planEntry.status,
+					executedAt: reconciledExecutedAt,
+					executionIdempotencyKey: reconciledExecutionIdempotencyKey,
+					status: "executing",
 				});
 			}
 
@@ -153,8 +253,7 @@ const stagePlanEntryExecution = convex
 				executionRecordedAt,
 				idempotencyKey: normalizedIdempotencyKey,
 				planEntryId: planEntry._id,
-				planEntryStatusAfter:
-					planEntry.status === "planned" ? "executing" : planEntry.status,
+				planEntryStatusAfter: "executing",
 				collectionAttemptId: existingAttempt._id,
 				attemptStatusAfter: existingAttempt.status,
 				transferRequestId: existingAttempt.transferRequestId,
@@ -162,9 +261,43 @@ const stagePlanEntryExecution = convex
 				reasonDetail:
 					"Collection plan entry already has a business collection attempt.",
 			});
+			if (existingAttempt.transferRequestId) {
+				await logPlanEntryExecutionAudit(ctx, args, result);
+				return {
+					result,
+				};
+			}
+
+			const handoffContext = prepareTransferHandoffContext({
+				obligations,
+				planEntry,
+				triggerSource: args.triggerSource,
+				requestedByActorId: args.requestedByActorId,
+			});
+			if ("reasonCode" in handoffContext) {
+				const rejected = buildRejectedResult({
+					executionRecordedAt,
+					idempotencyKey: normalizedIdempotencyKey,
+					planEntryId: planEntry._id,
+					planEntryStatusAfter: "executing",
+					reasonCode: handoffContext.reasonCode,
+					reasonDetail: handoffContext.reasonDetail,
+				});
+				await logPlanEntryExecutionAudit(ctx, args, rejected);
+				return {
+					result: rejected,
+				};
+			}
+
 			await logPlanEntryExecutionAudit(ctx, args, result);
 			return {
 				result,
+				transferHandoffRequest: buildTransferHandoffRequest({
+					context: handoffContext,
+					collectionAttemptId: existingAttempt._id,
+					idempotencyKey: reconciledExecutionIdempotencyKey,
+					planEntry,
+				}),
 			};
 		}
 
@@ -195,16 +328,20 @@ const stagePlanEntryExecution = convex
 			};
 		}
 
-		const firstObligation = obligations[0];
-		if (!(firstObligation?.borrowerId && firstObligation.mortgageId)) {
+		const handoffContext = prepareTransferHandoffContext({
+			obligations,
+			planEntry,
+			triggerSource: args.triggerSource,
+			requestedByActorId: args.requestedByActorId,
+		});
+		if ("reasonCode" in handoffContext) {
 			const result = buildRejectedResult({
 				executionRecordedAt,
 				idempotencyKey: normalizedIdempotencyKey,
 				planEntryId: planEntry._id,
 				planEntryStatusAfter: planEntry.status,
-				reasonCode: "missing_execution_metadata",
-				reasonDetail:
-					"Plan entry obligations do not provide the borrower or mortgage context required for Payment Rails handoff.",
+				reasonCode: handoffContext.reasonCode,
+				reasonDetail: handoffContext.reasonDetail,
 			});
 			await logPlanEntryExecutionAudit(ctx, args, result);
 			return {
@@ -258,22 +395,12 @@ const stagePlanEntryExecution = convex
 
 		return {
 			result,
-			transferHandoffRequest: {
-				amount: planEntry.amount,
-				borrowerId: firstObligation.borrowerId,
+			transferHandoffRequest: buildTransferHandoffRequest({
+				context: handoffContext,
 				collectionAttemptId: attemptId,
-				counterpartyId: `${firstObligation.borrowerId}`,
 				idempotencyKey: normalizedIdempotencyKey,
-				method: planEntry.method,
-				mortgageId: firstObligation.mortgageId,
-				obligationIds: planEntry.obligationIds,
-				primaryObligationType: firstObligation.type,
-				planEntryId: planEntry._id,
-				source: buildExecutionSource({
-					triggerSource: args.triggerSource,
-					requestedByActorId: args.requestedByActorId,
-				}),
-			},
+				planEntry,
+			}),
 		};
 	});
 
@@ -342,8 +469,14 @@ export const executePlanEntry = convex
 			args
 		);
 		const { result, transferHandoffRequest } = staged;
+		if (
+			result.outcome !== "attempt_created" &&
+			result.outcome !== "already_executed"
+		) {
+			return result;
+		}
 
-		if (result.outcome !== "attempt_created" || !transferHandoffRequest) {
+		if (!transferHandoffRequest || result.transferRequestId) {
 			return result;
 		}
 
@@ -364,7 +497,7 @@ export const executePlanEntry = convex
 					planEntryId: transferHandoffRequest.planEntryId,
 					collectionAttemptId: transferHandoffRequest.collectionAttemptId,
 					borrowerId: transferHandoffRequest.borrowerId,
-					providerCode: mapMethodToProviderCode(transferHandoffRequest.method),
+					providerCode: transferHandoffRequest.providerCode,
 					idempotencyKey: buildTransferHandoffIdempotencyKey(
 						transferHandoffRequest.planEntryId
 					),

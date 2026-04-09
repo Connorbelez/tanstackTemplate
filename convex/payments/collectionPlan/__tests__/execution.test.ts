@@ -22,6 +22,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
 	createGovernedTestConvex,
 	seedBorrowerProfile,
+	seedCollectionAttempt,
 	seedMortgage,
 	seedObligation,
 	seedPlanEntry,
@@ -82,6 +83,18 @@ async function getTransferForAttempt(
 			.query("transferRequests")
 			.filter((q) => q.eq(q.field("collectionAttemptId"), attemptId))
 			.first()
+	);
+}
+
+async function getTransferCountForPlanEntry(
+	t: GovernedTestConvex,
+	planEntryId: Id<"collectionPlanEntries">
+) {
+	return t.run(async (ctx) =>
+		ctx.db
+			.query("transferRequests")
+			.filter((q) => q.eq(q.field("planEntryId"), planEntryId))
+			.collect()
 	);
 }
 
@@ -169,6 +182,147 @@ describe("executePlanEntry", () => {
 			first.collectionAttemptId as Id<"collectionAttempts">
 		);
 		expect(transfer?._id).toBe(first.transferRequestId);
+	});
+
+	it("reconciles an existing attempt when the plan entry has no collectionAttemptId", async () => {
+		const t = createGovernedTestConvex();
+		const { planEntryId, mortgageId, borrowerId } =
+			await seedExecutionFixture(t);
+		const existingAttemptId = await seedCollectionAttempt(t, {
+			planEntryId,
+			method: "manual",
+			amount: 300_000,
+		});
+
+		const result = await t.action(
+			internal.payments.collectionPlan.execution.executePlanEntry,
+			{
+				planEntryId,
+				triggerSource: "workflow_replay",
+				requestedAt: Date.now(),
+				idempotencyKey: "exec-plan-entry-reconcile-1",
+				requestedByActorType: "workflow",
+				requestedByActorId: "workflow:collection-plan-replay",
+			}
+		);
+
+		expect(result.outcome).toBe("already_executed");
+		expect(result.collectionAttemptId).toBe(existingAttemptId);
+		expect(result.transferRequestId).toBeTruthy();
+
+		const planEntry = await t.run((ctx) => ctx.db.get(planEntryId));
+		expect(planEntry?.collectionAttemptId).toBe(existingAttemptId);
+		expect(planEntry?.executedAt).toBeDefined();
+		expect(planEntry?.executionIdempotencyKey).toBe(
+			"exec-plan-entry-reconcile-1"
+		);
+		expect(planEntry?.status).toBe("executing");
+
+		const attempts = await getAttemptsForPlanEntry(t, planEntryId);
+		expect(attempts).toHaveLength(1);
+		expect(attempts[0]?._id).toBe(existingAttemptId);
+		expect(attempts[0]?.transferRequestId).toBe(result.transferRequestId);
+
+		const transfer = await getTransferForAttempt(
+			t,
+			existingAttemptId as Id<"collectionAttempts">
+		);
+		expect(transfer?._id).toBe(result.transferRequestId);
+		expect(transfer?.planEntryId).toBe(planEntryId);
+		expect(transfer?.mortgageId).toBe(mortgageId);
+		expect(transfer?.borrowerId).toBe(borrowerId);
+	});
+
+	it("returns noop for dry runs without creating attempts or transfers", async () => {
+		const t = createGovernedTestConvex();
+		const { planEntryId } = await seedExecutionFixture(t);
+
+		const result = await t.action(
+			internal.payments.collectionPlan.execution.executePlanEntry,
+			{
+				planEntryId,
+				triggerSource: "system_scheduler",
+				requestedAt: Date.now(),
+				idempotencyKey: "exec-plan-entry-dry-run-1",
+				dryRun: true,
+			}
+		);
+
+		expect(result.outcome).toBe("noop");
+		expect(result.reasonCode).toBe("dry_run_requested");
+		expect(result.collectionAttemptId).toBeUndefined();
+
+		const attempts = await getAttemptsForPlanEntry(t, planEntryId);
+		expect(attempts).toHaveLength(0);
+
+		const transfers = await getTransferCountForPlanEntry(t, planEntryId);
+		expect(transfers).toHaveLength(0);
+	});
+
+	it("rejects plan entries with mixed obligation handoff context", async () => {
+		const t = createGovernedTestConvex();
+		const borrowerId = await seedBorrowerProfile(t);
+		const otherBorrowerId = await seedBorrowerProfile(t);
+		const mortgageId = await seedMortgage(t);
+		const otherMortgageId = await seedMortgage(t);
+		const firstObligationId = await seedObligation(t, mortgageId, borrowerId, {
+			status: "due",
+		});
+		const secondObligationId = await seedObligation(
+			t,
+			otherMortgageId,
+			otherBorrowerId,
+			{
+				status: "due",
+			}
+		);
+		const planEntryId = await seedPlanEntry(t, {
+			obligationIds: [firstObligationId, secondObligationId],
+			amount: 300_000,
+			method: "manual",
+			scheduledDate: Date.now() - 1000,
+			status: "planned",
+			source: "default_schedule",
+		});
+
+		const result = await t.action(
+			internal.payments.collectionPlan.execution.executePlanEntry,
+			{
+				planEntryId,
+				triggerSource: "system_scheduler",
+				requestedAt: Date.now(),
+				idempotencyKey: "exec-plan-entry-mixed-context-1",
+			}
+		);
+
+		expect(result.outcome).toBe("rejected");
+		expect(result.reasonCode).toBe("missing_execution_metadata");
+
+		const attempts = await getAttemptsForPlanEntry(t, planEntryId);
+		expect(attempts).toHaveLength(0);
+	});
+
+	it("rejects unsupported plan entry methods instead of defaulting to manual", async () => {
+		const t = createGovernedTestConvex();
+		const { planEntryId } = await seedExecutionFixture(t, {
+			method: "legacy_wire",
+		});
+
+		const result = await t.action(
+			internal.payments.collectionPlan.execution.executePlanEntry,
+			{
+				planEntryId,
+				triggerSource: "system_scheduler",
+				requestedAt: Date.now(),
+				idempotencyKey: "exec-plan-entry-unsupported-method-1",
+			}
+		);
+
+		expect(result.outcome).toBe("rejected");
+		expect(result.reasonCode).toBe("unsupported_plan_entry_method");
+
+		const attempts = await getAttemptsForPlanEntry(t, planEntryId);
+		expect(attempts).toHaveLength(0);
 	});
 
 	it("returns rejected when the plan entry does not exist", async () => {
