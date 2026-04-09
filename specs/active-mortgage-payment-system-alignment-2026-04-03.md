@@ -42,12 +42,12 @@ Primary sources:
 
 ### What is still missing
 
-- Canonical production plan-entry execution into collection attempts
 - Balance pre-check capability
 - Borrower reschedule capability
 - Workout-plan capability
 - Admin rule-management capability
 - Canonical public/admin Collection Plan read/write surfaces
+- Operational hardening and broader coverage for the canonical plan-entry execution spine
 
 ### Spec stale vs code drift
 
@@ -99,7 +99,7 @@ Primary sources:
 | Layer 3 Collection Attempts | Collection Attempt layer is where payment methods/providers plug in | `convex/payments/methods/interface.ts`, `convex/payments/transfers/interface.ts`, `convex/payments/transfers/providers/adapter.ts`, `convex/engine/effects/collectionAttempt.ts` | Implemented with acceptable variance | Boundary evolved: attempts now bridge into `transferRequests` / `TransferProvider`. Legacy `PaymentMethod` remains for older borrower-collection path and adapter support. | Spec cleanup and code convergence |
 | Cross-layer flow | Confirmed collection posts cash receipt against receivable | `convex/engine/effects/collectionAttempt.ts`, `convex/payments/cashLedger/integrations.ts`, `convex/payments/transfers/__tests__/inboundFlow.integration.test.ts` | Implemented | Cash posting happens in collection-attempt path; bridged transfer skips duplicate posting. | None |
 | Cross-layer flow | Ledger does not see plan entries or balance checks | `convex/payments/cashLedger/integrations.ts`, `convex/engine/effects/collectionAttempt.ts` | Implemented with acceptable variance | Ledger-facing code works from obligation/attempt/transfer settlement semantics, not plan-entry strategy logic. | None |
-| Cross-layer flow | Collection Plan entries eventually spawn Collection Attempts in production | No canonical production orchestrator found; attempts are seeded or inserted in tests; transfer domain has its own initiation flows | Missing | This is the largest operational gap in the payment architecture. | Code |
+| Cross-layer flow | Collection Plan entries eventually spawn Collection Attempts in production | `convex/payments/collectionPlan/execution.ts`, `convex/payments/collectionPlan/executionGuards.ts`, `convex/payments/collectionPlan/executionContract.ts` | Implemented with acceptable variance | The canonical plan-entry -> collection-attempt execution spine now exists; remaining work is coverage and operational hardening. | None |
 | Integration | Mortgage Ownership Ledger boundary is accrual + cash receipt only | `convex/payments/obligations/generateImpl.ts`, `convex/payments/cashLedger/integrations.ts` | Implemented with acceptable variance | Repo uses cash ledger rather than ownership ledger for money truth, but boundary intent is preserved: accrual and confirmed cash settlement drive postings. | Spec wording should reference cash ledger explicitly where appropriate |
 | Integration | Unified Borrower Payment Rails plug into Collection Attempt layer | `convex/payments/methods/*`, `convex/payments/transfers/*`, `convex/payments/transfers/providers/adapter.ts` | Partial | Intent is preserved through adapter/bridge, but the repo currently carries two abstractions. | Code and spec |
 | Integration | Mortgage activation generates obligations, then scheduling strategy | `convex/seed/seedPaymentData.ts`, `convex/payments/obligations/generate.ts`, `convex/payments/collectionPlan/rules/scheduleRule.ts` | Partial | Repo does generate obligations first, but initial plan entries are inserted directly in seed/bootstrap path instead of flowing through `ScheduleRule`. | Code |
@@ -227,14 +227,15 @@ No clear P0 boundary violation was found.
 
 The repo’s biggest issues are missing spine and incomplete surface area rather than outright concern collapse.
 
-### P1 Missing Core Spine
+### P1 Execution Spine Hardening
 
-#### P1-1: Build canonical production execution from Collection Plan entry to Collection Attempt
+#### P1-1: Validate canonical production execution from Collection Plan entry to Collection Attempt
 
-- Problem: There is no clear production path that picks up executable plan entries and spawns governed collection attempts.
+- Problem: The canonical plan-entry execution spine exists, but it still needs broader coverage around replay safety, staging, and downstream handoff behavior.
 - Evidence:
-  - no canonical mutation/action found that creates `collectionAttempts` from due plan entries
-  - most attempt creation occurs in tests or direct inserts
+  - `convex/payments/collectionPlan/execution.ts`
+  - `convex/payments/collectionPlan/executionGuards.ts`
+  - `convex/payments/collectionPlan/executionContract.ts`
 - Likely owning areas:
   - `convex/payments/collectionPlan/*`
   - `convex/engine/commands.ts`
@@ -358,8 +359,8 @@ These are the main public or cross-module contracts that should be evaluated nex
   - `obligations`
 - `convex/seed/seedPaymentData.ts`
   - current activation/bootstrap handoff shape
-- future plan-entry execution contract
-  - missing canonical API today
+- canonical plan-entry execution contract
+  - implemented via `executePlanEntry` and `stagePlanEntryExecution`
 
 ## Recommendation Summary
 

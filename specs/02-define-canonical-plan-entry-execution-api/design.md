@@ -81,12 +81,12 @@ Existing fields remain the primary business execution surface:
 ## Architecture
 
 ### Data Flow
-`executePlanEntry` internal mutation
+`executePlanEntry` internal action
 -> load + validate plan entry
--> replay and eligibility guards
--> create Collection Attempt
--> consume / link plan entry
--> optional transfer-request creation through Unified Payment Rails contract
+-> call `stagePlanEntryExecution` internal mutation inside the transaction boundary
+-> create Collection Attempt and consume / link the plan entry
+-> commit the transaction
+-> create transfer-request handoff through the Unified Payment Rails contract
 -> return structured result
 
 ### API Surface
@@ -94,19 +94,20 @@ Existing fields remain the primary business execution surface:
 #### Writes
 | Function | Args | Returns | Description |
 |----------|------|---------|-------------|
-| `executePlanEntry` | canonical execution input | structured outcome union | Internal AMPS entrypoint for one plan-entry execution request |
+| `executePlanEntry` | canonical execution input | structured outcome union | Internal AMPS action entrypoint for one plan-entry execution request |
 
 #### Shared modules
 | Module | Responsibility |
 |--------|----------------|
 | `executionContract.ts` | input validators, shared result types, reason codes, helper builders |
 | `executionGuards.ts` | eligibility and replay classification |
-| `execution.ts` | internal command and orchestration |
+| `execution.ts` | internal action orchestration |
+| `stagePlanEntryExecution` | internal mutation that stages plan-entry execution and persists attempt linkage |
 
 ## Implementation Decisions
 
 ### Internal-first command
-This issue ships an internal AMPS command first. Scheduler wiring and operator wrappers remain downstream work, but both will converge on the same internal callable.
+This issue ships an internal AMPS action first. Scheduler wiring and operator wrappers remain downstream work, but both will converge on the same internal callable. The transfer-request handoff stays outside the transaction boundary so staging and downstream provider work remain separable.
 
 ### Attempt-first persistence
 The Collection Attempt is created before Payment Rails handoff. If handoff fails, the attempt remains durable and the result surfaces the degraded handoff outcome.

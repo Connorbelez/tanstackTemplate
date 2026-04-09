@@ -25,9 +25,9 @@ without changing runtime behavior.
 | Requirement | Status | Evidence |
 |---|---|---|
 | REQ-1 Shared vocabulary alignment | Met | Updated repo-facing comments/docs to keep `Collection Attempt` as the business execution record and avoid collapsed abstractions |
-| REQ-2 Canonical `TransferProvider` guidance | Met | Updated [convex/payments/transfers/interface.ts](/Users/connor/Dev/tanstackFairLend/fairlendapp/convex/payments/transfers/interface.ts) and related docs |
-| REQ-3 Transitional `PaymentMethod` guidance | Met | Updated [convex/payments/methods/interface.ts](/Users/connor/Dev/tanstackFairLend/fairlendapp/convex/payments/methods/interface.ts) and compatibility surfaces |
-| REQ-4 Canonical path and lifecycle boundary | Met | Updated [docs/cash-ledger-developer-guide.md](/Users/connor/Dev/tanstackFairLend/fairlendapp/docs/cash-ledger-developer-guide.md) and payment-rails design docs |
+| REQ-2 Canonical `TransferProvider` guidance | Met | Updated [convex/payments/transfers/interface.ts](../../convex/payments/transfers/interface.ts) and related docs |
+| REQ-3 Transitional `PaymentMethod` guidance | Met | Updated [convex/payments/methods/interface.ts](../../convex/payments/methods/interface.ts) and compatibility surfaces |
+| REQ-4 Canonical path and lifecycle boundary | Met | Updated [docs/cash-ledger-developer-guide.md](../../docs/cash-ledger-developer-guide.md) and payment-rails design docs |
 
 ### Use Cases
 | Use Case | Status | Notes |
