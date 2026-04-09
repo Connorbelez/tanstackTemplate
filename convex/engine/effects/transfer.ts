@@ -121,6 +121,37 @@ async function appendTransferMutationAuditEntry(
 	});
 }
 
+async function logTransferIntegrityDefect(
+	ctx: MutationCtx,
+	args: {
+		collectionAttemptId: string;
+		message: string;
+		metadata?: Record<string, unknown>;
+		source: CommandSource;
+		transferId: Id<"transferRequests">;
+	}
+) {
+	try {
+		await auditLog.log(ctx, {
+			action:
+				"transfer.integrity_defect.collection_attempt_reconciliation_failed",
+			actorId: args.source.actorId ?? "system",
+			resourceType: "transferRequest",
+			resourceId: args.transferId,
+			severity: "error",
+			metadata: {
+				collectionAttemptId: args.collectionAttemptId,
+				...args.metadata,
+			},
+		});
+	} catch (error) {
+		console.error(
+			`[publishTransferConfirmed] Failed to record integrity defect for transfer ${args.transferId}: ${args.message}`,
+			error
+		);
+	}
+}
+
 async function recordCashJournalLink(
 	ctx: MutationCtx,
 	args: {
@@ -274,31 +305,51 @@ export const publishTransferConfirmed = internalMutation({
 		}
 
 		if (direction === "inbound" && transfer.collectionAttemptId) {
-			const reconciledAttempt = await reconcileAttemptLinkedInboundSettlement(
-				ctx,
-				{
-					transfer,
-					settledAt,
-					source: args.source,
-				}
-			);
-			if (!reconciledAttempt) {
-				await auditLog.log(ctx, {
-					action:
-						"transfer.integrity_defect.collection_attempt_reconciliation_failed",
-					actorId: args.source.actorId ?? "system",
-					resourceType: "transferRequest",
-					resourceId: args.entityId,
-					severity: "error",
-					metadata: {
-						collectionAttemptId: transfer.collectionAttemptId,
-						reason:
+			try {
+				const reconciledAttempt = await reconcileAttemptLinkedInboundSettlement(
+					ctx,
+					{
+						transfer,
+						settledAt,
+						source: args.source,
+					}
+				);
+				if (!reconciledAttempt) {
+					await logTransferIntegrityDefect(ctx, {
+						collectionAttemptId: `${transfer.collectionAttemptId}`,
+						message:
 							"Transfer settlement posted authoritative ledger state, but linked collection attempt reconciliation failed.",
+						metadata: {
+							reason:
+								"Transfer settlement posted authoritative ledger state, but linked collection attempt reconciliation failed.",
+							settledAt,
+						},
+						source: args.source,
+						transferId: args.entityId,
+					});
+					console.error(
+						`[publishTransferConfirmed] Linked collection attempt ${transfer.collectionAttemptId} could not be settled for transfer ${args.entityId}. Cash posting preserved; manual investigation required.`
+					);
+				}
+			} catch (error) {
+				const reconciliationError =
+					error instanceof Error ? error.message : String(error);
+				await logTransferIntegrityDefect(ctx, {
+					collectionAttemptId: `${transfer.collectionAttemptId}`,
+					message:
+						"Transfer settlement posted authoritative ledger state, but linked collection attempt reconciliation threw.",
+					metadata: {
+						reason:
+							"Transfer settlement posted authoritative ledger state, but linked collection attempt reconciliation threw.",
+						reconciliationError,
 						settledAt,
 					},
+					source: args.source,
+					transferId: args.entityId,
 				});
 				console.error(
-					`[publishTransferConfirmed] Linked collection attempt ${transfer.collectionAttemptId} could not be settled for transfer ${args.entityId}. Cash posting preserved; manual investigation required.`
+					`[publishTransferConfirmed] Linked collection attempt ${transfer.collectionAttemptId} threw during settlement reconciliation for transfer ${args.entityId}. Cash posting preserved; manual investigation required.`,
+					error
 				);
 			}
 		}
