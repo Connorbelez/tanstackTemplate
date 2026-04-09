@@ -1,7 +1,6 @@
 import type { GenericSchema, SchemaDefinition } from "convex/server";
 import type { TestConvex } from "convex-test";
-import aggregateSchema from "../../node_modules/@convex-dev/aggregate/dist/component/schema.js";
-import auditLogSchema from "../../node_modules/convex-audit-log/dist/component/schema.js";
+import { aggregateSchema, auditLogSchema } from "./packageSchemas";
 
 type ConvexModuleLoader = () => Promise<unknown>;
 type ConvexModuleMap = Record<string, ConvexModuleLoader>;
