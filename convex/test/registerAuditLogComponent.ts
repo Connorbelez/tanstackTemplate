@@ -1,102 +1,112 @@
-import { readdirSync } from "node:fs";
-import { join } from "node:path";
 import type { GenericSchema, SchemaDefinition } from "convex/server";
 import type { TestConvex } from "convex-test";
 import aggregateSchema from "../../node_modules/@convex-dev/aggregate/dist/component/schema.js";
 import auditLogSchema from "../../node_modules/convex-audit-log/dist/component/schema.js";
 
 type ConvexModuleLoader = () => Promise<unknown>;
+type ConvexModuleMap = Record<string, ConvexModuleLoader>;
 
-function compareModuleKeys(a: string, b: string) {
-	const aIsRootGenerated = a.startsWith("/convex/_generated/");
-	const bIsRootGenerated = b.startsWith("/convex/_generated/");
-
-	if (aIsRootGenerated !== bIsRootGenerated) {
-		return aIsRootGenerated ? -1 : 1;
-	}
-
-	return a.localeCompare(b);
-}
-
-function loadModulesFromRoot(root: URL, mountPrefix: string) {
-	const moduleEntries: [string, ConvexModuleLoader][] = [];
-
-	const walk = (dir: URL, relativePath: string) => {
-		for (const entry of readdirSync(dir, { withFileTypes: true })) {
-			const nextRelativePath = relativePath
-				? `${relativePath}/${entry.name}`
-				: entry.name;
-			const nextUrl = new URL(
-				`${entry.name}${entry.isDirectory() ? "/" : ""}`,
-				dir
-			);
-
-			if (entry.isDirectory()) {
-				if (entry.name === "__tests__") {
-					continue;
-				}
-				walk(nextUrl, nextRelativePath);
-				continue;
-			}
-
-			if (!(entry.name.endsWith(".ts") || entry.name.endsWith(".js"))) {
-				continue;
-			}
-
-			if (entry.name.endsWith(".d.ts")) {
-				continue;
-			}
-
-			const moduleKey = join(mountPrefix, nextRelativePath).replaceAll(
-				"\\",
-				"/"
-			);
-			moduleEntries.push([moduleKey, () => import(nextUrl.href)]);
-		}
-	};
-
-	walk(root, "");
-
-	return Object.fromEntries(
-		moduleEntries.sort(([leftKey], [rightKey]) =>
-			compareModuleKeys(leftKey, rightKey)
-		)
-	);
-}
-
-function loadAuditLogModules() {
-	return loadModulesFromRoot(
-		new URL(
-			"../../node_modules/convex-audit-log/dist/component/",
-			import.meta.url
+const auditLogModules: ConvexModuleMap = {
+	"/node_modules/convex-audit-log/dist/component/_generated/api.js": async () =>
+		await import(
+			"../../node_modules/convex-audit-log/dist/component/_generated/api.js"
 		),
-		"/node_modules/convex-audit-log/dist/component"
-	);
-}
-
-function loadAggregateModules() {
-	return loadModulesFromRoot(
-		new URL(
-			"../../node_modules/@convex-dev/aggregate/dist/component/",
-			import.meta.url
+	"/node_modules/convex-audit-log/dist/component/_generated/component.js":
+		async () =>
+			await import(
+				"../../node_modules/convex-audit-log/dist/component/_generated/component.js"
+			),
+	"/node_modules/convex-audit-log/dist/component/_generated/dataModel.js":
+		async () =>
+			await import(
+				"../../node_modules/convex-audit-log/dist/component/_generated/dataModel.js"
+			),
+	"/node_modules/convex-audit-log/dist/component/_generated/server.js":
+		async () =>
+			await import(
+				"../../node_modules/convex-audit-log/dist/component/_generated/server.js"
+			),
+	"/node_modules/convex-audit-log/dist/component/aggregates.js": async () =>
+		await import(
+			"../../node_modules/convex-audit-log/dist/component/aggregates.js"
 		),
-		"/node_modules/@convex-dev/aggregate/dist/component"
-	);
-}
+	"/node_modules/convex-audit-log/dist/component/convex.config.js": async () =>
+		await import(
+			"../../node_modules/convex-audit-log/dist/component/convex.config.js"
+		),
+	"/node_modules/convex-audit-log/dist/component/lib.js": async () =>
+		await import("../../node_modules/convex-audit-log/dist/component/lib.js"),
+	"/node_modules/convex-audit-log/dist/component/schema.js": async () =>
+		await import(
+			"../../node_modules/convex-audit-log/dist/component/schema.js"
+		),
+	"/node_modules/convex-audit-log/dist/component/shared.js": async () =>
+		await import(
+			"../../node_modules/convex-audit-log/dist/component/shared.js"
+		),
+};
+
+const aggregateModules: ConvexModuleMap = {
+	"/node_modules/@convex-dev/aggregate/dist/component/_generated/api.js":
+		async () =>
+			await import(
+				"../../node_modules/@convex-dev/aggregate/dist/component/_generated/api.js"
+			),
+	"/node_modules/@convex-dev/aggregate/dist/component/_generated/component.js":
+		async () =>
+			await import(
+				"../../node_modules/@convex-dev/aggregate/dist/component/_generated/component.js"
+			),
+	"/node_modules/@convex-dev/aggregate/dist/component/_generated/dataModel.js":
+		async () =>
+			await import(
+				"../../node_modules/@convex-dev/aggregate/dist/component/_generated/dataModel.js"
+			),
+	"/node_modules/@convex-dev/aggregate/dist/component/_generated/server.js":
+		async () =>
+			await import(
+				"../../node_modules/@convex-dev/aggregate/dist/component/_generated/server.js"
+			),
+	"/node_modules/@convex-dev/aggregate/dist/component/btree.js": async () =>
+		await import(
+			"../../node_modules/@convex-dev/aggregate/dist/component/btree.js"
+		),
+	"/node_modules/@convex-dev/aggregate/dist/component/compare.js": async () =>
+		await import(
+			"../../node_modules/@convex-dev/aggregate/dist/component/compare.js"
+		),
+	"/node_modules/@convex-dev/aggregate/dist/component/convex.config.js":
+		async () =>
+			await import(
+				"../../node_modules/@convex-dev/aggregate/dist/component/convex.config.js"
+			),
+	"/node_modules/@convex-dev/aggregate/dist/component/inspect.js": async () =>
+		await import(
+			"../../node_modules/@convex-dev/aggregate/dist/component/inspect.js"
+		),
+	"/node_modules/@convex-dev/aggregate/dist/component/public.js": async () =>
+		await import(
+			"../../node_modules/@convex-dev/aggregate/dist/component/public.js"
+		),
+	"/node_modules/@convex-dev/aggregate/dist/component/schema.js": async () =>
+		await import(
+			"../../node_modules/@convex-dev/aggregate/dist/component/schema.js"
+		),
+};
 
 export function registerAuditLogComponent(
 	t: TestConvex<SchemaDefinition<GenericSchema, boolean>>,
 	name = "auditLog"
 ) {
-	t.registerComponent(name, auditLogSchema, loadAuditLogModules());
+	t.registerComponent(name, auditLogSchema, auditLogModules);
 	t.registerComponent(
 		`${name}/aggregateBySeverity`,
 		aggregateSchema,
-		loadAggregateModules()
+		aggregateModules
 	);
 	t.registerComponent(
 		`${name}/aggregateByAction`,
 		aggregateSchema,
-		loadAggregateModules()
+		aggregateModules
 	);
 }

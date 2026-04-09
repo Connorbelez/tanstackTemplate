@@ -1094,7 +1094,7 @@ describe("View Engine", () => {
 					logicalOperator: "or",
 					operator: "is",
 					value: "qualified",
-				})
+				});
 			});
 
 			const result = await asAdmin(t).query(
