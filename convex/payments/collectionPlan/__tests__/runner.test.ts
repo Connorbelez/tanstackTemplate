@@ -269,12 +269,16 @@ describe("processDuePlanEntries", () => {
 		expect(attempt).toBeDefined();
 		expect(attempt?.status).toBe("retry_scheduled");
 		expect(attempt?.failureReason).toBeTruthy();
+		expect(attempt?.failureReason).toContain("disabled by default");
+		expect(attempt?.transferRequestId).toBeTruthy();
 		if (!attempt) {
 			throw new Error("Expected a durable failed collection attempt");
 		}
 
 		const transfers = await getTransfersForAttempt(t, attempt._id);
-		expect(transfers).toHaveLength(0);
+		expect(transfers).toHaveLength(1);
+		expect(transfers[0]?.status).toBe("initiated");
+		expect(transfers[0]?.providerRef).toBeUndefined();
 
 		const replay = await t.action(
 			internal.payments.collectionPlan.runner.processDuePlanEntries,
@@ -292,7 +296,7 @@ describe("processDuePlanEntries", () => {
 		const replayAttempts = await getAttemptsForPlanEntry(t, planEntryId);
 		expect(replayAttempts).toHaveLength(1);
 		const replayTransfers = await getTransfersForAttempt(t, attempt._id);
-		expect(replayTransfers).toHaveLength(0);
+		expect(replayTransfers).toHaveLength(1);
 
 		const retryEntry = await t.run(async (ctx) =>
 			ctx.db

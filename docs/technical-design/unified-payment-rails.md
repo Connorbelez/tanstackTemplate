@@ -1,10 +1,9 @@
 # Unified Payment Rails — Technical Design Document
 
-> Historical design note (2026-04-03): this draft predates the aligned payment
-> contract cleanup. Treat `TransferProvider` and transfer-domain execution as
-> the current canonical direction for new inbound provider work. References to
-> `PaymentMethod` in this document are historical design context unless they
-> explicitly describe migration compatibility.
+> Historical design note (2026-04-09): this draft predates the payment-contract
+> cleanup. The live repo uses `TransferProvider` plus `transferRequests` as the
+> canonical provider-facing boundary. Older `PaymentMethod` wording below is
+> historical background, not the current extension point.
 
 **Goal:** Unified Payment Rails
 **Author:** AI-assisted (GitNexus code analysis + architecture review)
@@ -18,7 +17,8 @@
 FairLend's payment system currently processes mortgage payments through a three-layer architecture: **Obligations** (what is owed), **Collection Plans** (rules-driven scheduling), and **Collection Attempts** (business execution records that can delegate provider work). This document proposes a unified payment rails design that consolidates payment processing, adds real payment provider integration (Rotessa PAD, Stripe), and ensures financial/domain correctness across the entire money-movement pipeline — from borrower collection through pro-rata lender dispersal.
 
 ### Current State
-- Two legacy compatibility payment methods: `ManualPaymentMethod` (no-op) and `MockPADMethod` (simulated delay + failure)
+- Current transfer-provider implementations are `ManualTransferProvider`,
+  `ManualReviewTransferProvider`, and `MockTransferProvider`
 - Stripe and Polar components installed but not wired into the collection pipeline
 - Dispersal entries created atomically but no actual payout mechanism
 - No real bank-account verification (Plaid/Flinks) or PAD agreement management
@@ -90,57 +90,23 @@ FairLend's payment system currently processes mortgage payments through a three-
 
 ## 3. Detailed Component Design
 
-### 3.1 Historical PaymentMethod Interface (Compatibility Only)
+### 3.1 Canonical TransferProvider Interface
 
-The current `PaymentMethod` strategy interface still exists for migration
-compatibility, but it is no longer the forward-looking contract for new inbound
-provider work. The aligned repo contract is:
+The aligned repo contract is:
 
-- `TransferProvider` is canonical for new inbound provider integrations
-- `PaymentMethod` remains transitional compatibility
-- `PaymentMethodAdapter` and `methods/registry.ts` are explicit compatibility
-  shims, not normal extension points for new provider work
+- `TransferProvider` is the canonical provider boundary
+- `transferRequests` is the canonical provider-facing execution record
 - Collection Attempts remain business execution records even when transfer
   infrastructure performs provider work
 
-The legacy interface is:
+Representative contract:
 
 ```typescript
-interface PaymentMethod {
-  initiate(params: InitiateParams): Promise<InitiateResult>;
-  confirm(ref: string): Promise<ConfirmResult>;
-  cancel(ref: string): Promise<CancelResult>;
-  getStatus(ref: string): Promise<StatusResult>;
-}
-```
-
-These proposed extensions are retained as historical design context only. New
-provider capability work should be designed against `TransferProvider` instead.
-
-```typescript
-interface PaymentMethod {
-  // Existing
-  initiate(params: InitiateParams): Promise<InitiateResult>;
-  confirm(ref: string): Promise<ConfirmResult>;
-  cancel(ref: string): Promise<CancelResult>;
-  getStatus(ref: string): Promise<StatusResult>;
-
-  // New: refund/reversal support
-  refund(ref: string, amount?: number): Promise<RefundResult>;
-
-  // New: webhook event processing
-  handleWebhook?(event: ProviderWebhookEvent): Promise<WebhookResult>;
-
-  // New: capabilities declaration
-  readonly capabilities: PaymentMethodCapabilities;
-}
-
-interface PaymentMethodCapabilities {
-  supportsPartialRefund: boolean;
-  supportsRecurring: boolean;
-  supportsWebhooks: boolean;
-  settlementDelayMs: number; // expected settlement time
-  maxAmountCents: number;
+interface TransferProvider {
+  initiate(request: TransferRequestInput): Promise<InitiateResult>;
+  confirm(providerRef: string): Promise<ConfirmResult>;
+  cancel(providerRef: string): Promise<CancelResult>;
+  getStatus(providerRef: string): Promise<StatusResult>;
 }
 ```
 
@@ -241,19 +207,11 @@ Stripe is already installed (`@convex-dev/stripe` v0.1.4). Wire into payment rai
 3. **Refunds/reversals** — Stripe's native refund API
 
 ```typescript
-// New payment method implementation
-class StripePaymentMethod implements PaymentMethod {
-  readonly capabilities: PaymentMethodCapabilities = {
-    supportsPartialRefund: true,
-    supportsRecurring: true,
-    supportsWebhooks: true,
-    settlementDelayMs: 4 * 24 * 60 * 60 * 1000, // 4 business days for ACH
-    maxAmountCents: 50_000_000, // $500k per ACH
-  };
-
-  async initiate(params: InitiateParams): Promise<InitiateResult> {
+// New transfer provider implementation
+class StripeTransferProvider implements TransferProvider {
+  async initiate(request: TransferRequestInput): Promise<InitiateResult> {
     // 1. Look up Stripe Customer for borrower
-    // 2. Look up verified PaymentMethod (bank account)
+    // 2. Look up the verified bank account or mandate backing this transfer
     // 3. Create PaymentIntent with confirm: true
     // 4. Return { providerRef: pi_xxx, status: "pending" }
   }
@@ -682,10 +640,10 @@ Payment operations must respect the three-layer auth model:
 
 | Concept | Primary Files |
 |---------|--------------|
-| PaymentMethod interface | `convex/payments/methods/interface.ts` |
-| Payment method registry | `convex/payments/methods/registry.ts` |
-| Manual payment method | `convex/payments/methods/manual.ts` |
-| Mock PAD method | `convex/payments/methods/mockPAD.ts` |
+| TransferProvider interface | `convex/payments/transfers/interface.ts` |
+| Transfer provider registry | `convex/payments/transfers/providers/registry.ts` |
+| Manual transfer provider | `convex/payments/transfers/providers/manual.ts` |
+| Mock transfer provider | `convex/payments/transfers/providers/mock.ts` |
 | Obligation generation | `convex/payments/obligations/generate.ts`, `generateImpl.ts` |
 | Obligation lifecycle crons | `convex/payments/obligations/crons.ts` |
 | Collection rules engine | `convex/payments/collectionPlan/engine.ts` |

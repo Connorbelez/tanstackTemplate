@@ -562,6 +562,30 @@ describe("collection attempt reconciliation for attempt-linked inbound transfers
 				status: "confirmed",
 				transferRequestId: transferId,
 			});
+
+			await emitPaymentReceivedMutation._handler(ctx, {
+				entityId: attemptId,
+				entityType: "collectionAttempt",
+				eventType: "FUNDS_SETTLED",
+				journalEntryId: "audit-attempt-settled-for-reversal",
+				effectName: "emitPaymentReceived",
+				payload: { settledAt: Date.now() },
+				source: ADMIN_SOURCE,
+			});
+
+			await applyPaymentMutation._handler(ctx, {
+				entityId: obligationId,
+				entityType: "obligation",
+				eventType: "PAYMENT_APPLIED",
+				journalEntryId: "audit-obligation-payment-applied-for-reversal",
+				effectName: "applyPayment",
+				payload: {
+					amount: 50_000,
+					attemptId,
+					postingGroupId: `cash-receipt:${attemptId}`,
+				},
+				source: ADMIN_SOURCE,
+			});
 		});
 
 		await t.run(async (ctx) => {
@@ -586,7 +610,23 @@ describe("collection attempt reconciliation for attempt-linked inbound transfers
 
 			const attempt = await ctx.db.get(attemptId);
 			expect(attempt?.status).toBe("reversed");
+			expect(attempt?.reversedAt).toBeTypeOf("number");
 			expect(attempt?.providerStatus).toBeUndefined();
+
+			const reversalEntries = await ctx.db
+				.query("cash_ledger_journal_entries")
+				.withIndex("by_transfer_request", (q) =>
+					q.eq("transferRequestId", transferId)
+				)
+				.collect();
+			expect(reversalEntries.length).toBeGreaterThanOrEqual(1);
+			expect(
+				reversalEntries.every(
+					(entry) =>
+						entry.entryType === "REVERSAL" &&
+						entry.postingGroupId === `reversal-group:transfer:${transferId}`
+				)
+			).toBe(true);
 		});
 	});
 });

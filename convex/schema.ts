@@ -1685,9 +1685,7 @@ export default defineSchema({
 		status: v.union(
 			v.literal("initiated"),
 			v.literal("pending"),
-			v.literal("approved"), // LEGACY status — not used by transfer state machine
 			v.literal("processing"),
-			v.literal("completed"), // LEGACY status — not used by transfer state machine
 			v.literal("confirmed"),
 			v.literal("reversed"),
 			v.literal("failed"),

@@ -1,19 +1,10 @@
+import process from "node:process";
 import { convexTest } from "convex-test";
 import { describe, expect, it, vi } from "vitest";
-import workflowSchema from "../../../../node_modules/@convex-dev/workflow/dist/component/schema.js";
-import workpoolSchema from "../../../../node_modules/@convex-dev/workpool/dist/component/schema.js";
+import { internal } from "../../../_generated/api";
 import type { Id } from "../../../_generated/dataModel";
-import type { MutationCtx } from "../../../_generated/server";
-import auditTrailSchema from "../../../components/auditTrail/schema";
-import { emitPaymentReversed } from "../../../engine/effects/collectionAttempt";
-import type { CommandSource } from "../../../engine/types";
 import schema from "../../../schema";
-import {
-	convexModules,
-	auditTrailModules as sharedAuditTrailModules,
-	workflowModules as sharedWorkflowModules,
-	workpoolModules as sharedWorkpoolModules,
-} from "../../../test/moduleMaps";
+import { convexModules } from "../../../test/moduleMaps";
 import { registerAuditLogComponent } from "../../../test/registerAuditLogComponent";
 import {
 	postCashReceiptForObligation,
@@ -24,45 +15,28 @@ import { SYSTEM_SOURCE, seedMinimalEntities } from "./testUtils";
 // ── Module globs ────────────────────────────────────────────────────
 
 const modules = convexModules;
-const auditTrailModules = sharedAuditTrailModules;
-const workflowModules = sharedWorkflowModules;
-const workpoolModules = sharedWorkpoolModules;
+const testGlobal = globalThis as typeof globalThis & {
+	process?: {
+		env: Record<string, string | undefined>;
+	};
+};
+const testProcess = process as unknown as {
+	env: Record<string, string | undefined>;
+};
+
+testGlobal.process = testProcess;
 
 // ── Test harness with components ────────────────────────────────────
 
 type TestHarness = ReturnType<typeof createFullHarness>;
 
 function createFullHarness() {
-	// Disable hash chain workflow — not under test here. The workflow component
-	// doesn't fully work in convex-test's synchronous environment.
-	process.env.DISABLE_CASH_LEDGER_HASHCHAIN = "true";
+	testProcess.env.DISABLE_CASH_LEDGER_HASHCHAIN = "true";
+	testProcess.env.DISABLE_GT_HASHCHAIN = "true";
 	const t = convexTest(schema, modules);
 	registerAuditLogComponent(t, "auditLog");
-	t.registerComponent("auditTrail", auditTrailSchema, auditTrailModules);
-	t.registerComponent("workflow", workflowSchema, workflowModules);
-	t.registerComponent("workflow/workpool", workpoolSchema, workpoolModules);
 	return t;
 }
-
-// ── Handler type cast ───────────────────────────────────────────────
-
-interface EmitPaymentReversedHandler {
-	_handler: (
-		ctx: MutationCtx,
-		args: {
-			entityId: Id<"collectionAttempts">;
-			entityType: "collectionAttempt";
-			eventType: string;
-			journalEntryId: string;
-			effectName: string;
-			payload?: Record<string, unknown>;
-			source: CommandSource;
-		}
-	) => Promise<void>;
-}
-
-const emitPaymentReversedMutation =
-	emitPaymentReversed as unknown as EmitPaymentReversedHandler;
 
 // ── Helpers ─────────────────────────────────────────────────────────
 
@@ -224,21 +198,15 @@ describe("emitPaymentReversed integration", () => {
 			});
 		});
 
-		// Run emitPaymentReversed
-		await t.run(async (ctx) => {
-			await emitPaymentReversedMutation._handler(ctx, {
+		await t.mutation(
+			internal.engine.effects.collectionAttempt.executeReversalCascadeStep,
+			{
 				entityId: attemptId,
-				entityType: "collectionAttempt",
-				eventType: "PAYMENT_REVERSED",
-				journalEntryId: "audit-reversal-1",
-				effectName: "emitPaymentReversed",
-				payload: {
-					reason: "nsf_return",
-					effectiveDate: "2026-03-20",
-				},
+				reason: "nsf_return",
+				effectiveDate: "2026-03-20",
 				source: SYSTEM_SOURCE,
-			});
-		});
+			}
+		);
 
 		// Drain scheduled functions (corrective obligation creation)
 		await t.finishAllScheduledFunctions(vi.runAllTimers);
@@ -301,21 +269,15 @@ describe("emitPaymentReversed integration", () => {
 			});
 		});
 
-		// Run reversal
-		await t.run(async (ctx) => {
-			await emitPaymentReversedMutation._handler(ctx, {
+		await t.mutation(
+			internal.engine.effects.collectionAttempt.executeReversalCascadeStep,
+			{
 				entityId: attemptId,
-				entityType: "collectionAttempt",
-				eventType: "PAYMENT_REVERSED",
-				journalEntryId: "audit-reversal-full-1",
-				effectName: "emitPaymentReversed",
-				payload: {
-					reason: "chargeback",
-					effectiveDate: "2026-03-20",
-				},
+				reason: "chargeback",
+				effectiveDate: "2026-03-20",
 				source: SYSTEM_SOURCE,
-			});
-		});
+			}
+		);
 
 		await t.finishAllScheduledFunctions(vi.runAllTimers);
 
@@ -398,21 +360,15 @@ describe("emitPaymentReversed integration", () => {
 			});
 		});
 
-		// Run reversal
-		await t.run(async (ctx) => {
-			await emitPaymentReversedMutation._handler(ctx, {
+		await t.mutation(
+			internal.engine.effects.collectionAttempt.executeReversalCascadeStep,
+			{
 				entityId: attemptId,
-				entityType: "collectionAttempt",
-				eventType: "PAYMENT_REVERSED",
-				journalEntryId: "audit-reversal-due-1",
-				effectName: "emitPaymentReversed",
-				payload: {
-					reason: "nsf_return",
-					effectiveDate: "2026-03-20",
-				},
+				reason: "nsf_return",
+				effectiveDate: "2026-03-20",
 				source: SYSTEM_SOURCE,
-			});
-		});
+			}
+		);
 
 		await t.finishAllScheduledFunctions(vi.runAllTimers);
 
@@ -467,21 +423,15 @@ describe("emitPaymentReversed integration", () => {
 			});
 		});
 
-		// Run reversal
-		await t.run(async (ctx) => {
-			await emitPaymentReversedMutation._handler(ctx, {
+		await t.mutation(
+			internal.engine.effects.collectionAttempt.executeReversalCascadeStep,
+			{
 				entityId: attemptId,
-				entityType: "collectionAttempt",
-				eventType: "PAYMENT_REVERSED",
-				journalEntryId: "audit-reversal-ledger-1",
-				effectName: "emitPaymentReversed",
-				payload: {
-					reason: "nsf_return",
-					effectiveDate: "2026-03-20",
-				},
+				reason: "nsf_return",
+				effectiveDate: "2026-03-20",
 				source: SYSTEM_SOURCE,
-			});
-		});
+			}
+		);
 
 		await t.finishAllScheduledFunctions(vi.runAllTimers);
 

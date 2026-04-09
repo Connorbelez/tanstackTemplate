@@ -8,6 +8,7 @@
 import { ConvexError, v } from "convex/values";
 import { internal } from "../../_generated/api";
 import type { Doc, Id } from "../../_generated/dataModel";
+import type { MutationCtx } from "../../_generated/server";
 import { internalAction, internalMutation } from "../../_generated/server";
 import { buildSource } from "../../engine/commands";
 import { executeTransition } from "../../engine/transition";
@@ -26,13 +27,13 @@ import {
 	getCommitmentDepositValidationError,
 } from "./depositCollection.logic";
 import type { TransferRequestInput } from "./interface";
-import { areMockTransferProvidersEnabled } from "./mockProviders";
 import { buildPipelineIdempotencyKey } from "./pipeline";
 import { validatePipelineFields } from "./pipeline.types";
 import { buildPrincipalReturnIdempotencyKey } from "./principalReturn.logic";
 import { getTransferProvider } from "./providers/registry";
 import {
 	InvalidDomainEntityIdError,
+	type ProviderCode,
 	type TransferDirection,
 	toDomainEntityId,
 } from "./types";
@@ -67,15 +68,6 @@ function validateTransferCreationInput(args: {
 	const pipelineError = validatePipelineFields(args.pipelineId, args.legNumber);
 	if (pipelineError) {
 		throw new ConvexError(pipelineError);
-	}
-
-	if (
-		(args.providerCode === "mock_pad" || args.providerCode === "mock_eft") &&
-		!areMockTransferProvidersEnabled()
-	) {
-		throw new ConvexError(
-			`Transfer provider "${args.providerCode}" is disabled by default. Set ENABLE_MOCK_PROVIDERS="true" to opt in.`
-		);
 	}
 
 	try {
@@ -121,6 +113,88 @@ export function canManuallyConfirmTransferStatus(
 	);
 }
 
+export interface CreateTransferRequestRecordArgs {
+	amount: number;
+	bankAccountRef?: string;
+	borrowerId?: Id<"borrowers">;
+	collectionAttemptId?: Id<"collectionAttempts">;
+	counterpartyId: string;
+	counterpartyType: "borrower" | "lender" | "investor" | "trust";
+	currency?: "CAD";
+	dealId?: Id<"deals">;
+	direction: TransferDirection;
+	dispersalEntryId?: Id<"dispersalEntries">;
+	idempotencyKey: string;
+	legNumber?: 1 | 2;
+	lenderId?: Id<"lenders">;
+	metadata?: Record<string, unknown>;
+	mortgageId?: Id<"mortgages">;
+	obligationId?: Id<"obligations">;
+	pipelineId?: string;
+	planEntryId?: Id<"collectionPlanEntries">;
+	providerCode: ProviderCode;
+	source: CommandSource;
+	transferType: TransferRequestInput["transferType"];
+}
+
+export async function createTransferRequestRecord(
+	ctx: MutationCtx,
+	args: CreateTransferRequestRecordArgs
+): Promise<Id<"transferRequests">> {
+	const counterpartyId = validateTransferCreationInput(args);
+
+	const existing = await ctx.db
+		.query("transferRequests")
+		.withIndex("by_idempotency", (q) =>
+			q.eq("idempotencyKey", args.idempotencyKey)
+		)
+		.first();
+
+	if (existing) {
+		return existing._id;
+	}
+
+	const now = Date.now();
+	const orgId = await orgIdForTransferRequest(ctx, {
+		mortgageId: args.mortgageId,
+		obligationId: args.obligationId,
+		dealId: args.dealId,
+		dispersalEntryId: args.dispersalEntryId,
+		lenderId: args.lenderId,
+		borrowerId: args.borrowerId,
+		planEntryId: args.planEntryId,
+		collectionAttemptId: args.collectionAttemptId,
+	});
+
+	return ctx.db.insert("transferRequests", {
+		orgId,
+		status: "initiated",
+		direction: args.direction,
+		transferType: args.transferType,
+		amount: args.amount,
+		currency: args.currency ?? "CAD",
+		counterpartyType: args.counterpartyType,
+		counterpartyId,
+		bankAccountRef: args.bankAccountRef,
+		mortgageId: args.mortgageId,
+		obligationId: args.obligationId,
+		dealId: args.dealId,
+		dispersalEntryId: args.dispersalEntryId,
+		planEntryId: args.planEntryId,
+		collectionAttemptId: args.collectionAttemptId,
+		lenderId: args.lenderId,
+		borrowerId: args.borrowerId,
+		providerCode: args.providerCode,
+		idempotencyKey: args.idempotencyKey,
+		source: args.source,
+		pipelineId: args.pipelineId,
+		legNumber: args.legNumber,
+		metadata: args.metadata,
+		createdAt: now,
+		lastTransitionAt: now,
+	});
+}
+
 // ── createTransferRequest ──────────────────────────────────────────
 /**
  * Creates a new transfer request record with status "initiated".
@@ -155,104 +229,29 @@ export const createTransferRequest = paymentMutation
 		legNumber: v.optional(legNumberValidator),
 	})
 	.handler(async (ctx, args): Promise<Id<"transferRequests">> => {
-		// 1. Validate amount is positive integer (safe-integer cents)
-		if (!Number.isInteger(args.amount) || args.amount <= 0) {
-			throw new ConvexError("Amount must be a positive integer (cents)");
-		}
-
-		// 1a. Pipeline fields must be co-required: both present or both absent
-		const pipelineError = validatePipelineFields(
-			args.pipelineId,
-			args.legNumber
-		);
-		if (pipelineError) {
-			throw new ConvexError(pipelineError);
-		}
-
-		// 1b. Guard against auth-ID / entity-ID confusion (ENG-218).
-		// counterpartyId must stay in domain entity ID space.
-		let counterpartyId: TransferRequestInput["counterpartyId"];
-		try {
-			counterpartyId = toDomainEntityId(args.counterpartyId, "counterpartyId");
-		} catch (error) {
-			if (error instanceof InvalidDomainEntityIdError) {
-				throw new ConvexError(error.message);
-			}
-			throw error;
-		}
-
-		if (
-			(args.providerCode === "mock_pad" || args.providerCode === "mock_eft") &&
-			!areMockTransferProvidersEnabled()
-		) {
-			throw new ConvexError(
-				`Transfer provider "${args.providerCode}" is disabled by default. Set ENABLE_MOCK_PROVIDERS="true" to opt in.`
-			);
-		}
-
-		// 2. Idempotency check
-		const existing = await ctx.db
-			.query("transferRequests")
-			.withIndex("by_idempotency", (q) =>
-				q.eq("idempotencyKey", args.idempotencyKey)
-			)
-			.first();
-
-		if (existing) {
-			return existing._id;
-		}
-
-		// 3. Build source from authenticated viewer
-		const source = buildSource(ctx.viewer, "admin_dashboard");
-
-		// 4. Insert transfer record
-		const now = Date.now();
-		const orgId = await orgIdForTransferRequest(ctx, {
-			mortgageId: args.mortgageId,
-			obligationId: args.obligationId,
-			dealId: args.dealId,
-			dispersalEntryId: args.dispersalEntryId,
-			lenderId: args.lenderId,
-			borrowerId: args.borrowerId,
-			planEntryId: args.planEntryId,
-			collectionAttemptId: args.collectionAttemptId,
-		});
-		const transferId = await ctx.db.insert("transferRequests", {
-			orgId,
-			status: "initiated",
-			direction: args.direction,
-			transferType: args.transferType,
+		return createTransferRequestRecord(ctx, {
 			amount: args.amount,
-			currency: args.currency ?? "CAD",
-			counterpartyType: args.counterpartyType,
-			counterpartyId,
 			bankAccountRef: args.bankAccountRef,
-			// References
+			borrowerId: args.borrowerId,
+			collectionAttemptId: args.collectionAttemptId,
+			counterpartyId: args.counterpartyId,
+			counterpartyType: args.counterpartyType,
+			currency: args.currency,
+			dealId: args.dealId,
+			direction: args.direction,
+			dispersalEntryId: args.dispersalEntryId,
+			idempotencyKey: args.idempotencyKey,
+			legNumber: args.legNumber,
+			lenderId: args.lenderId,
+			metadata: args.metadata,
 			mortgageId: args.mortgageId,
 			obligationId: args.obligationId,
-			dealId: args.dealId,
-			dispersalEntryId: args.dispersalEntryId,
-			planEntryId: args.planEntryId,
-			collectionAttemptId: args.collectionAttemptId,
-			// Participant references
-			lenderId: args.lenderId,
-			borrowerId: args.borrowerId,
-			// Provider & idempotency
-			providerCode: args.providerCode,
-			idempotencyKey: args.idempotencyKey,
-			source,
-			// Pipeline
 			pipelineId: args.pipelineId,
-			legNumber: args.legNumber,
-			// Metadata
-			metadata: args.metadata,
-			// Timestamps
-			createdAt: now,
-			lastTransitionAt: now,
+			planEntryId: args.planEntryId,
+			providerCode: args.providerCode,
+			source: buildSource(ctx.viewer, "admin_dashboard"),
+			transferType: args.transferType,
 		});
-
-		// 5. Return the new transfer ID
-		return transferId;
 	})
 	.public();
 
@@ -461,58 +460,28 @@ export const createTransferRequestInternal = internalMutation({
 		source: v.optional(sourceValidator),
 	},
 	handler: async (ctx, args): Promise<Id<"transferRequests">> => {
-		// Validate inputs (amount, pipeline co-requirement, mock provider guard, counterparty ID)
-		const counterpartyId = validateTransferCreationInput(args);
-
-		// Idempotency check
-		const existing = await ctx.db
-			.query("transferRequests")
-			.withIndex("by_idempotency", (q) =>
-				q.eq("idempotencyKey", args.idempotencyKey)
-			)
-			.first();
-
-		if (existing) {
-			return existing._id;
-		}
-
-		const now = Date.now();
-		const orgId = await orgIdForTransferRequest(ctx, {
-			mortgageId: args.mortgageId,
-			obligationId: args.obligationId,
-			dealId: args.dealId,
-			dispersalEntryId: args.dispersalEntryId,
-			lenderId: args.lenderId,
-			borrowerId: args.borrowerId,
-			planEntryId: args.planEntryId,
-			collectionAttemptId: args.collectionAttemptId,
-		});
-		return ctx.db.insert("transferRequests", {
-			orgId,
-			status: "initiated",
-			direction: args.direction,
-			transferType: args.transferType,
+		return createTransferRequestRecord(ctx, {
 			amount: args.amount,
-			currency: args.currency ?? "CAD",
-			counterpartyType: args.counterpartyType,
-			counterpartyId,
 			bankAccountRef: args.bankAccountRef,
+			borrowerId: args.borrowerId,
+			collectionAttemptId: args.collectionAttemptId,
+			counterpartyId: args.counterpartyId,
+			counterpartyType: args.counterpartyType,
+			currency: args.currency,
+			dealId: args.dealId,
+			direction: args.direction,
+			dispersalEntryId: args.dispersalEntryId,
+			idempotencyKey: args.idempotencyKey,
+			legNumber: args.legNumber,
+			lenderId: args.lenderId,
+			metadata: args.metadata,
 			mortgageId: args.mortgageId,
 			obligationId: args.obligationId,
-			dealId: args.dealId,
-			dispersalEntryId: args.dispersalEntryId,
-			planEntryId: args.planEntryId,
-			collectionAttemptId: args.collectionAttemptId,
-			lenderId: args.lenderId,
-			borrowerId: args.borrowerId,
-			providerCode: args.providerCode,
-			idempotencyKey: args.idempotencyKey,
-			source: args.source ?? PIPELINE_SOURCE,
 			pipelineId: args.pipelineId,
-			legNumber: args.legNumber,
-			metadata: args.metadata,
-			createdAt: now,
-			lastTransitionAt: now,
+			planEntryId: args.planEntryId,
+			providerCode: args.providerCode,
+			source: args.source ?? PIPELINE_SOURCE,
+			transferType: args.transferType,
 		});
 	},
 });

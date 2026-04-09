@@ -1428,12 +1428,19 @@ export async function postPaymentReversalCascade(
 		)
 		.collect();
 
+	let linkedAttemptId: Id<"collectionAttempts"> | undefined;
+	if (args.transferRequestId) {
+		const transfer = await ctx.db.get(args.transferRequestId);
+		linkedAttemptId = transfer?.collectionAttemptId;
+	}
+
 	const cashReceivedEntry = allObligationEntries.find(
 		(e) =>
 			e.entryType === "CASH_RECEIVED" &&
 			(args.attemptId
 				? e.attemptId === args.attemptId
-				: e.transferRequestId === args.transferRequestId)
+				: e.transferRequestId === args.transferRequestId ||
+					e.attemptId === linkedAttemptId)
 	);
 
 	if (!cashReceivedEntry) {

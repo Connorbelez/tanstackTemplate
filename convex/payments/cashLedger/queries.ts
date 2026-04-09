@@ -114,10 +114,9 @@ async function computeGrossLenderPayableBalance(
 /** Derived from the schema — stays in sync automatically. */
 type TransferRequestStatus = Doc<"transferRequests">["status"];
 
-// In-flight statuses: transfers initiated but not yet confirmed/completed
+// In-flight statuses: transfers sent to the provider but not yet settled.
 const IN_FLIGHT_STATUSES = [
 	"pending",
-	"approved",
 	"processing",
 ] as const satisfies readonly TransferRequestStatus[];
 

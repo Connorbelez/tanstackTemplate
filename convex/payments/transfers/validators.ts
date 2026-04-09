@@ -72,15 +72,11 @@ export const legNumberValidator = v.union(v.literal(1), v.literal(2));
 
 // ── Transfer Statuses ────────────────────────────────────────────────
 export const transferStatusValidator = v.union(
-	// Machine states
 	v.literal("initiated"),
 	v.literal("pending"),
 	v.literal("processing"),
 	v.literal("confirmed"),
 	v.literal("failed"),
 	v.literal("cancelled"),
-	v.literal("reversed"),
-	// TODO: Remove legacy statuses once all existing records are migrated
-	v.literal("approved"), // LEGACY
-	v.literal("completed") // LEGACY
+	v.literal("reversed")
 );

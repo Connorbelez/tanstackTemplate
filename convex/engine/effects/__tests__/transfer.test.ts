@@ -13,6 +13,10 @@ import {
 	type TestHarness,
 } from "../../../payments/cashLedger/__tests__/testUtils";
 import {
+	postCashReceiptForObligation,
+	postObligationAccrued,
+} from "../../../payments/cashLedger/integrations";
+import {
 	auditTrailModules,
 	convexModules,
 	workflowModules,
@@ -28,7 +32,7 @@ import {
 
 const modules = convexModules;
 const NO_DIRECTION_RE = /has no direction set/;
-const NO_JOURNAL_ENTRY_RE = /No journal entry found for NON-bridged transfer/;
+const NO_JOURNAL_ENTRY_RE = /No journal entry found for transfer/;
 
 vi.useFakeTimers();
 
@@ -594,7 +598,7 @@ describe("publishTransferReversed effect", () => {
 		});
 	});
 
-	it("skips cash reversal for bridged transfers without transfer-backed journal entries", async () => {
+	it("posts transfer-owned reversal entries for attempt-linked inbound transfers", async () => {
 		const t = createTransferHarness();
 		const seeded = await seedMinimalEntities(t);
 		const obligationId = await createObligation(t, {
@@ -620,6 +624,24 @@ describe("publishTransferReversed effect", () => {
 		});
 
 		await t.run(async (ctx) => {
+			await ctx.db.patch(collectionAttemptId, {
+				transferRequestId: transferId,
+			});
+
+			await postObligationAccrued(ctx, {
+				obligationId,
+				source: SYSTEM_SOURCE,
+			});
+
+			await postCashReceiptForObligation(ctx, {
+				obligationId,
+				amount: 55_000,
+				idempotencyKey: `transfer-effect-bridged-receipt:${collectionAttemptId}`,
+				attemptId: collectionAttemptId,
+				postingGroupId: `cash-receipt:${collectionAttemptId}`,
+				source: SYSTEM_SOURCE,
+			});
+
 			await publishTransferReversedMutation._handler(
 				ctx,
 				buildEffectArgs(transferId, {
@@ -629,10 +651,29 @@ describe("publishTransferReversed effect", () => {
 			);
 
 			const entries = await loadTransferEntries(ctx, transferId);
-			expect(entries).toHaveLength(0);
+			expect(entries.length).toBeGreaterThanOrEqual(1);
+			expect(entries.every((entry) => entry.entryType === "REVERSAL")).toBe(
+				true
+			);
+			expect(
+				entries.every(
+					(entry) =>
+						entry.postingGroupId === `reversal-group:transfer:${transferId}`
+				)
+			).toBe(true);
+			expect(
+				entries.some((entry) => entry.transferRequestId === transferId)
+			).toBe(true);
+			expect(
+				entries.some((entry) => entry.attemptId === collectionAttemptId)
+			).toBe(false);
 
 			const transfer = await ctx.db.get(transferId);
 			expect(transfer?.reversedAt).toBeTypeOf("number");
+
+			const attempt = await ctx.db.get(collectionAttemptId);
+			expect(attempt?.status).toBe("reversed");
+			expect(attempt?.reversedAt).toBeTypeOf("number");
 		});
 	});
 

@@ -111,6 +111,11 @@ export async function startHashChain(
 		typeof process !== "undefined" &&
 		process.env.DISABLE_GT_HASHCHAIN === "true"
 	) {
+		console.warn(
+			"[GT HashChain] KILL SWITCH ACTIVE: Hash chain audit trail disabled " +
+				`for journal ${journalEntryId}. No Layer 2 audit record will be created. ` +
+				"Set DISABLE_GT_HASHCHAIN=false to re-enable."
+		);
 		return;
 	}
 

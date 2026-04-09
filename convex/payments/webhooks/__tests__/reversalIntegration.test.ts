@@ -675,16 +675,13 @@ describe("Reversal webhook integration: out-of-order rejection", () => {
 // ═══════════════════════════════════════════════════════════════════
 // emitPaymentReversed effect → journal entries
 //
-// These tests call executeReversalCascadeStep directly (the mutation
-// that postPaymentReversalCascade calls per-obligation) to verify
-// journal entry creation without requiring the durable workflow
-// component. This is the actual business logic that processes
-// reversal entries in the cash ledger.
+// These tests exercise the canonical transfer-owned reversal path end-to-end.
+// For attempt-linked inbound transfers, processReversalCascade now fans out
+// through the transfer effect and writes transfer-scoped reversal entries.
 // ═══════════════════════════════════════════════════════════════════
 
 describe("Reversal webhook integration: emitPaymentReversed journal entries", () => {
-	// ── T-107: executeReversalCascadeStep creates REVERSAL journal entries ──
-	it("T-107: executeReversalCascadeStep posts reversal journal entries for each obligation", async () => {
+	it("T-107: processReversalCascade posts transfer-owned reversal journal entries for each obligation", async () => {
 		const t = createHarness(modules);
 		registerAuditLogComponent(t, "auditLog");
 		const state = await seedConfirmedAttemptPipeline(t);
@@ -700,22 +697,13 @@ describe("Reversal webhook integration: emitPaymentReversed journal entries", ()
 				providerEventId: "evt_journal_001",
 			}
 		);
+		await applyTransferReversalEffect(t, {
+			transferId: state.transferId,
+			reason: "NSF — journal entry test",
+			reversalRef: "evt_journal_001",
+		});
 
-		// Call executeReversalCascadeStep directly — this is the mutation that
-		// the durable workflow invokes to process the reversal cascade.
-		await t.mutation(
-			internal.engine.effects.collectionAttempt.executeReversalCascadeStep,
-			{
-				entityId: state.attemptId,
-				source: SYSTEM_SOURCE,
-				reason: "NSF — journal entry test",
-				effectiveDate: "2026-03-10",
-			}
-		);
-
-		// Verify REVERSAL entries were created in the journal.
-		// All reversal entries share a postingGroupId of `reversal-group:${attemptId}`.
-		const expectedPostingGroupId = `reversal-group:${state.attemptId}`;
+		const expectedPostingGroupId = `reversal-group:transfer:${state.transferId}`;
 		const reversalEntries = await t.run(async (ctx) => {
 			return ctx.db
 				.query("cash_ledger_journal_entries")
@@ -734,9 +722,9 @@ describe("Reversal webhook integration: emitPaymentReversed journal entries", ()
 			expect(entry.entryType).toBe("REVERSAL");
 		}
 
-		// CASH_RECEIVED reversal should reference our attempt
+		// CASH_RECEIVED reversal should reference the canonical transfer
 		const cashReceivedReversal = reversalEntries.find(
-			(e) => e.attemptId === state.attemptId
+			(e) => e.transferRequestId === state.transferId
 		);
 		expect(cashReceivedReversal).toBeDefined();
 
@@ -773,17 +761,11 @@ describe("Reversal webhook integration: emitPaymentReversed journal entries", ()
 				providerEventId: "evt_balance_001",
 			}
 		);
-
-		// Execute the reversal cascade step directly
-		await t.mutation(
-			internal.engine.effects.collectionAttempt.executeReversalCascadeStep,
-			{
-				entityId: state.attemptId,
-				source: SYSTEM_SOURCE,
-				reason: "NSF — balance test",
-				effectiveDate: "2026-03-10",
-			}
-		);
+		await applyTransferReversalEffect(t, {
+			transferId: state.transferId,
+			reason: "NSF — balance test",
+			reversalRef: "evt_balance_001",
+		});
 
 		// TRUST_CASH should be back to zero (received then reversed)
 		const trustCashAfter = await t.run(async (ctx) => {
@@ -836,7 +818,7 @@ describe("Reversal webhook integration: emitPaymentReversed journal entries", ()
 		registerAuditLogComponent(t, "auditLog");
 		const state = await seedConfirmedAttemptPipeline(t);
 
-		// Transition + execute cascade step
+		// Transition through the canonical transfer-owned reversal path
 		await t.mutation(
 			internal.payments.webhooks.processReversal.processReversalCascade,
 			{
@@ -847,19 +829,13 @@ describe("Reversal webhook integration: emitPaymentReversed journal entries", ()
 				providerEventId: "evt_pg_001",
 			}
 		);
+		await applyTransferReversalEffect(t, {
+			transferId: state.transferId,
+			reason: "NSF — posting group test",
+			reversalRef: "evt_pg_001",
+		});
 
-		await t.mutation(
-			internal.engine.effects.collectionAttempt.executeReversalCascadeStep,
-			{
-				entityId: state.attemptId,
-				source: SYSTEM_SOURCE,
-				reason: "NSF — posting group test",
-				effectiveDate: "2026-03-10",
-			}
-		);
-
-		// All reversal entries share postingGroupId = `reversal-group:${attemptId}`
-		const expectedPostingGroupId = `reversal-group:${state.attemptId}`;
+		const expectedPostingGroupId = `reversal-group:transfer:${state.transferId}`;
 		const reversalEntries = await t.run(async (ctx) => {
 			return ctx.db
 				.query("cash_ledger_journal_entries")

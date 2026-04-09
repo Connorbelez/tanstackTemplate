@@ -284,9 +284,7 @@ export async function checkOrphanedReversedTransfers(
 				reversedAt: transfer.reversedAt,
 				ageDays: ageDays(transfer.reversedAt, now),
 				mortgageId: transfer.mortgageId ?? undefined,
-				expectedIdempotencyKey: reversalPostingGroupId(
-					transfer.collectionAttemptId
-				),
+				expectedIdempotencyKey: reversalPostingGroupId(transfer._id),
 			});
 			totalAmountCents += transfer.amount;
 			continue;
