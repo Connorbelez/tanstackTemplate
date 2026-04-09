@@ -1,7 +1,6 @@
 import { convexTest } from "convex-test";
-import { describe, expect, it, vi } from "vitest";
-import workflowSchema from "../../../node_modules/@convex-dev/workflow/dist/component/schema.js";
-import workpoolSchema from "../../../node_modules/@convex-dev/workpool/dist/component/schema.js";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { drainScheduledWork } from "../../../src/test/convex/runtime";
 import { internal } from "../../_generated/api";
 import type { Id } from "../../_generated/dataModel";
 import auditTrailSchema from "../../components/auditTrail/schema";
@@ -9,15 +8,11 @@ import schema from "../../schema";
 import {
 	convexModules,
 	auditTrailModules as sharedAuditTrailModules,
-	workflowModules as sharedWorkflowModules,
-	workpoolModules as sharedWorkpoolModules,
 } from "../../test/moduleMaps";
 import { registerAuditLogComponent } from "../../test/registerAuditLogComponent";
 
 const modules = convexModules;
 const auditTrailModules = sharedAuditTrailModules;
-const workflowModules = sharedWorkflowModules;
-const workpoolModules = sharedWorkpoolModules;
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -33,13 +28,22 @@ const GRACE_PERIOD_DAYS = 15;
 type TestHarness = ReturnType<typeof convexTest>;
 
 function createTestHarness(): TestHarness {
+	process.env.DISABLE_GT_HASHCHAIN = "true";
+	process.env.DISABLE_CASH_LEDGER_HASHCHAIN = "true";
 	const t = convexTest(schema, modules);
 	registerAuditLogComponent(t, "auditLog");
 	t.registerComponent("auditTrail", auditTrailSchema, auditTrailModules);
-	t.registerComponent("workflow", workflowSchema, workflowModules);
-	t.registerComponent("workflow/workpool", workpoolSchema, workpoolModules);
 	return t;
 }
+
+afterEach(async () => {
+	vi.clearAllTimers();
+	vi.useRealTimers();
+});
+
+beforeEach(() => {
+	vi.useFakeTimers();
+});
 
 /**
  * Seed a mortgage with a linked borrower and return IDs needed for obligation seeding.
@@ -205,7 +209,6 @@ describe("processObligationTransitions", () => {
 	});
 
 	it("transitions due obligations to overdue when gracePeriodEnd <= now", async () => {
-		vi.useFakeTimers();
 		const t = createTestHarness();
 		const { mortgageId, borrowerId } = await seedMortgageWithBorrower(t);
 
@@ -226,14 +229,13 @@ describe("processObligationTransitions", () => {
 		);
 
 		// Drain scheduled effects (emitObligationOverdue, createLateFeeObligation)
-		await t.finishAllScheduledFunctions(vi.runAllTimers);
+		await drainScheduledWork(t, { flushMicrotasks: true });
 
 		const obligation = await t.run(async (ctx) => {
 			return ctx.db.get(obligationId);
 		});
 		expect(obligation).not.toBeNull();
 		expect(obligation?.status).toBe("overdue");
-		vi.useRealTimers();
 	});
 
 	it("does not transition obligations that are not yet due", async () => {
@@ -312,7 +314,6 @@ describe("processObligationTransitions", () => {
 	});
 
 	it("processes both phases in a single run", async () => {
-		vi.useFakeTimers();
 		const t = createTestHarness();
 		const { mortgageId, borrowerId } = await seedMortgageWithBorrower(t);
 
@@ -344,7 +345,7 @@ describe("processObligationTransitions", () => {
 		);
 
 		// Drain scheduled effects from GRACE_PERIOD_EXPIRED
-		await t.finishAllScheduledFunctions(vi.runAllTimers);
+		await drainScheduledWork(t, { flushMicrotasks: true });
 
 		const [upcomingObl, dueObl] = await t.run(async (ctx) => {
 			return Promise.all([ctx.db.get(upcomingId), ctx.db.get(dueId)]);
@@ -352,7 +353,6 @@ describe("processObligationTransitions", () => {
 
 		expect(upcomingObl?.status).toBe("due");
 		expect(dueObl?.status).toBe("overdue");
-		vi.useRealTimers();
 	});
 
 	it("logs batch overflow warnings and records the UTC business-date streak", async () => {

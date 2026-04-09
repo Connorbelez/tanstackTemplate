@@ -1,6 +1,9 @@
 import { convexTest } from "convex-test";
 import type { Doc, Id } from "../../../_generated/dataModel";
+import auditTrailSchema from "../../../components/auditTrail/schema";
 import schema from "../../../schema";
+import { auditTrailModules } from "../../../test/moduleMaps";
+import { registerAuditLogComponent } from "../../../test/registerAuditLogComponent";
 import { getOrCreateCashAccount } from "../accounts";
 import { type PostCashEntryInput, postCashEntryInternal } from "../postEntry";
 import type { CashAccountFamily, ControlSubaccount } from "../types";
@@ -33,12 +36,17 @@ export const ADMIN_IDENTITY = {
 //
 // The hash-chain kill switch is enabled here because createHarness does NOT
 // register workflow/workpool components that nudge() → startCashLedgerHashChain()
-// requires. Tests that exercise hash-chain behaviour use their own harnesses
-// with workflow components (e.g. cashReceiptIntegration.test.ts, auditTrail.test.ts).
+// requires. It does register the audit components that rejection paths and
+// auth failures write into. Tests that exercise hash-chain behaviour use their
+// own harnesses with workflow components (e.g. cashReceiptIntegration.test.ts,
+// auditTrail.test.ts).
 
 export function createHarness(modules: Record<string, () => Promise<unknown>>) {
 	process.env.DISABLE_CASH_LEDGER_HASHCHAIN = "true";
-	return convexTest(schema, modules);
+	const t = convexTest(schema, modules);
+	registerAuditLogComponent(t, "auditLog");
+	t.registerComponent("auditTrail", auditTrailSchema, auditTrailModules);
+	return t;
 }
 
 export type TestHarness = ReturnType<typeof convexTest>;

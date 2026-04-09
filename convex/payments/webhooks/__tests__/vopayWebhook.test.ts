@@ -6,7 +6,7 @@
  * functions and data structures from vopay.ts.
  */
 
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createWebhookTestHarness } from "../../../../src/test/convex/payments/webhooks/convexTestHarness";
 import { internal } from "../../../_generated/api";
 import { seedMinimalEntities } from "../../cashLedger/__tests__/testUtils";
@@ -21,6 +21,19 @@ const TEST_SOURCE = {
 	actorId: "test-webhook",
 	actorType: "system" as const,
 };
+
+function createTrackedHarness() {
+	return createWebhookTestHarness();
+}
+
+afterEach(async () => {
+	vi.clearAllTimers();
+	vi.useRealTimers();
+});
+
+beforeEach(() => {
+	vi.useFakeTimers();
+});
 
 // ── Factory ─────────────────────────────────────────────────────────
 
@@ -203,7 +216,7 @@ async function seedProviderOwnedTransfer(
 		providerCode: "pad_vopay" | "eft_vopay";
 		providerRef: string;
 	},
-	t = createWebhookTestHarness()
+	t = createTrackedHarness()
 ) {
 	const seeded = await t.run(async (ctx) => {
 		const transferId = await ctx.db.insert("transferRequests", {
@@ -252,7 +265,7 @@ async function seedBridgedTransfer(
 		providerRef: string;
 		status?: "confirmed" | "pending";
 	},
-	t = createWebhookTestHarness()
+	t = createTrackedHarness()
 ) {
 	const { mortgageId } = await seedMinimalEntities(t);
 
@@ -277,7 +290,6 @@ async function seedBridgedTransfer(
 			obligationIds: [],
 			method: opts.providerCode,
 			amount: 50_000,
-			providerRef: opts.providerRef,
 			initiatedAt: Date.now(),
 		});
 

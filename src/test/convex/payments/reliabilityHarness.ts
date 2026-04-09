@@ -26,7 +26,7 @@ const WEBHOOK_SOURCE = {
 
 const LEDGER_SOURCE = {
 	type: "system" as const,
-	channel: "test",
+	channel: "scheduler" as const,
 };
 
 const ADMIN_IDENTITY = {

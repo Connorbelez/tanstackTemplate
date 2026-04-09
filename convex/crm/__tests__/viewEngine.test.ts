@@ -1439,10 +1439,11 @@ describe("System object view queries", () => {
 		expect(borrowerObjDef.nativeTable).toBeTruthy();
 
 		await t.run(async (ctx) => {
+			const now = Date.now();
 			const userId = await ctx.db.insert("users", {
-				authId: "borrower-auth-1",
-				email: "borrower@test.fairlend.ca",
-				firstName: "Native",
+				authId: "crm-system-borrower",
+				email: "crm-system-borrower@test.fairlend.ca",
+				firstName: "System",
 				lastName: "Borrower",
 			});
 
@@ -1450,7 +1451,7 @@ describe("System object view queries", () => {
 				status: "active",
 				orgId: CRM_ADMIN_IDENTITY.org_id,
 				userId,
-				createdAt: Date.now(),
+				createdAt: now,
 			});
 		});
 

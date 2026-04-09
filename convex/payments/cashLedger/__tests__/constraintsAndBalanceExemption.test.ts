@@ -3,6 +3,7 @@ import { convexModules } from "../../../test/moduleMaps";
 import { getOrCreateCashAccount } from "../accounts";
 import type { PostCashEntryInput } from "../postEntry";
 import { postCashEntryInternal } from "../postEntry";
+import { buildIdempotencyKey } from "../types";
 import {
 	ADMIN_SOURCE,
 	createHarness,
@@ -21,6 +22,10 @@ const CORRECTION_CAUSED_BY_PATTERN =
 const CORRECTION_REASON_PATTERN = /CORRECTION entries require a reason/;
 const REVERSAL_CAUSED_BY_PATTERN = /REVERSAL entries must reference causedBy/;
 const NEGATIVE_BALANCE_PATTERN = /negative/i;
+
+function testIdempotencyKey(scope: string) {
+	return buildIdempotencyKey("test", scope);
+}
 
 /**
  * Seeds a minimal set of cash ledger accounts needed for CORRECTION/REVERSAL
@@ -48,7 +53,7 @@ async function seedAccountsForConstraintTests(t: TestHarness) {
 			debitAccountId: receivableAccount._id,
 			creditAccountId: controlAccount._id,
 			amount: 10_000n,
-			idempotencyKey: "seed-entry-for-constraint-tests",
+			idempotencyKey: testIdempotencyKey("seed-entry-for-constraint-tests"),
 			source: SYSTEM_SOURCE,
 		});
 
@@ -105,7 +110,7 @@ describe("constraintCheck — CORRECTION entries", () => {
 				amount: 1000,
 				debitAccountId: seeded.debitAccountId,
 				creditAccountId: seeded.creditAccountId,
-				idempotencyKey: "correction-bad-actor-type",
+				idempotencyKey: testIdempotencyKey("correction-bad-actor-type"),
 				causedBy: seeded.causedBy,
 				reason: "Fix misposting",
 				source: { ...SYSTEM_SOURCE, actorType: "system" },
@@ -128,7 +133,7 @@ describe("constraintCheck — CORRECTION entries", () => {
 				amount: 1000,
 				debitAccountId: seeded.debitAccountId,
 				creditAccountId: seeded.creditAccountId,
-				idempotencyKey: "correction-no-actor-id",
+				idempotencyKey: testIdempotencyKey("correction-no-actor-id"),
 				causedBy: seeded.causedBy,
 				reason: "Fix misposting",
 				source: { channel: "admin_dashboard", actorType: "admin" },
@@ -151,7 +156,7 @@ describe("constraintCheck — CORRECTION entries", () => {
 				amount: 1000,
 				debitAccountId: seeded.debitAccountId,
 				creditAccountId: seeded.creditAccountId,
-				idempotencyKey: "correction-no-caused-by",
+				idempotencyKey: testIdempotencyKey("correction-no-caused-by"),
 				reason: "Fix misposting",
 				source: ADMIN_SOURCE,
 			};
@@ -173,7 +178,7 @@ describe("constraintCheck — CORRECTION entries", () => {
 				amount: 1000,
 				debitAccountId: seeded.debitAccountId,
 				creditAccountId: seeded.creditAccountId,
-				idempotencyKey: "correction-no-reason",
+				idempotencyKey: testIdempotencyKey("correction-no-reason"),
 				causedBy: seeded.causedBy,
 				source: ADMIN_SOURCE,
 			};
@@ -195,7 +200,7 @@ describe("constraintCheck — CORRECTION entries", () => {
 				amount: 1000,
 				debitAccountId: seeded.debitAccountId,
 				creditAccountId: seeded.creditAccountId,
-				idempotencyKey: "correction-valid",
+				idempotencyKey: testIdempotencyKey("correction-valid"),
 				causedBy: seeded.causedBy,
 				reason: "Fix misposting — correcting accrual amount",
 				source: ADMIN_SOURCE,
@@ -225,7 +230,7 @@ describe("constraintCheck — REVERSAL entries", () => {
 				amount: 1000,
 				debitAccountId: seeded.debitAccountId,
 				creditAccountId: seeded.creditAccountId,
-				idempotencyKey: "reversal-no-caused-by",
+				idempotencyKey: testIdempotencyKey("reversal-no-caused-by"),
 				source: SYSTEM_SOURCE,
 			};
 
@@ -246,7 +251,7 @@ describe("constraintCheck — REVERSAL entries", () => {
 				amount: 1000,
 				debitAccountId: seeded.debitAccountId,
 				creditAccountId: seeded.creditAccountId,
-				idempotencyKey: "reversal-valid",
+				idempotencyKey: testIdempotencyKey("reversal-valid"),
 				causedBy: seeded.causedBy,
 				source: SYSTEM_SOURCE,
 			});
@@ -277,7 +282,7 @@ describe("balanceCheck — NEGATIVE_BALANCE_EXEMPT_FAMILIES", () => {
 				amount: 50_000,
 				debitAccountId: seeded.trustCashAccountId,
 				creditAccountId: seeded.receivableAccountId,
-				idempotencyKey: "balance-exempt-receivable",
+				idempotencyKey: testIdempotencyKey("balance-exempt-receivable"),
 				source: SYSTEM_SOURCE,
 			});
 
@@ -317,7 +322,7 @@ describe("balanceCheck — NEGATIVE_BALANCE_EXEMPT_FAMILIES", () => {
 					amount: 50_000,
 					debitAccountId: lenderPayableAccount._id,
 					creditAccountId: seeded.trustCashAccountId,
-					idempotencyKey: "balance-guard-trust-cash",
+					idempotencyKey: testIdempotencyKey("balance-guard-trust-cash"),
 					source: SYSTEM_SOURCE,
 				})
 			).rejects.toThrow(NEGATIVE_BALANCE_PATTERN);
@@ -352,7 +357,7 @@ describe("balanceCheck — SUSPENSE_ESCALATED exemption", () => {
 				amount: 25_000,
 				debitAccountId: suspenseAccount._id,
 				creditAccountId: receivableAccount._id,
-				idempotencyKey: "suspense-escalated-balance-exempt",
+				idempotencyKey: testIdempotencyKey("suspense-escalated-balance-exempt"),
 				source: SYSTEM_SOURCE,
 			});
 

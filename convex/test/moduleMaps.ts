@@ -1,7 +1,33 @@
 type ModuleLoader = () => Promise<unknown>;
 type ModuleMap = Record<string, ModuleLoader>;
 
-export const convexModules: ModuleMap = {
+function withModuleAliases(modules: ModuleMap): ModuleMap {
+	const aliasedModules: ModuleMap = { ...modules };
+
+	for (const [key, loader] of Object.entries(modules)) {
+		const keyWithoutLeadingSlash = key.startsWith("/") ? key.slice(1) : key;
+		aliasedModules[keyWithoutLeadingSlash] = loader;
+
+		if (key.startsWith("/convex/")) {
+			const convexRelativeKey = key.slice("/convex/".length);
+			aliasedModules[convexRelativeKey] = loader;
+
+			if (convexRelativeKey.endsWith(".ts")) {
+				aliasedModules[convexRelativeKey.slice(0, -3)] = loader;
+				aliasedModules[`${convexRelativeKey.slice(0, -3)}.js`] = loader;
+				aliasedModules[`${key.slice(0, -3)}.js`] = loader;
+			}
+		}
+
+		if (keyWithoutLeadingSlash.endsWith(".js")) {
+			aliasedModules[keyWithoutLeadingSlash.slice(0, -3)] = loader;
+		}
+	}
+
+	return aliasedModules;
+}
+
+export const convexModules: ModuleMap = withModuleAliases({
 	"/convex/accrual/calculateAccruedByMortgage.ts": async () =>
 		await import("./../accrual/calculateAccruedByMortgage.ts"),
 	"/convex/accrual/calculateAccruedInterest.ts": async () =>
@@ -515,9 +541,9 @@ export const convexModules: ModuleMap = {
 	"/convex/test/registerAuditLogComponent.ts": async () =>
 		await import("./registerAuditLogComponent.ts"),
 	"/convex/todos.ts": async () => await import("./../todos.ts"),
-};
+});
 
-export const auditTrailModules: ModuleMap = {
+export const auditTrailModules: ModuleMap = withModuleAliases({
 	"/convex/components/auditTrail/_generated/api.ts": async () =>
 		await import("./../components/auditTrail/_generated/api.ts"),
 	"/convex/components/auditTrail/_generated/component.ts": async () =>
@@ -536,9 +562,9 @@ export const auditTrailModules: ModuleMap = {
 		await import("./../components/auditTrail/lib.ts"),
 	"/convex/components/auditTrail/schema.ts": async () =>
 		await import("./../components/auditTrail/schema.ts"),
-};
+});
 
-export const workflowModules: ModuleMap = {
+export const workflowModules: ModuleMap = withModuleAliases({
 	"/node_modules/@convex-dev/workflow/dist/component/_generated/api.js":
 		async () =>
 			await import(
@@ -596,9 +622,9 @@ export const workflowModules: ModuleMap = {
 		await import(
 			"./../../node_modules/@convex-dev/workflow/dist/component/workflow.js"
 		),
-};
+});
 
-export const workpoolModules: ModuleMap = {
+export const workpoolModules: ModuleMap = withModuleAliases({
 	"/node_modules/@convex-dev/workpool/dist/component/_generated/api.js":
 		async () =>
 			await import(
@@ -676,4 +702,4 @@ export const workpoolModules: ModuleMap = {
 		await import(
 			"./../../node_modules/@convex-dev/workpool/dist/component/worker.js"
 		),
-};
+});

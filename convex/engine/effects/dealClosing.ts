@@ -8,11 +8,6 @@ const dealEffectPayloadValidator = {
 	...effectPayloadValidator,
 	entityId: v.id("deals"),
 	entityType: v.literal("deal"),
-	payload: v.optional(
-		v.object({
-			reason: v.optional(v.string()),
-		})
-	),
 };
 
 /**

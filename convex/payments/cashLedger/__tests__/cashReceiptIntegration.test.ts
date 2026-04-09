@@ -1,5 +1,6 @@
+import process from "node:process";
 import { convexTest } from "convex-test";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import workflowSchema from "../../../../node_modules/@convex-dev/workflow/dist/component/schema.js";
 import workpoolSchema from "../../../../node_modules/@convex-dev/workpool/dist/component/schema.js";
 import type { Id } from "../../../_generated/dataModel";
@@ -27,12 +28,29 @@ const modules = convexModules;
 const auditTrailModules = sharedAuditTrailModules;
 const workflowModules = sharedWorkflowModules;
 const workpoolModules = sharedWorkpoolModules;
+const testGlobal = globalThis as typeof globalThis & {
+	process?: {
+		env: Record<string, string | undefined>;
+	};
+};
+const testProcess = process as unknown as {
+	env: Record<string, string | undefined>;
+};
+
+testGlobal.process = testProcess;
+
+afterEach(() => {
+	vi.clearAllTimers();
+	vi.useRealTimers();
+});
 
 // ── Test harness with components ────────────────────────────────────
 
 type TestHarness = ReturnType<typeof createFullHarness>;
 
 function createFullHarness() {
+	testProcess.env.DISABLE_CASH_LEDGER_HASHCHAIN = "true";
+	testProcess.env.DISABLE_GT_HASHCHAIN = "true";
 	const t = convexTest(schema, modules);
 	registerAuditLogComponent(t, "auditLog");
 	t.registerComponent("auditTrail", auditTrailSchema, auditTrailModules);

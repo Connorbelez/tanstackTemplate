@@ -447,10 +447,8 @@ describe("calculateProRataShares", () => {
 			10
 		);
 
-		expect(shares.map((share) => share.amount)).toEqual([3.33, 3.33, 3.34]);
-		expect(
-			Math.round(shares.reduce((sum, share) => sum + share.amount, 0) * 100)
-		).toBe(1000);
+		expect(shares.map((share) => share.amount)).toEqual([3, 3, 4]);
+		expect(shares.reduce((sum, share) => sum + share.amount, 0)).toBe(10);
 	});
 
 	it("distributes an odd cent deterministically across equal positions", () => {
@@ -467,13 +465,11 @@ describe("calculateProRataShares", () => {
 					units: 5000,
 				}),
 			],
-			100.01
+			10_001
 		);
 
-		expect(shares.map((share) => share.amount)).toEqual([50.01, 50]);
-		expect(
-			Math.round(shares.reduce((sum, share) => sum + share.amount, 0) * 100)
-		).toBe(10_001);
+		expect(shares.map((share) => share.amount)).toEqual([5001, 5000]);
+		expect(shares.reduce((sum, share) => sum + share.amount, 0)).toBe(10_001);
 	});
 
 	it("breaks equal-remainder ties by largest position", () => {
@@ -490,12 +486,12 @@ describe("calculateProRataShares", () => {
 					units: 1000,
 				}),
 			],
-			0.02
+			2
 		);
 
-		expect(shares.map((share) => share.amount)).toEqual([0.01, 0.01]);
-		expect(shares[0]?.rawAmount).toBeCloseTo(0.013_333_333_3, 10);
-		expect(shares[1]?.rawAmount).toBeCloseTo(0.006_666_666_7, 10);
+		expect(shares.map((share) => share.amount)).toEqual([1, 1]);
+		expect(shares[0]?.rawAmount).toBeCloseTo(1.333_333_333_3, 10);
+		expect(shares[1]?.rawAmount).toBeCloseTo(0.666_666_666_7, 10);
 	});
 
 	it("preserves input order while allocating cents by rank", () => {
@@ -512,14 +508,14 @@ describe("calculateProRataShares", () => {
 					units: 3,
 				}),
 			],
-			0.01
+			1
 		);
 
 		expect(shares.map((share) => share.lenderAccountId)).toEqual([
 			"ledger_account_9",
 			"ledger_account_8",
 		]);
-		expect(shares.map((share) => share.amount)).toEqual([0, 0.01]);
+		expect(shares.map((share) => share.amount)).toEqual([0, 1]);
 	});
 
 	it("returns an empty array for no positions", () => {
@@ -527,13 +523,13 @@ describe("calculateProRataShares", () => {
 	});
 
 	it("throws when distributableAmount is negative", () => {
-		expect(() => calculateProRataShares([makePosition()], -0.01)).toThrow(
-			"calculateProRataShares: distributableAmount must be non-negative"
+		expect(() => calculateProRataShares([makePosition()], -1)).toThrow(
+			"calculateProRataShares: distributableAmount must be a non-negative integer cent value, got -1"
 		);
 	});
 
-	it("throws when total units is not positive", () => {
-		expect(() =>
+	it("returns an empty array when total units is not positive", () => {
+		expect(
 			calculateProRataShares(
 				[
 					makePosition({
@@ -543,6 +539,6 @@ describe("calculateProRataShares", () => {
 				],
 				1
 			)
-		).toThrow("calculateProRataShares: totalUnits must be positive");
+		).toEqual([]);
 	});
 });

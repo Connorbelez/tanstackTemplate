@@ -100,7 +100,7 @@ describe("ENG-164 reconciliation suite — checks 1–4", () => {
 		expect(result.items.length).toBeGreaterThanOrEqual(1);
 	});
 
-	it("checkNegativePayables skips LENDER_PAYABLE when a REVERSAL debits the account", async () => {
+	it("checkNegativePayables still flags a LENDER_PAYABLE account when a REVERSAL leaves it negative", async () => {
 		const t = createHarness(modules);
 		await seedMinimalEntities(t);
 
@@ -139,7 +139,7 @@ describe("ENG-164 reconciliation suite — checks 1–4", () => {
 
 		const result = await t.run(async (ctx) => checkNegativePayables(ctx));
 		const hit = result.items.some((i) => i.accountId === lenderPayable._id);
-		expect(hit).toBe(false);
+		expect(hit).toBe(true);
 	});
 
 	it("checkObligationBalanceDrift flags settled obligations without matching CASH_RECEIVED journal", async () => {

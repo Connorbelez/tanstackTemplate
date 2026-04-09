@@ -1,6 +1,6 @@
 import process from "node:process";
 import { convexTest } from "convex-test";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { internal } from "../../../_generated/api";
 import type { Id } from "../../../_generated/dataModel";
 import schema from "../../../schema";
@@ -25,6 +25,11 @@ const testProcess = process as unknown as {
 };
 
 testGlobal.process = testProcess;
+
+afterEach(() => {
+	vi.clearAllTimers();
+	vi.useRealTimers();
+});
 
 // ── Test harness with components ────────────────────────────────────
 

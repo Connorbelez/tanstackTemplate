@@ -4,6 +4,7 @@ import { api } from "../../../_generated/api";
 import { FAIRLEND_STAFF_ORG_ID } from "../../../constants";
 import schema from "../../../schema";
 import { convexModules } from "../../../test/moduleMaps";
+import { registerAuditLogComponent } from "../../../test/registerAuditLogComponent";
 import { getNextCashSequenceNumber } from "../sequenceCounter";
 
 const modules = convexModules;
@@ -37,7 +38,9 @@ const NON_ADMIN_IDENTITY = {
 };
 
 function createHarness() {
-	return convexTest(schema, modules);
+	const t = convexTest(schema, modules);
+	registerAuditLogComponent(t, "auditLog");
+	return t;
 }
 
 function asAdmin(t: ReturnType<typeof createHarness>) {

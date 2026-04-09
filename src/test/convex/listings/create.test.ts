@@ -4,6 +4,7 @@ import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import type { ListingCreateInput } from "../../../../convex/listings/validators";
 import schema from "../../../../convex/schema";
+import { registerAuditLogComponent } from "../../../../convex/test/registerAuditLogComponent";
 import { BROKER, FAIRLEND_ADMIN } from "../../auth/identities";
 
 const modules = {
@@ -15,6 +16,12 @@ const modules = {
 	...import.meta.glob("../../../../convex/constants.ts"),
 	...import.meta.glob("../../../../convex/fluent.ts"),
 };
+
+function createHarness() {
+	const t = convexTest(schema, modules);
+	registerAuditLogComponent(t, "auditLog");
+	return t;
+}
 
 function buildListingInput(
 	overrides: Partial<ListingCreateInput> = {}
@@ -55,7 +62,7 @@ function buildListingInput(
 	};
 }
 
-async function seedMortgage(t: ReturnType<typeof convexTest>) {
+async function seedMortgage(t: ReturnType<typeof createHarness>) {
 	const now = Date.now();
 
 	return await t.run(async (ctx) => {
@@ -125,7 +132,7 @@ async function seedMortgage(t: ReturnType<typeof convexTest>) {
 
 describe("listings/create.create", () => {
 	it("creates a draft listing behind the fluent admin + permission chain", async () => {
-		const t = convexTest(schema, modules);
+		const t = createHarness();
 		const mortgageId = await seedMortgage(t);
 
 		const listingId = await t
@@ -141,7 +148,7 @@ describe("listings/create.create", () => {
 	});
 
 	it("rejects unauthenticated callers", async () => {
-		const t = convexTest(schema, modules);
+		const t = createHarness();
 
 		await expect(
 			t.mutation(
@@ -152,7 +159,7 @@ describe("listings/create.create", () => {
 	});
 
 	it("rejects non-FairLend admins even if they have listing permissions", async () => {
-		const t = convexTest(schema, modules);
+		const t = createHarness();
 
 		await expect(
 			t.withIdentity(BROKER).mutation(
@@ -163,7 +170,7 @@ describe("listings/create.create", () => {
 	});
 
 	it("rejects duplicate listings for the same mortgage", async () => {
-		const t = convexTest(schema, modules);
+		const t = createHarness();
 		const auth = t.withIdentity(FAIRLEND_ADMIN);
 		const mortgageId = await seedMortgage(t);
 
@@ -181,7 +188,7 @@ describe("listings/create.create", () => {
 	});
 
 	it("allows demo listings without a mortgage link", async () => {
-		const t = convexTest(schema, modules);
+		const t = createHarness();
 
 		const listingId = await t
 			.withIdentity(FAIRLEND_ADMIN)
@@ -199,7 +206,7 @@ describe("listings/create.create", () => {
 	});
 
 	it("rejects a demo listing with a mortgage link", async () => {
-		const t = convexTest(schema, modules);
+		const t = createHarness();
 		const mortgageId = await seedMortgage(t);
 
 		await expect(
@@ -211,7 +218,7 @@ describe("listings/create.create", () => {
 	});
 
 	it("rejects a mortgage-backed listing without a mortgage link", async () => {
-		const t = convexTest(schema, modules);
+		const t = createHarness();
 
 		await expect(
 			t.withIdentity(FAIRLEND_ADMIN).mutation(

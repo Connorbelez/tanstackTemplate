@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createWebhookTestHarness } from "../../../../src/test/convex/payments/webhooks/convexTestHarness";
 import { internal } from "../../../_generated/api";
 import type { Id } from "../../../_generated/dataModel";
@@ -13,6 +13,15 @@ const TEST_SOURCE = {
 function createHarness() {
 	return createWebhookTestHarness();
 }
+
+beforeEach(() => {
+	vi.useFakeTimers();
+});
+
+afterEach(() => {
+	vi.clearAllTimers();
+	vi.useRealTimers();
+});
 
 async function seedBridgedTransfer(
 	t: ReturnType<typeof createWebhookTestHarness>,
@@ -45,7 +54,6 @@ async function seedBridgedTransfer(
 			obligationIds: [],
 			method: args.providerCode,
 			amount: 50_000,
-			providerRef: args.providerRef,
 			initiatedAt: Date.now(),
 		});
 

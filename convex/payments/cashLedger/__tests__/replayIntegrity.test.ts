@@ -8,6 +8,7 @@ import {
 	getReplayCursor,
 	replayJournalIntegrity,
 } from "../replayIntegrity";
+import { buildIdempotencyKey } from "../types";
 import {
 	createHarness,
 	createTestAccount,
@@ -17,6 +18,10 @@ import {
 } from "./testUtils";
 
 const modules = convexModules;
+
+function replayIdempotencyKey(scope: string) {
+	return buildIdempotencyKey("replay-test", scope);
+}
 
 // ── Typed account reader (avoids union-type issue with ctx.db.get) ───
 
@@ -62,15 +67,22 @@ function accrualInput(
 	creditAccountId: Id<"cash_ledger_accounts">,
 	overrides?: Partial<PostCashEntryInput>
 ): PostCashEntryInput {
+	const overrideIdempotencyKey = overrides?.idempotencyKey;
 	return {
 		amount: 10_000,
 		effectiveDate: "2026-01-15",
 		entryType: "OBLIGATION_ACCRUED",
-		idempotencyKey: `replay-test-${Date.now()}-${Math.random()}`,
 		source: SYSTEM_SOURCE,
 		debitAccountId,
 		creditAccountId,
 		...overrides,
+		idempotencyKey:
+			overrideIdempotencyKey?.startsWith("cash-ledger:") === true
+				? overrideIdempotencyKey
+				: replayIdempotencyKey(
+						overrideIdempotencyKey ??
+							`${Date.now()}-${Math.random().toString(36).slice(2)}`
+					),
 	};
 }
 
@@ -441,7 +453,7 @@ describe("Credit-normal vs debit-normal families", () => {
 			amount: 20_000,
 			effectiveDate: "2026-02-01",
 			entryType: "LENDER_PAYABLE_CREATED",
-			idempotencyKey: "credit-normal-1",
+			idempotencyKey: replayIdempotencyKey("credit-normal-1"),
 			source: SYSTEM_SOURCE,
 			debitAccountId: controlAlloc._id,
 			creditAccountId: lenderPayable._id,
@@ -451,7 +463,7 @@ describe("Credit-normal vs debit-normal families", () => {
 			amount: 30_000,
 			effectiveDate: "2026-02-02",
 			entryType: "LENDER_PAYABLE_CREATED",
-			idempotencyKey: "credit-normal-2",
+			idempotencyKey: replayIdempotencyKey("credit-normal-2"),
 			source: SYSTEM_SOURCE,
 			debitAccountId: controlAlloc._id,
 			creditAccountId: lenderPayable._id,
@@ -475,14 +487,14 @@ describe("Credit-normal vs debit-normal families", () => {
 			t,
 			accrualInput(debitAccount._id, creditAccount._id, {
 				amount: 15_000,
-				idempotencyKey: "debit-normal-1",
+				idempotencyKey: replayIdempotencyKey("debit-normal-1"),
 			})
 		);
 		await postTestEntry(
 			t,
 			accrualInput(debitAccount._id, creditAccount._id, {
 				amount: 25_000,
-				idempotencyKey: "debit-normal-2",
+				idempotencyKey: replayIdempotencyKey("debit-normal-2"),
 			})
 		);
 
@@ -502,7 +514,7 @@ describe("Credit-normal vs debit-normal families", () => {
 			amount: 50_000,
 			effectiveDate: "2026-02-01",
 			entryType: "LENDER_PAYABLE_CREATED",
-			idempotencyKey: "credit-normal-drift-1",
+			idempotencyKey: replayIdempotencyKey("credit-normal-drift-1"),
 			source: SYSTEM_SOURCE,
 			debitAccountId: controlAlloc._id,
 			creditAccountId: lenderPayable._id,
@@ -620,7 +632,7 @@ describe("REVERSAL entries reduce replayed totals", () => {
 			t,
 			accrualInput(debitAccount._id, creditAccount._id, {
 				amount: 50_000,
-				idempotencyKey: "reversal-original",
+				idempotencyKey: replayIdempotencyKey("reversal-original"),
 			})
 		);
 
@@ -630,7 +642,7 @@ describe("REVERSAL entries reduce replayed totals", () => {
 			amount: 50_000,
 			effectiveDate: "2026-01-16",
 			entryType: "REVERSAL",
-			idempotencyKey: "reversal-undo",
+			idempotencyKey: replayIdempotencyKey("reversal-undo"),
 			source: SYSTEM_SOURCE,
 			debitAccountId: creditAccount._id, // reversing: debit the CONTROL
 			creditAccountId: debitAccount._id, // reversing: credit the BORROWER_RECEIVABLE
@@ -670,7 +682,7 @@ describe("REVERSAL entries reduce replayed totals", () => {
 			t,
 			accrualInput(debitAccount._id, creditAccount._id, {
 				amount: 100_000,
-				idempotencyKey: "partial-reversal-original",
+				idempotencyKey: replayIdempotencyKey("partial-reversal-original"),
 			})
 		);
 
@@ -679,7 +691,7 @@ describe("REVERSAL entries reduce replayed totals", () => {
 			amount: 40_000,
 			effectiveDate: "2026-01-16",
 			entryType: "REVERSAL",
-			idempotencyKey: "partial-reversal-undo",
+			idempotencyKey: replayIdempotencyKey("partial-reversal-undo"),
 			source: SYSTEM_SOURCE,
 			debitAccountId: creditAccount._id,
 			creditAccountId: debitAccount._id,

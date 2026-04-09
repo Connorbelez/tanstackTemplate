@@ -25,9 +25,15 @@ async function openHarness(
 	runId: string
 ) {
 	await page.goto(`${BASE_PATH}?runId=${runId}`);
-	await expect(
-		page.getByRole("heading", { name: "Offline Collection Lifecycle Harness" })
-	).toBeVisible({ timeout: LOAD_TIMEOUT });
+	await expect(page.getByTestId("e2e-stage-badge")).toBeVisible({
+		timeout: LOAD_TIMEOUT,
+	});
+	await expect(page.getByTestId("e2e-run-id-input")).toHaveValue(runId, {
+		timeout: LOAD_TIMEOUT,
+	});
+	await expect(page.getByText("Offline Collection Lifecycle Harness")).toBeVisible({
+		timeout: LOAD_TIMEOUT,
+	});
 }
 
 test.describe("AMPS offline payments e2e harness", () => {

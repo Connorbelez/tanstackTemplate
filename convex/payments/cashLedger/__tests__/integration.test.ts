@@ -9,6 +9,7 @@ import { postObligationAccrued } from "../integrations";
 import { postLenderPayout } from "../mutations";
 import { postCashEntryInternal } from "../postEntry";
 import { reconcileObligationSettlementProjectionInternal } from "../reconciliation";
+import { buildIdempotencyKey } from "../types";
 import { createHarness, SYSTEM_SOURCE, type TestHarness } from "./testUtils";
 
 const modules = convexModules;
@@ -16,6 +17,10 @@ const modules = convexModules;
 const NEGATIVE_BALANCE_PATTERN = /negative/i;
 const POSITIVE_SAFE_INTEGER_PATTERN = /positive safe integer/;
 const MUST_BE_DIFFERENT_PATTERN = /must be different/;
+
+function testIdempotencyKey(scope: string) {
+	return buildIdempotencyKey("test", scope);
+}
 
 interface ApplyPaymentHandler {
 	_handler: (
@@ -388,7 +393,7 @@ describe("cash ledger integrations", () => {
 				mortgageId: seeded.mortgageId,
 				settledAmount: 100_000,
 				settledDate: "2026-03-01",
-				idempotencyKey: "cash-ledger-dispersal",
+				idempotencyKey: testIdempotencyKey("dispersal"),
 				source: SYSTEM_SOURCE,
 			});
 
@@ -457,7 +462,7 @@ describe("cash ledger integrations", () => {
 				mortgageId: seeded.mortgageId,
 				settledAmount: 100_000,
 				settledDate: "2026-03-01",
-				idempotencyKey: "cash-ledger-payout-seed",
+				idempotencyKey: testIdempotencyKey("payout-seed"),
 				source: SYSTEM_SOURCE,
 			});
 
@@ -467,7 +472,7 @@ describe("cash ledger integrations", () => {
 					lenderId: seeded.lenderAId,
 					amount: 80_000,
 					effectiveDate: "2026-03-02",
-					idempotencyKey: "cash-ledger-overpay",
+					idempotencyKey: testIdempotencyKey("overpay"),
 					source: SYSTEM_SOURCE,
 				})
 			).rejects.toThrow(NEGATIVE_BALANCE_PATTERN);
@@ -477,7 +482,7 @@ describe("cash ledger integrations", () => {
 				lenderId: seeded.lenderAId,
 				amount: 55_000,
 				effectiveDate: "2026-03-02",
-				idempotencyKey: "cash-ledger-valid-payout",
+				idempotencyKey: testIdempotencyKey("valid-payout"),
 				source: SYSTEM_SOURCE,
 			});
 
@@ -519,7 +524,7 @@ describe("cash ledger integrations", () => {
 					amount: 0,
 					debitAccountId: debit._id,
 					creditAccountId: credit._id,
-					idempotencyKey: "zero-amount-test",
+					idempotencyKey: testIdempotencyKey("zero-amount"),
 					source: SYSTEM_SOURCE,
 				})
 			).rejects.toThrow(POSITIVE_SAFE_INTEGER_PATTERN);
@@ -546,7 +551,7 @@ describe("cash ledger integrations", () => {
 					amount: -50_000,
 					debitAccountId: debit._id,
 					creditAccountId: credit._id,
-					idempotencyKey: "negative-amount-test",
+					idempotencyKey: testIdempotencyKey("negative-amount"),
 					source: SYSTEM_SOURCE,
 				})
 			).rejects.toThrow(POSITIVE_SAFE_INTEGER_PATTERN);
@@ -568,7 +573,7 @@ describe("cash ledger integrations", () => {
 					amount: 100_000,
 					debitAccountId: account._id,
 					creditAccountId: account._id,
-					idempotencyKey: "same-account-test",
+					idempotencyKey: testIdempotencyKey("same-account"),
 					source: SYSTEM_SOURCE,
 				})
 			).rejects.toThrow(MUST_BE_DIFFERENT_PATTERN);

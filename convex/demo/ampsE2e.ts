@@ -1,5 +1,5 @@
 import { ConvexError, v } from "convex/values";
-import { api, internal } from "../_generated/api";
+import { internal } from "../_generated/api";
 import type { DataModel, Doc, Id } from "../_generated/dataModel";
 import {
 	internalQuery,
@@ -880,10 +880,35 @@ export const confirmOfflineLifecycleInbound = adminAction
 			"Inbound"
 		);
 
-		return ctx.runMutation(
-			api.payments.transfers.mutations.confirmManualTransfer,
+		const providerRef =
+			state.inboundTransfer?.providerRef ??
+			`${OFFLINE_PROVIDER_CODE}_inbound_${Date.now()}`;
+		await ctx.runMutation(
+			internal.payments.transfers.mutations.persistProviderRef,
 			{
 				transferId: inboundTransfer._id,
+				providerRef,
+			}
+		);
+
+		return ctx.runMutation(
+			internal.engine.transitionMutation.transitionMutation,
+			{
+				entityType: "transfer",
+				entityId: inboundTransfer._id,
+				eventType: "FUNDS_SETTLED",
+				payload: {
+					settledAt: Date.now(),
+					providerData: {
+						providerRef,
+						method: OFFLINE_PROVIDER_CODE,
+					},
+				},
+				source: {
+					channel: "admin_dashboard",
+					actorType: "admin",
+					actorId: ctx.viewer.authId,
+				},
 			}
 		);
 	})
@@ -945,10 +970,35 @@ export const confirmOfflineLifecycleOutbound = adminAction
 			"Outbound"
 		);
 
-		return ctx.runMutation(
-			api.payments.transfers.mutations.confirmManualTransfer,
+		const providerRef =
+			state.outboundTransfer?.providerRef ??
+			`${OFFLINE_PROVIDER_CODE}_outbound_${Date.now()}`;
+		await ctx.runMutation(
+			internal.payments.transfers.mutations.persistProviderRef,
 			{
 				transferId: outboundTransfer._id,
+				providerRef,
+			}
+		);
+
+		return ctx.runMutation(
+			internal.engine.transitionMutation.transitionMutation,
+			{
+				entityType: "transfer",
+				entityId: outboundTransfer._id,
+				eventType: "FUNDS_SETTLED",
+				payload: {
+					settledAt: Date.now(),
+					providerData: {
+						providerRef,
+						method: OFFLINE_PROVIDER_CODE,
+					},
+				},
+				source: {
+					channel: "admin_dashboard",
+					actorType: "admin",
+					actorId: ctx.viewer.authId,
+				},
 			}
 		);
 	})

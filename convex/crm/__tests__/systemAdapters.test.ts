@@ -366,6 +366,7 @@ describe("queryNativeTable", () => {
 	it("throws for unknown native table names", async () => {
 		// Insert a fake objectDef with an unknown nativeTable value
 		const fakeObjectDefId = await t.run(async (ctx) => {
+			const now = Date.now();
 			return ctx.db.insert("objectDefs", {
 				orgId: ORG_ID,
 				name: "fake_entity",
@@ -376,7 +377,8 @@ describe("queryNativeTable", () => {
 				nativeTable: "nonexistent_native_table",
 				isActive: true,
 				displayOrder: 999,
-				updatedAt: Date.now(),
+				createdAt: now,
+				updatedAt: now,
 				createdBy: CRM_ADMIN_IDENTITY.subject,
 			});
 		});
