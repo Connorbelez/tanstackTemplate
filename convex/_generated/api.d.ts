@@ -235,6 +235,7 @@ import type * as payments_payout_config from "../payments/payout/config.js";
 import type * as payments_payout_mutations from "../payments/payout/mutations.js";
 import type * as payments_payout_queries from "../payments/payout/queries.js";
 import type * as payments_payout_refs from "../payments/payout/refs.js";
+import type * as payments_payout_transferOwnedFlow from "../payments/payout/transferOwnedFlow.js";
 import type * as payments_payout_validators from "../payments/payout/validators.js";
 import type * as payments_transfers_collectionAttemptReconciliation from "../payments/transfers/collectionAttemptReconciliation.js";
 import type * as payments_transfers_depositCollection from "../payments/transfers/depositCollection.js";
@@ -516,6 +517,7 @@ declare const fullApi: ApiFromModules<{
   "payments/payout/mutations": typeof payments_payout_mutations;
   "payments/payout/queries": typeof payments_payout_queries;
   "payments/payout/refs": typeof payments_payout_refs;
+  "payments/payout/transferOwnedFlow": typeof payments_payout_transferOwnedFlow;
   "payments/payout/validators": typeof payments_payout_validators;
   "payments/transfers/collectionAttemptReconciliation": typeof payments_transfers_collectionAttemptReconciliation;
   "payments/transfers/depositCollection": typeof payments_transfers_depositCollection;

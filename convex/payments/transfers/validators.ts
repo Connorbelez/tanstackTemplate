@@ -67,6 +67,23 @@ export const providerCodeValidator = v.union(
 	v.literal("plaid_transfer")
 );
 
+export const manualSettlementInstrumentValidator = v.union(
+	v.literal("cash"),
+	v.literal("cheque"),
+	v.literal("wire"),
+	v.literal("journal"),
+	v.literal("other")
+);
+
+export const manualSettlementValidator = v.object({
+	instrumentType: manualSettlementInstrumentValidator,
+	settlementOccurredAt: v.number(),
+	externalReference: v.optional(v.string()),
+	enteredBy: v.optional(v.string()),
+	location: v.optional(v.string()),
+	evidenceAttachmentIds: v.optional(v.array(v.string())),
+});
+
 // ── Pipeline Leg Number ──────────────────────────────────────────────
 export const legNumberValidator = v.union(v.literal(1), v.literal(2));
 

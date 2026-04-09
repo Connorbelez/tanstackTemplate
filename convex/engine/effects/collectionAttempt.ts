@@ -278,6 +278,18 @@ export const emitPaymentReceived = internalMutation({
 });
 
 /**
+ * No-op traceability effect for repeated settlement observations on already
+ * confirmed attempts. The transfer owns the cash journal; this effect only
+ * preserves an auditable same-state transition in the GT journal.
+ */
+export const recordSettlementObserved = internalMutation({
+	args: collectionAttemptEffectValidator,
+	handler: async () => {
+		return;
+	},
+});
+
+/**
  * Cross-entity effect: triggers rules engine evaluation with COLLECTION_FAILED.
  * Triggered when a collection attempt transitions to `permanent_fail` via MAX_RETRIES_EXCEEDED.
  */

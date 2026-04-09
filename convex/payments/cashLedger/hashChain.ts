@@ -16,6 +16,7 @@ export interface CashLedgerAuditArgs {
 	actorId: string;
 	afterState: string;
 	beforeState: string;
+	canonicalEnvelope: string;
 	entityId: string;
 	entityType: "cashLedgerEntry";
 	eventType: string;
@@ -28,6 +29,40 @@ export function buildCashLedgerAuditArgs(
 	balanceBefore: BalancePair,
 	balanceAfter: BalancePair
 ): CashLedgerAuditArgs {
+	const canonicalEnvelope = {
+		accountBalances: {
+			after: {
+				credit: balanceAfter.credit.toString(),
+				debit: balanceAfter.debit.toString(),
+			},
+			before: {
+				credit: balanceBefore.credit.toString(),
+				debit: balanceBefore.debit.toString(),
+			},
+		},
+		amount: entry.amount.toString(),
+		causedBy: entry.causedBy,
+		creditAccountId: `${entry.creditAccountId}`,
+		debitAccountId: `${entry.debitAccountId}`,
+		effectiveDate: entry.effectiveDate,
+		entryId: `${entry._id}`,
+		entryMetadata: entry.metadata ?? null,
+		eventCategory: "cash_ledger",
+		eventId: `cash-ledger:${entry._id}`,
+		eventType: entry.entryType,
+		idempotencyKey: entry.idempotencyKey,
+		lenderId: entry.lenderId ? `${entry.lenderId}` : undefined,
+		mortgageId: entry.mortgageId ? `${entry.mortgageId}` : undefined,
+		obligationId: entry.obligationId ? `${entry.obligationId}` : undefined,
+		postingGroupId: entry.postingGroupId,
+		reason: entry.reason,
+		sequenceNumber: entry.sequenceNumber.toString(),
+		source: entry.source,
+		timestamp: entry.timestamp,
+		transferRequestId: entry.transferRequestId
+			? `${entry.transferRequestId}`
+			: undefined,
+	};
 	return {
 		entityId: entry._id as string,
 		entityType: "cashLedgerEntry" as const,
@@ -44,16 +79,9 @@ export function buildCashLedgerAuditArgs(
 			debitAccountId: entry.debitAccountId,
 			creditAccountId: entry.creditAccountId,
 		}),
+		canonicalEnvelope: JSON.stringify(canonicalEnvelope),
 		metadata: JSON.stringify({
-			effectiveDate: entry.effectiveDate,
-			causedBy: entry.causedBy,
-			postingGroupId: entry.postingGroupId,
-			reason: entry.reason,
-			channel: entry.source.channel,
-			actorType: entry.source.actorType,
-			mortgageId: entry.mortgageId,
-			obligationId: entry.obligationId,
-			entryMetadata: entry.metadata ?? null,
+			canonicalEnvelope,
 		}),
 		timestamp: entry.timestamp,
 	};

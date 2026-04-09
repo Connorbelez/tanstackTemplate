@@ -1,20 +1,17 @@
-import { internal } from "../../_generated/api";
 import type { Doc, Id } from "../../_generated/dataModel";
 import { type ActionCtx, internalAction } from "../../_generated/server";
 import type { CommandSource } from "../../engine/types";
-import { buildIdempotencyKey } from "../cashLedger/types";
 import {
 	DEFAULT_PAYOUT_FREQUENCY,
 	isPayoutDue,
 	MINIMUM_PAYOUT_CENTS,
 } from "./config";
 import {
-	claimEntriesForPayoutRef,
 	getActiveLendersRef,
 	getEligibleDispersalEntriesRef,
-	revertClaimedEntriesRef,
 	updateLenderPayoutDateRef,
 } from "./refs";
+import { executeTransferOwnedPayout } from "./transferOwnedFlow";
 import type { PayoutFrequency } from "./validators";
 
 // ── Helpers ─────────────────────────────────────────────────────────
@@ -30,78 +27,68 @@ function groupBy<T>(items: T[], keyFn: (item: T) => string): Map<string, T[]> {
 	return map;
 }
 
-/**
- * Claim-then-post a single mortgage group's payout.
- *
- * 1. Claim entries (pending -> disbursed) -- concurrency lock.
- * 2. Post lender payout to cash ledger.
- * 3. If ledger post fails, revert claimed entries to "pending".
- */
 async function processMortgageGroup(
 	ctx: ActionCtx,
 	args: {
-		mortgageId: Id<"mortgages">;
-		lenderId: Id<"lenders">;
 		entries: Doc<"dispersalEntries">[];
-		totalAmount: number;
-		today: string;
+		mortgageId: Id<"mortgages">;
 		source: CommandSource;
-		postingGroupId: string;
 	}
-): Promise<void> {
-	const idempotencyKey = buildIdempotencyKey(
-		"lender-payout-sent",
-		"batch",
-		args.today,
-		args.lenderId,
-		args.mortgageId
-	);
+): Promise<{
+	confirmedCount: number;
+	failures: Array<{
+		dispersalEntryId: string;
+		error: string;
+		lenderId: string;
+		mortgageId: string;
+	}>;
+	totalAmountCents: number;
+}> {
+	let confirmedCount = 0;
+	let totalAmountCents = 0;
+	const failures: Array<{
+		dispersalEntryId: string;
+		error: string;
+		lenderId: string;
+		mortgageId: string;
+	}> = [];
 
-	const entryIds = args.entries.map((e: Doc<"dispersalEntries">) => e._id);
-
-	// Step 1: Claim entries (pending -> disbursed) BEFORE posting payout.
-	// This is the concurrency lock -- only the first caller wins.
-	await ctx.runMutation(claimEntriesForPayoutRef, {
-		entryIds,
-		payoutDate: args.today,
-	});
-
-	// Step 2: Post lender payout via cash ledger.
-	// If this fails, revert the claim.
-	try {
-		await ctx.runMutation(
-			internal.payments.cashLedger.mutations.postLenderPayout,
-			{
-				mortgageId: args.mortgageId,
-				lenderId: args.lenderId,
-				amount: args.totalAmount,
-				effectiveDate: args.today,
-				idempotencyKey,
+	for (const entry of args.entries) {
+		try {
+			const result = await executeTransferOwnedPayout({
+				confirmSettlement: true,
+				ctx,
+				entry,
+				providerCode: "manual",
 				source: args.source,
-				reason: "Scheduled batch payout",
-				postingGroupId: args.postingGroupId,
+			});
+
+			if (result.confirmed) {
+				confirmedCount += 1;
+				totalAmountCents += result.amount;
 			}
-		);
-	} catch (postError) {
-		// Revert claimed entries so they can be retried
-		await ctx.runMutation(revertClaimedEntriesRef, { entryIds });
-		throw postError;
+		} catch (error) {
+			failures.push({
+				dispersalEntryId: entry._id as string,
+				error: error instanceof Error ? error.message : String(error),
+				lenderId: entry.lenderId as string,
+				mortgageId: args.mortgageId as string,
+			});
+		}
 	}
+
+	return {
+		confirmedCount,
+		failures,
+		totalAmountCents,
+	};
 }
 
 // ── Batch payout action ─────────────────────────────────────────────
 
 /**
- * Daily cron handler -- evaluates which lenders are due for payout,
- * checks eligible dispersal entries, and posts lender payouts via the cash
- * ledger.
- *
- * Concurrency safety: entries are claimed (pending -> disbursed) BEFORE the
- * cash ledger payout is posted. This prevents double payouts when an admin
- * triggers a payout while the cron is running -- only the first claim wins.
- * If the ledger post fails, claimed entries are reverted to "pending".
- *
- * Idempotency: keys use the standard cash-ledger prefix via buildIdempotencyKey.
+ * Daily cron handler -- evaluates which lenders are due for payout and executes
+ * each eligible dispersal entry on the canonical transfer rail.
  */
 export const processPayoutBatch = internalAction({
 	args: {},
@@ -121,9 +108,10 @@ export const processPayoutBatch = internalAction({
 		let lendersProcessed = 0;
 		let lendersSkipped = 0;
 		const failures: Array<{
+			dispersalEntryId: string;
+			error: string;
 			lenderId: string;
 			mortgageId: string;
-			error: string;
 		}> = [];
 
 		// 2. Evaluate each lender
@@ -152,7 +140,6 @@ export const processPayoutBatch = internalAction({
 				(e: Doc<"dispersalEntries">) => e.mortgageId as string
 			);
 
-			const postingGroupId = `payout-batch:${today}:${lender._id}`;
 			let lenderPayoutCount = 0;
 
 			for (const [mortgageIdStr, entries] of groupedByMortgage) {
@@ -167,25 +154,14 @@ export const processPayoutBatch = internalAction({
 					continue;
 				}
 
-				try {
-					await processMortgageGroup(ctx, {
-						mortgageId,
-						lenderId: lender._id,
-						entries,
-						totalAmount,
-						today,
-						source,
-						postingGroupId,
-					});
-					lenderPayoutCount++;
-					totalAmountCents += totalAmount;
-				} catch (error) {
-					failures.push({
-						lenderId: lender._id as string,
-						mortgageId: mortgageIdStr,
-						error: error instanceof Error ? error.message : String(error),
-					});
-				}
+				const result = await processMortgageGroup(ctx, {
+					entries,
+					mortgageId,
+					source,
+				});
+				lenderPayoutCount += result.confirmedCount;
+				totalAmountCents += result.totalAmountCents;
+				failures.push(...result.failures);
 			}
 
 			if (lenderPayoutCount > 0) {

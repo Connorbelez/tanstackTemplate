@@ -77,6 +77,7 @@ import { payoutFrequencyValidator } from "./payments/payout/validators";
 import {
 	counterpartyTypeValidator,
 	directionValidator,
+	manualSettlementValidator,
 	providerCodeValidator,
 	transferTypeValidator,
 } from "./payments/transfers/validators";
@@ -1229,6 +1230,8 @@ export default defineSchema({
 		mortgageId: v.id("mortgages"),
 		lenderId: v.id("lenders"),
 		lenderAccountId: v.id("ledger_accounts"),
+		calculationRunId: v.optional(v.id("dispersalCalculationRuns")),
+		transferRequestId: v.optional(v.id("transferRequests")),
 		amount: v.number(),
 		dispersalDate: v.string(), // business date: YYYY-MM-DD at UTC midnight semantics
 		obligationId: v.id("obligations"),
@@ -1241,18 +1244,24 @@ export default defineSchema({
 		payoutEligibleAfter: v.optional(v.string()), // YYYY-MM-DD: earliest payout date (hold period)
 		paymentMethod: v.optional(v.string()), // resolved from collection attempt chain
 		payoutDate: v.optional(v.string()), // YYYY-MM-DD: date payout was executed (ENG-182)
+		processingAt: v.optional(v.number()),
+		disbursedAt: v.optional(v.number()),
+		reversedAt: v.optional(v.number()),
 		createdAt: v.number(), // system timestamp: Unix ms
 	})
 		.index("by_lender", ["lenderId", "dispersalDate"])
 		.index("by_mortgage", ["mortgageId", "dispersalDate"])
 		.index("by_obligation", ["obligationId"])
+		.index("by_calculation_run", ["calculationRunId"])
 		.index("by_status", ["status", "lenderId"])
 		.index("by_idempotency", ["idempotencyKey"])
+		.index("by_transfer_request", ["transferRequestId"])
 		.index("by_eligibility", ["status", "payoutEligibleAfter"])
 		.index("by_org", ["orgId"])
 		.index("by_org_status", ["orgId", "status"]),
 
 	servicingFeeEntries: defineTable({
+		calculationRunId: v.optional(v.id("dispersalCalculationRuns")),
 		mortgageId: v.id("mortgages"),
 		obligationId: v.id("obligations"),
 		amount: v.number(),
@@ -1269,7 +1278,27 @@ export default defineSchema({
 		createdAt: v.number(), // system timestamp: Unix ms
 	})
 		.index("by_mortgage", ["mortgageId", "date"])
-		.index("by_obligation", ["obligationId"]),
+		.index("by_obligation", ["obligationId"])
+		.index("by_calculation_run", ["calculationRunId"]),
+
+	dispersalCalculationRuns: defineTable({
+		orgId: v.optional(v.string()),
+		mortgageId: v.id("mortgages"),
+		obligationId: v.id("obligations"),
+		idempotencyKey: v.string(),
+		settledAmount: v.number(),
+		settledDate: v.string(),
+		paymentMethod: v.string(),
+		payoutEligibleAfter: v.string(),
+		calculationVersion: v.string(),
+		inputs: v.any(),
+		outputs: v.any(),
+		source: sourceValidator,
+		createdAt: v.number(),
+	})
+		.index("by_obligation", ["obligationId"])
+		.index("by_mortgage", ["mortgageId", "createdAt"])
+		.index("by_idempotency", ["idempotencyKey"]),
 
 	dispersalHealingAttempts: defineTable({
 		obligationId: v.id("obligations"),
@@ -1412,15 +1441,28 @@ export default defineSchema({
 
 	auditJournal: defineTable({
 		/** WorkOS organization id for org-scoped audit queries (optional for legacy rows). */
+		afterState: v.optional(v.any()),
+		beforeState: v.optional(v.any()),
 		organizationId: v.optional(v.string()),
+		correlationId: v.optional(v.string()),
+		delta: v.optional(v.any()),
 		entityType: entityTypeValidator,
 		entityId: v.string(),
+		effectiveDate: v.string(),
+		eventCategory: v.string(),
+		eventId: v.string(),
 		eventType: v.string(),
+		idempotencyKey: v.optional(v.string()),
+		legalEntityId: v.optional(v.string()),
+		linkedRecordIds: v.optional(v.any()),
+		originSystem: v.string(),
 		payload: v.optional(v.any()),
 		previousState: v.string(),
 		newState: v.string(),
 		outcome: v.union(v.literal("transitioned"), v.literal("rejected")),
 		reason: v.optional(v.string()),
+		requestId: v.optional(v.string()),
+		sequenceNumber: v.int64(),
 		actorId: v.string(),
 		actorType: v.optional(actorTypeValidator),
 		channel: channelValidator,
@@ -1430,10 +1472,34 @@ export default defineSchema({
 		effectsScheduled: v.optional(v.array(v.string())),
 		timestamp: v.number(),
 	})
+		.index("by_event_id", ["eventId"])
+		.index("by_sequence", ["sequenceNumber"])
 		.index("by_entity", ["entityType", "entityId", "timestamp"])
 		.index("by_actor", ["actorId", "timestamp"])
 		.index("by_type_and_time", ["entityType", "timestamp"])
 		.index("by_org_and_time", ["organizationId", "timestamp"]),
+
+	auditJournalSequenceCounters: defineTable({
+		name: v.string(),
+		nextSequenceNumber: v.int64(),
+		updatedAt: v.number(),
+	}).index("by_name", ["name"]),
+
+	auditEvidencePackages: defineTable({
+		scope: v.any(),
+		asOf: v.number(),
+		format: v.union(v.literal("json"), v.literal("json_and_csv")),
+		manifestJson: v.string(),
+		eventsJson: v.string(),
+		eventsCsv: v.string(),
+		entitiesCsv: v.string(),
+		balancesCsv: v.string(),
+		linkageCsv: v.string(),
+		reconstructionNotes: v.string(),
+		verificationJson: v.optional(v.string()),
+		createdAt: v.number(),
+		createdBy: v.string(),
+	}).index("by_created_at", ["createdAt"]),
 
 	// ══════════════════════════════════════════════════════════
 	// MORTGAGE OWNERSHIP LEDGER
@@ -1732,6 +1798,10 @@ export default defineSchema({
 		failureReason: v.optional(v.string()),
 		failureCode: v.optional(v.string()),
 		reversalRef: v.optional(v.string()),
+		manualSettlement: v.optional(manualSettlementValidator),
+		cashJournalEntryIds: v.optional(
+			v.array(v.id("cash_ledger_journal_entries"))
+		),
 
 		// ── Multi-leg pipeline ──────────────────────────────────────
 		pipelineId: v.optional(v.string()),

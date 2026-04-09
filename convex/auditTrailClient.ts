@@ -35,6 +35,7 @@ export class AuditTrail {
 			actorId: string;
 			beforeState?: string;
 			afterState?: string;
+			canonicalEnvelope?: string;
 			metadata?: string;
 			timestamp: number;
 		}

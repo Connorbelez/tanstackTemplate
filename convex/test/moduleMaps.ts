@@ -44,6 +44,8 @@ export const convexModules: ModuleMap = withModuleAliases({
 		await import("./../accrual/queryHelpers.ts"),
 	"/convex/accrual/types.ts": async () => await import("./../accrual/types.ts"),
 	"/convex/audit/queries.ts": async () => await import("./../audit/queries.ts"),
+	"/convex/auditEvidence/services.ts": async () =>
+		await import("./../auditEvidence/services.ts"),
 	"/convex/auditLog.ts": async () => await import("./../auditLog.ts"),
 	"/convex/auditTrailClient.ts": async () =>
 		await import("./../auditTrailClient.ts"),
@@ -454,6 +456,8 @@ export const convexModules: ModuleMap = withModuleAliases({
 		await import("./../payments/payout/queries.ts"),
 	"/convex/payments/payout/refs.ts": async () =>
 		await import("./../payments/payout/refs.ts"),
+	"/convex/payments/payout/transferOwnedFlow.ts": async () =>
+		await import("./../payments/payout/transferOwnedFlow.ts"),
 	"/convex/payments/payout/validators.ts": async () =>
 		await import("./../payments/payout/validators.ts"),
 	"/convex/payments/transfers/depositCollection.logic.ts": async () =>

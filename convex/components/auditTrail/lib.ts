@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import { AUDIT_RETENTION_MS, emitAuditEvidence } from "./sink";
 
 // ── PII Sanitization ─────────────────────────────────────────────
 // Lives inside the component — host cannot bypass it
@@ -49,6 +50,7 @@ function sanitizeState(obj: Record<string, unknown>): Record<string, unknown> {
 // ── Hash Chain Computation ───────────────────────────────────────
 // Lives inside the component — host cannot forge hashes
 async function computeHash(parts: {
+	canonicalEnvelope?: string;
 	prevHash: string;
 	eventType: string;
 	entityId: string;
@@ -56,14 +58,16 @@ async function computeHash(parts: {
 	timestamp: number;
 	afterState: string;
 }): Promise<string> {
-	const payload = JSON.stringify({
-		p: parts.prevHash,
-		t: parts.eventType,
-		e: parts.entityId,
-		a: parts.actorId,
-		ts: parts.timestamp,
-		s: parts.afterState,
-	});
+	const payload =
+		parts.canonicalEnvelope ??
+		JSON.stringify({
+			p: parts.prevHash,
+			t: parts.eventType,
+			e: parts.entityId,
+			a: parts.actorId,
+			ts: parts.timestamp,
+			s: parts.afterState,
+		});
 
 	const data = new TextEncoder().encode(payload);
 	const hashBuffer = await crypto.subtle.digest("SHA-256", data);
@@ -80,6 +84,7 @@ export const insert = mutation({
 		actorId: v.string(),
 		beforeState: v.optional(v.string()),
 		afterState: v.optional(v.string()),
+		canonicalEnvelope: v.optional(v.string()),
 		metadata: v.optional(v.string()),
 		timestamp: v.number(),
 	},
@@ -102,6 +107,9 @@ export const insert = mutation({
 		const metadata = args.metadata
 			? JSON.stringify(sanitizeState(safeParseJSON(args.metadata)))
 			: undefined;
+		const canonicalEnvelope = args.canonicalEnvelope
+			? JSON.stringify(sanitizeState(safeParseJSON(args.canonicalEnvelope)))
+			: undefined;
 
 		// Chain: get previous hash
 		const prevEvent = await ctx.db
@@ -118,9 +126,11 @@ export const insert = mutation({
 			actorId: args.actorId,
 			timestamp: args.timestamp,
 			afterState: afterState ?? "",
+			canonicalEnvelope,
 		});
 
 		const eventId = await ctx.db.insert("audit_events", {
+			canonicalEnvelope,
 			entityId: args.entityId,
 			entityType: args.entityType,
 			eventType: args.eventType,
@@ -131,6 +141,7 @@ export const insert = mutation({
 			prevHash,
 			hash,
 			emitted: false,
+			retentionUntilAt: args.timestamp + AUDIT_RETENTION_MS,
 			timestamp: args.timestamp,
 		});
 
@@ -141,6 +152,7 @@ export const insert = mutation({
 			status: "pending",
 			emitFailures: 0,
 			createdAt: args.timestamp,
+			retentionUntilAt: args.timestamp + AUDIT_RETENTION_MS,
 		});
 
 		return eventId;
@@ -160,12 +172,16 @@ export const queryByEntity = query({
 			actorId: v.string(),
 			beforeState: v.optional(v.string()),
 			afterState: v.optional(v.string()),
+			canonicalEnvelope: v.optional(v.string()),
 			metadata: v.optional(v.string()),
 			prevHash: v.string(),
 			hash: v.string(),
 			emitted: v.boolean(),
 			emittedAt: v.optional(v.number()),
 			emitFailures: v.optional(v.number()),
+			sinkReference: v.optional(v.string()),
+			archivedAt: v.optional(v.number()),
+			retentionUntilAt: v.number(),
 			timestamp: v.number(),
 		})
 	),
@@ -210,6 +226,7 @@ export const verifyChain = query({
 				actorId: event.actorId,
 				timestamp: event.timestamp,
 				afterState: event.afterState ?? "",
+				canonicalEnvelope: event.canonicalEnvelope,
 			});
 
 			if (recomputed !== event.hash) {
@@ -250,6 +267,9 @@ export const exportTrail = query({
 				timestamp: e.timestamp,
 				beforeState: e.beforeState ? JSON.parse(e.beforeState) : null,
 				afterState: e.afterState ? JSON.parse(e.afterState) : null,
+				canonicalEnvelope: e.canonicalEnvelope
+					? JSON.parse(e.canonicalEnvelope)
+					: null,
 				hash: e.hash,
 				prevHash: e.prevHash,
 				emitted: e.emitted,
@@ -321,13 +341,36 @@ export const emitPending = mutation({
 		const emittedAt = Date.now();
 		let emittedCount = 0;
 		for (const entry of pending) {
+			const event = await ctx.db.get(entry.eventId);
+			if (!event) {
+				continue;
+			}
+			const sinkResult = await emitAuditEvidence(ctx, {
+				contentType: "application/json",
+				eventId: entry.eventId,
+				idempotencyKey: entry.idempotencyKey,
+				payload: JSON.stringify({
+					archivedAt: event.archivedAt ?? null,
+					canonicalEnvelope: event.canonicalEnvelope
+						? JSON.parse(event.canonicalEnvelope)
+						: null,
+					entityId: event.entityId,
+					entityType: event.entityType,
+					eventType: event.eventType,
+					hash: event.hash,
+					prevHash: event.prevHash,
+					timestamp: event.timestamp,
+				}),
+			});
 			await ctx.db.patch(entry.eventId, {
 				emitted: true,
 				emittedAt,
+				sinkReference: sinkResult.sinkReference,
 			});
 			await ctx.db.patch(entry._id, {
 				status: "emitted" as const,
 				emittedAt,
+				sinkReference: sinkResult.sinkReference,
 			});
 			emittedCount++;
 		}

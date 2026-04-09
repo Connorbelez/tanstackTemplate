@@ -27,9 +27,9 @@ import {
 	internalQuery,
 } from "../_generated/server";
 import type { CommandSource } from "../engine/types";
-import { orgIdFromMortgageId } from "../lib/orgScope";
 import { assertDisbursementAllowed } from "../payments/cashLedger/disbursementGate";
 import { areMockTransferProvidersEnabled } from "../payments/transfers/mockProviders";
+import { createTransferRequestRecord } from "../payments/transfers/mutations";
 import {
 	InvalidDomainEntityIdError,
 	toDomainEntityId,
@@ -50,6 +50,12 @@ const DEFAULT_BATCH_SIZE = 50;
 
 /** Default provider for Phase 1 disbursements. */
 const DEFAULT_PROVIDER_CODE = "mock_eft" as const;
+
+function isReusableTerminalTransferStatus(
+	status: Doc<"transferRequests">["status"]
+) {
+	return status === "failed" || status === "cancelled" || status === "reversed";
+}
 
 /**
  * Builds a deterministic idempotency key for a disbursement transfer.
@@ -114,6 +120,9 @@ export const findEligibleEntriesInternal = internalQuery({
 			if (args.lenderId && entry.lenderId !== args.lenderId) {
 				return false;
 			}
+			if (entry.transferRequestId) {
+				return false;
+			}
 			return (
 				entry.payoutEligibleAfter !== undefined &&
 				entry.payoutEligibleAfter !== ""
@@ -128,6 +137,9 @@ export const findEligibleEntriesInternal = internalQuery({
 
 		const eligibleLegacy = pendingAll.filter((entry) => {
 			if (args.lenderId && entry.lenderId !== args.lenderId) {
+				return false;
+			}
+			if (entry.transferRequestId) {
 				return false;
 			}
 			return !entry.payoutEligibleAfter;
@@ -208,11 +220,14 @@ export const processSingleDisbursement = internalMutation({
 			)
 			.first();
 
-		if (
-			existing &&
-			existing.status !== "failed" &&
-			existing.status !== "cancelled"
-		) {
+		if (existing && !isReusableTerminalTransferStatus(existing.status)) {
+			const existingEntry = await ctx.db.get(args.dispersalEntryId);
+			if (existingEntry && existingEntry.transferRequestId !== existing._id) {
+				await ctx.db.patch(args.dispersalEntryId, {
+					processingAt: existingEntry.processingAt ?? existing.createdAt,
+					transferRequestId: existing._id,
+				});
+			}
 			return { transferId: existing._id, created: false };
 		}
 
@@ -233,6 +248,20 @@ export const processSingleDisbursement = internalMutation({
 				currentStatus: entry.status,
 				message: `Dispersal entry is "${entry.status}", expected "pending"`,
 			});
+		}
+
+		// 2a. If the entry is already linked to an active transfer, reuse it.
+		if (entry.transferRequestId) {
+			const linkedTransfer = await ctx.db.get(entry.transferRequestId);
+			if (
+				linkedTransfer &&
+				!isReusableTerminalTransferStatus(linkedTransfer.status)
+			) {
+				return {
+					transferId: linkedTransfer._id,
+					created: false,
+				};
+			}
 		}
 
 		// 2b. Verify calculation details exist (ownership snapshot was recorded)
@@ -318,29 +347,25 @@ export const processSingleDisbursement = internalMutation({
 				: idempotencyKey;
 
 		const now = Date.now();
-		const orgId =
-			entry.orgId ?? (await orgIdFromMortgageId(ctx, entry.mortgageId));
-		const transferId = await ctx.db.insert("transferRequests", {
-			orgId,
-			status: "initiated",
+		const transferId = await createTransferRequestRecord(ctx, {
 			direction: "outbound",
 			transferType: "lender_dispersal_payout",
 			amount: entry.amount,
 			currency: "CAD",
 			counterpartyType: "lender",
 			counterpartyId,
-			// References
 			mortgageId: entry.mortgageId,
+			obligationId: entry.obligationId,
 			dispersalEntryId: entry._id,
 			lenderId: entry.lenderId,
-			obligationId: entry.obligationId,
-			// Provider & idempotency
 			providerCode,
 			idempotencyKey: effectiveIdempotencyKey,
 			source: BRIDGE_SOURCE,
-			// Timestamps
-			createdAt: now,
-			lastTransitionAt: now,
+		});
+
+		await ctx.db.patch(args.dispersalEntryId, {
+			processingAt: now,
+			transferRequestId: transferId,
 		});
 
 		console.info(
@@ -538,7 +563,11 @@ export const resetFailedEntry = internalMutation({
 
 		await ctx.db.patch(args.dispersalEntryId, {
 			status: "pending",
+			disbursedAt: undefined,
 			payoutDate: undefined,
+			processingAt: undefined,
+			reversedAt: undefined,
+			transferRequestId: undefined,
 		});
 
 		console.info(
@@ -574,7 +603,10 @@ export const checkDisbursementsDue = internalMutation({
 			.collect();
 
 		const eligibleWithHold = pendingPastHold.filter(
-			(e) => e.payoutEligibleAfter !== undefined && e.payoutEligibleAfter !== ""
+			(e) =>
+				e.transferRequestId === undefined &&
+				e.payoutEligibleAfter !== undefined &&
+				e.payoutEligibleAfter !== ""
 		);
 
 		// Bucket 2: legacy entries with no hold period
@@ -583,7 +615,9 @@ export const checkDisbursementsDue = internalMutation({
 			.withIndex("by_eligibility", (q) => q.eq("status", "pending"))
 			.collect();
 
-		const eligibleLegacy = pendingAll.filter((e) => !e.payoutEligibleAfter);
+		const eligibleLegacy = pendingAll.filter(
+			(e) => e.transferRequestId === undefined && !e.payoutEligibleAfter
+		);
 
 		const eligible = [...eligibleWithHold, ...eligibleLegacy];
 

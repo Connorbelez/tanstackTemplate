@@ -63,6 +63,109 @@ async function loadTransfer(
 	return transfer;
 }
 
+function buildTransferLinkedRecordIds(
+	transfer: Awaited<ReturnType<typeof loadTransfer>>
+) {
+	return Object.fromEntries(
+		Object.entries({
+			collectionAttemptId: transfer.collectionAttemptId
+				? `${transfer.collectionAttemptId}`
+				: undefined,
+			dealId: transfer.dealId ? `${transfer.dealId}` : undefined,
+			dispersalEntryId: transfer.dispersalEntryId
+				? `${transfer.dispersalEntryId}`
+				: undefined,
+			mortgageId: transfer.mortgageId ? `${transfer.mortgageId}` : undefined,
+			obligationId: transfer.obligationId
+				? `${transfer.obligationId}`
+				: undefined,
+			planEntryId: transfer.planEntryId ? `${transfer.planEntryId}` : undefined,
+			transferId: `${transfer._id}`,
+		}).filter(([, value]) => value != null)
+	);
+}
+
+async function appendTransferMutationAuditEntry(
+	ctx: MutationCtx,
+	args: {
+		afterState: Record<string, unknown>;
+		beforeState: Record<string, unknown>;
+		eventType: string;
+		payload?: Record<string, unknown>;
+		source: CommandSource;
+		transfer: Awaited<ReturnType<typeof loadTransfer>>;
+	}
+) {
+	await appendAuditJournalEntry(ctx, {
+		entityType: "transfer",
+		entityId: `${args.transfer._id}`,
+		eventType: args.eventType,
+		eventCategory: "domain_write",
+		organizationId: args.transfer.orgId,
+		previousState: args.transfer.status,
+		newState:
+			typeof args.afterState.status === "string"
+				? args.afterState.status
+				: args.transfer.status,
+		outcome: "transitioned",
+		actorId: args.source.actorId ?? "system",
+		actorType: args.source.actorType,
+		channel: args.source.channel,
+		payload: args.payload,
+		idempotencyKey: args.transfer.idempotencyKey,
+		linkedRecordIds: buildTransferLinkedRecordIds(args.transfer),
+		beforeState: args.beforeState,
+		afterState: args.afterState,
+		timestamp: Date.now(),
+	});
+}
+
+async function recordCashJournalLink(
+	ctx: MutationCtx,
+	args: {
+		entryId: Id<"cash_ledger_journal_entries">;
+		transferId: Id<"transferRequests">;
+	}
+) {
+	const transfer = await ctx.db.get(args.transferId);
+	if (!transfer) {
+		throw new Error(
+			`[recordCashJournalLink] Transfer request not found: ${args.transferId}`
+		);
+	}
+
+	const existingEntryIds = transfer.cashJournalEntryIds ?? [];
+	if (existingEntryIds.includes(args.entryId)) {
+		return;
+	}
+
+	await ctx.db.patch(args.transferId, {
+		cashJournalEntryIds: [...existingEntryIds, args.entryId],
+	});
+	await appendTransferMutationAuditEntry(ctx, {
+		beforeState: {
+			...transfer,
+			_id: `${transfer._id}`,
+			cashJournalEntryIds: existingEntryIds.map((entryId) => `${entryId}`),
+		},
+		afterState: {
+			...transfer,
+			_id: `${transfer._id}`,
+			cashJournalEntryIds: [...existingEntryIds, `${args.entryId}`],
+		},
+		eventType: "LEDGER_LINK_RECORDED",
+		payload: {
+			cashJournalEntryId: `${args.entryId}`,
+		},
+		source: {
+			actorId: "system",
+			actorType: "system",
+			channel: "scheduler",
+		},
+		transfer,
+	});
+}
+
 /**
  * Domain field patch: writes providerRef onto the transfer entity.
  */
@@ -74,6 +177,21 @@ export const recordTransferProviderRef = internalMutation({
 		const providerRef = args.payload?.providerRef;
 		if (typeof providerRef === "string") {
 			await ctx.db.patch(transfer._id, { providerRef });
+			await appendTransferMutationAuditEntry(ctx, {
+				beforeState: {
+					...transfer,
+					_id: `${transfer._id}`,
+				},
+				afterState: {
+					...transfer,
+					_id: `${transfer._id}`,
+					providerRef,
+				},
+				eventType: "PROVIDER_REF_RECORDED",
+				payload: { providerRef },
+				source: args.source,
+				transfer,
+			});
 		} else {
 			console.warn(
 				`[recordTransferProviderRef] providerRef missing or non-string in payload for transfer ${args.entityId}. ` +
@@ -84,17 +202,10 @@ export const recordTransferProviderRef = internalMutation({
 });
 
 /**
- * Settles a transfer and posts cash ledger entries (unless bridged via collection attempt).
+ * Settles a transfer and posts its authoritative cash-ledger entry.
  *
- * Decision D4 conditional: When collectionAttemptId is set, cash was already
- * posted via the collection attempt path. Only settledAt is patched.
- *
- * Always patches settledAt on the transfer record. Cash ledger posting only
- * occurs for non-bridged transfers with a known direction.
- *
- * Boundary note: this effect does not inspect collection-plan strategy state.
- * It only uses explicit transfer linkage (collectionAttemptId) at the
- * reconciliation seam; money meaning stays transfer- or obligation-driven.
+ * Attempt-linked inbound transfers still transition the collection attempt for
+ * business traceability, but the cash receipt is owned by the transfer.
  */
 export const publishTransferConfirmed = internalMutation({
 	args: transferEffectValidator,
@@ -113,40 +224,66 @@ export const publishTransferConfirmed = internalMutation({
 			confirmedAt: transfer.confirmedAt ?? settledAt,
 			settledAt,
 		});
-
-		const reconciledAttempt = await reconcileAttemptLinkedInboundSettlement(
-			ctx,
-			{
-				transfer,
+		await appendTransferMutationAuditEntry(ctx, {
+			beforeState: {
+				...transfer,
+				_id: `${transfer._id}`,
+			},
+			afterState: {
+				...transfer,
+				_id: `${transfer._id}`,
+				confirmedAt: transfer.confirmedAt ?? settledAt,
 				settledAt,
-				source: args.source,
-			}
-		);
+			},
+			eventType: "SETTLEMENT_RECORDED",
+			payload: {
+				settledAt,
+			},
+			source: args.source,
+			transfer,
+		});
 
-		// Attempt-linked inbound transfers keep business settlement and cash posting
-		// on the Collection Attempt path. Outbound and non-attempt-linked transfers
-		// still post directly from the transfer effect.
-		if (reconciledAttempt) {
-			console.info(
-				`[publishTransferConfirmed] Attempt-linked inbound transfer ${args.entityId} reconciled through collection attempt settlement. Skipping transfer-owned cash posting.`
-			);
-		} else if (transfer.direction === "inbound") {
-			await postCashReceiptForTransfer(ctx, {
+		let cashEntryId: Id<"cash_ledger_journal_entries"> | undefined;
+		if (transfer.direction === "inbound") {
+			const receiptEntry = await postCashReceiptForTransfer(ctx, {
 				transferRequestId: args.entityId,
 				source: args.source,
 			});
+			cashEntryId = receiptEntry._id;
 		} else if (transfer.direction === "outbound") {
-			await postLenderPayoutForTransfer(ctx, {
+			const payoutEntry = await postLenderPayoutForTransfer(ctx, {
 				transferRequestId: args.entityId,
 				source: args.source,
 			});
+			cashEntryId = payoutEntry._id;
 		} else {
-			// Missing direction on a non-bridged confirmed transfer is a data integrity violation.
-			// Schema requires direction, so this should never happen — but if it does, fail loudly.
 			throw new Error(
 				`[publishTransferConfirmed] Transfer ${args.entityId} has no direction set. ` +
 					"Cannot post cash entry — this is a data integrity violation."
 			);
+		}
+
+		if (cashEntryId) {
+			await recordCashJournalLink(ctx, {
+				entryId: cashEntryId,
+				transferId: args.entityId,
+			});
+		}
+
+		if (transfer.direction === "inbound" && transfer.collectionAttemptId) {
+			const reconciledAttempt = await reconcileAttemptLinkedInboundSettlement(
+				ctx,
+				{
+					transfer,
+					settledAt,
+					source: args.source,
+				}
+			);
+			if (!reconciledAttempt) {
+				throw new Error(
+					`[publishTransferConfirmed] Linked collection attempt ${transfer.collectionAttemptId} could not be settled for transfer ${args.entityId}`
+				);
+			}
 		}
 
 		// ── Dispersal entry lifecycle (disbursement confirmation) ────────
@@ -164,7 +301,11 @@ export const publishTransferConfirmed = internalMutation({
 
 				await ctx.db.patch(transfer.dispersalEntryId, {
 					status: "disbursed" as const,
+					disbursedAt: settledAt,
 					payoutDate: settledDate,
+					processingAt: dispersalEntry.processingAt ?? transfer.createdAt,
+					reversedAt: undefined,
+					transferRequestId: dispersalEntry.transferRequestId ?? transfer._id,
 				});
 
 				await appendAuditJournalEntry(ctx, {
@@ -392,6 +533,26 @@ export const publishTransferFailed = internalMutation({
 			failureReason: reason,
 			failureCode: errorCode,
 		});
+		await appendTransferMutationAuditEntry(ctx, {
+			beforeState: {
+				...transfer,
+				_id: `${transfer._id}`,
+			},
+			afterState: {
+				...transfer,
+				_id: `${transfer._id}`,
+				failedAt: Date.now(),
+				failureCode: errorCode,
+				failureReason: reason,
+			},
+			eventType: "FAILURE_RECORDED",
+			payload: {
+				errorCode,
+				reason,
+			},
+			source: args.source,
+			transfer,
+		});
 
 		await reconcileAttemptLinkedInboundFailure(ctx, {
 			transfer,
@@ -416,6 +577,8 @@ export const publishTransferFailed = internalMutation({
 
 				await ctx.db.patch(transfer.dispersalEntryId, {
 					status: "failed" as const,
+					processingAt: dispersalEntry.processingAt ?? transfer.createdAt,
+					transferRequestId: dispersalEntry.transferRequestId ?? transfer._id,
 				});
 
 				await appendAuditJournalEntry(ctx, {
@@ -594,6 +757,26 @@ export const publishTransferReversed = internalMutation({
 			reversedAt: Date.now(),
 			reversalRef,
 		});
+		await appendTransferMutationAuditEntry(ctx, {
+			beforeState: {
+				...transfer,
+				_id: `${transfer._id}`,
+			},
+			afterState: {
+				...transfer,
+				_id: `${transfer._id}`,
+				reversedAt: Date.now(),
+				reversalRef,
+			},
+			eventType: "REVERSAL_RECORDED",
+			payload: {
+				effectiveDate,
+				reason,
+				reversalRef,
+			},
+			source: args.source,
+			transfer,
+		});
 
 		await reconcileAttemptLinkedInboundReversal(ctx, {
 			transfer,
@@ -677,8 +860,12 @@ export const publishTransferReversed = internalMutation({
 				const previousStatus = dispersalEntry.status;
 
 				await ctx.db.patch(transfer.dispersalEntryId, {
+					disbursedAt: undefined,
+					processingAt: dispersalEntry.processingAt ?? transfer.createdAt,
 					status: "failed" as const,
 					payoutDate: undefined,
+					reversedAt: Date.now(),
+					transferRequestId: dispersalEntry.transferRequestId ?? transfer._id,
 				});
 
 				await appendAuditJournalEntry(ctx, {

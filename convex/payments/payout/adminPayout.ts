@@ -1,26 +1,23 @@
 import { ConvexError, v } from "convex/values";
-import { internal } from "../../_generated/api";
 import type { Doc, Id } from "../../_generated/dataModel";
 import type { CommandSource } from "../../engine/types";
 import { adminAction } from "../../fluent";
-import { buildIdempotencyKey } from "../cashLedger/types";
 import { MINIMUM_PAYOUT_CENTS } from "./config";
 import {
-	claimEntriesForPayoutRef,
 	getEligibleDispersalEntriesRef,
 	getLenderByIdRef,
-	revertClaimedEntriesRef,
 	updateLenderPayoutDateRef,
 } from "./refs";
+import { executeTransferOwnedPayout } from "./transferOwnedFlow";
 
 /**
- * Admin-triggered immediate payout for a specific lender.
- * Bypasses frequency schedule but still respects hold period.
+ * Admin-triggered payout execution for a specific lender.
  *
- * Uses a claim-then-post pattern to prevent double payouts:
- * 1. Claim entries (pending -> disbursed) atomically
- * 2. Post the cash ledger entry
- * 3. If posting fails, revert the claim (disbursed -> pending)
+ * Canonical behavior:
+ * 1. Select eligible dispersal entries
+ * 2. Create one outbound transfer per entry
+ * 3. Initiate and confirm each transfer through the manual provider rail
+ * 4. Let transfer confirmation own ledger posting + dispersal entry status
  */
 export const triggerImmediatePayout = adminAction
 	.input({
@@ -59,7 +56,7 @@ export const triggerImmediatePayout = adminAction
 			return { payoutCount: 0, totalAmountCents: 0, lenderId: args.lenderId };
 		}
 
-		// 4. Group entries by mortgageId
+		// 4. Group entries by mortgageId so threshold checks remain mortgage-scoped
 		const groupedByMortgage = new Map<
 			Id<"mortgages">,
 			Doc<"dispersalEntries">[]
@@ -74,7 +71,8 @@ export const triggerImmediatePayout = adminAction
 			}
 		}
 
-		// 5. For each mortgage group: claim entries, post payout, revert on failure
+		// 5. For each mortgage group: create one transfer per eligible entry and
+		// confirm it on the canonical manual rail.
 		const minimumCents = lender.minimumPayoutCents ?? MINIMUM_PAYOUT_CENTS;
 		let payoutCount = 0;
 		let totalAmountCents = 0;
@@ -85,7 +83,11 @@ export const triggerImmediatePayout = adminAction
 			channel: "admin_dashboard",
 		};
 
-		const failures: Array<{ mortgageId: string; error: string }> = [];
+		const failures: Array<{
+			dispersalEntryId: string;
+			error: string;
+			mortgageId: string;
+		}> = [];
 
 		for (const [mortgageId, entries] of groupedByMortgage) {
 			const sumAmount = entries.reduce(
@@ -97,52 +99,27 @@ export const triggerImmediatePayout = adminAction
 				continue;
 			}
 
-			const entryIds = entries.map((e: Doc<"dispersalEntries">) => e._id);
-
-			// Use standardised cash-ledger idempotency key convention
-			const idempotencyKey = buildIdempotencyKey(
-				"lender-payout-sent",
-				"admin",
-				today,
-				args.lenderId,
-				mortgageId
-			);
-
-			try {
-				// Step 1: Claim entries BEFORE posting — prevents concurrent
-				// admin+cron from processing the same entries
-				await ctx.runMutation(claimEntriesForPayoutRef, {
-					entryIds,
-					payoutDate: today,
-				});
-
+			for (const entry of entries) {
 				try {
-					// Step 2: Post the cash ledger entry
-					await ctx.runMutation(
-						internal.payments.cashLedger.mutations.postLenderPayout,
-						{
-							mortgageId,
-							lenderId: args.lenderId,
-							amount: sumAmount,
-							effectiveDate: today,
-							idempotencyKey,
-							source,
-							reason: "Admin-triggered immediate payout",
-						}
-					);
-				} catch (postError) {
-					// Step 3: Revert claim if ledger posting fails
-					await ctx.runMutation(revertClaimedEntriesRef, { entryIds });
-					throw postError;
-				}
+					const result = await executeTransferOwnedPayout({
+						confirmSettlement: true,
+						ctx,
+						entry,
+						providerCode: "manual",
+						source,
+					});
 
-				payoutCount++;
-				totalAmountCents += sumAmount;
-			} catch (error) {
-				failures.push({
-					mortgageId: mortgageId as string,
-					error: error instanceof Error ? error.message : String(error),
-				});
+					if (result.confirmed) {
+						payoutCount += 1;
+						totalAmountCents += result.amount;
+					}
+				} catch (error) {
+					failures.push({
+						dispersalEntryId: entry._id as string,
+						mortgageId: mortgageId as string,
+						error: error instanceof Error ? error.message : String(error),
+					});
+				}
 			}
 		}
 
@@ -157,7 +134,7 @@ export const triggerImmediatePayout = adminAction
 		// 7. If there were failures, report with partial success details
 		if (failures.length > 0) {
 			throw new ConvexError({
-				message: `Admin payout had ${failures.length} failure(s) out of ${payoutCount + failures.length} mortgage groups`,
+				message: `Admin payout had ${failures.length} failure(s) out of ${payoutCount + failures.length} dispersal entries`,
 				payoutCount,
 				totalAmountCents,
 				failures,

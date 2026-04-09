@@ -3,6 +3,7 @@ import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 import { internalMutation } from "../_generated/server";
 import { calculateProRataShares } from "../accrual/interestMath";
+import { appendAuditJournalEntry } from "../engine/auditJournal";
 import { sourceValidator } from "../engine/validators";
 import { resolveServicingFeeConfig } from "../fees/resolver";
 import { getAccountLenderId } from "../ledger/accountOwnership";
@@ -467,6 +468,110 @@ export const createDispersalEntries = internalMutation({
 			resolvedMethod
 		);
 
+		const existingCalculationRun = await ctx.db
+			.query("dispersalCalculationRuns")
+			.withIndex("by_idempotency", (q) =>
+				q.eq("idempotencyKey", args.idempotencyKey)
+			)
+			.first();
+
+		const calculationInputs = {
+			distributableAmount,
+			feeCashApplied,
+			feeDue,
+			feeReceivable,
+			paymentMethod: resolvedMethod,
+			payoutEligibleAfter,
+			reroutesAppliedCount,
+			settledAmount: args.settledAmount,
+			settledDate: args.settledDate,
+			servicingConfig: servicingConfig
+				? {
+						annualRate: servicingConfig.annualRate,
+						code: servicingConfig.code,
+						mortgageFeeId: servicingConfig.mortgageFeeId,
+						policyVersion: servicingConfig.policyVersion,
+					}
+				: null,
+			ownershipSnapshot: normalizedPositions.map((position) => ({
+				lenderAccountId: `${position.lenderAccountId}`,
+				lenderId: `${position.lenderId}`,
+				units: position.units,
+			})),
+		};
+		const calculationOutputs = {
+			servicingFeeEntryExpected: feeDue > 0,
+			shares: shares.map((share) => ({
+				amount: share.amount,
+				lenderAccountId: `${share.lenderAccountId}`,
+				lenderId: `${share.lenderId}`,
+				rawAmount: share.rawAmount,
+				units: share.units,
+			})),
+			totalUnits,
+		};
+
+		let calculationRunId = existingCalculationRun?._id;
+
+		if (!calculationRunId) {
+			const createdAt = Date.now();
+			calculationRunId = await ctx.db.insert("dispersalCalculationRuns", {
+				orgId: mortgage.orgId,
+				mortgageId: args.mortgageId,
+				obligationId: args.obligationId,
+				idempotencyKey: args.idempotencyKey,
+				settledAmount: args.settledAmount,
+				settledDate: args.settledDate,
+				paymentMethod: resolvedMethod,
+				payoutEligibleAfter,
+				calculationVersion: "audit-ready-v1",
+				inputs: calculationInputs,
+				outputs: calculationOutputs,
+				source: args.source,
+				createdAt,
+			});
+
+			await appendAuditJournalEntry(ctx, {
+				entityType: "dispersalCalculationRun",
+				entityId: `${calculationRunId}`,
+				eventType: "CREATED",
+				eventCategory: "domain_write",
+				organizationId: mortgage.orgId,
+				previousState: "none",
+				newState: "recorded",
+				outcome: "transitioned",
+				actorId: args.source.actorId ?? "system",
+				actorType: args.source.actorType,
+				channel: args.source.channel,
+				payload: {
+					obligationId: `${args.obligationId}`,
+					mortgageId: `${args.mortgageId}`,
+				},
+				idempotencyKey: args.idempotencyKey,
+				linkedRecordIds: {
+					calculationRunId: `${calculationRunId}`,
+					mortgageId: `${args.mortgageId}`,
+					obligationId: `${args.obligationId}`,
+				},
+				afterState: {
+					_id: `${calculationRunId}`,
+					calculationVersion: "audit-ready-v1",
+					createdAt,
+					idempotencyKey: args.idempotencyKey,
+					inputs: calculationInputs,
+					mortgageId: `${args.mortgageId}`,
+					obligationId: `${args.obligationId}`,
+					orgId: mortgage.orgId,
+					outputs: calculationOutputs,
+					paymentMethod: resolvedMethod,
+					payoutEligibleAfter,
+					settledAmount: args.settledAmount,
+					settledDate: args.settledDate,
+				},
+				timestamp: createdAt,
+			});
+		}
+
 		const entries: DispersalCreationResult["entries"] = [];
 		const createdAt = Date.now();
 		for (const share of shares) {
@@ -475,6 +580,7 @@ export const createDispersalEntries = internalMutation({
 				mortgageId: args.mortgageId,
 				lenderId: share.lenderId,
 				lenderAccountId: share.lenderAccountId,
+				calculationRunId,
 				amount: share.amount,
 				dispersalDate: args.settledDate,
 				obligationId: args.obligationId,
@@ -504,6 +610,72 @@ export const createDispersalEntries = internalMutation({
 				},
 				createdAt,
 			});
+
+			await appendAuditJournalEntry(ctx, {
+				entityType: "dispersalEntry",
+				entityId: `${entryId}`,
+				eventType: "CREATED",
+				eventCategory: "domain_write",
+				organizationId: mortgage.orgId,
+				previousState: "none",
+				newState: "pending",
+				outcome: "transitioned",
+				actorId: args.source.actorId ?? "system",
+				actorType: args.source.actorType,
+				channel: args.source.channel,
+				payload: {
+					amount: share.amount,
+					dispersalDate: args.settledDate,
+					lenderId: `${share.lenderId}`,
+					mortgageId: `${args.mortgageId}`,
+					obligationId: `${args.obligationId}`,
+				},
+				idempotencyKey: `${args.idempotencyKey}:${share.lenderId}`,
+				linkedRecordIds: {
+					calculationRunId: `${calculationRunId}`,
+					dispersalEntryId: `${entryId}`,
+					lenderId: `${share.lenderId}`,
+					mortgageId: `${args.mortgageId}`,
+					obligationId: `${args.obligationId}`,
+				},
+				afterState: {
+					_id: `${entryId}`,
+					amount: share.amount,
+					calculationDetails: {
+						distributableAmount,
+						feeCashApplied,
+						feeCode: servicingConfig?.code,
+						feeDue,
+						feeReceivable,
+						mortgageFeeId: servicingConfig?.mortgageFeeId
+							? `${servicingConfig.mortgageFeeId}`
+							: undefined,
+						ownershipFraction: totalUnits === 0 ? 0 : share.units / totalUnits,
+						ownershipSnapshotDate: args.settledDate,
+						ownershipUnits: share.units,
+						policyVersion: servicingConfig?.policyVersion,
+						rawAmount: share.rawAmount,
+						reroutesAppliedCount,
+						roundedAmount: share.amount,
+						settledAmount: args.settledAmount,
+						servicingFee: feeCashApplied,
+						sourceObligationType: obligation.type,
+						totalUnits,
+					},
+					calculationRunId: `${calculationRunId}`,
+					createdAt,
+					dispersalDate: args.settledDate,
+					lenderAccountId: `${share.lenderAccountId}`,
+					lenderId: `${share.lenderId}`,
+					mortgageId: `${args.mortgageId}`,
+					obligationId: `${args.obligationId}`,
+					orgId: mortgage.orgId,
+					paymentMethod: resolvedMethod,
+					payoutEligibleAfter,
+					status: "pending",
+				},
+				timestamp: createdAt,
+			});
 			entries.push({
 				id: entryId,
 				lenderId: share.lenderId,
@@ -517,6 +689,7 @@ export const createDispersalEntries = internalMutation({
 		const newServicingFeeEntryId =
 			feeDue > 0
 				? await ctx.db.insert("servicingFeeEntries", {
+						calculationRunId,
 						mortgageId: args.mortgageId,
 						obligationId: args.obligationId,
 						amount: feeCashApplied,
@@ -533,6 +706,57 @@ export const createDispersalEntries = internalMutation({
 						feeCode: servicingConfig?.code,
 					})
 				: null;
+
+		if (newServicingFeeEntryId) {
+			await appendAuditJournalEntry(ctx, {
+				entityType: "servicingFeeEntry",
+				entityId: `${newServicingFeeEntryId}`,
+				eventType: "CREATED",
+				eventCategory: "domain_write",
+				organizationId: mortgage.orgId,
+				previousState: "none",
+				newState: "recorded",
+				outcome: "transitioned",
+				actorId: args.source.actorId ?? "system",
+				actorType: args.source.actorType,
+				channel: args.source.channel,
+				payload: {
+					amount: feeCashApplied,
+					mortgageFeeId: servicingConfig?.mortgageFeeId
+						? `${servicingConfig.mortgageFeeId}`
+						: undefined,
+					obligationId: `${args.obligationId}`,
+				},
+				idempotencyKey: `${args.idempotencyKey}:servicing-fee`,
+				linkedRecordIds: {
+					calculationRunId: `${calculationRunId}`,
+					mortgageId: `${args.mortgageId}`,
+					obligationId: `${args.obligationId}`,
+					servicingFeeEntryId: `${newServicingFeeEntryId}`,
+				},
+				afterState: {
+					_id: `${newServicingFeeEntryId}`,
+					amount: feeCashApplied,
+					annualRate: servicingConfig?.annualRate ?? 0,
+					calculationRunId: `${calculationRunId}`,
+					createdAt,
+					date: args.settledDate,
+					feeCashApplied,
+					feeCode: servicingConfig?.code,
+					feeDue,
+					feeReceivable,
+					mortgageFeeId: servicingConfig?.mortgageFeeId
+						? `${servicingConfig.mortgageFeeId}`
+						: undefined,
+					mortgageId: `${args.mortgageId}`,
+					obligationId: `${args.obligationId}`,
+					policyVersion: servicingConfig?.policyVersion,
+					principalBalance: mortgage.principal,
+					sourceObligationType: obligation.type,
+				},
+				timestamp: createdAt,
+			});
+		}
 
 		let feeMetadata: ServicingFeeMetadata | undefined;
 		if (feeCashApplied > 0) {

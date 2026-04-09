@@ -1,3 +1,4 @@
+import auditLogTest from "convex-audit-log/test";
 import { convexTest } from "convex-test";
 import { describe, expect, it, vi } from "vitest";
 import { internal } from "../../../_generated/api";
@@ -502,8 +503,10 @@ describe("batch payout — query & mutation integration", () => {
  * uses the AuditTrail component for rejection auditing).
  */
 function createActionHarness() {
+	process.env.DISABLE_GT_HASHCHAIN = "true";
 	process.env.DISABLE_CASH_LEDGER_HASHCHAIN = "true";
 	const t = convexTest(schema, modules);
+	auditLogTest.register(t, "auditLog");
 	t.registerComponent("auditTrail", auditTrailSchema, auditTrailModules);
 	return t;
 }
@@ -794,7 +797,7 @@ async function seedPayoutScenario(
 }
 
 describe("processPayoutBatch — E2E integration", () => {
-	it("posts LENDER_PAYOUT_SENT journal entries, marks entries disbursed, and updates lastPayoutDate", async () => {
+	it("creates one transfer-owned payout per eligible entry, disburses them, and updates lastPayoutDate", async () => {
 		vi.useFakeTimers();
 		vi.setSystemTime(new Date("2026-03-20T08:00:00.000Z"));
 
@@ -808,7 +811,7 @@ describe("processPayoutBatch — E2E integration", () => {
 				{}
 			);
 
-			// (1) Assert LENDER_PAYOUT_SENT journal entry exists with expected amount/idempotencyKey
+			// (1) Assert one journal entry per transfer / dispersal entry
 			await t.run(async (ctx) => {
 				const journalEntries = await ctx.db
 					.query("cash_ledger_journal_entries")
@@ -817,19 +820,22 @@ describe("processPayoutBatch — E2E integration", () => {
 				const payoutEntries = journalEntries.filter(
 					(e) => e.entryType === "LENDER_PAYOUT_SENT"
 				);
-				expect(payoutEntries).toHaveLength(1);
-
-				const entry = payoutEntries[0];
-				// Entries A1 (3000) + A2 (2000) grouped under same mortgage = 5000
-				expect(entry.amount).toBe(5000n);
-				expect(entry.mortgageId).toBe(seeded.mortgageAId);
-				expect(entry.lenderId).toBe(seeded.lenderId);
-				expect(entry.idempotencyKey).toContain("cash-ledger:");
-				expect(entry.idempotencyKey).toContain("lender-payout-sent");
-				expect(entry.idempotencyKey).toContain("2026-03-20");
+				expect(payoutEntries).toHaveLength(2);
+				expect(
+					payoutEntries
+						.map((entry) => Number(entry.amount))
+						.sort((a, b) => a - b)
+				).toEqual([2000, 3000]);
+				for (const entry of payoutEntries) {
+					expect(entry.mortgageId).toBe(seeded.mortgageAId);
+					expect(entry.lenderId).toBe(seeded.lenderId);
+					expect(entry.transferRequestId).toBeDefined();
+					expect(entry.idempotencyKey).toContain("cash-ledger:");
+					expect(entry.idempotencyKey).toContain("lender-payout-sent");
+				}
 			});
 
-			// (2) Assert dispersalEntries are marked disbursed with payoutDate
+			// (2) Assert dispersalEntries are marked disbursed with payoutDate and linked transfer
 			await t.run(async (ctx) => {
 				const entryA1 = await ctx.db.get(seeded.entryA1Id);
 				const entryA2 = await ctx.db.get(seeded.entryA2Id);
@@ -837,10 +843,12 @@ describe("processPayoutBatch — E2E integration", () => {
 				expect(entryA1).not.toBeNull();
 				expect(entryA1?.status).toBe("disbursed");
 				expect(entryA1?.payoutDate).toBe("2026-03-20");
+				expect(entryA1?.transferRequestId).toBeDefined();
 
 				expect(entryA2).not.toBeNull();
 				expect(entryA2?.status).toBe("disbursed");
 				expect(entryA2?.payoutDate).toBe("2026-03-20");
+				expect(entryA2?.transferRequestId).toBeDefined();
 			});
 
 			// (3) Assert lender's lastPayoutDate is updated
@@ -854,7 +862,7 @@ describe("processPayoutBatch — E2E integration", () => {
 		}
 	});
 
-	it("groups entries by mortgage and posts separate journal entries per mortgage", async () => {
+	it("creates separate transfer-owned payouts for every eligible entry across mortgages", async () => {
 		vi.useFakeTimers();
 		vi.setSystemTime(new Date("2026-03-20T08:00:00.000Z"));
 
@@ -867,7 +875,7 @@ describe("processPayoutBatch — E2E integration", () => {
 				{}
 			);
 
-			// Verify two separate LENDER_PAYOUT_SENT entries — one per mortgage
+			// Verify one LENDER_PAYOUT_SENT entry per dispersal entry
 			await t.run(async (ctx) => {
 				const journalEntries = await ctx.db
 					.query("cash_ledger_journal_entries")
@@ -876,28 +884,12 @@ describe("processPayoutBatch — E2E integration", () => {
 				const payoutEntries = journalEntries.filter(
 					(e) => e.entryType === "LENDER_PAYOUT_SENT"
 				);
-				expect(payoutEntries).toHaveLength(2);
-
-				// Find entries by mortgage
-				const mortgageAEntry = payoutEntries.find(
-					(e) => e.mortgageId === seeded.mortgageAId
-				);
-				const mortgageBEntry = payoutEntries.find(
-					(e) => e.mortgageId === seeded.mortgageBId
-				);
-
-				expect(mortgageAEntry).toBeDefined();
-				expect(mortgageBEntry).toBeDefined();
-
-				// Mortgage A: entries A1 (3000) + A2 (2000) = 5000
-				expect(mortgageAEntry?.amount).toBe(5000n);
-				// Mortgage B: entry B1 (4000)
-				expect(mortgageBEntry?.amount).toBe(4000n);
-
-				// Each entry has a unique idempotency key
-				expect(mortgageAEntry?.idempotencyKey).not.toBe(
-					mortgageBEntry?.idempotencyKey
-				);
+				expect(payoutEntries).toHaveLength(3);
+				expect(
+					payoutEntries
+						.map((entry) => Number(entry.amount))
+						.sort((a, b) => a - b)
+				).toEqual([2000, 3000, 4000]);
 			});
 
 			// All three dispersal entries should be disbursed
@@ -914,6 +906,9 @@ describe("processPayoutBatch — E2E integration", () => {
 				expect(entryA1?.status).toBe("disbursed");
 				expect(entryA2?.status).toBe("disbursed");
 				expect(entryB1?.status).toBe("disbursed");
+				expect(entryA1?.transferRequestId).toBeDefined();
+				expect(entryA2?.transferRequestId).toBeDefined();
+				expect(entryB1?.transferRequestId).toBeDefined();
 			});
 
 			// lastPayoutDate updated once for the lender

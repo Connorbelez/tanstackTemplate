@@ -290,13 +290,23 @@ async function insertAuditTimelineEntry(
 ) {
 	return t.run(async (ctx) => {
 		return ctx.db.insert("auditJournal", {
+			afterState: { status: args.newState },
+			beforeState:
+				args.previousState === "none"
+					? undefined
+					: { status: args.previousState },
+			effectiveDate: new Date(args.timestamp).toISOString().slice(0, 10),
 			entityType: "transfer",
 			entityId: `${args.transferId}`,
+			eventCategory: "governed_transition",
+			eventId: `test-audit-${args.transferId}-${args.eventType}-${args.timestamp}`,
 			eventType: args.eventType,
+			originSystem: "test",
 			payload: {},
 			previousState: args.previousState,
 			newState: args.newState,
 			outcome: "transitioned",
+			sequenceNumber: 1n,
 			actorId: "test-transfer-admin",
 			actorType: "admin",
 			channel: "admin_dashboard",
@@ -607,6 +617,75 @@ describe("transfer handlers integration: mutations", () => {
 			});
 
 			await t.finishAllScheduledFunctions(vi.runAllTimers);
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it("confirmManualTransfer persists structured manual settlement evidence", async () => {
+		vi.useFakeTimers();
+		const t = createHarness();
+		const auth = asPaymentUser(t);
+		const seeded = await seedCoreEntities(t);
+
+		try {
+			await seedOutboundBalances(t, {
+				amount: 50_000,
+				lenderId: seeded.lenderId,
+				mortgageId: seeded.mortgageId,
+			});
+
+			const transferId = await auth.mutation(
+				api.payments.transfers.mutations.createTransferRequest,
+				{
+					direction: "outbound",
+					transferType: "lender_dispersal_payout",
+					amount: 50_000,
+					counterpartyType: "lender",
+					counterpartyId: `${seeded.lenderId}`,
+					mortgageId: seeded.mortgageId,
+					lenderId: seeded.lenderId,
+					providerCode: "manual_review",
+					idempotencyKey: "manual-settlement-evidence",
+				}
+			);
+
+			await auth.action(api.payments.transfers.mutations.initiateTransfer, {
+				transferId,
+			});
+			await t.finishAllScheduledFunctions(vi.runAllTimers);
+
+			await auth.mutation(
+				api.payments.transfers.mutations.confirmManualTransfer as never,
+				{
+					transferId,
+					manualSettlement: {
+						instrumentType: "cash",
+						settlementOccurredAt: Date.parse("2026-03-20T15:30:00Z"),
+						externalReference: "cash-drawer-001",
+						enteredBy: "admin-payout-test",
+						location: "Toronto HQ",
+						evidenceAttachmentIds: ["storage_1", "storage_2"],
+					},
+				} as never
+			);
+
+			await t.finishAllScheduledFunctions(vi.runAllTimers);
+
+			await t.run(async (ctx) => {
+				const transfer = await ctx.db.get(transferId);
+				expect(transfer?.status).toBe("confirmed");
+				expect(
+					(transfer as Record<string, unknown> | null)?.manualSettlement
+				).toEqual({
+					instrumentType: "cash",
+					settlementOccurredAt: Date.parse("2026-03-20T15:30:00Z"),
+					externalReference: "cash-drawer-001",
+					enteredBy: "admin-payout-test",
+					location: "Toronto HQ",
+					evidenceAttachmentIds: ["storage_1", "storage_2"],
+				});
+			});
 		} finally {
 			vi.useRealTimers();
 		}

@@ -10,32 +10,69 @@ const auditTrail = new AuditTrail(components.auditTrail);
 const workflow = new WorkflowManager(components.workflow);
 
 export function buildAuditTrailInsertArgs(entry: {
+	afterState?: Record<string, unknown>;
 	actorId: string;
+	beforeState?: Record<string, unknown>;
 	channel: string;
+	correlationId?: string;
+	delta?: Record<string, unknown>;
+	effectiveDate: string;
 	effectsScheduled?: string[];
 	entityId: string;
 	entityType: string;
+	eventCategory: string;
+	eventId: string;
 	eventType: string;
+	idempotencyKey?: string;
+	legalEntityId?: string;
+	linkedRecordIds?: Record<string, unknown>;
 	machineVersion?: string;
 	newState: string;
 	outcome: string;
 	previousState: string;
 	reason?: string;
+	requestId?: string;
+	sequenceNumber: bigint;
 	timestamp: number;
 }) {
+	const canonicalEnvelope = {
+		afterState: entry.afterState,
+		actorId: entry.actorId,
+		beforeState: entry.beforeState,
+		channel: entry.channel,
+		correlationId: entry.correlationId,
+		delta: entry.delta,
+		effectiveDate: entry.effectiveDate,
+		effectsScheduled: entry.effectsScheduled,
+		entityId: entry.entityId,
+		entityType: entry.entityType,
+		eventCategory: entry.eventCategory,
+		eventId: entry.eventId,
+		eventType: entry.eventType,
+		idempotencyKey: entry.idempotencyKey,
+		legalEntityId: entry.legalEntityId,
+		linkedRecordIds: entry.linkedRecordIds,
+		machineVersion: entry.machineVersion,
+		newState: entry.newState,
+		outcome: entry.outcome,
+		previousState: entry.previousState,
+		reason: entry.reason,
+		requestId: entry.requestId,
+		sequenceNumber: entry.sequenceNumber.toString(),
+		timestamp: entry.timestamp,
+	};
 	return {
 		entityId: entry.entityId,
 		entityType: entry.entityType,
 		eventType: entry.eventType,
 		actorId: entry.actorId,
-		beforeState: entry.previousState,
-		afterState: entry.newState,
+		beforeState: JSON.stringify(
+			entry.beforeState ?? { status: entry.previousState }
+		),
+		afterState: JSON.stringify(entry.afterState ?? { status: entry.newState }),
+		canonicalEnvelope: JSON.stringify(canonicalEnvelope),
 		metadata: JSON.stringify({
-			outcome: entry.outcome,
-			machineVersion: entry.machineVersion,
-			effectsScheduled: entry.effectsScheduled,
-			channel: entry.channel,
-			reason: entry.reason,
+			canonicalEnvelope,
 		}),
 		timestamp: entry.timestamp,
 	};
