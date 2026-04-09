@@ -161,6 +161,13 @@ export const logicalOperatorValidator = v.union(
 	v.literal("or")
 );
 
+export const savedViewFilterValidator = v.object({
+	fieldDefId: v.id("fieldDefs"),
+	operator: filterOperatorValidator,
+	value: v.optional(v.string()),
+	logicalOperator: v.optional(logicalOperatorValidator),
+});
+
 // ── Select Option (reused in fieldDefs) ──
 export const selectOptionValidator = v.object({
 	value: v.string(),

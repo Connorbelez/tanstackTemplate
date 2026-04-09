@@ -15,6 +15,7 @@ import {
 	logicalOperatorValidator,
 	normalizedFieldKindValidator,
 	relationMetadataValidator,
+	savedViewFilterValidator,
 	selectOptionValidator,
 	viewLayoutMessagesValidator,
 	viewTypeValidator,
@@ -2081,6 +2082,7 @@ export default defineSchema({
 		viewType: viewTypeValidator,
 		visibleFieldIds: v.array(v.id("fieldDefs")),
 		fieldOrder: v.array(v.id("fieldDefs")),
+		filters: v.optional(v.array(savedViewFilterValidator)),
 		filtersJson: v.optional(v.string()),
 		groupByFieldId: v.optional(v.id("fieldDefs")),
 		aggregatePresets: v.optional(v.array(aggregatePresetValidator)),
@@ -2088,7 +2090,19 @@ export default defineSchema({
 		createdAt: v.number(),
 		updatedAt: v.number(),
 	})
+		.index("by_org_owner_object", ["orgId", "ownerAuthId", "objectDefId"])
 		.index("by_owner_object", ["ownerAuthId", "objectDefId"])
+		.index("by_org_owner_object_default", [
+			"orgId",
+			"ownerAuthId",
+			"objectDefId",
+			"isDefault",
+		])
+		.index("by_owner_object_default", [
+			"ownerAuthId",
+			"objectDefId",
+			"isDefault",
+		])
 		.index("by_org", ["orgId"])
 		.index("by_source_view", ["sourceViewDefId"]),
 
