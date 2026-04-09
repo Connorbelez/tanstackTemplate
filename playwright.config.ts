@@ -19,7 +19,11 @@ export default defineConfig({
 		trace: "on-first-retry",
 	},
 	webServer: {
-		command: `WORKOS_REDIRECT_URI=http://127.0.0.1:${e2ePort}/callback VITE_E2E=true vite dev --host 127.0.0.1 --port ${e2ePort}`,
+		command: `vite dev --host 127.0.0.1 --port ${e2ePort}`,
+		env: {
+			WORKOS_REDIRECT_URI: `http://127.0.0.1:${e2ePort}/callback`,
+			VITE_E2E: "true",
+		},
 		url: `${e2eBaseUrl}/about`,
 		reuseExistingServer: !process.env.CI,
 		timeout: 120_000,
