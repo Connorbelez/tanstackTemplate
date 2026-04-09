@@ -164,6 +164,14 @@ function RecordSurfaceBody({
 		1,
 		Math.ceil((tablePreview?.totalCount ?? 0) / RECORD_PAGE_SIZE)
 	);
+	const hasExactTableCount = tablePreview?.totalCountExact ?? true;
+	const recordsBadgeLabel =
+		viewMode === "kanban"
+			? `${kanbanPreview?.totalCount ?? 0} grouped records`
+			: `${tablePreview?.totalCount ?? 0}${hasExactTableCount ? "" : "+"} records`;
+	const pageLabel = hasExactTableCount
+		? `Server page ${tablePageIndex + 1} of ${tablePageCount}`
+		: `Server page ${tablePageIndex + 1}`;
 	const visibleRangeStart =
 		activeRows.length === 0 ? 0 : tablePageIndex * RECORD_PAGE_SIZE + 1;
 	const visibleRangeEnd = tablePageIndex * RECORD_PAGE_SIZE + activeRows.length;
@@ -171,11 +179,7 @@ function RecordSurfaceBody({
 	return (
 		<>
 			<div className="flex flex-wrap items-center gap-2">
-				<Badge variant="secondary">
-					{viewMode === "kanban"
-						? `${kanbanPreview?.totalCount ?? 0} grouped records`
-						: `${tablePreview?.totalCount ?? 0} records`}
-				</Badge>
+				<Badge variant="secondary">{recordsBadgeLabel}</Badge>
 				<Badge variant="outline">{fields.length} fields</Badge>
 				<Badge variant="outline">
 					{metricSource === "native" ? "Native Adapter" : "EAV Storage"}
@@ -214,12 +218,11 @@ function RecordSurfaceBody({
 			(tablePreview?.totalCount ?? 0) > RECORD_PAGE_SIZE ? (
 				<div className="flex flex-col gap-3 rounded-2xl border border-border/70 bg-muted/10 px-4 py-3 text-sm lg:flex-row lg:items-center lg:justify-between">
 					<div className="space-y-1">
-						<p className="font-medium">
-							Server page {tablePageIndex + 1} of {tablePageCount}
-						</p>
+						<p className="font-medium">{pageLabel}</p>
 						<p className="text-muted-foreground">
 							Showing records {visibleRangeStart}-{visibleRangeEnd} of{" "}
-							{tablePreview?.totalCount ?? 0}.
+							{tablePreview?.totalCount ?? 0}
+							{hasExactTableCount ? "." : "+."}
 						</p>
 					</div>
 					<div className="flex items-center gap-2">

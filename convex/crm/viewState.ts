@@ -38,6 +38,15 @@ type UserSavedViewSnapshot = Omit<
 	UserSavedViewDefinition,
 	"ownerAuthId" | "userSavedViewId"
 >;
+interface ColumnCandidate {
+	displayOrder: number;
+	fieldDefId: Id<"fieldDefs">;
+	fieldType: FieldDef["fieldType"];
+	isVisibleByDefault: boolean;
+	label: string;
+	name: string;
+	width: number | undefined;
+}
 
 export interface ViewColumnDefinition {
 	displayOrder: number;
@@ -218,9 +227,15 @@ function applyFieldOverridesToColumn(args: {
 
 	return {
 		...args.column,
-		isVisible: hiddenInCurrentLayout ? false : args.column.isVisible,
+		isVisible: hiddenInCurrentLayout
+			? false
+			: (args.override?.isVisibleByDefault ?? args.column.isVisible),
 		label: args.override?.label ?? args.column.label,
 	};
+}
+
+function toSyntheticFieldDefId(fieldName: string): Id<"fieldDefs"> {
+	return `computed:${fieldName}` as Id<"fieldDefs">;
 }
 
 function applyFieldOverridesToDefinition(args: {
@@ -262,6 +277,7 @@ function toComputedNormalizedFieldDefinition(args: {
 			mode: "computed",
 			reason: "Computed adapter fields are read-only projections.",
 		},
+		fieldDefId: toSyntheticFieldDefId(args.computedField.fieldName),
 		fieldSource: "adapter_computed",
 		fieldType: args.computedField.fieldType,
 		isActive: true,
@@ -408,25 +424,6 @@ function toRuntimeFilters(
 	}));
 }
 
-function sanitizeFieldIdList(
-	fieldIds: Id<"fieldDefs">[],
-	fieldDefsById: Map<string, FieldDef>
-): Id<"fieldDefs">[] {
-	const seen = new Set<string>();
-	const sanitized: Id<"fieldDefs">[] = [];
-
-	for (const fieldId of fieldIds) {
-		const key = fieldId.toString();
-		if (seen.has(key) || !fieldDefsById.has(key)) {
-			continue;
-		}
-		seen.add(key);
-		sanitized.push(fieldId);
-	}
-
-	return sanitized;
-}
-
 function toSystemViewDefinition(args: {
 	disabledLayoutMessages: SystemViewDefinition["disabledLayoutMessages"];
 	viewDef: ViewDefDoc;
@@ -461,7 +458,7 @@ function toSystemViewDefinition(args: {
 function buildBaseColumnDefinitions(
 	viewFields: ViewField[],
 	fieldDefsById: Map<string, FieldDef>
-): Map<string, ViewColumnDefinition> {
+): Map<string, ColumnCandidate> {
 	return new Map(
 		viewFields.flatMap((viewField) => {
 			const fieldDef = fieldDefsById.get(viewField.fieldDefId.toString());
@@ -478,13 +475,57 @@ function buildBaseColumnDefinitions(
 						label: fieldDef.label,
 						fieldType: fieldDef.fieldType,
 						width: viewField.width,
-						isVisible: viewField.isVisible,
 						displayOrder: viewField.displayOrder,
+						isVisibleByDefault: viewField.isVisible,
 					},
-				] satisfies [string, ViewColumnDefinition],
+				] satisfies [string, ColumnCandidate],
 			];
 		})
 	);
+}
+
+function buildComputedColumnDefinitions(
+	adapterContract: EntityViewAdapterContract,
+	persistedCount: number
+): Map<string, ColumnCandidate> {
+	return new Map(
+		adapterContract.computedFields.map((computedField, index) => {
+			const fieldDefId = toSyntheticFieldDefId(computedField.fieldName);
+
+			return [
+				fieldDefId.toString(),
+				{
+					fieldDefId,
+					name: computedField.fieldName,
+					label: computedField.label,
+					fieldType: computedField.fieldType,
+					width: undefined,
+					displayOrder: persistedCount + index,
+					isVisibleByDefault: computedField.isVisibleByDefault,
+				},
+			] satisfies [string, ColumnCandidate];
+		})
+	);
+}
+
+function sanitizeColumnIdList(
+	preferred: Id<"fieldDefs">[],
+	fallback: Id<"fieldDefs">[],
+	availableColumnsById: ReadonlyMap<string, ColumnCandidate>
+): Id<"fieldDefs">[] {
+	const seen = new Set<string>();
+	const sanitized: Id<"fieldDefs">[] = [];
+
+	for (const fieldId of [...preferred, ...fallback]) {
+		const key = fieldId.toString();
+		if (seen.has(key) || !availableColumnsById.has(key)) {
+			continue;
+		}
+		seen.add(key);
+		sanitized.push(fieldId);
+	}
+
+	return sanitized;
 }
 
 function buildEffectiveColumns(args: {
@@ -494,16 +535,25 @@ function buildEffectiveColumns(args: {
 	viewFields: ViewField[];
 	viewIsDefault: boolean;
 }): ViewColumnDefinition[] {
-	const baseColumnsById = buildBaseColumnDefinitions(
+	const persistedColumnsById = buildBaseColumnDefinitions(
 		args.viewFields,
 		args.fieldDefsById
 	);
+	const computedColumnsById = buildComputedColumnDefinitions(
+		args.adapterContract,
+		persistedColumnsById.size
+	);
+	const baseColumnsById = new Map([
+		...persistedColumnsById,
+		...computedColumnsById,
+	]);
 	const fallbackFieldOrder = [...baseColumnsById.values()]
 		.sort((a, b) => a.displayOrder - b.displayOrder)
 		.map((column) => column.fieldDefId);
-	const orderedFieldIds = sanitizeFieldIdList(
+	const orderedFieldIds = sanitizeColumnIdList(
 		[...args.effectiveView.fieldOrder, ...fallbackFieldOrder],
-		args.fieldDefsById
+		fallbackFieldOrder,
+		baseColumnsById
 	);
 	const visibleFieldIds = new Set(
 		args.effectiveView.visibleFieldIds.map((fieldId) => fieldId.toString())
@@ -516,25 +566,26 @@ function buildEffectiveColumns(args: {
 
 	return orderedFieldIds
 		.flatMap((fieldId, index) => {
-			const fieldDef = args.fieldDefsById.get(fieldId.toString());
-			if (!fieldDef) {
+			const baseColumn = baseColumnsById.get(fieldId.toString());
+			if (!baseColumn) {
 				return [];
 			}
 
-			const baseColumn = baseColumnsById.get(fieldId.toString());
 			return [
 				applyFieldOverridesToColumn({
 					column: {
-						fieldDefId: fieldDef._id,
-						name: fieldDef.name,
-						label: fieldDef.label,
-						fieldType: fieldDef.fieldType,
+						fieldDefId: baseColumn.fieldDefId,
+						name: baseColumn.name,
+						label: baseColumn.label,
+						fieldType: baseColumn.fieldType,
 						width: baseColumn?.width,
-						isVisible: visibleFieldIds.has(fieldId.toString()),
+						isVisible:
+							visibleFieldIds.has(fieldId.toString()) ||
+							baseColumn.isVisibleByDefault,
 						displayOrder: index,
 					},
 					currentLayout: args.effectiveView.layout,
-					override: fieldOverridesByName.get(fieldDef.name),
+					override: fieldOverridesByName.get(baseColumn.name),
 				}),
 			];
 		})
@@ -545,7 +596,11 @@ function buildEffectiveColumns(args: {
 				orderHints: schemaOrderHints,
 				overrideByName: fieldOverridesByName,
 			})
-		);
+		)
+		.map((column, index) => ({
+			...column,
+			displayOrder: index,
+		}));
 }
 
 export function toUserSavedViewDefinition(
@@ -932,14 +987,19 @@ export async function resolveViewState(
 				objectDefId: objectDef._id,
 			})
 		);
-	const fields = [...persistedFields, ...computedFields].sort((left, right) =>
-		compareSchemaOrderedEntries({
-			left,
-			right,
-			orderHints: schemaOrderHints,
-			overrideByName: fieldOverridesByName,
-		})
-	);
+	const fields = [...persistedFields, ...computedFields]
+		.sort((left, right) =>
+			compareSchemaOrderedEntries({
+				left,
+				right,
+				orderHints: schemaOrderHints,
+				overrideByName: fieldOverridesByName,
+			})
+		)
+		.map((field, index) => ({
+			...field,
+			displayOrder: index,
+		}));
 
 	return {
 		viewDef: effectiveState.viewDef,

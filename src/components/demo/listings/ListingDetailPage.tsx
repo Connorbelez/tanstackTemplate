@@ -1,5 +1,6 @@
 "use client";
 
+import { Link } from "@tanstack/react-router";
 import {
 	ArrowLeft,
 	Check,
@@ -10,7 +11,7 @@ import {
 	ImageIcon,
 	MapPinned,
 } from "lucide-react";
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useId, useMemo, useState } from "react";
 import { Badge } from "#/components/ui/badge";
 import { Button } from "#/components/ui/button";
 import { Input } from "#/components/ui/input";
@@ -48,38 +49,40 @@ interface ListingDetailPageProps {
 }
 
 export function ListingDetailPage({ listing }: ListingDetailPageProps) {
-	const [selectedImageId, setSelectedImageId] = useState(
+	const [selectedImageId, setSelectedImageId] = useState<string | undefined>(
 		listing.heroImages[0]?.id
 	);
-	const [selectedDocumentId, setSelectedDocumentId] = useState(
-		listing.documents[0]?.id
-	);
-	const [selectedLawyerId, setSelectedLawyerId] = useState(
+	const [selectedDocumentId, setSelectedDocumentId] = useState<
+		string | undefined
+	>(listing.documents[0]?.id);
+	const [selectedLawyerId, setSelectedLawyerId] = useState<string | undefined>(
 		listing.checkout.lawyers[0]?.id
 	);
 	const [fractionInput, setFractionInput] = useState(
 		String(listing.checkout.defaultFractions)
 	);
+	const [showMobileMap, setShowMobileMap] = useState(false);
 
 	useEffect(() => {
 		setSelectedImageId(listing.heroImages[0]?.id);
 		setSelectedDocumentId(listing.documents[0]?.id);
 		setSelectedLawyerId(listing.checkout.lawyers[0]?.id);
 		setFractionInput(String(listing.checkout.defaultFractions));
+		setShowMobileMap(false);
 	}, [listing]);
 
-	const selectedImageIndex = Math.max(
-		0,
-		listing.heroImages.findIndex((image) => image.id === selectedImageId)
-	);
+	const selectedImageIndex = selectedImageId
+		? listing.heroImages.findIndex((image) => image.id === selectedImageId)
+		: -1;
+	const normalizedImageIndex = selectedImageIndex >= 0 ? selectedImageIndex : 0;
 	const selectedImage =
-		listing.heroImages[selectedImageIndex] ?? listing.heroImages[0];
-	const selectedDocument =
-		listing.documents.find((document) => document.id === selectedDocumentId) ??
-		listing.documents[0];
-	const selectedLawyer =
-		listing.checkout.lawyers.find((lawyer) => lawyer.id === selectedLawyerId) ??
-		listing.checkout.lawyers[0];
+		listing.heroImages[normalizedImageIndex] ?? listing.heroImages[0];
+	const selectedDocument = listing.documents.find(
+		(document) => document.id === selectedDocumentId
+	);
+	const selectedLawyer = listing.checkout.lawyers.find(
+		(lawyer) => lawyer.id === selectedLawyerId
+	);
 
 	const requestedFractions = useMemo(() => {
 		const parsed = Number.parseInt(fractionInput, 10);
@@ -102,16 +105,22 @@ export function ListingDetailPage({ listing }: ListingDetailPageProps) {
 	const summaryParagraphs = splitSummary(listing.summary);
 
 	function goToNextImage() {
+		if (listing.heroImages.length <= 1) {
+			return;
+		}
 		setSelectedImageId(
-			listing.heroImages[(selectedImageIndex + 1) % listing.heroImages.length]
+			listing.heroImages[(normalizedImageIndex + 1) % listing.heroImages.length]
 				?.id
 		);
 	}
 
 	function goToPreviousImage() {
+		if (listing.heroImages.length <= 1) {
+			return;
+		}
 		setSelectedImageId(
 			listing.heroImages[
-				(selectedImageIndex - 1 + listing.heroImages.length) %
+				(normalizedImageIndex - 1 + listing.heroImages.length) %
 					listing.heroImages.length
 			]?.id
 		);
@@ -153,19 +162,22 @@ export function ListingDetailPage({ listing }: ListingDetailPageProps) {
 							ariaLabel="Previous photo"
 							className="left-4"
 							direction="left"
+							disabled={listing.heroImages.length <= 1}
 							onClick={goToPreviousImage}
 						/>
 						<HeroArrowButton
 							ariaLabel="Next photo"
 							className="right-4"
 							direction="right"
+							disabled={listing.heroImages.length <= 1}
 							onClick={goToNextImage}
 						/>
 						<div className="absolute right-4 bottom-4 rounded-lg bg-black/70 px-3 py-1 font-medium text-sm text-white">
-							{selectedImageIndex + 1} of {listing.heroImages.length} photos
+							{selectedImage ? normalizedImageIndex + 1 : 0} of{" "}
+							{listing.heroImages.length} photos
 						</div>
 					</div>
-					<MapPanel listing={listing} />
+					<MapPanel listing={listing} mapPanelId="listing-map" />
 				</section>
 
 				<section className="flex gap-3 px-16 pt-4">
@@ -173,7 +185,7 @@ export function ListingDetailPage({ listing }: ListingDetailPageProps) {
 						<button
 							className={cn(
 								"relative h-16 w-[88px] cursor-pointer overflow-hidden rounded-lg border transition-all",
-								image.id === selectedImage.id
+								image.id === selectedImage?.id
 									? "border-[#204636] ring-1 ring-[#204636]"
 									: "border-[#E7E5E4]"
 							)}
@@ -244,7 +256,7 @@ export function ListingDetailPage({ listing }: ListingDetailPageProps) {
 				<DesktopDocuments
 					documents={listing.documents}
 					onDocumentSelect={setSelectedDocumentId}
-					selectedDocumentId={selectedDocument.id}
+					selectedDocumentId={selectedDocument?.id}
 				/>
 				<InvestmentSummaryCard className="mx-16 mt-10" listing={listing} />
 
@@ -279,14 +291,18 @@ export function ListingDetailPage({ listing }: ListingDetailPageProps) {
 							<p className="font-medium text-[#6B6B68] text-[13px]">
 								Select your lawyer
 							</p>
-							{listing.checkout.lawyers.map((lawyer) => (
-								<LawyerOptionCard
-									isSelected={lawyer.id === selectedLawyer.id}
-									key={lawyer.id}
-									lawyer={lawyer}
-									onSelect={setSelectedLawyerId}
-								/>
-							))}
+							{listing.checkout.lawyers.length > 0 ? (
+								listing.checkout.lawyers.map((lawyer) => (
+									<LawyerOptionCard
+										isSelected={lawyer.id === selectedLawyer?.id}
+										key={lawyer.id}
+										lawyer={lawyer}
+										onSelect={setSelectedLawyerId}
+									/>
+								))
+							) : (
+								<EmptySelectionState message="No lawyers are configured for this demo listing yet." />
+							)}
 						</div>
 					</WhiteSurface>
 
@@ -295,7 +311,7 @@ export function ListingDetailPage({ listing }: ListingDetailPageProps) {
 						ctaLabel={ctaLabel}
 						fractions={effectiveFractions}
 						listing={listing}
-						selectedLawyerLabel={selectedLawyer.label}
+						selectedLawyerLabel={selectedLawyer?.label}
 					/>
 				</section>
 
@@ -310,7 +326,8 @@ export function ListingDetailPage({ listing }: ListingDetailPageProps) {
 				<section className="relative h-[260px]">
 					<MediaPanel image={selectedImage} />
 					<div className="absolute right-4 bottom-4 rounded-lg bg-black/70 px-3 py-1 font-medium text-sm text-white">
-						{selectedImageIndex + 1} / {listing.heroImages.length}
+						{selectedImage ? normalizedImageIndex + 1 : 0} /{" "}
+						{listing.heroImages.length}
 					</div>
 				</section>
 
@@ -329,14 +346,22 @@ export function ListingDetailPage({ listing }: ListingDetailPageProps) {
 				</section>
 
 				<section className="px-5 pt-4">
-					<a
+					<button
 						className="flex items-center justify-center gap-2 rounded-xl border border-[#E7E5E4] bg-white px-4 py-3 font-medium text-[15px]"
-						href="#listing-map"
+						onClick={() => setShowMobileMap((current) => !current)}
+						type="button"
 					>
 						<MapPinned className="size-4" />
-						Show Map — {listing.map.locationText}
-					</a>
+						{showMobileMap ? "Hide Map" : "Show Map"} —{" "}
+						{listing.map.locationText}
+					</button>
 				</section>
+
+				{showMobileMap ? (
+					<section className="px-5 pt-4">
+						<MapPanel className="h-[220px]" listing={listing} />
+					</section>
+				) : null}
 
 				<section className="px-5 pt-6">
 					<SectionLabel>Executive Summary</SectionLabel>
@@ -480,22 +505,30 @@ export function ListingDetailPage({ listing }: ListingDetailPageProps) {
 
 				<section className="px-5 pt-6">
 					<SectionLabel>Documents</SectionLabel>
-					<div className="mt-3 space-y-2">
-						{listing.documents.map((document) => (
-							<button
-								className="flex w-full items-center justify-between rounded-xl border border-[#E7E5E4] bg-white px-4 py-4 text-left"
-								key={document.id}
-								onClick={() => setSelectedDocumentId(document.id)}
-								type="button"
-							>
-								<div className="flex items-center gap-3">
-									<FileText className="size-4 text-[#737373]" />
-									<span className="font-medium text-sm">{document.label}</span>
-								</div>
-								<ChevronRight className="size-4 text-[#A3A3A3]" />
-							</button>
-						))}
-					</div>
+					{listing.documents.length > 0 ? (
+						<div className="mt-3 space-y-2">
+							{listing.documents.map((document) => (
+								<button
+									className="flex w-full items-center justify-between rounded-xl border border-[#E7E5E4] bg-white px-4 py-4 text-left"
+									key={document.id}
+									onClick={() => setSelectedDocumentId(document.id)}
+									type="button"
+								>
+									<div className="flex items-center gap-3">
+										<FileText className="size-4 text-[#737373]" />
+										<span className="font-medium text-sm">
+											{document.label}
+										</span>
+									</div>
+									<ChevronRight className="size-4 text-[#A3A3A3]" />
+								</button>
+							))}
+						</div>
+					) : (
+						<WhiteSurface className="mt-3 border-dashed px-4 py-5 text-[#6B6B68] text-sm">
+							No documents are attached to this demo listing yet.
+						</WhiteSurface>
+					)}
 				</section>
 
 				<InvestmentSummaryCard className="mx-5 mt-6" listing={listing} mobile />
@@ -528,15 +561,19 @@ export function ListingDetailPage({ listing }: ListingDetailPageProps) {
 							<p className="font-medium text-[#6B6B68] text-[13px]">
 								Select your lawyer
 							</p>
-							{listing.checkout.lawyers.map((lawyer) => (
-								<LawyerOptionCard
-									isCompact
-									isSelected={lawyer.id === selectedLawyer.id}
-									key={lawyer.id}
-									lawyer={lawyer}
-									onSelect={setSelectedLawyerId}
-								/>
-							))}
+							{listing.checkout.lawyers.length > 0 ? (
+								listing.checkout.lawyers.map((lawyer) => (
+									<LawyerOptionCard
+										isCompact
+										isSelected={lawyer.id === selectedLawyer?.id}
+										key={lawyer.id}
+										lawyer={lawyer}
+										onSelect={setSelectedLawyerId}
+									/>
+								))
+							) : (
+								<EmptySelectionState message="No lawyers are configured for this demo listing yet." />
+							)}
 						</div>
 					</div>
 				</section>
@@ -548,7 +585,7 @@ export function ListingDetailPage({ listing }: ListingDetailPageProps) {
 						ctaLabel={ctaLabel}
 						fractions={effectiveFractions}
 						listing={listing}
-						selectedLawyerLabel={selectedLawyer.label}
+						selectedLawyerLabel={selectedLawyer?.label}
 					/>
 				</div>
 
@@ -792,11 +829,11 @@ function DesktopDocuments({
 }: {
 	documents: ListingDocumentItem[];
 	onDocumentSelect: (documentId: string) => void;
-	selectedDocumentId: string;
+	selectedDocumentId?: string;
 }) {
-	const selectedDocument =
-		documents.find((document) => document.id === selectedDocumentId) ??
-		documents[0];
+	const selectedDocument = documents.find(
+		(document) => document.id === selectedDocumentId
+	);
 
 	return (
 		<section className="px-16 pt-10">
@@ -805,7 +842,7 @@ function DesktopDocuments({
 				<div className="w-[260px] border-[#EFEDE8] border-r p-3">
 					<div className="space-y-1">
 						{documents.map((document) => {
-							const isSelected = document.id === selectedDocument.id;
+							const isSelected = document.id === selectedDocument?.id;
 							return (
 								<button
 									className={cn(
@@ -832,12 +869,20 @@ function DesktopDocuments({
 				</div>
 				<div className="flex h-[358px] flex-1 flex-col items-center justify-center bg-[#FBFAF8] text-center">
 					<FileText className="size-10 text-[#B0AEA8]" />
-					<p className="mt-4 font-medium text-[#5A5956] text-sm">
-						{selectedDocument.pageLabel}
-					</p>
-					<p className="mt-2 text-[#A3A3A3] text-sm">
-						Inline PDF viewer renders here
-					</p>
+					{selectedDocument ? (
+						<>
+							<p className="mt-4 font-medium text-[#5A5956] text-sm">
+								{selectedDocument.pageLabel}
+							</p>
+							<p className="mt-2 text-[#A3A3A3] text-sm">
+								Inline PDF viewer renders here
+							</p>
+						</>
+					) : (
+						<p className="mt-4 text-[#A3A3A3] text-sm">
+							No documents are attached to this demo listing yet.
+						</p>
+					)}
 				</div>
 			</div>
 		</section>
@@ -910,8 +955,13 @@ function CheckoutCard({
 	ctaLabel: string;
 	fractions: number;
 	listing: ListingDetailMock;
-	selectedLawyerLabel: string;
+	selectedLawyerLabel?: string;
 }) {
+	const idBase = useId();
+	const cardNumberId = `${idBase}-card-number`;
+	const expiryId = `${idBase}-expiry`;
+	const cvcId = `${idBase}-cvc`;
+
 	return (
 		<div
 			className={cn(
@@ -926,7 +976,10 @@ function CheckoutCard({
 					label="Fractions"
 					value={`${fractions} (${formatCurrency(calculatedInvestment)})`}
 				/>
-				<CheckoutRow label="Lawyer" value={selectedLawyerLabel} />
+				<CheckoutRow
+					label="Lawyer"
+					value={selectedLawyerLabel ?? "No lawyer selected"}
+				/>
 				<CheckoutRow
 					emphasis
 					label="Lock Fee"
@@ -936,34 +989,34 @@ function CheckoutCard({
 
 			<div className="mt-6 space-y-3">
 				<div>
-					<label className="text-[12px] text-white/70" htmlFor="card-number">
+					<label className="text-[12px] text-white/70" htmlFor={cardNumberId}>
 						Card number
 					</label>
 					<Input
 						className="mt-1 h-11 border-white/15 bg-white/6 text-white placeholder:text-white/45"
 						defaultValue="4242 4242 4242 4242"
-						id="card-number"
+						id={cardNumberId}
 					/>
 				</div>
 				<div className="grid grid-cols-2 gap-3">
 					<div>
-						<label className="text-[12px] text-white/70" htmlFor="expiry">
+						<label className="text-[12px] text-white/70" htmlFor={expiryId}>
 							Expiry
 						</label>
 						<Input
 							className="mt-1 h-11 border-white/15 bg-white/6 text-white placeholder:text-white/45"
 							defaultValue="MM / YY"
-							id="expiry"
+							id={expiryId}
 						/>
 					</div>
 					<div>
-						<label className="text-[12px] text-white/70" htmlFor="cvc">
+						<label className="text-[12px] text-white/70" htmlFor={cvcId}>
 							CVC
 						</label>
 						<Input
 							className="mt-1 h-11 border-white/15 bg-white/6 text-white placeholder:text-white/45"
 							defaultValue="123"
-							id="cvc"
+							id={cvcId}
 						/>
 					</div>
 				</div>
@@ -1002,13 +1055,14 @@ function SimilarListingsSection({
 				)}
 			>
 				{cards.map((card) => (
-					<a
+					<Link
 						className={cn(
 							"overflow-hidden rounded-xl border border-[#E7E5E4] bg-white",
 							mobile ? "w-[220px] shrink-0" : "min-w-0"
 						)}
-						href={`/demo/listings/${card.id}`}
 						key={card.id}
+						params={{ listingid: card.id }}
+						to="/demo/listings/$listingid"
 					>
 						<div className="h-[138px] overflow-hidden">
 							<MediaPanel
@@ -1039,18 +1093,29 @@ function SimilarListingsSection({
 								</div>
 							</div>
 						</div>
-					</a>
+					</Link>
 				))}
 			</div>
 		</section>
 	);
 }
 
-function MapPanel({ listing }: { listing: ListingDetailMock }) {
+function MapPanel({
+	className,
+	listing,
+	mapPanelId,
+}: {
+	className?: string;
+	listing: ListingDetailMock;
+	mapPanelId?: string;
+}) {
 	return (
 		<div
-			className="flex flex-1 flex-col items-center justify-center gap-3 rounded-xl bg-[#E8E4DF]"
-			id="listing-map"
+			className={cn(
+				"flex flex-1 flex-col items-center justify-center gap-3 rounded-xl bg-[#E8E4DF]",
+				className
+			)}
+			id={mapPanelId}
 		>
 			<div className="relative flex size-[180px] items-center justify-center rounded-full border border-[#BFC9BF] border-dashed bg-[#E6EBE4]">
 				<div className="size-2 rounded-full bg-[#2E7D4F]" />
@@ -1069,13 +1134,13 @@ function MediaPanel({
 }: {
 	className?: string;
 	compact?: boolean;
-	image: ListingHeroImage;
+	image?: ListingHeroImage;
 }) {
 	return (
 		<div
 			className={cn(
 				"flex h-full w-full items-center justify-center rounded-xl",
-				HERO_TONE_CLASSES[image.tone],
+				image ? HERO_TONE_CLASSES[image.tone] : HERO_TONE_CLASSES.stone,
 				className
 			)}
 		>
@@ -1084,9 +1149,17 @@ function MediaPanel({
 				<span
 					className={cn("font-medium", compact ? "text-[11px]" : "text-base")}
 				>
-					{image.label}
+					{image?.label ?? "No photos available"}
 				</span>
 			</div>
+		</div>
+	);
+}
+
+function EmptySelectionState({ message }: { message: string }) {
+	return (
+		<div className="rounded-xl border border-[#E7E5E4] border-dashed bg-white px-4 py-4 text-[#6B6B68] text-sm">
+			{message}
 		</div>
 	);
 }
@@ -1302,11 +1375,13 @@ function BadgePill({
 function HeroArrowButton({
 	ariaLabel,
 	className,
+	disabled = false,
 	direction,
 	onClick,
 }: {
 	ariaLabel: string;
 	className?: string;
+	disabled?: boolean;
 	direction: "left" | "right";
 	onClick: () => void;
 }) {
@@ -1315,9 +1390,10 @@ function HeroArrowButton({
 		<button
 			aria-label={ariaLabel}
 			className={cn(
-				"absolute top-1/2 flex size-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/95 text-[#4A4A48] shadow-sm",
+				"absolute top-1/2 flex size-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/95 text-[#4A4A48] shadow-sm disabled:cursor-not-allowed disabled:opacity-50",
 				className
 			)}
+			disabled={disabled}
 			onClick={onClick}
 			type="button"
 		>

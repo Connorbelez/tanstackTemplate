@@ -372,7 +372,7 @@ function buildListing(
 	};
 }
 
-export const listingDetailMocks: Record<string, ListingDetailMock> = {
+export const listingDetailMocks: Partial<Record<string, ListingDetailMock>> = {
 	"first-mortgage-north-york": buildListing({
 		id: "first-mortgage-north-york",
 		title: "First Mortgage — Detached Home, North York",
@@ -505,6 +505,8 @@ export const listingDetailMocks: Record<string, ListingDetailMock> = {
 	}),
 };
 
-export function getListingDetailMock(listingId: string) {
+export function getListingDetailMock(
+	listingId: string
+): ListingDetailMock | undefined {
 	return listingDetailMocks[listingId];
 }

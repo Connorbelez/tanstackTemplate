@@ -261,6 +261,7 @@ export interface EntityViewPageResult {
 	returnedCount: number;
 	rows: EntityViewRow[];
 	totalCount: number;
+	totalCountExact: boolean;
 	truncated: boolean;
 }
 
