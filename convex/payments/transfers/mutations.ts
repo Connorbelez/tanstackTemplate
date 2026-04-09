@@ -914,9 +914,12 @@ export const confirmManualTransfer = paymentMutation
 			throw new ConvexError("Transfer request not found");
 		}
 
-		if (transfer.providerCode !== "manual") {
+		if (
+			transfer.providerCode !== "manual" &&
+			transfer.providerCode !== "manual_review"
+		) {
 			throw new ConvexError(
-				`Only manual transfers can be confirmed manually, got "${transfer.providerCode}"`
+				`Only manual and manual_review transfers can be confirmed manually, got "${transfer.providerCode}"`
 			);
 		}
 
@@ -948,7 +951,7 @@ export const confirmManualTransfer = paymentMutation
 				settledAt: now,
 				providerData: {
 					providerRef,
-					method: "manual",
+					method: transfer.providerCode,
 				},
 			},
 			source,

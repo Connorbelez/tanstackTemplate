@@ -116,6 +116,8 @@ export const convexModules: ModuleMap = {
 		await import("./../demo/aggregate.ts"),
 	"/convex/demo/apiCredentials.ts": async () =>
 		await import("./../demo/apiCredentials.ts"),
+	"/convex/demo/amps.ts": async () => await import("./../demo/amps.ts"),
+	"/convex/demo/ampsE2e.ts": async () => await import("./../demo/ampsE2e.ts"),
 	"/convex/demo/auditLog.ts": async () => await import("./../demo/auditLog.ts"),
 	"/convex/demo/auditTraceability.ts": async () =>
 		await import("./../demo/auditTraceability.ts"),
@@ -438,6 +440,10 @@ export const convexModules: ModuleMap = {
 		await import("./../payments/transfers/principalReturn.ts"),
 	"/convex/payments/transfers/providers/manual.ts": async () =>
 		await import("./../payments/transfers/providers/manual.ts"),
+	"/convex/payments/transfers/providers/manualReview.ts": async () =>
+		await import("./../payments/transfers/providers/manualReview.ts"),
+	"/convex/payments/collectionPlan/execution.ts": async () =>
+		await import("./../payments/collectionPlan/execution.ts"),
 	"/convex/payments/transfers/providers/mock.ts": async () =>
 		await import("./../payments/transfers/providers/mock.ts"),
 	"/convex/payments/transfers/providers/registry.ts": async () =>

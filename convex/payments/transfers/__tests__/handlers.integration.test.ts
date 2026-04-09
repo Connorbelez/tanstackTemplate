@@ -31,7 +31,7 @@ const PAYMENT_HANDLER_IDENTITY = {
 
 const INITIATED_STATUS_RE = /initiated/;
 const ONLY_MANUAL_CONFIRM_RE =
-	/Only manual transfers can be confirmed manually/;
+	/Only manual and manual_review transfers can be confirmed manually/;
 const OUTBOUND_CONFIRM_AFTER_INITIATE_RE =
 	/Transfer must be in "pending" or "processing" status to confirm manually/;
 
@@ -476,6 +476,137 @@ describe("transfer handlers integration: mutations", () => {
 				expect(entries).toHaveLength(1);
 				expect(entries[0]?.entryType).toBe("LENDER_PAYOUT_SENT");
 			});
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it("manual_review inbound transfers stay pending until confirmManualTransfer and then post CASH_RECEIVED", async () => {
+		vi.useFakeTimers();
+		const t = createHarness();
+		const auth = asPaymentUser(t);
+		const seeded = await seedCoreEntities(t);
+		try {
+			const obligationId = await createDueObligation(t, {
+				amount: 50_000,
+				borrowerId: seeded.borrowerId,
+				mortgageId: seeded.mortgageId,
+			});
+
+			await t.run(async (ctx) => {
+				const account = await getOrCreateCashAccount(ctx, {
+					family: "BORROWER_RECEIVABLE",
+					mortgageId: seeded.mortgageId,
+					obligationId,
+					borrowerId: seeded.borrowerId,
+				});
+				await ctx.db.patch(account._id, {
+					cumulativeDebits: 50_000n,
+					cumulativeCredits: 0n,
+				});
+			});
+
+			const transferId = await auth.mutation(
+				api.payments.transfers.mutations.createTransferRequest,
+				{
+					direction: "inbound",
+					transferType: "borrower_interest_collection",
+					amount: 50_000,
+					counterpartyType: "borrower",
+					counterpartyId: `${seeded.borrowerId}`,
+					mortgageId: seeded.mortgageId,
+					obligationId,
+					borrowerId: seeded.borrowerId,
+					providerCode: "manual_review",
+					idempotencyKey: "manual-review-inbound",
+				}
+			);
+
+			const initiateResult = await auth.action(
+				api.payments.transfers.mutations.initiateTransfer,
+				{
+					transferId,
+				}
+			);
+
+			expect(initiateResult.success).toBe(true);
+			expect(initiateResult.newState).toBe("pending");
+
+			await t.finishAllScheduledFunctions(vi.runAllTimers);
+
+			await t.run(async (ctx) => {
+				const transfer = await ctx.db.get(transferId);
+				expect(transfer?.status).toBe("pending");
+			});
+
+			const confirmResult = await auth.mutation(
+				api.payments.transfers.mutations.confirmManualTransfer,
+				{
+					transferId,
+				}
+			);
+
+			expect(confirmResult.success).toBe(true);
+			expect(confirmResult.previousState).toBe("pending");
+			expect(confirmResult.newState).toBe("confirmed");
+
+			await t.finishAllScheduledFunctions(vi.runAllTimers);
+
+			await t.run(async (ctx) => {
+				const transfer = await ctx.db.get(transferId);
+				expect(transfer?.status).toBe("confirmed");
+
+				const entries = await ctx.db
+					.query("cash_ledger_journal_entries")
+					.withIndex("by_transfer_request", (q) =>
+						q.eq("transferRequestId", transferId)
+					)
+					.collect();
+
+				expect(entries).toHaveLength(1);
+				expect(entries[0]?.entryType).toBe("CASH_RECEIVED");
+			});
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it("confirmManualTransfer accepts manual_review providers", async () => {
+		vi.useFakeTimers();
+		const t = createHarness();
+		const auth = asPaymentUser(t);
+		const seeded = await seedCoreEntities(t);
+
+		try {
+			await seedOutboundBalances(t, {
+				amount: 50_000,
+				lenderId: seeded.lenderId,
+				mortgageId: seeded.mortgageId,
+			});
+
+			const transferId = await insertTransfer(t, {
+				status: "pending",
+				direction: "outbound",
+				transferType: "lender_dispersal_payout",
+				counterpartyType: "lender",
+				counterpartyId: `${seeded.lenderId}`,
+				lenderId: seeded.lenderId,
+				mortgageId: seeded.mortgageId,
+				providerCode: "manual_review",
+				idempotencyKey: "confirm-manual-review-guard",
+			});
+
+			await expect(
+				auth.mutation(api.payments.transfers.mutations.confirmManualTransfer, {
+					transferId,
+				})
+			).resolves.toMatchObject({
+				success: true,
+				previousState: "pending",
+				newState: "confirmed",
+			});
+
+			await t.finishAllScheduledFunctions(vi.runAllTimers);
 		} finally {
 			vi.useRealTimers();
 		}

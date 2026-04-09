@@ -8,6 +8,7 @@ import {
 	LoaderCircle,
 	RefreshCcw,
 	SatelliteDish,
+	TestTube2,
 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -47,6 +48,13 @@ const NAV_ITEMS = [
 		label: "Collection Attempts",
 		description: "Execution history, transfers, and reconciliation.",
 		icon: Activity,
+	},
+	{
+		to: "/demo/amps/e2e-payments",
+		label: "E2E Harness",
+		description:
+			"Disposable offline payment lifecycle for Playwright scaffolding.",
+		icon: TestTube2,
 	},
 ] as const;
 

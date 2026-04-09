@@ -8,6 +8,7 @@ export interface HoldPeriodConfig {
 /** Default hold periods by payment method (Tech Design §5.5) */
 export const HOLD_PERIOD_BY_METHOD: Record<string, HoldPeriodConfig> = {
 	manual: { holdBusinessDays: 0 },
+	manual_review: { holdBusinessDays: 0 },
 	mock_pad: { holdBusinessDays: 5 },
 	rotessa_pad: { holdBusinessDays: 5 },
 	stripe_ach: { holdBusinessDays: 7 },

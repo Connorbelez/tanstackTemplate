@@ -92,6 +92,7 @@ import { Route as DemoAuditTraceabilityHashChainRouteImport } from './routes/dem
 import { Route as DemoAuditTraceabilityAuditTrailRouteImport } from './routes/demo/audit-traceability/audit-trail'
 import { Route as DemoAuditTraceabilityAccessLogRouteImport } from './routes/demo/audit-traceability/access-log'
 import { Route as DemoAmpsRulesRouteImport } from './routes/demo/amps/rules'
+import { Route as DemoAmpsE2ePaymentsRouteImport } from './routes/demo/amps/e2e-payments'
 import { Route as DemoAmpsCollectionPlanRouteImport } from './routes/demo/amps/collection-plan'
 import { Route as DemoAmpsCollectionAttemptsRouteImport } from './routes/demo/amps/collection-attempts'
 import { Route as AdminPropertiesRecordidRouteImport } from './routes/admin/properties/$recordid'
@@ -547,6 +548,11 @@ const DemoAmpsRulesRoute = DemoAmpsRulesRouteImport.update({
   path: '/rules',
   getParentRoute: () => DemoAmpsRouteRoute,
 } as any)
+const DemoAmpsE2ePaymentsRoute = DemoAmpsE2ePaymentsRouteImport.update({
+  id: '/e2e-payments',
+  path: '/e2e-payments',
+  getParentRoute: () => DemoAmpsRouteRoute,
+} as any)
 const DemoAmpsCollectionPlanRoute = DemoAmpsCollectionPlanRouteImport.update({
   id: '/collection-plan',
   path: '/collection-plan',
@@ -714,6 +720,7 @@ export interface FileRoutesByFullPath {
   '/admin/properties/$recordid': typeof AdminPropertiesRecordidRoute
   '/demo/amps/collection-attempts': typeof DemoAmpsCollectionAttemptsRoute
   '/demo/amps/collection-plan': typeof DemoAmpsCollectionPlanRoute
+  '/demo/amps/e2e-payments': typeof DemoAmpsE2ePaymentsRoute
   '/demo/amps/rules': typeof DemoAmpsRulesRoute
   '/demo/audit-traceability/access-log': typeof DemoAuditTraceabilityAccessLogRoute
   '/demo/audit-traceability/audit-trail': typeof DemoAuditTraceabilityAuditTrailRoute
@@ -810,6 +817,7 @@ export interface FileRoutesByTo {
   '/admin/properties/$recordid': typeof AdminPropertiesRecordidRoute
   '/demo/amps/collection-attempts': typeof DemoAmpsCollectionAttemptsRoute
   '/demo/amps/collection-plan': typeof DemoAmpsCollectionPlanRoute
+  '/demo/amps/e2e-payments': typeof DemoAmpsE2ePaymentsRoute
   '/demo/amps/rules': typeof DemoAmpsRulesRoute
   '/demo/audit-traceability/access-log': typeof DemoAuditTraceabilityAccessLogRoute
   '/demo/audit-traceability/audit-trail': typeof DemoAuditTraceabilityAuditTrailRoute
@@ -914,6 +922,7 @@ export interface FileRoutesById {
   '/admin/properties/$recordid': typeof AdminPropertiesRecordidRoute
   '/demo/amps/collection-attempts': typeof DemoAmpsCollectionAttemptsRoute
   '/demo/amps/collection-plan': typeof DemoAmpsCollectionPlanRoute
+  '/demo/amps/e2e-payments': typeof DemoAmpsE2ePaymentsRoute
   '/demo/amps/rules': typeof DemoAmpsRulesRoute
   '/demo/audit-traceability/access-log': typeof DemoAuditTraceabilityAccessLogRoute
   '/demo/audit-traceability/audit-trail': typeof DemoAuditTraceabilityAuditTrailRoute
@@ -1019,6 +1028,7 @@ export interface FileRouteTypes {
     | '/admin/properties/$recordid'
     | '/demo/amps/collection-attempts'
     | '/demo/amps/collection-plan'
+    | '/demo/amps/e2e-payments'
     | '/demo/amps/rules'
     | '/demo/audit-traceability/access-log'
     | '/demo/audit-traceability/audit-trail'
@@ -1115,6 +1125,7 @@ export interface FileRouteTypes {
     | '/admin/properties/$recordid'
     | '/demo/amps/collection-attempts'
     | '/demo/amps/collection-plan'
+    | '/demo/amps/e2e-payments'
     | '/demo/amps/rules'
     | '/demo/audit-traceability/access-log'
     | '/demo/audit-traceability/audit-trail'
@@ -1218,6 +1229,7 @@ export interface FileRouteTypes {
     | '/admin/properties/$recordid'
     | '/demo/amps/collection-attempts'
     | '/demo/amps/collection-plan'
+    | '/demo/amps/e2e-payments'
     | '/demo/amps/rules'
     | '/demo/audit-traceability/access-log'
     | '/demo/audit-traceability/audit-trail'
@@ -1887,6 +1899,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DemoAmpsRulesRouteImport
       parentRoute: typeof DemoAmpsRouteRoute
     }
+    '/demo/amps/e2e-payments': {
+      id: '/demo/amps/e2e-payments'
+      path: '/e2e-payments'
+      fullPath: '/demo/amps/e2e-payments'
+      preLoaderRoute: typeof DemoAmpsE2ePaymentsRouteImport
+      parentRoute: typeof DemoAmpsRouteRoute
+    }
     '/demo/amps/collection-plan': {
       id: '/demo/amps/collection-plan'
       path: '/collection-plan'
@@ -2126,6 +2145,7 @@ const AdminRouteRouteWithChildren = AdminRouteRoute._addFileChildren(
 interface DemoAmpsRouteRouteChildren {
   DemoAmpsCollectionAttemptsRoute: typeof DemoAmpsCollectionAttemptsRoute
   DemoAmpsCollectionPlanRoute: typeof DemoAmpsCollectionPlanRoute
+  DemoAmpsE2ePaymentsRoute: typeof DemoAmpsE2ePaymentsRoute
   DemoAmpsRulesRoute: typeof DemoAmpsRulesRoute
   DemoAmpsIndexRoute: typeof DemoAmpsIndexRoute
   DemoAmpsMortgagesMortgageIdPaymentsRoute: typeof DemoAmpsMortgagesMortgageIdPaymentsRoute
@@ -2134,6 +2154,7 @@ interface DemoAmpsRouteRouteChildren {
 const DemoAmpsRouteRouteChildren: DemoAmpsRouteRouteChildren = {
   DemoAmpsCollectionAttemptsRoute: DemoAmpsCollectionAttemptsRoute,
   DemoAmpsCollectionPlanRoute: DemoAmpsCollectionPlanRoute,
+  DemoAmpsE2ePaymentsRoute: DemoAmpsE2ePaymentsRoute,
   DemoAmpsRulesRoute: DemoAmpsRulesRoute,
   DemoAmpsIndexRoute: DemoAmpsIndexRoute,
   DemoAmpsMortgagesMortgageIdPaymentsRoute:

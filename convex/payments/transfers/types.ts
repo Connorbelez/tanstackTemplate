@@ -109,6 +109,7 @@ export function toDomainEntityId(
 // ── Provider Codes ───────────────────────────────────────────────────
 export const PROVIDER_CODES = [
 	"manual",
+	"manual_review",
 	"mock_pad",
 	"mock_eft",
 	"pad_vopay",

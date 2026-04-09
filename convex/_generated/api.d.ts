@@ -63,6 +63,7 @@ import type * as deals_queries from "../deals/queries.js";
 import type * as demo_actionCache from "../demo/actionCache.js";
 import type * as demo_aggregate from "../demo/aggregate.js";
 import type * as demo_amps from "../demo/amps.js";
+import type * as demo_ampsE2e from "../demo/ampsE2e.js";
 import type * as demo_apiCredentials from "../demo/apiCredentials.js";
 import type * as demo_auditLog from "../demo/auditLog.js";
 import type * as demo_auditTraceability from "../demo/auditTraceability.js";
@@ -241,6 +242,7 @@ import type * as payments_transfers_mutations from "../payments/transfers/mutati
 import type * as payments_transfers_pipeline from "../payments/transfers/pipeline.js";
 import type * as payments_transfers_principalReturn from "../payments/transfers/principalReturn.js";
 import type * as payments_transfers_providers_manual from "../payments/transfers/providers/manual.js";
+import type * as payments_transfers_providers_manualReview from "../payments/transfers/providers/manualReview.js";
 import type * as payments_transfers_providers_mock from "../payments/transfers/providers/mock.js";
 import type * as payments_transfers_providers_registry from "../payments/transfers/providers/registry.js";
 import type * as payments_transfers_queries from "../payments/transfers/queries.js";
@@ -339,6 +341,7 @@ declare const fullApi: ApiFromModules<{
   "demo/actionCache": typeof demo_actionCache;
   "demo/aggregate": typeof demo_aggregate;
   "demo/amps": typeof demo_amps;
+  "demo/ampsE2e": typeof demo_ampsE2e;
   "demo/apiCredentials": typeof demo_apiCredentials;
   "demo/auditLog": typeof demo_auditLog;
   "demo/auditTraceability": typeof demo_auditTraceability;
@@ -517,6 +520,7 @@ declare const fullApi: ApiFromModules<{
   "payments/transfers/pipeline": typeof payments_transfers_pipeline;
   "payments/transfers/principalReturn": typeof payments_transfers_principalReturn;
   "payments/transfers/providers/manual": typeof payments_transfers_providers_manual;
+  "payments/transfers/providers/manualReview": typeof payments_transfers_providers_manualReview;
   "payments/transfers/providers/mock": typeof payments_transfers_providers_mock;
   "payments/transfers/providers/registry": typeof payments_transfers_providers_registry;
   "payments/transfers/queries": typeof payments_transfers_queries;

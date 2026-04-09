@@ -9,6 +9,7 @@ import type { TransferProvider } from "../interface";
 import { areMockTransferProvidersEnabled } from "../mockProviders";
 import type { ProviderCode } from "../types";
 import { ManualTransferProvider } from "./manual";
+import { ManualReviewTransferProvider } from "./manualReview";
 import { MockTransferProvider } from "./mock";
 
 /** Resolves a TransferProvider by canonical provider code.
@@ -20,6 +21,8 @@ export function getTransferProvider(
 	switch (providerCode) {
 		case "manual":
 			return new ManualTransferProvider();
+		case "manual_review":
+			return new ManualReviewTransferProvider();
 		case "mock_pad":
 		case "mock_eft":
 			if (!areMockTransferProvidersEnabled()) {
@@ -31,7 +34,7 @@ export function getTransferProvider(
 		default:
 			throw new Error(
 				`Transfer provider "${providerCode}" is not yet implemented. ` +
-					'Phase 1 supports "manual", "mock_pad", and "mock_eft".'
+					'Phase 1 supports "manual", "manual_review", "mock_pad", and "mock_eft".'
 			);
 	}
 }
