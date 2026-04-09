@@ -45,6 +45,7 @@ import type * as crm_systemAdapters_bootstrap from "../crm/systemAdapters/bootst
 import type * as crm_systemAdapters_columnResolver from "../crm/systemAdapters/columnResolver.js";
 import type * as crm_systemAdapters_queryAdapter from "../crm/systemAdapters/queryAdapter.js";
 import type * as crm_types from "../crm/types.js";
+import type * as crm_userSavedViews from "../crm/userSavedViews.js";
 import type * as crm_validators from "../crm/validators.js";
 import type * as crm_valueRouter from "../crm/valueRouter.js";
 import type * as crm_viewDefs from "../crm/viewDefs.js";
@@ -315,6 +316,7 @@ declare const fullApi: ApiFromModules<{
   "crm/systemAdapters/columnResolver": typeof crm_systemAdapters_columnResolver;
   "crm/systemAdapters/queryAdapter": typeof crm_systemAdapters_queryAdapter;
   "crm/types": typeof crm_types;
+  "crm/userSavedViews": typeof crm_userSavedViews;
   "crm/validators": typeof crm_validators;
   "crm/valueRouter": typeof crm_valueRouter;
   "crm/viewDefs": typeof crm_viewDefs;

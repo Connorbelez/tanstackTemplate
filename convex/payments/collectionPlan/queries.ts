@@ -142,8 +142,9 @@ export const getDuePlannedEntries = internalQuery({
 
 		return await ctx.db
 			.query("collectionPlanEntries")
-			.withIndex("by_scheduled_date", (q) => q.lte("scheduledDate", asOf))
-			.filter((q) => q.eq(q.field("status"), "planned"))
+			.withIndex("by_status_scheduled_date", (q) =>
+				q.eq("status", "planned").lte("scheduledDate", asOf)
+			)
 			.take(boundedLimit);
 	},
 });

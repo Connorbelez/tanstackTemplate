@@ -811,6 +811,7 @@ export default defineSchema({
 		createdAt: v.number(),
 	})
 		.index("by_scheduled_date", ["scheduledDate", "status"])
+		.index("by_status_scheduled_date", ["status", "scheduledDate"])
 		.index("by_status", ["status"])
 		.index("by_rescheduled_from", ["rescheduledFromId", "source"]),
 
