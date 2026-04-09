@@ -2,25 +2,24 @@ import { makeFunctionReference } from "convex/server";
 import { ConvexError, v } from "convex/values";
 import { api, internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
-import type { MutationCtx, QueryCtx } from "../_generated/server";
+import type { ActionCtx, MutationCtx, QueryCtx } from "../_generated/server";
 import { executeTransition } from "../engine/transition";
 import { adminAction, adminQuery, convex } from "../fluent";
-import {
-	obligationTypeToTransferType,
-	PROVIDER_CODES,
-	type ProviderCode,
-} from "../payments/transfers/types";
+import { upsertCollectionRuleByCode } from "../payments/collectionPlan/ruleRecords";
+import { createTransferRequestRecord } from "../payments/transfers/mutations";
 
 const MS_PER_DAY = 86_400_000;
-
-function mapMethodToProviderCode(method: string): ProviderCode {
-	return (PROVIDER_CODES as readonly string[]).includes(method)
-		? (method as ProviderCode)
-		: "manual";
-}
+const DEMO_SOURCE = {
+	actorId: "system:demo-amps",
+	actorType: "system" as const,
+	channel: "simulation" as const,
+};
 
 const seedAllActionRef = makeFunctionReference<"action">(
 	"seed/seedAll:seedAll"
+);
+const getRetryScenarioSeedContextQueryRef = makeFunctionReference<"query">(
+	"demo/amps:getRetryScenarioSeedContextInternal"
 );
 
 const DEMO_SCENARIOS = [
@@ -112,6 +111,29 @@ interface DemoScenarioTargetRecord {
 	upcomingObligationIds: Id<"obligations">[];
 }
 
+interface RequiredDemoTargets {
+	retry: DemoScenarioTargetRecord;
+	reviewRequired: DemoScenarioTargetRecord;
+	suppress: DemoScenarioTargetRecord;
+}
+
+interface DemoWorkspaceActionCtx {
+	runAction: ActionCtx["runAction"];
+	runMutation: ActionCtx["runMutation"];
+	runQuery: ActionCtx["runQuery"];
+	viewer: {
+		authId: string;
+	};
+}
+
+interface DemoDecisionScenarioDefinition {
+	idempotencyPrefix: string;
+	readyDecision: "require_operator_review" | "suppress";
+	reason: string;
+	reasonKey: "review_required" | "suppress";
+	targetKey: keyof Pick<RequiredDemoTargets, "reviewRequired" | "suppress">;
+}
+
 interface ScenarioOverviewCard {
 	description: string;
 	href?: string;
@@ -180,6 +202,47 @@ interface MortgageWorkspaceResult {
 function uniqueIds<T extends string>(values: T[]) {
 	return [...new Set(values)];
 }
+
+function buildDemoSignalIdempotencyKey(args: {
+	borrowerId: Id<"borrowers">;
+	mortgageId: Id<"mortgages">;
+	reasonKey: "review_required" | "suppress";
+}) {
+	return `demo-amps:${args.reasonKey}:${args.mortgageId}:${args.borrowerId}`;
+}
+
+function buildDemoRetryExecutionIdempotencyKey(
+	planEntryId: Id<"collectionPlanEntries">
+) {
+	return `demo-amps:retry:${planEntryId}`;
+}
+
+const DEMO_DECISION_SCENARIOS: readonly DemoDecisionScenarioDefinition[] = [
+	{
+		idempotencyPrefix: "demo-amps:review",
+		readyDecision: "require_operator_review",
+		reason: "Prepare AMPS demo review-required scenario",
+		reasonKey: "review_required",
+		targetKey: "reviewRequired",
+	},
+	{
+		idempotencyPrefix: "demo-amps:suppress",
+		readyDecision: "suppress",
+		reason: "Prepare AMPS demo suppress scenario",
+		reasonKey: "suppress",
+		targetKey: "suppress",
+	},
+] as const;
+
+type RetryScenarioSeedResult =
+	| {
+			outcome: "already_seeded";
+			retryPlanEntryId?: Id<"collectionPlanEntries">;
+	  }
+	| {
+			attemptId: Id<"collectionAttempts">;
+			outcome: "seeded";
+	  };
 
 function sumCounts(counts: Record<string, number>) {
 	return Object.values(counts).reduce((total, value) => total + value, 0);
@@ -475,54 +538,35 @@ async function upsertBalanceRule(args: {
 	mortgageId: Id<"mortgages">;
 	priority: number;
 }) {
-	const existing = await args.ctx.db
-		.query("collectionRules")
-		.withIndex("by_code", (q) => q.eq("code", args.code))
-		.first();
-
-	const now = Date.now();
-	const patch = {
-		kind: "balance_pre_check" as const,
+	return upsertCollectionRuleByCode({
+		actorId: DEMO_SOURCE.actorId,
 		code: args.code,
-		displayName: args.displayName,
-		description: args.description,
-		trigger: "event" as const,
-		status: "active" as const,
-		scope: {
-			scopeType: "mortgage" as const,
-			mortgageId: args.mortgageId,
-		},
 		config:
 			args.blockingDecision === "suppress"
 				? {
-						kind: "balance_pre_check" as const,
-						signalSource: "recent_transfer_failures" as const,
+						kind: "balance_pre_check",
+						signalSource: "recent_transfer_failures",
 						lookbackDays: 21,
 						failureCountThreshold: 1,
-						blockingDecision: "suppress" as const,
+						blockingDecision: "suppress",
 					}
 				: {
-						kind: "balance_pre_check" as const,
-						signalSource: "recent_transfer_failures" as const,
+						kind: "balance_pre_check",
+						signalSource: "recent_transfer_failures",
 						lookbackDays: 21,
 						failureCountThreshold: 1,
-						blockingDecision: "require_operator_review" as const,
+						blockingDecision: "require_operator_review",
 					},
-		version: 1,
+		ctx: args.ctx,
+		description: args.description,
+		displayName: args.displayName,
+		kind: "balance_pre_check",
 		priority: args.priority,
-		updatedAt: now,
-		updatedByActorId: "system:demo-amps",
-	};
-
-	if (existing) {
-		await args.ctx.db.patch(existing._id, patch);
-		return existing._id;
-	}
-
-	return args.ctx.db.insert("collectionRules", {
-		...patch,
-		createdAt: now,
-		createdByActorId: "system:demo-amps",
+		scope: {
+			scopeType: "mortgage",
+			mortgageId: args.mortgageId,
+		},
+		status: "active",
 	});
 }
 
@@ -566,178 +610,195 @@ export const seedFailedInboundSignalInternal = convex
 		reasonKey: v.union(v.literal("review_required"), v.literal("suppress")),
 	})
 	.handler(async (ctx, args) => {
+		const idempotencyKey = buildDemoSignalIdempotencyKey(args);
 		const existing = await ctx.db
 			.query("transferRequests")
-			.withIndex("by_counterparty_status", (q) =>
-				q
-					.eq("counterpartyType", "borrower")
-					.eq("counterpartyId", `${args.borrowerId}`)
-					.eq("status", "failed")
+			.withIndex("by_idempotency", (q) =>
+				q.eq("idempotencyKey", idempotencyKey)
 			)
-			.collect();
-
-		const matching = existing.find(
-			(transfer) =>
-				transfer.direction === "inbound" &&
-				transfer.mortgageId === args.mortgageId &&
-				transfer.idempotencyKey ===
-					`demo-amps:${args.reasonKey}:${args.mortgageId}:${args.borrowerId}`
-		);
-		if (matching) {
-			return matching._id;
+			.first();
+		if (existing?.status === "failed") {
+			return existing._id;
 		}
 
-		const createdAt = Date.now();
-		return ctx.db.insert("transferRequests", {
-			status: "failed",
-			direction: "inbound",
-			transferType: "borrower_interest_collection",
-			amount: 1,
-			currency: "CAD",
-			counterpartyType: "borrower",
-			counterpartyId: `${args.borrowerId}`,
-			providerCode: "manual",
-			idempotencyKey: `demo-amps:${args.reasonKey}:${args.mortgageId}:${args.borrowerId}`,
-			source: { channel: "scheduler", actorType: "system" },
-			mortgageId: args.mortgageId,
-			borrowerId: args.borrowerId,
-			createdAt,
-			lastTransitionAt: createdAt,
-			failedAt: createdAt,
-			failureCode: "NSF",
-			failureReason: "insufficient_funds",
-		});
+		const transferId =
+			existing?._id ??
+			(await createTransferRequestRecord(ctx, {
+				amount: 1,
+				borrowerId: args.borrowerId,
+				counterpartyId: `${args.borrowerId}`,
+				counterpartyType: "borrower",
+				direction: "inbound",
+				idempotencyKey,
+				mortgageId: args.mortgageId,
+				providerCode: "manual",
+				source: DEMO_SOURCE,
+				transferType: "borrower_interest_collection",
+			}));
+
+		const transfer = await ctx.db.get(transferId);
+		if (!transfer) {
+			throw new ConvexError(`Signal transfer not found: ${transferId}`);
+		}
+
+		if (transfer.status === "initiated") {
+			await executeTransition(ctx, {
+				entityType: "transfer",
+				entityId: `${transferId}`,
+				eventType: "PROVIDER_INITIATED",
+				payload: {
+					providerRef: `demo_signal_${args.reasonKey}_${args.borrowerId}`,
+				},
+				source: DEMO_SOURCE,
+			});
+		}
+
+		if (transfer.status !== "failed") {
+			await executeTransition(ctx, {
+				entityType: "transfer",
+				entityId: `${transferId}`,
+				eventType: "TRANSFER_FAILED",
+				payload: {
+					errorCode: "NSF",
+					reason: "insufficient_funds",
+				},
+				source: DEMO_SOURCE,
+			});
+		}
+
+		return transferId;
 	})
 	.internal();
 
-export const seedRetryScenarioInternal = convex
-	.mutation()
+export const getRetryScenarioSeedContextInternal = convex
+	.query()
 	.input({
 		planEntryId: v.id("collectionPlanEntries"),
 	})
 	.handler(async (ctx, args) => {
-		const existingRetryEntry = await ctx.db
-			.query("collectionPlanEntries")
-			.withIndex("by_retry_of", (q) =>
-				q.eq("retryOfId", args.planEntryId).eq("source", "retry_rule")
-			)
-			.first();
-		if (existingRetryEntry) {
-			return {
-				outcome: "already_seeded" as const,
-				retryPlanEntryId: existingRetryEntry._id,
-			};
-		}
+		const [existingRetryEntry, existingAttempts, planEntry] = await Promise.all(
+			[
+				ctx.db
+					.query("collectionPlanEntries")
+					.withIndex("by_retry_of", (q) =>
+						q.eq("retryOfId", args.planEntryId).eq("source", "retry_rule")
+					)
+					.first(),
+				ctx.db
+					.query("collectionAttempts")
+					.withIndex("by_plan_entry", (q) =>
+						q.eq("planEntryId", args.planEntryId)
+					)
+					.collect(),
+				ctx.db.get(args.planEntryId),
+			]
+		);
 
-		const existingAttempts = await ctx.db
-			.query("collectionAttempts")
-			.withIndex("by_plan_entry", (q) => q.eq("planEntryId", args.planEntryId))
-			.collect();
-		if (existingAttempts.length > 0) {
-			return {
-				outcome: "already_seeded" as const,
-			};
-		}
-
-		const planEntry = await ctx.db.get(args.planEntryId);
 		if (!planEntry) {
-			throw new ConvexError(`Plan entry not found: ${args.planEntryId}`);
+			return null;
 		}
+
 		const primaryObligationId = planEntry.obligationIds[0];
-		if (!primaryObligationId) {
-			throw new ConvexError(
-				`Retry demo plan entry ${args.planEntryId} has no obligations`
-			);
-		}
-		const primaryObligation = await ctx.db.get(primaryObligationId);
-		if (!primaryObligation?.borrowerId) {
-			throw new ConvexError(
-				`Retry demo obligation ${primaryObligationId} is missing borrower context`
-			);
-		}
-
-		const attemptId = await ctx.db.insert("collectionAttempts", {
-			status: "initiated",
-			machineContext: {
-				attemptId: "",
-				retryCount: 0,
-				maxRetries: 3,
-			},
-			planEntryId: planEntry._id,
-			mortgageId: planEntry.mortgageId,
-			obligationIds: planEntry.obligationIds,
-			method: planEntry.method,
-			amount: planEntry.amount,
-			triggerSource: "migration_backfill",
-			executionRequestedAt: Date.now(),
-			executionIdempotencyKey: `demo-amps:retry:${planEntry._id}`,
-			requestedByActorType: "system",
-			requestedByActorId: "system:demo-amps",
-			executionReason: "Demo-seeded failure and retry scenario",
-			initiatedAt: Date.now(),
-		});
-		await ctx.db.patch(attemptId, {
-			machineContext: {
-				attemptId: `${attemptId}`,
-				retryCount: 3,
-				maxRetries: 3,
-			},
-		});
-		const transferId = await ctx.db.insert("transferRequests", {
-			status: "initiated",
-			direction: "inbound",
-			transferType: obligationTypeToTransferType(primaryObligation.type),
-			amount: planEntry.amount,
-			currency: "CAD",
-			counterpartyType: "borrower",
-			counterpartyId: `${primaryObligation.borrowerId}`,
-			providerCode: mapMethodToProviderCode(planEntry.method),
-			idempotencyKey: `demo-amps:retry-transfer:${planEntry._id}`,
-			source: { channel: "scheduler", actorType: "system" },
-			mortgageId: planEntry.mortgageId,
-			obligationId: primaryObligationId,
-			planEntryId: planEntry._id,
-			collectionAttemptId: attemptId,
-			borrowerId: primaryObligation.borrowerId,
-			createdAt: Date.now(),
-			lastTransitionAt: Date.now(),
-		});
-		await ctx.db.patch(attemptId, {
-			transferRequestId: transferId,
-		});
-		await ctx.db.patch(planEntry._id, {
-			status: "executing",
-			collectionAttemptId: attemptId,
-			executedAt: Date.now(),
-			executionIdempotencyKey: `demo-amps:retry:${planEntry._id}`,
-		});
-
-		const source = {
-			actorType: "system" as const,
-			channel: "scheduler" as const,
-		};
-		await executeTransition(ctx, {
-			entityType: "transfer",
-			entityId: `${transferId}`,
-			eventType: "PROVIDER_INITIATED",
-			payload: {
-				providerRef: `demo_retry_${attemptId}`,
-			},
-			source,
-		});
-		await executeTransition(ctx, {
-			entityType: "transfer",
-			entityId: `${transferId}`,
-			eventType: "TRANSFER_FAILED",
-			payload: {
-				reason: "Insufficient funds",
-				errorCode: "NSF",
-			},
-			source,
-		});
+		const primaryObligation = primaryObligationId
+			? await ctx.db.get(primaryObligationId)
+			: null;
 
 		return {
-			attemptId,
+			existingAttemptCount: existingAttempts.length,
+			existingRetryPlanEntryId: existingRetryEntry?._id,
+			planEntry: {
+				amount: planEntry.amount,
+				method: planEntry.method,
+				mortgageId: planEntry.mortgageId,
+				obligationIds: planEntry.obligationIds,
+				planEntryId: planEntry._id,
+			},
+			primaryObligation: primaryObligation
+				? {
+						borrowerId: primaryObligation.borrowerId,
+						obligationId: primaryObligation._id,
+						type: primaryObligation.type,
+					}
+				: null,
+		};
+	})
+	.internal();
+
+export const seedRetryScenarioInternal = convex
+	.action()
+	.input({
+		planEntryId: v.id("collectionPlanEntries"),
+	})
+	.handler(async (ctx, args): Promise<RetryScenarioSeedResult> => {
+		const seedContext = await ctx.runQuery(
+			getRetryScenarioSeedContextQueryRef,
+			{
+				planEntryId: args.planEntryId,
+			}
+		);
+		if (!seedContext) {
+			throw new ConvexError(`Plan entry not found: ${args.planEntryId}`);
+		}
+
+		if (seedContext.existingRetryPlanEntryId) {
+			return {
+				outcome: "already_seeded" as const,
+				retryPlanEntryId: seedContext.existingRetryPlanEntryId,
+			};
+		}
+
+		if (seedContext.existingAttemptCount > 0) {
+			return {
+				outcome: "already_seeded" as const,
+			};
+		}
+
+		if (!seedContext.primaryObligation?.borrowerId) {
+			throw new ConvexError(
+				`Retry demo obligation for ${args.planEntryId} is missing borrower context`
+			);
+		}
+
+		const executionResult = await ctx.runAction(
+			internal.payments.collectionPlan.execution.executePlanEntry,
+			{
+				planEntryId: args.planEntryId,
+				triggerSource: "migration_backfill",
+				requestedAt: Date.now(),
+				idempotencyKey: buildDemoRetryExecutionIdempotencyKey(args.planEntryId),
+				requestedByActorType: "system",
+				requestedByActorId: DEMO_SOURCE.actorId,
+				reason: "Demo-seeded failure and retry scenario",
+			}
+		);
+
+		if (
+			(executionResult.outcome !== "attempt_created" &&
+				executionResult.outcome !== "already_executed") ||
+			!("transferRequestId" in executionResult) ||
+			!executionResult.transferRequestId
+		) {
+			throw new ConvexError(
+				`Retry scenario could not create a canonical transfer for ${args.planEntryId}.`
+			);
+		}
+
+		await ctx.runMutation(
+			internal.engine.transitionMutation.transitionMutation,
+			{
+				entityType: "transfer",
+				entityId: executionResult.transferRequestId,
+				eventType: "TRANSFER_FAILED",
+				payload: {
+					errorCode: "NSF",
+					reason: "Insufficient funds",
+				},
+				source: DEMO_SOURCE,
+			}
+		);
+
+		return {
+			attemptId: executionResult.collectionAttemptId,
 			outcome: "seeded" as const,
 		};
 	})
@@ -782,157 +843,165 @@ function buildWorkoutInstallments(target: DemoScenarioTargetRecord): {
 	return { installments };
 }
 
+async function loadRequiredDemoTargets(
+	ctx: Pick<DemoWorkspaceActionCtx, "runQuery">
+): Promise<RequiredDemoTargets> {
+	const [reviewRequired, suppress, retry] = await Promise.all([
+		ctx.runQuery(internal.demo.amps.getDemoTargetByAddressInternal, {
+			streetAddress: "12 Garden Ave",
+		}),
+		ctx.runQuery(internal.demo.amps.getDemoTargetByAddressInternal, {
+			streetAddress: "18 Maple Grove Rd",
+		}),
+		ctx.runQuery(internal.demo.amps.getDemoTargetByAddressInternal, {
+			streetAddress: "44 Front St E",
+		}),
+	]);
+
+	if (!(reviewRequired && suppress && retry)) {
+		throw new ConvexError(
+			"AMPS demo mortgages are missing. Run seedAll and verify the canonical seed fixtures are present."
+		);
+	}
+
+	return { retry, reviewRequired, suppress };
+}
+
+async function ensureDemoDecisionScenario(
+	ctx: DemoWorkspaceActionCtx,
+	definition: DemoDecisionScenarioDefinition,
+	target: DemoScenarioTargetRecord
+) {
+	const isReady =
+		(target.planEntryIdsByDecision[definition.readyDecision]?.length ?? 0) > 0;
+	if (isReady) {
+		return;
+	}
+
+	await ctx.runMutation(internal.demo.amps.seedFailedInboundSignalInternal, {
+		borrowerId: target.borrowerId,
+		mortgageId: target.mortgageId,
+		reasonKey: definition.reasonKey,
+	});
+
+	const planEntry = target.nextPlannedEntry;
+	if (!planEntry) {
+		return;
+	}
+
+	await ctx.runAction(
+		internal.payments.collectionPlan.execution.executePlanEntry,
+		{
+			planEntryId: planEntry.planEntryId,
+			triggerSource: "admin_manual",
+			requestedAt: Date.now(),
+			idempotencyKey: `${definition.idempotencyPrefix}:${planEntry.planEntryId}`,
+			requestedByActorType: "admin",
+			requestedByActorId: ctx.viewer.authId,
+			reason: definition.reason,
+		}
+	);
+}
+
+async function ensureDemoRetryScenario(
+	ctx: Pick<DemoWorkspaceActionCtx, "runAction">,
+	target: DemoScenarioTargetRecord
+) {
+	const retryEntryCount = target.planEntryStatusCounts.planned ?? 0;
+	const permanentFailCount =
+		target.recentAttemptStatusCounts.permanent_fail ?? 0;
+	if (permanentFailCount > 0 && retryEntryCount > 0) {
+		return;
+	}
+
+	const planEntry = target.nextPlannedEntry;
+	if (!planEntry) {
+		return;
+	}
+
+	await ctx.runAction(internal.demo.amps.seedRetryScenarioInternal, {
+		planEntryId: planEntry.planEntryId,
+	});
+	await ctx.runAction(internal.payments.collectionPlan.engine.evaluateRules, {
+		trigger: "event",
+		mortgageId: target.mortgageId,
+		eventType: "COLLECTION_FAILED",
+		eventPayload: {
+			amount: planEntry.amount,
+			method: planEntry.method,
+			obligationIds: planEntry.obligationIds,
+			planEntryId: planEntry.planEntryId,
+			retryCount: 1,
+		},
+	});
+}
+
+async function ensureDemoWorkoutScenario(
+	ctx: DemoWorkspaceActionCtx,
+	target: DemoScenarioTargetRecord
+) {
+	if (target.activeWorkoutPlanId !== undefined) {
+		return;
+	}
+
+	if (target.availableDraftWorkoutPlanId) {
+		await ctx.runAction(api.payments.collectionPlan.admin.activateWorkoutPlan, {
+			workoutPlanId: target.availableDraftWorkoutPlanId,
+		});
+		return;
+	}
+
+	const workoutStrategy = buildWorkoutInstallments(target);
+	if (!workoutStrategy) {
+		return;
+	}
+
+	const created = await ctx.runAction(
+		api.payments.collectionPlan.admin.createWorkoutPlan,
+		{
+			mortgageId: target.mortgageId,
+			name: "Demo hardship extension",
+			rationale:
+				"Demo-only workout that shows strategy supersession without mutating obligation truth.",
+			installments: workoutStrategy.installments,
+		}
+	);
+	if (created.outcome !== "created") {
+		return;
+	}
+
+	await ctx.runAction(api.payments.collectionPlan.admin.activateWorkoutPlan, {
+		workoutPlanId: created.workoutPlanId,
+	});
+}
+
+async function ensureDemoWorkspaceScenarios(
+	ctx: DemoWorkspaceActionCtx,
+	targets: RequiredDemoTargets
+) {
+	await ctx.runMutation(internal.demo.amps.ensureDemoRulesInternal, {
+		reviewMortgageId: targets.reviewRequired.mortgageId,
+		suppressMortgageId: targets.suppress.mortgageId,
+	});
+
+	for (const definition of DEMO_DECISION_SCENARIOS) {
+		await ensureDemoDecisionScenario(
+			ctx,
+			definition,
+			targets[definition.targetKey]
+		);
+	}
+
+	await ensureDemoRetryScenario(ctx, targets.retry);
+	await ensureDemoWorkoutScenario(ctx, targets.reviewRequired);
+}
+
 export const prepareWorkspace = adminAction
 	.input({})
 	.handler(async (ctx): Promise<WorkspaceOverviewResult> => {
 		await ctx.runAction(seedAllActionRef, {});
-
-		const reviewTarget = await ctx.runQuery(
-			internal.demo.amps.getDemoTargetByAddressInternal,
-			{
-				streetAddress: "12 Garden Ave",
-			}
-		);
-		const suppressTarget = await ctx.runQuery(
-			internal.demo.amps.getDemoTargetByAddressInternal,
-			{
-				streetAddress: "18 Maple Grove Rd",
-			}
-		);
-		const retryTarget = await ctx.runQuery(
-			internal.demo.amps.getDemoTargetByAddressInternal,
-			{
-				streetAddress: "44 Front St E",
-			}
-		);
-
-		if (!(reviewTarget && suppressTarget && retryTarget)) {
-			throw new ConvexError(
-				"AMPS demo mortgages are missing. Run seedAll and verify the canonical seed fixtures are present."
-			);
-		}
-
-		await ctx.runMutation(internal.demo.amps.ensureDemoRulesInternal, {
-			reviewMortgageId: reviewTarget.mortgageId,
-			suppressMortgageId: suppressTarget.mortgageId,
-		});
-
-		const reviewReady =
-			(reviewTarget.planEntryIdsByDecision.require_operator_review?.length ??
-				0) > 0;
-		if (!reviewReady) {
-			await ctx.runMutation(
-				internal.demo.amps.seedFailedInboundSignalInternal,
-				{
-					borrowerId: reviewTarget.borrowerId,
-					mortgageId: reviewTarget.mortgageId,
-					reasonKey: "review_required",
-				}
-			);
-			const planEntry = reviewTarget.nextPlannedEntry;
-			if (planEntry) {
-				await ctx.runAction(
-					internal.payments.collectionPlan.execution.executePlanEntry,
-					{
-						planEntryId: planEntry.planEntryId,
-						triggerSource: "admin_manual",
-						requestedAt: Date.now(),
-						idempotencyKey: `demo-amps:review:${planEntry.planEntryId}`,
-						requestedByActorType: "admin",
-						requestedByActorId: ctx.viewer.authId,
-						reason: "Prepare AMPS demo review-required scenario",
-					}
-				);
-			}
-		}
-
-		const suppressReady =
-			(suppressTarget.planEntryIdsByDecision.suppress?.length ?? 0) > 0;
-		if (!suppressReady) {
-			await ctx.runMutation(
-				internal.demo.amps.seedFailedInboundSignalInternal,
-				{
-					borrowerId: suppressTarget.borrowerId,
-					mortgageId: suppressTarget.mortgageId,
-					reasonKey: "suppress",
-				}
-			);
-			const planEntry = suppressTarget.nextPlannedEntry;
-			if (planEntry) {
-				await ctx.runAction(
-					internal.payments.collectionPlan.execution.executePlanEntry,
-					{
-						planEntryId: planEntry.planEntryId,
-						triggerSource: "admin_manual",
-						requestedAt: Date.now(),
-						idempotencyKey: `demo-amps:suppress:${planEntry.planEntryId}`,
-						requestedByActorType: "admin",
-						requestedByActorId: ctx.viewer.authId,
-						reason: "Prepare AMPS demo suppress scenario",
-					}
-				);
-			}
-		}
-
-		const retryEntryCount = retryTarget.planEntryStatusCounts.planned ?? 0;
-		const permanentFailCount =
-			retryTarget.recentAttemptStatusCounts.permanent_fail ?? 0;
-		if (permanentFailCount === 0 || retryEntryCount === 0) {
-			const planEntry = retryTarget.nextPlannedEntry;
-			if (planEntry) {
-				await ctx.runMutation(internal.demo.amps.seedRetryScenarioInternal, {
-					planEntryId: planEntry.planEntryId,
-				});
-				await ctx.runAction(
-					internal.payments.collectionPlan.engine.evaluateRules,
-					{
-						trigger: "event",
-						mortgageId: retryTarget.mortgageId,
-						eventType: "COLLECTION_FAILED",
-						eventPayload: {
-							amount: planEntry.amount,
-							method: planEntry.method,
-							obligationIds: planEntry.obligationIds,
-							planEntryId: planEntry.planEntryId,
-							retryCount: 1,
-						},
-					}
-				);
-			}
-		}
-
-		if (reviewTarget.activeWorkoutPlanId === undefined) {
-			if (reviewTarget.availableDraftWorkoutPlanId) {
-				await ctx.runAction(
-					api.payments.collectionPlan.admin.activateWorkoutPlan,
-					{
-						workoutPlanId: reviewTarget.availableDraftWorkoutPlanId,
-					}
-				);
-			} else {
-				const workoutStrategy = buildWorkoutInstallments(reviewTarget);
-				if (workoutStrategy) {
-					const created = await ctx.runAction(
-						api.payments.collectionPlan.admin.createWorkoutPlan,
-						{
-							mortgageId: reviewTarget.mortgageId,
-							name: "Demo hardship extension",
-							rationale:
-								"Demo-only workout that shows strategy supersession without mutating obligation truth.",
-							installments: workoutStrategy.installments,
-						}
-					);
-					if (created.outcome === "created") {
-						await ctx.runAction(
-							api.payments.collectionPlan.admin.activateWorkoutPlan,
-							{
-								workoutPlanId: created.workoutPlanId,
-							}
-						);
-					}
-				}
-			}
-		}
+		const targets = await loadRequiredDemoTargets(ctx);
+		await ensureDemoWorkspaceScenarios(ctx, targets);
 
 		return ctx.runQuery(internal.demo.amps.getWorkspaceOverviewInternal, {});
 	})

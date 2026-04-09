@@ -1,10 +1,10 @@
-import { vi } from "vitest";
 import { api, components, internal } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import { auditLog } from "../../../../convex/auditLog";
 import { AuditTrail } from "../../../../convex/auditTrailClient";
 import type { MockIdentity } from "../../auth/helpers";
 import { createTestConvex, ensureSeededIdentity } from "../../auth/helpers";
+import { drainScheduledWork as drainScheduledRuntime } from "../runtime";
 import { BROKER, FAIRLEND_ADMIN, MEMBER } from "../../auth/identities";
 
 const auditTrail = new AuditTrail(components.auditTrail);
@@ -200,5 +200,5 @@ export async function runAssignRoleAction(
 }
 
 export async function drainScheduledWork(t: GovernedTestConvex) {
-	await t.finishAllScheduledFunctions(() => vi.runAllTimers());
+	await drainScheduledRuntime(t);
 }

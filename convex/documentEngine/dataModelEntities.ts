@@ -1,5 +1,5 @@
 import { ConvexError, v } from "convex/values";
-import { adminMutation, authedQuery } from "../fluent";
+import { adminMutation, documentQuery } from "../fluent";
 import schema from "../schema";
 import { entityFieldValidator } from "./validators";
 
@@ -77,12 +77,9 @@ const SKIP_TABLES = new Set([
 	"dataModelEntities",
 ]);
 
-// TODO: Read query (list) uses authedQuery (authentication only).
-// Add permission gate (e.g. requirePermission("entity:view")) when moving to production.
-
 // ── Queries ──────────────────────────────────────────────────────────
 
-export const list = authedQuery
+export const list = documentQuery
 	.input({})
 	.handler(async (ctx) => {
 		const entities = await ctx.db.query("dataModelEntities").collect();

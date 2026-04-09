@@ -1,10 +1,7 @@
 import { v } from "convex/values";
-import { authedQuery } from "../fluent";
+import { documentQuery } from "../fluent";
 
-// TODO: Read queries (listByTemplate, get, getLatest) use authedQuery (authentication only).
-// Add permission gate (e.g. requirePermission("document:view")) when moving to production.
-
-export const listByTemplate = authedQuery
+export const listByTemplate = documentQuery
 	.input({ templateId: v.id("documentTemplates") })
 	.handler(async (ctx, args) => {
 		return await ctx.db
@@ -15,7 +12,7 @@ export const listByTemplate = authedQuery
 	})
 	.public();
 
-export const get = authedQuery
+export const get = documentQuery
 	.input({
 		templateId: v.id("documentTemplates"),
 		version: v.number(),
@@ -30,7 +27,7 @@ export const get = authedQuery
 	})
 	.public();
 
-export const getLatest = authedQuery
+export const getLatest = documentQuery
 	.input({ templateId: v.id("documentTemplates") })
 	.handler(async (ctx, args) => {
 		return await ctx.db

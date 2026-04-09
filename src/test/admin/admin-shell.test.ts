@@ -2,6 +2,7 @@ import type { Doc, Id } from "../../../../convex/_generated/dataModel";
 import type { UnifiedRecord } from "../../../../convex/crm/types";
 import { Children, isValidElement } from "react";
 import { describe, expect, it } from "vitest";
+import { FAIRLEND_STAFF_ORG_ID } from "../../../convex/constants";
 import {
 	buildAdminPreviewRecords,
 	getAdminPreviewRecord,
@@ -89,9 +90,33 @@ function buildBorrowerRecord(): UnifiedRecord {
 			status: "active",
 		},
 		objectDefId: "object_borrower" as Id<"objectDefs">,
-		updatedAt: 0,
-	};
-}
+			updatedAt: 0,
+		};
+	}
+
+const FAIRLEND_ADMIN_CONTEXT = {
+	orgId: FAIRLEND_STAFF_ORG_ID,
+	permissions: ["admin:access"],
+	roles: ["admin"],
+	token: null,
+	userId: "user_fairlend_admin",
+};
+
+const UNDERWRITER_CONTEXT = {
+	orgId: null,
+	permissions: ["underwriter:access"],
+	roles: ["underwriter"],
+	token: null,
+	userId: "user_underwriter",
+};
+
+const EXTERNAL_ADMIN_CONTEXT = {
+	orgId: "org_external_test",
+	permissions: ["admin:access"],
+	roles: ["admin"],
+	token: null,
+	userId: "user_external_admin",
+};
 
 describe("admin shell helpers", () => {
 	it("matches dashboard routes exactly instead of every admin page", () => {
@@ -166,16 +191,21 @@ describe("admin shell helpers", () => {
 	});
 
 	it("allows underwriters only on the underwriting admin subtree", () => {
-		expect(canAccessAdminPath("/admin/underwriting", ["underwriter:access"])).toBe(
+		expect(canAccessAdminPath("/admin/underwriting", UNDERWRITER_CONTEXT)).toBe(
 			true
 		);
 		expect(
-			canAccessAdminPath("/admin/underwriting/queue", ["underwriter:access"])
+			canAccessAdminPath("/admin/underwriting/queue", UNDERWRITER_CONTEXT)
 		).toBe(true);
-		expect(canAccessAdminPath("/admin/mortgages", ["underwriter:access"])).toBe(
+		expect(canAccessAdminPath("/admin/mortgages", UNDERWRITER_CONTEXT)).toBe(
 			false
 		);
-		expect(canAccessAdminPath("/admin/mortgages", ["admin:access"])).toBe(true);
+		expect(canAccessAdminPath("/admin/mortgages", FAIRLEND_ADMIN_CONTEXT)).toBe(
+			true
+		);
+		expect(canAccessAdminPath("/admin/mortgages", EXTERNAL_ADMIN_CONTEXT)).toBe(
+			false
+		);
 	});
 
 	it("identifies admin pathnames for root header suppression", () => {

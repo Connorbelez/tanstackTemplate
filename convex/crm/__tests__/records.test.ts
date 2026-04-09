@@ -733,11 +733,26 @@ describe("getRecordReference", () => {
 			throw new Error("Borrower system object not found");
 		}
 
+		const borrowerId = await t.run(async (ctx) => {
+			const userId = await ctx.db.insert("users", {
+				authId: "crm-native-borrower",
+				email: "crm-native-borrower@test.fairlend.ca",
+				firstName: "CRM",
+				lastName: "Borrower",
+			});
+			return ctx.db.insert("borrowers", {
+				createdAt: Date.now(),
+				orgId: CRM_ADMIN_IDENTITY.org_id,
+				status: "active",
+				userId,
+			});
+		});
+
 		const result = await asAdmin(t).query(
 			api.crm.recordQueries.getRecordReference,
 			{
 				objectDefId: borrowerObjDef._id,
-				recordId: (borrowerObjDef._id as string).replace("borrower:", ""),
+				recordId: borrowerId as string,
 				recordKind: "native",
 			}
 		);

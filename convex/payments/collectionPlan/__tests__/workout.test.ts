@@ -34,6 +34,7 @@ const PAYMENT_OPERATOR = createMockViewer({
 beforeEach(() => {
 	vi.useFakeTimers();
 	vi.stubEnv("DISABLE_CASH_LEDGER_HASHCHAIN", "true");
+	vi.stubEnv("DISABLE_GT_HASHCHAIN", "true");
 });
 
 afterEach(() => {

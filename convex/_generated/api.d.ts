@@ -209,8 +209,10 @@ import type * as payments_collectionPlan_initialScheduling from "../payments/col
 import type * as payments_collectionPlan_mutations from "../payments/collectionPlan/mutations.js";
 import type * as payments_collectionPlan_planEntrySafety from "../payments/collectionPlan/planEntrySafety.js";
 import type * as payments_collectionPlan_queries from "../payments/collectionPlan/queries.js";
+import type * as payments_collectionPlan_readModels from "../payments/collectionPlan/readModels.js";
 import type * as payments_collectionPlan_reschedule from "../payments/collectionPlan/reschedule.js";
 import type * as payments_collectionPlan_ruleContract from "../payments/collectionPlan/ruleContract.js";
+import type * as payments_collectionPlan_ruleRecords from "../payments/collectionPlan/ruleRecords.js";
 import type * as payments_collectionPlan_rules_balancePreCheckRule from "../payments/collectionPlan/rules/balancePreCheckRule.js";
 import type * as payments_collectionPlan_rules_lateFeeRule from "../payments/collectionPlan/rules/lateFeeRule.js";
 import type * as payments_collectionPlan_rules_retryRule from "../payments/collectionPlan/rules/retryRule.js";
@@ -251,6 +253,7 @@ import type * as payments_transfers_types from "../payments/transfers/types.js";
 import type * as payments_transfers_validators from "../payments/transfers/validators.js";
 import type * as payments_webhooks_eftVopay from "../payments/webhooks/eftVopay.js";
 import type * as payments_webhooks_handleReversal from "../payments/webhooks/handleReversal.js";
+import type * as payments_webhooks_legacyReversal from "../payments/webhooks/legacyReversal.js";
 import type * as payments_webhooks_processReversal from "../payments/webhooks/processReversal.js";
 import type * as payments_webhooks_rotessa from "../payments/webhooks/rotessa.js";
 import type * as payments_webhooks_rotessaPad from "../payments/webhooks/rotessaPad.js";
@@ -487,8 +490,10 @@ declare const fullApi: ApiFromModules<{
   "payments/collectionPlan/mutations": typeof payments_collectionPlan_mutations;
   "payments/collectionPlan/planEntrySafety": typeof payments_collectionPlan_planEntrySafety;
   "payments/collectionPlan/queries": typeof payments_collectionPlan_queries;
+  "payments/collectionPlan/readModels": typeof payments_collectionPlan_readModels;
   "payments/collectionPlan/reschedule": typeof payments_collectionPlan_reschedule;
   "payments/collectionPlan/ruleContract": typeof payments_collectionPlan_ruleContract;
+  "payments/collectionPlan/ruleRecords": typeof payments_collectionPlan_ruleRecords;
   "payments/collectionPlan/rules/balancePreCheckRule": typeof payments_collectionPlan_rules_balancePreCheckRule;
   "payments/collectionPlan/rules/lateFeeRule": typeof payments_collectionPlan_rules_lateFeeRule;
   "payments/collectionPlan/rules/retryRule": typeof payments_collectionPlan_rules_retryRule;
@@ -529,6 +534,7 @@ declare const fullApi: ApiFromModules<{
   "payments/transfers/validators": typeof payments_transfers_validators;
   "payments/webhooks/eftVopay": typeof payments_webhooks_eftVopay;
   "payments/webhooks/handleReversal": typeof payments_webhooks_handleReversal;
+  "payments/webhooks/legacyReversal": typeof payments_webhooks_legacyReversal;
   "payments/webhooks/processReversal": typeof payments_webhooks_processReversal;
   "payments/webhooks/rotessa": typeof payments_webhooks_rotessa;
   "payments/webhooks/rotessaPad": typeof payments_webhooks_rotessaPad;

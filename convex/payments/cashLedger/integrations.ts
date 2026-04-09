@@ -19,45 +19,13 @@ import {
 	type CashEntryType,
 } from "./types";
 
-interface LegacySource {
-	actor?: string;
-	actorId?: string;
-	actorType?: CommandSource["actorType"];
-	channel?: string;
-	ip?: string;
-	sessionId?: string;
-	type?: "user" | "system" | "webhook" | "cron";
-}
-
-function isLegacySource(
-	source: CommandSource | LegacySource
-): source is LegacySource {
-	return "type" in source || "actor" in source;
-}
-
-function normalizeSource(source: CommandSource | LegacySource): CommandSource {
-	const channel =
-		source.channel === "test" || !source.channel
-			? "scheduler"
-			: (source.channel as CommandSource["channel"]);
-
-	let actorType = source.actorType;
-	const legacySource = isLegacySource(source) ? source : undefined;
-	if (!actorType && legacySource) {
-		if (legacySource.type === "user") {
-			actorType = "admin";
-		} else if (legacySource.type === "system") {
-			actorType = "system";
-		}
-	}
+function normalizeSource(source: CommandSource): CommandSource {
+	const channel = source.channel ?? "scheduler";
 
 	return {
 		channel,
-		actorId:
-			source.actorId ??
-			legacySource?.actor ??
-			(legacySource?.type === "system" ? "system" : undefined),
-		actorType,
+		actorId: source.actorId,
+		actorType: source.actorType,
 		ip: source.ip,
 		sessionId: source.sessionId,
 	};
@@ -1260,20 +1228,19 @@ export async function postCashCorrectionForEntry(
 // ── Reversal ──────────────────────────────────────────────────────────
 
 /**
- * Tiered payout detection for clawback logic.
+ * Canonical payout detection for clawback logic.
  *
  * Searches for a LENDER_PAYOUT_SENT entry linked to a given lender payable
- * entry using progressively broader strategies:
+ * entry using canonical identifiers in progressively broader strategies:
  *   1. dispersalEntryId in obligation-scoped entries
- *   2. dispersalEntryId in lender-scoped entries (legacy payouts without obligationId)
+ *   2. dispersalEntryId in lender-scoped entries
  *   3. postingGroupId from the allocation group
- *   4. lenderId + mortgageId fallback
  */
 async function findPayoutEntryForClawback(
 	ctx: MutationCtx,
 	lenderEntry: Doc<"cash_ledger_journal_entries">,
 	lenderId: Id<"lenders">,
-	mortgageId: Id<"mortgages">,
+	_mortgageId: Id<"mortgages">,
 	allObligationEntries: Doc<"cash_ledger_journal_entries">[]
 ): Promise<Doc<"cash_ledger_journal_entries"> | undefined> {
 	// Tier 1: match by dispersalEntryId in obligation-scoped entries
@@ -1322,18 +1289,7 @@ async function findPayoutEntryForClawback(
 		}
 	}
 
-	// Tier 4: broadest fallback — match by lenderId + mortgageId in
-	// lender-scoped entries to catch legacy payouts with no dispersalEntryId.
-	// Fail closed: if multiple payouts match, return null to surface ambiguity
-	// for manual handling instead of risking a wrong clawback attachment.
-	const lenderEntries = await ctx.db
-		.query("cash_ledger_journal_entries")
-		.withIndex("by_lender_and_sequence", (q) => q.eq("lenderId", lenderId))
-		.collect();
-	const candidates = lenderEntries.filter(
-		(e) => e.entryType === "LENDER_PAYOUT_SENT" && e.mortgageId === mortgageId
-	);
-	return candidates.length === 1 ? candidates[0] : undefined;
+	return undefined;
 }
 
 /**

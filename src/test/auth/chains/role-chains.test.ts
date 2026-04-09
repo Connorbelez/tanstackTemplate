@@ -209,10 +209,28 @@ const CHAIN_TESTS: ChainTest[] = [
 		allowed: ["FAIRLEND_ADMIN"],
 	},
 	{
+		name: "paymentQuery (FairLend admin + payment:view)",
+		queryEndpoint: api.test.authTestEndpoints.testPaymentQuery,
+		type: "query",
+		allowed: ["FAIRLEND_ADMIN"],
+	},
+	{
 		name: "ledgerQuery (ledger:view)",
 		queryEndpoint: api.test.authTestEndpoints.testLedgerQuery,
 		type: "query",
 		allowed: ["FAIRLEND_ADMIN", "BROKER", "LENDER"],
+	},
+	{
+		name: "cashLedgerQuery (FairLend admin + cash_ledger:view)",
+		queryEndpoint: api.test.authTestEndpoints.testCashLedgerQuery,
+		type: "query",
+		allowed: ["FAIRLEND_ADMIN"],
+	},
+	{
+		name: "cashLedgerMutation (cash_ledger:correct)",
+		mutationEndpoint: api.test.authTestEndpoints.testCashLedgerMutation,
+		type: "mutation",
+		allowed: ["FAIRLEND_ADMIN"],
 	},
 	{
 		name: "crmAdminQuery (org-scoped admin only)",
@@ -227,16 +245,22 @@ const CHAIN_TESTS: ChainTest[] = [
 		allowed: ["FAIRLEND_ADMIN", "EXTERNAL_ORG_ADMIN"],
 	},
 	{
-		name: "crmQuery (any authed user with org context)",
+		name: "crmQuery (org-scoped admin only)",
 		queryEndpoint: api.test.authTestEndpoints.testCrmQuery,
 		type: "query",
-		allowed: ALL_IDENTITY_NAMES,
+		allowed: ["FAIRLEND_ADMIN", "EXTERNAL_ORG_ADMIN"],
 	},
 	{
-		name: "crmMutation (any authed user with org context)",
+		name: "crmMutation (org-scoped admin only)",
 		mutationEndpoint: api.test.authTestEndpoints.testCrmMutation,
 		type: "mutation",
-		allowed: ALL_IDENTITY_NAMES,
+		allowed: ["FAIRLEND_ADMIN", "EXTERNAL_ORG_ADMIN"],
+	},
+	{
+		name: "documentQuery (FairLend admin + document:review)",
+		queryEndpoint: api.test.authTestEndpoints.testDocumentQuery,
+		type: "query",
+		allowed: ["FAIRLEND_ADMIN"],
 	},
 ];
 

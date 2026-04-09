@@ -1,8 +1,12 @@
 import { useQuery } from "convex/react";
 import { Gauge, Sparkles } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { RuleEditorDialog } from "#/components/demo/amps/dialogs";
-import { useAmpsDemoAccess } from "#/components/demo/amps/hooks";
+import {
+	useAmpsDemoAccess,
+	useMortgageOptions,
+	useSelectableSurface,
+} from "#/components/demo/amps/hooks";
 import {
 	buildCountBadgeItems,
 	CountBadgeRow,
@@ -24,7 +28,6 @@ export function AmpsRulesPage() {
 	const [kind, setKind] = useState<CollectionRuleKind | "all">("all");
 	const [status, setStatus] = useState<CollectionRuleStatus | "all">("all");
 	const [mortgageId, setMortgageId] = useState<string>("all");
-	const [selectedRuleId, setSelectedRuleId] = useState<string | null>(null);
 
 	const rules = useQuery(
 		api.payments.collectionPlan.admin.listCollectionRules,
@@ -36,33 +39,15 @@ export function AmpsRulesPage() {
 		}
 	);
 
+	const [selectedRuleId, setSelectedRuleId] = useSelectableSurface(
+		rules?.map((rule) => rule.ruleId)
+	);
 	const selectedRule = useQuery(
 		api.payments.collectionPlan.admin.getCollectionRule,
 		selectedRuleId ? { ruleId: selectedRuleId as never } : "skip"
 	);
 
-	useEffect(() => {
-		if (!rules?.length) {
-			setSelectedRuleId(null);
-			return;
-		}
-		if (
-			selectedRuleId &&
-			rules.some((rule) => rule.ruleId === selectedRuleId)
-		) {
-			return;
-		}
-		setSelectedRuleId(rules[0]?.ruleId ?? null);
-	}, [rules, selectedRuleId]);
-
-	const mortgageOptions = useMemo(
-		() =>
-			(workspaceOverview?.mortgages ?? []).map((mortgage) => ({
-				label: mortgage.propertyLabel,
-				mortgageId: mortgage.mortgageId,
-			})),
-		[workspaceOverview?.mortgages]
-	);
+	const mortgageOptions = useMortgageOptions(workspaceOverview?.mortgages);
 
 	const kindCounts = useMemo(() => {
 		const nextCounts: Record<string, number> = {};

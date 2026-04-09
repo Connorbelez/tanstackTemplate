@@ -376,16 +376,24 @@ export const convexModules: ModuleMap = {
 		await import("./../payments/cashLedger/waiveObligationBalanceHandler.ts"),
 	"/convex/payments/collectionPlan/engine.ts": async () =>
 		await import("./../payments/collectionPlan/engine.ts"),
+	"/convex/payments/collectionPlan/admin.ts": async () =>
+		await import("./../payments/collectionPlan/admin.ts"),
 	"/convex/payments/collectionPlan/mutations.ts": async () =>
 		await import("./../payments/collectionPlan/mutations.ts"),
 	"/convex/payments/collectionPlan/queries.ts": async () =>
 		await import("./../payments/collectionPlan/queries.ts"),
+	"/convex/payments/collectionPlan/readModels.ts": async () =>
+		await import("./../payments/collectionPlan/readModels.ts"),
+	"/convex/payments/collectionPlan/reschedule.ts": async () =>
+		await import("./../payments/collectionPlan/reschedule.ts"),
 	"/convex/payments/collectionPlan/rules/lateFeeRule.ts": async () =>
 		await import("./../payments/collectionPlan/rules/lateFeeRule.ts"),
 	"/convex/payments/collectionPlan/rules/retryRule.ts": async () =>
 		await import("./../payments/collectionPlan/rules/retryRule.ts"),
 	"/convex/payments/collectionPlan/rules/scheduleRule.ts": async () =>
 		await import("./../payments/collectionPlan/rules/scheduleRule.ts"),
+	"/convex/payments/collectionPlan/runner.ts": async () =>
+		await import("./../payments/collectionPlan/runner.ts"),
 	"/convex/payments/collectionPlan/seed.ts": async () =>
 		await import("./../payments/collectionPlan/seed.ts"),
 	"/convex/payments/collectionPlan/stubs.ts": async () =>

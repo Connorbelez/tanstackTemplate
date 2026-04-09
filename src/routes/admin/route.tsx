@@ -13,7 +13,7 @@ export const Route = createFileRoute("/admin")({
 			throw redirect(buildSignInRedirect(location.href));
 		}
 
-		if (!canAccessAdminPath(location.pathname, context.permissions)) {
+		if (!canAccessAdminPath(location.pathname, context)) {
 			throw redirect({ to: "/unauthorized" });
 		}
 	},

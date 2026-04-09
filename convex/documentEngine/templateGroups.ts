@@ -1,8 +1,5 @@
 import { ConvexError, v } from "convex/values";
-import { adminMutation, authedQuery } from "../fluent";
-
-// TODO: Read queries (get, list) use authedQuery (authentication only).
-// Add permission gate (e.g. requirePermission("document:view")) when moving to production.
+import { adminMutation, documentQuery } from "../fluent";
 
 export const create = adminMutation
 	.input({
@@ -22,7 +19,7 @@ export const create = adminMutation
 	})
 	.public();
 
-export const get = authedQuery
+export const get = documentQuery
 	.input({ id: v.id("documentTemplateGroups") })
 	.handler(async (ctx, args) => {
 		const group = await ctx.db.get(args.id);
@@ -43,7 +40,7 @@ export const get = authedQuery
 	})
 	.public();
 
-export const list = authedQuery
+export const list = documentQuery
 	.input({})
 	.handler(async (ctx) => {
 		return await ctx.db.query("documentTemplateGroups").order("desc").collect();

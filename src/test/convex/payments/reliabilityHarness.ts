@@ -10,6 +10,7 @@ import {
 	createGovernedTestConvex,
 	type GovernedTestConvex,
 } from "./helpers";
+import { drainScheduledWork as drainScheduledRuntime } from "../runtime";
 
 const SYSTEM_SOURCE = {
 	channel: "scheduler" as const,
@@ -252,8 +253,7 @@ export function createReliabilityHarness(): ReliabilityHarness {
 	}
 
 	async function drainScheduledWork() {
-		await t.finishAllScheduledFunctions(() => vi.runAllTimers());
-		await Promise.resolve();
+		await drainScheduledRuntime(t, { flushMicrotasks: true });
 	}
 
 	async function seedReliabilityFixture(): Promise<ReliabilityFixture> {

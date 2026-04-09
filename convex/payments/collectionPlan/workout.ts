@@ -4,7 +4,7 @@ import type { MutationCtx } from "../../_generated/server";
 import { internalMutation } from "../../_generated/server";
 import { auditLog } from "../../auditLog";
 import { buildSource } from "../../engine/commands";
-import { paymentMutation, paymentQuery } from "../../fluent";
+import { paymentMutation, paymentQuery, type Viewer } from "../../fluent";
 import {
 	createEntryImpl,
 	ensureDefaultEntriesForObligationsImpl,
@@ -635,6 +635,121 @@ interface WorkoutMutationActorOptions {
 	requestedAt: number;
 }
 
+const internalWorkoutMutationActorArgs = {
+	actorId: v.string(),
+	actorType: workoutPlanActorTypeValidator,
+	requestedAt: v.optional(v.number()),
+};
+
+const workoutPlanIdInput = {
+	workoutPlanId: v.id("workoutPlans"),
+};
+
+const activateWorkoutReasonCodeMap: Record<
+	CreateWorkoutPlanReasonCode,
+	ActivateWorkoutPlanReasonCode
+> = {
+	duplicate_obligation: "workout_plan_obligation_mismatch",
+	invalid_amount: "workout_plan_obligation_not_collectible",
+	invalid_installments: "workout_plan_obligation_mismatch",
+	invalid_method: "workout_plan_obligation_mismatch",
+	invalid_name: "workout_plan_obligation_mismatch",
+	invalid_rationale: "workout_plan_obligation_mismatch",
+	invalid_scheduled_date: "workout_plan_obligation_mismatch",
+	mortgage_not_found: "workout_plan_obligation_mismatch",
+	obligation_mismatch: "workout_plan_obligation_mismatch",
+	obligation_not_collectible: "workout_plan_obligation_not_collectible",
+	obligation_not_found: "workout_plan_obligation_not_found",
+};
+
+function buildViewerWorkoutActor(
+	ctx: WorkoutMutationContext & { viewer: Viewer }
+): WorkoutMutationActorOptions {
+	const actor = buildSource(ctx.viewer, "admin_dashboard");
+	return {
+		actorId: ctx.viewer.authId,
+		actorType: actor.actorType ?? "admin",
+		requestedAt: Date.now(),
+	};
+}
+
+function buildInternalWorkoutActor(args: {
+	actorId: string;
+	actorType: WorkoutPlanActorType;
+	requestedAt?: number;
+}): WorkoutMutationActorOptions {
+	return {
+		actorId: args.actorId,
+		actorType: args.actorType,
+		requestedAt: args.requestedAt ?? Date.now(),
+	};
+}
+
+async function runWorkoutExit(args: {
+	action: "collection_plan.complete_workout_plan";
+	ctx: WorkoutMutationContext;
+	kind: "complete";
+	options: WorkoutMutationActorOptions;
+	workoutPlanId: Id<"workoutPlans">;
+}): Promise<CompleteWorkoutPlanResult>;
+async function runWorkoutExit(args: {
+	action: "collection_plan.cancel_workout_plan";
+	cancelReason?: string;
+	ctx: WorkoutMutationContext;
+	kind: "cancel";
+	options: WorkoutMutationActorOptions;
+	workoutPlanId: Id<"workoutPlans">;
+}): Promise<CancelWorkoutPlanResult>;
+async function runWorkoutExit(args: {
+	action:
+		| "collection_plan.cancel_workout_plan"
+		| "collection_plan.complete_workout_plan";
+	cancelReason?: string;
+	ctx: WorkoutMutationContext;
+	kind: WorkoutExitKind;
+	options: WorkoutMutationActorOptions;
+	workoutPlanId: Id<"workoutPlans">;
+}): Promise<CancelWorkoutPlanResult | CompleteWorkoutPlanResult> {
+	const result =
+		args.kind === "complete"
+			? await exitWorkoutPlanImpl(
+					args.ctx,
+					{
+						requestedAt: args.options.requestedAt,
+						workoutPlanId: args.workoutPlanId,
+					},
+					{
+						actorId: args.options.actorId,
+						actorType: args.options.actorType,
+						kind: "complete",
+					}
+				)
+			: await exitWorkoutPlanImpl(
+					args.ctx,
+					{
+						cancelReason: args.cancelReason,
+						requestedAt: args.options.requestedAt,
+						workoutPlanId: args.workoutPlanId,
+					},
+					{
+						actorId: args.options.actorId,
+						actorType: args.options.actorType,
+						kind: "cancel",
+					}
+				);
+
+	await logWorkoutAudit({
+		action: args.action,
+		actorId: args.options.actorId,
+		ctx: args.ctx,
+		metadata: { ...result },
+		resourceId: `${args.workoutPlanId}`,
+		severity: result.outcome === "rejected" ? "warning" : "info",
+	});
+
+	return result;
+}
+
 async function createWorkoutPlanImpl(
 	ctx: WorkoutMutationContext,
 	args: CreateWorkoutPlanArgs,
@@ -861,25 +976,9 @@ async function activateWorkoutPlanImpl(
 		mortgageId: workoutPlan.mortgageId,
 	});
 	if ("reasonCode" in resolvedInstallments) {
-		const reasonCodeMap: Record<
-			CreateWorkoutPlanReasonCode,
-			ActivateWorkoutPlanReasonCode
-		> = {
-			duplicate_obligation: "workout_plan_obligation_mismatch",
-			invalid_amount: "workout_plan_obligation_not_collectible",
-			invalid_installments: "workout_plan_obligation_mismatch",
-			invalid_method: "workout_plan_obligation_mismatch",
-			invalid_name: "workout_plan_obligation_mismatch",
-			invalid_rationale: "workout_plan_obligation_mismatch",
-			invalid_scheduled_date: "workout_plan_obligation_mismatch",
-			mortgage_not_found: "workout_plan_obligation_mismatch",
-			obligation_mismatch: "workout_plan_obligation_mismatch",
-			obligation_not_collectible: "workout_plan_obligation_not_collectible",
-			obligation_not_found: "workout_plan_obligation_not_found",
-		};
 		const result: ActivateWorkoutPlanResult = {
 			outcome: "rejected",
-			reasonCode: reasonCodeMap[resolvedInstallments.reasonCode],
+			reasonCode: activateWorkoutReasonCodeMap[resolvedInstallments.reasonCode],
 			reasonDetail: resolvedInstallments.reasonDetail,
 			requestedAt: options.requestedAt,
 			workoutPlanId: workoutPlan._id,
@@ -1059,24 +1158,17 @@ export const createWorkoutPlan = paymentMutation
 		rationale: v.string(),
 	})
 	.handler(async (ctx, args): Promise<CreateWorkoutPlanResult> => {
-		const actor = buildSource(ctx.viewer, "admin_dashboard");
-		return createWorkoutPlanImpl(ctx, args, {
-			actorId: ctx.viewer.authId,
-			actorType: actor.actorType ?? "admin",
-			requestedAt: Date.now(),
-		});
+		return createWorkoutPlanImpl(ctx, args, buildViewerWorkoutActor(ctx));
 	})
 	.public();
 
 export const createWorkoutPlanInternal = internalMutation({
 	args: {
-		actorId: v.string(),
-		actorType: workoutPlanActorTypeValidator,
+		...internalWorkoutMutationActorArgs,
 		installments: v.array(workoutPlanInstallmentInputValidator),
 		mortgageId: v.id("mortgages"),
 		name: v.string(),
 		rationale: v.string(),
-		requestedAt: v.optional(v.number()),
 	},
 	handler: async (ctx, args): Promise<CreateWorkoutPlanResult> =>
 		createWorkoutPlanImpl(
@@ -1087,37 +1179,24 @@ export const createWorkoutPlanInternal = internalMutation({
 				name: args.name,
 				rationale: args.rationale,
 			},
-			{
-				actorId: args.actorId,
-				actorType: args.actorType,
-				requestedAt: args.requestedAt ?? Date.now(),
-			}
+			buildInternalWorkoutActor(args)
 		),
 });
 
 export const activateWorkoutPlan = paymentMutation
-	.input({
-		workoutPlanId: v.id("workoutPlans"),
-	})
+	.input(workoutPlanIdInput)
 	.handler(async (ctx, args): Promise<ActivateWorkoutPlanResult> => {
 		// Page 14 boundary lock: workout activation only rewrites future
 		// collection strategy. Obligations, mortgage lifecycle, and cash meaning
 		// still move through their own governed seams later.
-		const actor = buildSource(ctx.viewer, "admin_dashboard");
-		return activateWorkoutPlanImpl(ctx, args, {
-			actorId: ctx.viewer.authId,
-			actorType: actor.actorType ?? "admin",
-			requestedAt: Date.now(),
-		});
+		return activateWorkoutPlanImpl(ctx, args, buildViewerWorkoutActor(ctx));
 	})
 	.public();
 
 export const activateWorkoutPlanInternal = internalMutation({
 	args: {
-		actorId: v.string(),
-		actorType: workoutPlanActorTypeValidator,
-		requestedAt: v.optional(v.number()),
-		workoutPlanId: v.id("workoutPlans"),
+		...internalWorkoutMutationActorArgs,
+		...workoutPlanIdInput,
 	},
 	handler: async (ctx, args): Promise<ActivateWorkoutPlanResult> =>
 		activateWorkoutPlanImpl(
@@ -1125,156 +1204,73 @@ export const activateWorkoutPlanInternal = internalMutation({
 			{
 				workoutPlanId: args.workoutPlanId,
 			},
-			{
-				actorId: args.actorId,
-				actorType: args.actorType,
-				requestedAt: args.requestedAt ?? Date.now(),
-			}
+			buildInternalWorkoutActor(args)
 		),
 });
 
 export const completeWorkoutPlan = paymentMutation
-	.input({
-		workoutPlanId: v.id("workoutPlans"),
-	})
+	.input(workoutPlanIdInput)
 	.handler(async (ctx, args): Promise<CompleteWorkoutPlanResult> => {
-		const requestedAt = Date.now();
-		const actor = buildSource(ctx.viewer, "admin_dashboard");
-		const actorId = ctx.viewer.authId;
-		const result = await exitWorkoutPlanImpl(
-			ctx,
-			{
-				workoutPlanId: args.workoutPlanId,
-				requestedAt,
-			},
-			{
-				actorId,
-				actorType: actor.actorType ?? "admin",
-				kind: "complete",
-			}
-		);
-
-		await logWorkoutAudit({
+		const result = await runWorkoutExit({
 			action: "collection_plan.complete_workout_plan",
-			actorId,
 			ctx,
-			metadata: { ...result },
-			resourceId: `${args.workoutPlanId}`,
-			severity: result.outcome === "rejected" ? "warning" : "info",
+			kind: "complete",
+			options: buildViewerWorkoutActor(ctx),
+			workoutPlanId: args.workoutPlanId,
 		});
-
-		return result;
+		return result as CompleteWorkoutPlanResult;
 	})
 	.public();
 
 export const completeWorkoutPlanInternal = internalMutation({
 	args: {
-		actorId: v.string(),
-		actorType: workoutPlanActorTypeValidator,
-		requestedAt: v.optional(v.number()),
-		workoutPlanId: v.id("workoutPlans"),
+		...internalWorkoutMutationActorArgs,
+		...workoutPlanIdInput,
 	},
-	handler: async (ctx, args): Promise<CompleteWorkoutPlanResult> => {
-		const requestedAt = args.requestedAt ?? Date.now();
-		const result = await exitWorkoutPlanImpl(
-			ctx,
-			{
-				workoutPlanId: args.workoutPlanId,
-				requestedAt,
-			},
-			{
-				actorId: args.actorId,
-				actorType: args.actorType,
-				kind: "complete",
-			}
-		);
-
-		await logWorkoutAudit({
+	handler: async (ctx, args): Promise<CompleteWorkoutPlanResult> =>
+		(await runWorkoutExit({
 			action: "collection_plan.complete_workout_plan",
-			actorId: args.actorId,
 			ctx,
-			metadata: { ...result },
-			resourceId: `${args.workoutPlanId}`,
-			severity: result.outcome === "rejected" ? "warning" : "info",
-		});
-
-		return result;
-	},
+			kind: "complete",
+			options: buildInternalWorkoutActor(args),
+			workoutPlanId: args.workoutPlanId,
+		})) as CompleteWorkoutPlanResult,
 });
 
 export const cancelWorkoutPlan = paymentMutation
 	.input({
 		reason: v.optional(v.string()),
-		workoutPlanId: v.id("workoutPlans"),
+		...workoutPlanIdInput,
 	})
 	.handler(async (ctx, args): Promise<CancelWorkoutPlanResult> => {
-		const requestedAt = Date.now();
-		const actor = buildSource(ctx.viewer, "admin_dashboard");
-		const actorId = ctx.viewer.authId;
 		const cancelReason = trimOrEmpty(args.reason ?? "") || undefined;
-		const result = await exitWorkoutPlanImpl(
-			ctx,
-			{
-				cancelReason,
-				workoutPlanId: args.workoutPlanId,
-				requestedAt,
-			},
-			{
-				actorId,
-				actorType: actor.actorType ?? "admin",
-				kind: "cancel",
-			}
-		);
-
-		await logWorkoutAudit({
+		const result = await runWorkoutExit({
 			action: "collection_plan.cancel_workout_plan",
-			actorId,
+			cancelReason,
 			ctx,
-			metadata: { ...result },
-			resourceId: `${args.workoutPlanId}`,
-			severity: result.outcome === "rejected" ? "warning" : "info",
+			kind: "cancel",
+			options: buildViewerWorkoutActor(ctx),
+			workoutPlanId: args.workoutPlanId,
 		});
-
-		return result;
+		return result as CancelWorkoutPlanResult;
 	})
 	.public();
 
 export const cancelWorkoutPlanInternal = internalMutation({
 	args: {
-		actorId: v.string(),
-		actorType: workoutPlanActorTypeValidator,
+		...internalWorkoutMutationActorArgs,
 		reason: v.optional(v.string()),
-		requestedAt: v.optional(v.number()),
-		workoutPlanId: v.id("workoutPlans"),
+		...workoutPlanIdInput,
 	},
-	handler: async (ctx, args): Promise<CancelWorkoutPlanResult> => {
-		const requestedAt = args.requestedAt ?? Date.now();
-		const cancelReason = trimOrEmpty(args.reason ?? "") || undefined;
-		const result = await exitWorkoutPlanImpl(
-			ctx,
-			{
-				cancelReason,
-				workoutPlanId: args.workoutPlanId,
-				requestedAt,
-			},
-			{
-				actorId: args.actorId,
-				actorType: args.actorType,
-				kind: "cancel",
-			}
-		);
-
-		await logWorkoutAudit({
+	handler: async (ctx, args): Promise<CancelWorkoutPlanResult> =>
+		(await runWorkoutExit({
 			action: "collection_plan.cancel_workout_plan",
-			actorId: args.actorId,
+			cancelReason: trimOrEmpty(args.reason ?? "") || undefined,
 			ctx,
-			metadata: { ...result },
-			resourceId: `${args.workoutPlanId}`,
-			severity: result.outcome === "rejected" ? "warning" : "info",
-		});
-
-		return result;
-	},
+			kind: "cancel",
+			options: buildInternalWorkoutActor(args),
+			workoutPlanId: args.workoutPlanId,
+		})) as CancelWorkoutPlanResult,
 });
 
 export const getWorkoutPlan = paymentQuery

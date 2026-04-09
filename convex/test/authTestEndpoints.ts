@@ -15,17 +15,21 @@ import {
 	borrowerQuery,
 	brokerMutation,
 	brokerQuery,
+	cashLedgerMutation,
+	cashLedgerQuery,
 	crmAdminMutation,
 	crmAdminQuery,
 	crmMutation,
 	crmQuery,
 	dealMutation,
 	dealQuery,
+	documentQuery,
 	lawyerMutation,
 	lawyerQuery,
 	ledgerQuery,
 	lenderMutation,
 	lenderQuery,
+	paymentQuery,
 	requireAdmin,
 	requirePermission,
 	underwriterMutation,
@@ -131,8 +135,20 @@ export const testDealMutation = dealMutation
 	.handler(async () => okResponse())
 	.public();
 
+export const testPaymentQuery = paymentQuery
+	.handler(async () => okResponse())
+	.public();
+
 // ── ledger ───────────────────────────────────────────────────────────
 export const testLedgerQuery = ledgerQuery
+	.handler(async () => okResponse())
+	.public();
+
+export const testCashLedgerQuery = cashLedgerQuery
+	.handler(async () => okResponse())
+	.public();
+
+export const testCashLedgerMutation = cashLedgerMutation
 	.handler(async () => okResponse())
 	.public();
 
@@ -169,5 +185,9 @@ export const testCrmAdminMutation = crmAdminMutation
 export const testCrmQuery = crmQuery.handler(async () => okResponse()).public();
 
 export const testCrmMutation = crmMutation
+	.handler(async () => okResponse())
+	.public();
+
+export const testDocumentQuery = documentQuery
 	.handler(async () => okResponse())
 	.public();

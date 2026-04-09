@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { authedQuery, requirePermission } from "../fluent";
+import { adminQuery } from "../fluent";
 
 const adminEntityTypeValidator = v.union(
 	v.literal("mortgages"),
@@ -8,7 +8,7 @@ const adminEntityTypeValidator = v.union(
 	v.literal("deals")
 );
 
-const adminShellQuery = authedQuery.use(requirePermission("admin:access"));
+const adminShellQuery = adminQuery;
 
 export interface AdminEntityListRow {
 	id: string;

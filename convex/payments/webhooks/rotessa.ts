@@ -1,6 +1,9 @@
 import { internal } from "../../_generated/api";
 import { httpAction } from "../../_generated/server";
-import { handlePaymentReversal } from "./handleReversal";
+import {
+	persistLegacyReversalWebhook,
+	scheduleLegacyReversalWebhookProcessing,
+} from "./legacyReversal";
 import type { ReversalWebhookPayload } from "./types";
 import { jsonResponse } from "./utils";
 import type { VerificationResult } from "./verification";
@@ -113,20 +116,37 @@ export const rotessaWebhook = httpAction(async (ctx, request) => {
 		return jsonResponse({ ignored: true, event_type: event.event_type });
 	}
 
-	// 4. Map to payload and process
+	// 4. Map to payload, persist, and schedule processing
 	const payload = toPayload(event);
-
-	try {
-		const result = await handlePaymentReversal(ctx, payload);
-		return jsonResponse({ ...result });
-	} catch (err) {
-		// Always return 200 to prevent Rotessa retry storms.
-		// Non-200 responses are reserved for signature/JSON parsing failures only.
-		console.error("[Rotessa Webhook] Reversal processing failed:", err);
-		return jsonResponse({
-			accepted: true,
-			error: "processing_failed",
-			message: err instanceof Error ? err.message : "Unknown error",
-		});
+	const persisted = await persistLegacyReversalWebhook(ctx, { body, payload });
+	if (!persisted.ok) {
+		return jsonResponse(
+			{
+				error: "persistence_failed",
+				message: persisted.error,
+				providerEventId: payload.providerEventId,
+			},
+			500
+		);
 	}
+
+	const scheduled = await scheduleLegacyReversalWebhookProcessing(ctx, {
+		payload,
+		webhookEventId: persisted.webhookEventId,
+	});
+	if (!scheduled.ok) {
+		return jsonResponse(
+			{
+				error: "scheduler_failed",
+				message: scheduled.error,
+				providerEventId: payload.providerEventId,
+			},
+			500
+		);
+	}
+
+	return jsonResponse({
+		accepted: true,
+		providerEventId: payload.providerEventId,
+	});
 });
