@@ -223,15 +223,15 @@ We're building a backoffice Loan Management System with an integrated ledger and
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **t3code-35e1a6e1** (11289 symbols, 16442 relationships, 268 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **fairlendapp** (11584 symbols, 17259 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
 
 ## Always Do
 
-- Run impact analysis before editing shared or risky symbols. Before modifying a function, class, or method with external consumers, run `gitnexus_impact({target: "symbolName", direction: "upstream"})` and report the blast radius (direct callers, affected processes, risk level) to the user.
-- Before committing, review the resulting git diff and run any available GitNexus checks manually when the local index is present. GitNexus guidance in this repo is workflow guidance, not an enforced pre-commit hook.
-- Warn the user if impact analysis returns HIGH or CRITICAL risk before proceeding with edits.
+- **MUST run impact analysis before editing any symbol.** Before modifying a function, class, or method, run `gitnexus_impact({target: "symbolName", direction: "upstream"})` and report the blast radius (direct callers, affected processes, risk level) to the user.
+- **MUST run `gitnexus_detect_changes()` before committing** to verify your changes only affect expected symbols and execution flows.
+- **MUST warn the user** if impact analysis returns HIGH or CRITICAL risk before proceeding with edits.
 - When exploring unfamiliar code, use `gitnexus_query({query: "concept"})` to find execution flows instead of grepping. It returns process-grouped results ranked by relevance.
 - When you need full context on a specific symbol — callers, callees, which execution flows it participates in — use `gitnexus_context({name: "symbolName"})`.
 
@@ -239,7 +239,7 @@ This project is indexed by GitNexus as **t3code-35e1a6e1** (11289 symbols, 16442
 
 1. `gitnexus_query({query: "<error or symptom>"})` — find execution flows related to the issue
 2. `gitnexus_context({name: "<suspect function>"})` — see all callers, callees, and process participation
-3. `READ gitnexus://repo/t3code-35e1a6e1/process/{processName}` — trace the full execution flow step by step
+3. `READ gitnexus://repo/fairlendapp/process/{processName}` — trace the full execution flow step by step
 4. For regressions: `gitnexus_detect_changes({scope: "compare", base_ref: "main"})` — see what your branch changed
 
 ## When Refactoring
@@ -278,10 +278,10 @@ This project is indexed by GitNexus as **t3code-35e1a6e1** (11289 symbols, 16442
 
 | Resource | Use for |
 |----------|---------|
-| `gitnexus://repo/t3code-35e1a6e1/context` | Codebase overview, check index freshness |
-| `gitnexus://repo/t3code-35e1a6e1/clusters` | All functional areas |
-| `gitnexus://repo/t3code-35e1a6e1/processes` | All execution flows |
-| `gitnexus://repo/t3code-35e1a6e1/process/{name}` | Step-by-step execution trace |
+| `gitnexus://repo/fairlendapp/context` | Codebase overview, check index freshness |
+| `gitnexus://repo/fairlendapp/clusters` | All functional areas |
+| `gitnexus://repo/fairlendapp/processes` | All execution flows |
+| `gitnexus://repo/fairlendapp/process/{name}` | Step-by-step execution trace |
 
 ## Self-Check Before Finishing
 

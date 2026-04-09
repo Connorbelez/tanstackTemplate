@@ -10,7 +10,10 @@
  */
 import { beforeEach, describe, expect, it } from "vitest";
 import { api } from "../../_generated/api";
-import { deriveCapabilities } from "../metadataCompiler";
+import {
+	deriveCapabilities,
+	deriveFieldContractMetadata,
+} from "../metadataCompiler";
 import {
 	asAdmin,
 	type CrmTestFixture,
@@ -101,6 +104,46 @@ describe("deriveCapabilities (pure)", () => {
 	});
 });
 
+describe("deriveFieldContractMetadata (pure)", () => {
+	it("marks native fields as read-only and preserves numeric aggregation metadata", () => {
+		expect(
+			deriveFieldContractMetadata({
+				fieldType: "currency",
+				nativeReadOnly: true,
+			})
+		).toMatchObject({
+			normalizedFieldKind: "primitive",
+			rendererHint: "currency",
+			editability: {
+				mode: "read_only",
+			},
+			aggregation: {
+				enabled: true,
+				supportedFunctions: ["count", "sum", "avg", "min", "max"],
+			},
+		});
+	});
+
+	it("marks computed fields as computed and non-editable", () => {
+		expect(
+			deriveFieldContractMetadata({
+				fieldType: "number",
+				nativeReadOnly: false,
+				computed: {
+					expressionKey: "ltv",
+					sourceFieldNames: ["principal", "appraisedValue"],
+				},
+			})
+		).toMatchObject({
+			normalizedFieldKind: "computed",
+			rendererHint: "computed",
+			editability: {
+				mode: "computed",
+			},
+		});
+	});
+});
+
 // ═══════════════════════════════════════════════════════════════════════
 // INTEGRATION TESTS
 // ═══════════════════════════════════════════════════════════════════════
@@ -169,6 +212,30 @@ describe("metadataCompiler integration", () => {
 			expect(caps.map((c) => c.capability).sort()).toEqual(
 				["group_by", "kanban", "table"].sort()
 			);
+		});
+
+		it("persists normalized field contract metadata alongside capabilities", async () => {
+			const amountField = await t.run(async (ctx) =>
+				ctx.db.get(fixture.fieldDefs.amount)
+			);
+			expect(amountField).toMatchObject({
+				normalizedFieldKind: "primitive",
+				rendererHint: "number",
+				isVisibleByDefault: true,
+				aggregation: {
+					enabled: true,
+					supportedFunctions: ["count", "sum", "avg", "min", "max"],
+				},
+				editability: {
+					mode: "editable",
+				},
+				layoutEligibility: {
+					table: { enabled: true },
+					kanban: { enabled: false },
+					calendar: { enabled: false },
+					groupBy: { enabled: false },
+				},
+			});
 		});
 	});
 

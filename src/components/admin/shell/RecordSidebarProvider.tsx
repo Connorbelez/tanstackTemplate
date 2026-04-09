@@ -2,11 +2,11 @@
 
 import {
 	createContext,
+	type ReactNode,
 	useCallback,
 	useContext,
 	useMemo,
 	useState,
-	type ReactNode,
 } from "react";
 
 export interface SidebarRecordRef {
@@ -42,11 +42,7 @@ const EMPTY_STATE: RecordSidebarState = {
 	stack: [],
 };
 
-export function RecordSidebarProvider({
-	children,
-}: {
-	children: ReactNode;
-}) {
+export function RecordSidebarProvider({ children }: { children: ReactNode }) {
 	const [state, setState] = useState<RecordSidebarState>(EMPTY_STATE);
 
 	const open = useCallback((record: SidebarRecordRef) => {
