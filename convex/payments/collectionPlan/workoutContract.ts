@@ -65,10 +65,10 @@ export const workoutPlanStrategyValidator = v.object({
 export function getWorkoutPlanCoveredObligationIds(workoutPlan: {
 	strategy: WorkoutPlanStrategy;
 }) {
-	const ids = new Set<string>();
+	const ids = new Set<Doc<"obligations">["_id"]>();
 	for (const installment of workoutPlan.strategy.installments) {
 		for (const obligationId of installment.obligationIds) {
-			ids.add(`${obligationId}`);
+			ids.add(obligationId);
 		}
 	}
 	return [...ids];
