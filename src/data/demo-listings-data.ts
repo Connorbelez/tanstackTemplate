@@ -18,6 +18,12 @@ export interface DemoListing {
 	soldPercent?: number;
 }
 
+function createLocalDate(isoDate: `${number}-${number}-${number}`) {
+	const [year, month, day] = isoDate.split("-").map(Number);
+
+	return new Date(year, month - 1, day);
+}
+
 function createListingImage(title: string, accent: string, skyline: string) {
 	const svg = `
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800">
@@ -65,7 +71,7 @@ export const demoListings: DemoListing[] = [
 		marketValue: 2025000,
 		mortgageType: "First",
 		propertyType: "Condo",
-		maturityDate: new Date("2027-11-30"),
+		maturityDate: createLocalDate("2027-11-30"),
 		availablePercent: 54,
 		lockedPercent: 18,
 		soldPercent: 28,
@@ -87,7 +93,7 @@ export const demoListings: DemoListing[] = [
 		marketValue: 1690000,
 		mortgageType: "First",
 		propertyType: "Townhouse",
-		maturityDate: new Date("2027-06-15"),
+		maturityDate: createLocalDate("2027-06-15"),
 		availablePercent: 71,
 		lockedPercent: 0,
 		soldPercent: 29,
@@ -109,7 +115,7 @@ export const demoListings: DemoListing[] = [
 		marketValue: 2360000,
 		mortgageType: "Second",
 		propertyType: "Duplex",
-		maturityDate: new Date("2028-02-28"),
+		maturityDate: createLocalDate("2028-02-28"),
 		availablePercent: 36,
 		lockedPercent: 24,
 		soldPercent: 40,
@@ -131,7 +137,7 @@ export const demoListings: DemoListing[] = [
 		marketValue: 3490000,
 		mortgageType: "First",
 		propertyType: "Mixed-Use",
-		maturityDate: new Date("2028-08-31"),
+		maturityDate: createLocalDate("2028-08-31"),
 		locked: true,
 		availablePercent: 12,
 		lockedPercent: 46,
@@ -154,7 +160,7 @@ export const demoListings: DemoListing[] = [
 		marketValue: 3160000,
 		mortgageType: "First",
 		propertyType: "Commercial",
-		maturityDate: new Date("2027-12-31"),
+		maturityDate: createLocalDate("2027-12-31"),
 		availablePercent: 64,
 		lockedPercent: 0,
 		soldPercent: 36,
@@ -176,7 +182,7 @@ export const demoListings: DemoListing[] = [
 		marketValue: 1340000,
 		mortgageType: "Second",
 		propertyType: "Condo",
-		maturityDate: new Date("2027-09-30"),
+		maturityDate: createLocalDate("2027-09-30"),
 		availablePercent: 48,
 		lockedPercent: 22,
 		soldPercent: 30,
@@ -198,7 +204,7 @@ export const demoListings: DemoListing[] = [
 		marketValue: 5470000,
 		mortgageType: "First",
 		propertyType: "Detached Home",
-		maturityDate: new Date("2028-05-31"),
+		maturityDate: createLocalDate("2028-05-31"),
 		availablePercent: 80,
 		lockedPercent: 0,
 		soldPercent: 20,
@@ -220,7 +226,7 @@ export const demoListings: DemoListing[] = [
 		marketValue: 1675000,
 		mortgageType: "Other",
 		propertyType: "Apartment",
-		maturityDate: new Date("2027-10-15"),
+		maturityDate: createLocalDate("2027-10-15"),
 		locked: true,
 		availablePercent: 9,
 		lockedPercent: 61,
@@ -243,7 +249,7 @@ export const demoListings: DemoListing[] = [
 		marketValue: 2380000,
 		mortgageType: "First",
 		propertyType: "Triplex",
-		maturityDate: new Date("2028-01-31"),
+		maturityDate: createLocalDate("2028-01-31"),
 		availablePercent: 58,
 		lockedPercent: 14,
 		soldPercent: 28,
@@ -265,7 +271,7 @@ export const demoListings: DemoListing[] = [
 		marketValue: 1620000,
 		mortgageType: "Other",
 		propertyType: "Cottage",
-		maturityDate: new Date("2027-08-31"),
+		maturityDate: createLocalDate("2027-08-31"),
 		availablePercent: 69,
 		lockedPercent: 11,
 		soldPercent: 20,
