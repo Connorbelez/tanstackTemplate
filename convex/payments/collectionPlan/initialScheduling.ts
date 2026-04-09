@@ -79,7 +79,8 @@ async function getUpcomingObligationsInWindow(
 
 async function getCoveredPlanEntriesForObligations(
 	ctx: Pick<MutationCtx, "db">,
-	obligationIds: readonly Id<"obligations">[]
+	obligationIds: readonly Id<"obligations">[],
+	scheduledBefore: number
 ): Promise<Record<string, Id<"collectionPlanEntries">>> {
 	if (obligationIds.length === 0) {
 		return {};
@@ -91,7 +92,9 @@ async function getCoveredPlanEntriesForObligations(
 			NON_CANCELLED_PLAN_ENTRY_STATUSES.map((status) =>
 				ctx.db
 					.query("collectionPlanEntries")
-					.withIndex("by_status", (q) => q.eq("status", status))
+					.withIndex("by_status_scheduled_date", (q) =>
+						q.eq("status", status).lte("scheduledDate", scheduledBefore)
+					)
 					.collect()
 			)
 		)
@@ -139,7 +142,8 @@ export async function scheduleInitialEntriesImpl(
 
 	const coveredObligations = await getCoveredPlanEntriesForObligations(
 		ctx,
-		obligations.map((obligation) => obligation._id)
+		obligations.map((obligation) => obligation._id),
+		dueBefore
 	);
 
 	const createdPlanEntryIds: Id<"collectionPlanEntries">[] = [];
