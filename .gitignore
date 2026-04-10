@@ -20,6 +20,7 @@ todos.json
 .tmp.vite.min.ts
 .husky/_
 playwright-report
+.playwright-mcp/
 test-results
 coverage
 .auth/
