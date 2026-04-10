@@ -3,9 +3,8 @@ import { ConvexError, v } from "convex/values";
 import { api, internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
-import { internalMutation, internalQuery } from "../_generated/server";
 import { executeTransition } from "../engine/transition";
-import { adminAction, adminQuery } from "../fluent";
+import { adminAction, adminQuery, convex } from "../fluent";
 import {
 	obligationTypeToTransferType,
 	PROVIDER_CODES,
@@ -458,13 +457,14 @@ function buildWorkspaceOverviewResult(
 	};
 }
 
-export const getWorkspaceOverviewInternal = internalQuery({
-	args: {},
-	handler: async (ctx) => {
+export const getWorkspaceOverviewInternal = convex
+	.query()
+	.input({})
+	.handler(async (ctx): Promise<WorkspaceOverviewResult> => {
 		const targets = await loadDemoScenarioTargets(ctx);
 		return buildWorkspaceOverviewResult(targets);
-	},
-});
+	})
+	.internal();
 
 async function upsertBalanceRule(args: {
 	blockingDecision: "require_operator_review" | "suppress";
@@ -526,12 +526,13 @@ async function upsertBalanceRule(args: {
 	});
 }
 
-export const ensureDemoRulesInternal = internalMutation({
-	args: {
+export const ensureDemoRulesInternal = convex
+	.mutation()
+	.input({
 		reviewMortgageId: v.id("mortgages"),
 		suppressMortgageId: v.id("mortgages"),
-	},
-	handler: async (ctx, args) => {
+	})
+	.handler(async (ctx, args) => {
 		const reviewRuleId = await upsertBalanceRule({
 			blockingDecision: "require_operator_review",
 			code: "demo_review_required_rule",
@@ -554,16 +555,17 @@ export const ensureDemoRulesInternal = internalMutation({
 		});
 
 		return { reviewRuleId, suppressRuleId };
-	},
-});
+	})
+	.internal();
 
-export const seedFailedInboundSignalInternal = internalMutation({
-	args: {
+export const seedFailedInboundSignalInternal = convex
+	.mutation()
+	.input({
 		borrowerId: v.id("borrowers"),
 		mortgageId: v.id("mortgages"),
 		reasonKey: v.union(v.literal("review_required"), v.literal("suppress")),
-	},
-	handler: async (ctx, args) => {
+	})
+	.handler(async (ctx, args) => {
 		const existing = await ctx.db
 			.query("transferRequests")
 			.withIndex("by_counterparty_status", (q) =>
@@ -605,14 +607,15 @@ export const seedFailedInboundSignalInternal = internalMutation({
 			failureCode: "NSF",
 			failureReason: "insufficient_funds",
 		});
-	},
-});
+	})
+	.internal();
 
-export const seedRetryScenarioInternal = internalMutation({
-	args: {
+export const seedRetryScenarioInternal = convex
+	.mutation()
+	.input({
 		planEntryId: v.id("collectionPlanEntries"),
-	},
-	handler: async (ctx, args) => {
+	})
+	.handler(async (ctx, args) => {
 		const existingRetryEntry = await ctx.db
 			.query("collectionPlanEntries")
 			.withIndex("by_retry_of", (q) =>
@@ -737,8 +740,8 @@ export const seedRetryScenarioInternal = internalMutation({
 			attemptId,
 			outcome: "seeded" as const,
 		};
-	},
-});
+	})
+	.internal();
 
 function buildWorkoutInstallments(target: DemoScenarioTargetRecord): {
 	installments: {
@@ -935,15 +938,16 @@ export const prepareWorkspace = adminAction
 	})
 	.public();
 
-export const getDemoTargetByAddressInternal = internalQuery({
-	args: {
+export const getDemoTargetByAddressInternal = convex
+	.query()
+	.input({
 		streetAddress: v.string(),
-	},
-	handler: async (ctx, args) => {
+	})
+	.handler(async (ctx, args): Promise<DemoScenarioTargetRecord | undefined> => {
 		const targets = await loadDemoScenarioTargets(ctx);
 		return targets.get(args.streetAddress);
-	},
-});
+	})
+	.internal();
 
 export const getWorkspaceOverview = adminQuery
 	.input({})

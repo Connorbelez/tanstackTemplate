@@ -303,4 +303,37 @@ describe("typed collection-rule engine", () => {
 			deferDays: 3,
 		});
 	});
+
+	it("seedCollectionRules migrates a legacy blank-code default rule without creating a duplicate", async () => {
+		const t = createGovernedTestConvex();
+
+		const legacyScheduleRuleId = await insertCollectionRule(t, {
+			code: "",
+			kind: "schedule",
+			priority: 10,
+			trigger: "schedule",
+			config: { kind: "schedule", delayDays: 9 },
+		});
+
+		await t.mutation(
+			internal.payments.collectionPlan.seed.seedCollectionRules,
+			{}
+		);
+
+		const state = await t.run(async (ctx) => {
+			const rules = await ctx.db.query("collectionRules").collect();
+			const legacyScheduleRule = await ctx.db.get(legacyScheduleRuleId);
+			return { legacyScheduleRule, rules };
+		});
+
+		expect(state.legacyScheduleRule?.code).toBe("schedule_rule");
+		expect(state.legacyScheduleRule?.config).toEqual({
+			kind: "schedule",
+			delayDays: 9,
+		});
+		expect(
+			state.rules.filter((rule) => rule.code === "schedule_rule")
+		).toHaveLength(1);
+		expect(state.rules).toHaveLength(4);
+	});
 });

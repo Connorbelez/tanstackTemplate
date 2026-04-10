@@ -361,6 +361,7 @@ async function resolveWorkoutInstallments(
 
 async function loadNonCancelledPlanEntriesForObligations(
 	ctx: Pick<MutationCtx, "db">,
+	mortgageId: Id<"mortgages">,
 	obligationIds: readonly Id<"obligations">[]
 ) {
 	const obligationLookup = new Set(
@@ -371,7 +372,9 @@ async function loadNonCancelledPlanEntriesForObligations(
 			NON_CANCELLED_PLAN_ENTRY_STATUSES.map((status) =>
 				ctx.db
 					.query("collectionPlanEntries")
-					.withIndex("by_status", (q) => q.eq("status", status))
+					.withIndex("by_mortgage_status_scheduled", (q) =>
+						q.eq("mortgageId", mortgageId).eq("status", status)
+					)
 					.collect()
 			)
 		)
@@ -552,6 +555,7 @@ async function exitWorkoutPlanImpl(
 		}
 		await ctx.db.patch(entry._id, {
 			status: "cancelled",
+			cancelledAt: args.requestedAt,
 		});
 		cancelledPlanEntryIds.push(entry._id);
 	}
@@ -893,6 +897,7 @@ async function activateWorkoutPlanImpl(
 
 	const existingEntries = await loadNonCancelledPlanEntriesForObligations(
 		ctx,
+		workoutPlan.mortgageId,
 		resolvedInstallments.coveredObligationIds
 	);
 	const coveredObligations = new Set(
@@ -1013,6 +1018,7 @@ async function activateWorkoutPlanImpl(
 	for (const entry of existingEntries) {
 		await ctx.db.patch(entry._id, {
 			status: "cancelled",
+			cancelledAt: options.requestedAt,
 			supersededAt: options.requestedAt,
 			supersededByWorkoutPlanId: workoutPlan._id,
 		});

@@ -108,6 +108,38 @@ function serialize(value: unknown) {
 	return JSON.stringify(value);
 }
 
+function hasCanonicalRuleCode(rule: Pick<Doc<"collectionRules">, "code">) {
+	return rule.code.trim().length > 0;
+}
+
+function findExistingDefaultRule(
+	allRules: Doc<"collectionRules">[],
+	ruleDef: DefaultCollectionRuleDefinition
+) {
+	const exactMatch =
+		allRules.find((rule) => rule.code === ruleDef.code) ?? null;
+	if (exactMatch) {
+		return exactMatch;
+	}
+
+	const legacyCandidates = allRules.filter(
+		(rule) =>
+			!hasCanonicalRuleCode(rule) &&
+			rule.kind === ruleDef.kind &&
+			rule.trigger === ruleDef.trigger &&
+			serialize(rule.scope) === serialize(ruleDef.scope)
+	);
+
+	if (legacyCandidates.length === 1) {
+		return legacyCandidates[0];
+	}
+
+	return (
+		legacyCandidates.find((rule) => rule.displayName === ruleDef.displayName) ??
+		null
+	);
+}
+
 function shouldPatchRule(
 	rule: Doc<"collectionRules">,
 	nextFields: {
@@ -148,8 +180,7 @@ export async function seedCollectionRulesImpl(
 	const allRules = await ctx.db.query("collectionRules").collect();
 
 	for (const ruleDef of DEFAULT_COLLECTION_RULES) {
-		const existing =
-			allRules.find((rule) => rule.code === ruleDef.code) ?? null;
+		const existing = findExistingDefaultRule(allRules, ruleDef);
 		const resolvedConfig = existing?.config ?? ruleDef.config;
 		const resolvedStatus = existing?.status ?? ruleDef.status;
 		const resolvedScope = existing?.scope ?? ruleDef.scope;

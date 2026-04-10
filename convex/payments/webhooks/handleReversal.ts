@@ -1,7 +1,14 @@
 import { internal } from "../../_generated/api";
+import type { Id } from "../../_generated/dataModel";
 import type { ActionCtx } from "../../_generated/server";
-import type { ProviderCode } from "../transfers/types";
+import type { PersistedTransferStatus, ProviderCode } from "../transfers/types";
 import type { ReversalResult, ReversalWebhookPayload } from "./types";
+
+interface ReversalTransferRecord {
+	_id: Id<"transferRequests">;
+	collectionAttemptId?: Id<"collectionAttempts">;
+	status: PersistedTransferStatus;
+}
 
 const REVERSAL_PROVIDER_CODE_MAP: Record<
 	ReversalWebhookPayload["provider"],
@@ -14,9 +21,9 @@ const REVERSAL_PROVIDER_CODE_MAP: Record<
 async function getTransferByProviderRef(
 	ctx: ActionCtx,
 	payload: ReversalWebhookPayload
-) {
+): Promise<ReversalTransferRecord | null> {
 	for (const providerCode of REVERSAL_PROVIDER_CODE_MAP[payload.provider]) {
-		const transfer = await ctx.runQuery(
+		const transfer: ReversalTransferRecord | null = await ctx.runQuery(
 			internal.payments.webhooks.transferCore.getTransferRequestByProviderRef,
 			{
 				providerCode,
@@ -31,6 +38,10 @@ async function getTransferByProviderRef(
 	return null;
 }
 
+function isConfirmedLikeTransferStatus(status: PersistedTransferStatus) {
+	return status === "confirmed" || status === "completed";
+}
+
 // ── Main Handler ─────────────────────────────────────────────────────
 
 /**
@@ -38,7 +49,7 @@ async function getTransferByProviderRef(
  *
  * Orchestrates:
  * 1. Looks up the transfer by canonical providerCode + providerRef
- * 2. Validates transfer state (must be `confirmed`)
+ * 2. Validates transfer state (must be `confirmed` or legacy `completed`)
  * 3. Fires the transfer GT transition once via `processReversalCascade`
  *
  * Transfer effects then reconcile any linked collection attempt and the
@@ -68,7 +79,7 @@ export async function handlePaymentReversal(
 		};
 	}
 
-	if (transfer.status !== "confirmed") {
+	if (!isConfirmedLikeTransferStatus(transfer.status)) {
 		return {
 			success: false,
 			reason: "invalid_state",

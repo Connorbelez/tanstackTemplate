@@ -189,11 +189,12 @@ export const fieldLayoutEligibilityValidator = v.object({
 });
 
 export const fieldEditabilityValidator = v.object({
-	mode: v.string(),
+	mode: editabilityModeValidator,
+	reason: v.optional(v.string()),
 });
 
 export const fieldAggregationValidator = v.object({
 	enabled: v.boolean(),
 	reason: v.optional(v.string()),
-	supportedFunctions: v.array(v.string()),
+	supportedFunctions: v.array(aggregateFnValidator),
 });

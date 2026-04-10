@@ -170,6 +170,7 @@ describe("workout plans", () => {
 		for (const originalPlanEntryId of originalPlanEntryIds) {
 			const original = await t.run((ctx) => ctx.db.get(originalPlanEntryId));
 			expect(original?.status).toBe("cancelled");
+			expect(original?.cancelledAt).toBe(asOf);
 			expect(original?.supersededByWorkoutPlanId).toBe(
 				createResult.workoutPlanId
 			);
@@ -374,6 +375,9 @@ describe("workout plans", () => {
 		expect(workoutOwnedEntries).toHaveLength(2);
 		expect(
 			workoutOwnedEntries.every((entry) => entry.status === "cancelled")
+		).toBe(true);
+		expect(
+			workoutOwnedEntries.every((entry) => entry.cancelledAt === asOf)
 		).toBe(true);
 		expect(
 			workoutOwnedEntries.every(

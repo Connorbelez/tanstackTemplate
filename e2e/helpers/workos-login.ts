@@ -36,15 +36,18 @@ export async function loginViaWorkOS(
 		.then(() => true)
 		.catch(() => false);
 	if (hasOrgPicker) {
-		const preferredOrgButton = page.getByRole("button", {
+		const orgPicker = orgHeading.locator("xpath=ancestor::*[.//button][1]");
+		const preferredOrgButton = orgPicker.getByRole("button", {
 			name: "FairLendStaff",
 			exact: true,
 		});
+		const fallbackOrgButton = orgPicker.getByRole("button").first();
 		const targetOrgButton = await preferredOrgButton
 			.waitFor({ state: "visible", timeout: 2000 })
 			.then(() => preferredOrgButton)
-			.catch(() => page.getByRole("button").first());
-		await targetOrgButton.click({ force: true });
+			.catch(() => fallbackOrgButton);
+		await targetOrgButton.waitFor({ state: "visible", timeout: 2000 });
+		await targetOrgButton.click();
 	}
 
 	// ── Step 3b: Optional passkey prompt ──
