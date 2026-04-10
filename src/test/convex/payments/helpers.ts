@@ -58,19 +58,21 @@ export async function seedCollectionRules(
 		ctx.db.query("collectionRules").collect()
 	);
 
-	const scheduleRuleId = rules.find(
-		(rule) => (rule.code ?? rule.name) === "schedule_rule"
-	)?._id;
-	const retryRuleId = rules.find(
-		(rule) => (rule.code ?? rule.name) === "retry_rule"
-	)?._id;
-	const lateFeeRuleId = rules.find(
-		(rule) => (rule.code ?? rule.name) === "late_fee_rule"
-	)?._id;
+	const getCanonicalRuleId = (ruleCode: string) => {
+		const matches = rules.filter(
+			(rule) => (rule.code ?? rule.name) === ruleCode
+		);
+		if (matches.length !== 1) {
+			throw new Error(
+				`Expected exactly one canonical ${ruleCode} rule, found ${matches.length}`
+			);
+		}
+		return matches[0]._id;
+	};
 
-	if (!scheduleRuleId || !retryRuleId || !lateFeeRuleId) {
-		throw new Error("Expected canonical collection rules to be seeded");
-	}
+	const scheduleRuleId = getCanonicalRuleId("schedule_rule");
+	const retryRuleId = getCanonicalRuleId("retry_rule");
+	const lateFeeRuleId = getCanonicalRuleId("late_fee_rule");
 
 	return { scheduleRuleId, retryRuleId, lateFeeRuleId };
 }
