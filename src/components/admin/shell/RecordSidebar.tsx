@@ -17,6 +17,10 @@ import { Button } from "#/components/ui/button";
 import { Sheet, SheetContent, SheetHeader } from "#/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "#/components/ui/tabs";
 import { EMPTY_ADMIN_DETAIL_SEARCH } from "#/lib/admin-detail-search";
+import {
+	getDedicatedAdminRecordRoute,
+	isDedicatedAdminEntityType,
+} from "#/lib/admin-entity-routes";
 import { cn } from "#/lib/utils";
 import { api } from "../../../../convex/_generated/api";
 import type { Doc } from "../../../../convex/_generated/dataModel";
@@ -130,6 +134,28 @@ export function AdminRecordDetailSurface({
 			}),
 		[adapters, objectDef, resolvedEntityType]
 	);
+	const fullPageTarget = useMemo(() => {
+		if (!resolvedEntityType) {
+			return null;
+		}
+
+		if (isDedicatedAdminEntityType(resolvedEntityType)) {
+			return {
+				to: getDedicatedAdminRecordRoute(resolvedEntityType),
+				params: {
+					recordid: reference.recordId,
+				},
+			} as const;
+		}
+
+		return {
+			to: "/admin/$entitytype/$recordid" as const,
+			params: {
+				entitytype: resolvedEntityType,
+				recordid: reference.recordId,
+			},
+		} as const;
+	}, [reference.recordId, resolvedEntityType]);
 	const recordKind =
 		reference.recordKind ?? (objectDef?.isSystem ? "native" : "record");
 	const shouldLoadLiveRecord =
@@ -219,16 +245,13 @@ export function AdminRecordDetailSurface({
 								<span className="sr-only">Back</span>
 							</Button>
 						) : null}
-						{resolvedEntityType ? (
+						{fullPageTarget ? (
 							<Button asChild size="sm" variant="outline">
 								<Link
 									onClick={() => onClose?.()}
-									params={{
-										entitytype: resolvedEntityType,
-										recordid: reference.recordId,
-									}}
+									params={fullPageTarget.params}
 									search={EMPTY_ADMIN_DETAIL_SEARCH}
-									to="/admin/$entitytype/$recordid"
+									to={fullPageTarget.to}
 									viewTransition
 								>
 									Open Full Page

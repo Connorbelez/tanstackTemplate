@@ -33,6 +33,7 @@ export interface CrmDemoTableResult {
 		updatedAt: number;
 	}>;
 	totalCount: number;
+	totalCountExact: boolean;
 }
 
 export interface CrmDemoKanbanGroup {

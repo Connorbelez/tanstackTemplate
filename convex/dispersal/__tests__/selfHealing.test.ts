@@ -1,6 +1,7 @@
 import { makeFunctionReference } from "convex/server";
 import { convexTest } from "convex-test";
 import { describe, expect, it, vi } from "vitest";
+import { registerAuditLogComponent } from "../../../src/test/convex/registerAuditLogComponent";
 import type { Id } from "../../_generated/dataModel";
 import type { QueryCtx } from "../../_generated/server";
 import auditTrailSchema from "../../components/auditTrail/schema";
@@ -9,7 +10,6 @@ import {
 	convexModules,
 	auditTrailModules as sharedAuditTrailModules,
 } from "../../test/moduleMaps";
-import { registerAuditLogComponent } from "../../test/registerAuditLogComponent";
 import { findSettledWithoutDispersals } from "../selfHealing";
 import type { HealingCandidate } from "../selfHealingTypes";
 

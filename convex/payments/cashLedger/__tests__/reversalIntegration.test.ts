@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { registerAuditLogComponent } from "../../../../src/test/convex/registerAuditLogComponent";
 import type { Doc, Id } from "../../../_generated/dataModel";
 import { convexModules } from "../../../test/moduleMaps";
-import { registerAuditLogComponent } from "../../../test/registerAuditLogComponent";
 import {
 	type CashAccountSpec,
 	findCashAccount,

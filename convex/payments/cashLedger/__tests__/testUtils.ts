@@ -1,9 +1,9 @@
 import { convexTest } from "convex-test";
+import { registerAuditLogComponent } from "../../../../src/test/convex/registerAuditLogComponent";
 import type { Doc, Id } from "../../../_generated/dataModel";
 import auditTrailSchema from "../../../components/auditTrail/schema";
 import schema from "../../../schema";
 import { auditTrailModules } from "../../../test/moduleMaps";
-import { registerAuditLogComponent } from "../../../test/registerAuditLogComponent";
 import { getOrCreateCashAccount } from "../accounts";
 import { type PostCashEntryInput, postCashEntryInternal } from "../postEntry";
 import type { CashAccountFamily, ControlSubaccount } from "../types";

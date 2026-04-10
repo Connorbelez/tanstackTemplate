@@ -96,6 +96,8 @@ export const convexModules: ModuleMap = withModuleAliases({
 	"/convex/crm/linkTypes.ts": async () => await import("./../crm/linkTypes.ts"),
 	"/convex/crm/metadataCompiler.ts": async () =>
 		await import("./../crm/metadataCompiler.ts"),
+	"/convex/crm/migrations.ts": async () =>
+		await import("./../crm/migrations.ts"),
 	"/convex/crm/objectDefs.ts": async () =>
 		await import("./../crm/objectDefs.ts"),
 	"/convex/crm/recordLinks.ts": async () =>
@@ -538,8 +540,6 @@ export const convexModules: ModuleMap = withModuleAliases({
 	"/convex/test/authTestEndpoints.ts": async () =>
 		await import("./authTestEndpoints.ts"),
 	"/convex/test/moduleMaps.ts": async () => await import("./moduleMaps.ts"),
-	"/convex/test/registerAuditLogComponent.ts": async () =>
-		await import("./registerAuditLogComponent.ts"),
 	"/convex/todos.ts": async () => await import("./../todos.ts"),
 });
 

@@ -1,4 +1,5 @@
 import type { Doc, Id } from "../_generated/dataModel";
+import { materializeFieldDef } from "./metadataCompiler";
 import type {
 	EntityViewAdapterContract,
 	EntityViewComputedFieldContract,
@@ -8,6 +9,7 @@ import type {
 } from "./types";
 
 type FieldDef = Doc<"fieldDefs">;
+type MaterializedFieldDef = ReturnType<typeof materializeFieldDef>;
 type ObjectDef = Doc<"objectDefs">;
 
 interface EntityViewAdapterDefinition {
@@ -156,7 +158,7 @@ const ENTITY_VIEW_ADAPTERS_BY_ALIAS = new Map<
 
 function buildSupportedLayouts(args: {
 	currentLayout: ViewLayout;
-	fieldDefs: readonly FieldDef[];
+	fieldDefs: readonly MaterializedFieldDef[];
 }): ViewLayout[] {
 	const supportedLayouts = new Set<ViewLayout>(["table"]);
 
@@ -190,7 +192,7 @@ function sanitizeFieldNames(
 }
 
 function resolveFieldCandidate(
-	fieldDefs: readonly FieldDef[],
+	fieldDefs: readonly MaterializedFieldDef[],
 	candidates: readonly string[]
 ): string | undefined {
 	const availableFieldNames = new Set(
@@ -199,7 +201,9 @@ function resolveFieldCandidate(
 	return candidates.find((candidate) => availableFieldNames.has(candidate));
 }
 
-function deriveFallbackVisibleFields(fieldDefs: readonly FieldDef[]): string[] {
+function deriveFallbackVisibleFields(
+	fieldDefs: readonly MaterializedFieldDef[]
+): string[] {
 	return [...fieldDefs]
 		.filter((fieldDef) => fieldDef.isVisibleByDefault)
 		.sort((left, right) => left.displayOrder - right.displayOrder)
@@ -207,7 +211,7 @@ function deriveFallbackVisibleFields(fieldDefs: readonly FieldDef[]): string[] {
 }
 
 function deriveCalendarFieldName(
-	fieldDefs: readonly FieldDef[]
+	fieldDefs: readonly MaterializedFieldDef[]
 ): string | undefined {
 	return fieldDefs.find(
 		(fieldDef) => fieldDef.layoutEligibility.calendar.enabled
@@ -215,7 +219,7 @@ function deriveCalendarFieldName(
 }
 
 function deriveKanbanFieldName(
-	fieldDefs: readonly FieldDef[]
+	fieldDefs: readonly MaterializedFieldDef[]
 ): string | undefined {
 	return (
 		resolveFieldCandidate(fieldDefs, DEFAULT_STATUS_FIELD_CANDIDATES) ??
@@ -265,7 +269,7 @@ function resolveFallbackEntityType(objectDef: ObjectDef): string {
 
 function buildLayoutDefaults(args: {
 	definition: EntityViewAdapterDefinition | undefined;
-	fieldDefs: readonly FieldDef[];
+	fieldDefs: readonly MaterializedFieldDef[];
 }): EntityViewLayoutDefaultsContract {
 	const availableFieldNames = new Set(
 		args.fieldDefs.map((fieldDef) => fieldDef.name)
@@ -297,7 +301,7 @@ function buildLayoutDefaults(args: {
 
 function normalizeOverrides(
 	overrides: readonly EntityViewFieldOverrideContract[] | undefined,
-	fieldDefs: readonly FieldDef[]
+	fieldDefs: readonly MaterializedFieldDef[]
 ): EntityViewFieldOverrideContract[] {
 	const availableFieldNames = new Set(
 		fieldDefs.map((fieldDef) => fieldDef.name)
@@ -316,6 +320,7 @@ export function resolveEntityViewAdapterContract(args: {
 	const definition = resolveEntityViewDefinition(args.objectDef);
 	const entityType =
 		definition?.entityType ?? resolveFallbackEntityType(args.objectDef);
+	const materializedFieldDefs = args.fieldDefs.map(materializeFieldDef);
 
 	return {
 		variant: definition ? "dedicated" : "fallback",
@@ -326,25 +331,25 @@ export function resolveEntityViewAdapterContract(args: {
 			surfaceKey: entityType,
 		},
 		detailSurfaceKey: definition?.detail.surfaceKey ?? entityType,
-		titleFieldName: resolveFieldCandidate(args.fieldDefs, [
+		titleFieldName: resolveFieldCandidate(materializedFieldDefs, [
 			...(definition?.titleFieldCandidates ?? []),
 			...DEFAULT_TITLE_FIELD_CANDIDATES,
 		]),
-		statusFieldName: resolveFieldCandidate(args.fieldDefs, [
+		statusFieldName: resolveFieldCandidate(materializedFieldDefs, [
 			...(definition?.statusFieldCandidates ?? []),
 			...DEFAULT_STATUS_FIELD_CANDIDATES,
 		]),
 		supportedLayouts: buildSupportedLayouts({
 			currentLayout: args.currentLayout,
-			fieldDefs: args.fieldDefs,
+			fieldDefs: materializedFieldDefs,
 		}),
 		layoutDefaults: buildLayoutDefaults({
 			definition,
-			fieldDefs: args.fieldDefs,
+			fieldDefs: materializedFieldDefs,
 		}),
 		fieldOverrides: normalizeOverrides(
 			definition?.fieldOverrides,
-			args.fieldDefs
+			materializedFieldDefs
 		),
 		computedFields: [...(definition?.computedFields ?? [])],
 	};

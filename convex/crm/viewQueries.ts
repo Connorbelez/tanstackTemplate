@@ -58,6 +58,7 @@ interface NativeTablePage {
 const OFFSET_CURSOR_PATTERN = /^[0-9]+$/;
 const NATIVE_CURSOR_PREFIX = "native:";
 const COUNT_PAGE_SIZE = 256;
+const UNFILTERED_TOTAL_COUNT_CAP = 1000;
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -71,6 +72,7 @@ interface TableViewResult {
 	page: EntityViewPageResult;
 	rows: UnifiedRecord[];
 	totalCount: number;
+	totalCountExact: boolean;
 	truncated: boolean;
 	view: SystemViewDefinition;
 	viewType: ViewLayout;
@@ -94,6 +96,7 @@ interface KanbanViewResult {
 	groups: KanbanGroup[];
 	needsRepair: boolean;
 	totalCount: number;
+	totalCountExact: boolean;
 	truncated: boolean;
 	view: SystemViewDefinition;
 	viewType: ViewLayout;
@@ -317,6 +320,7 @@ function buildPageResult(args: {
 	records: UnifiedRecord[];
 	columns: ViewColumnDefinition[];
 	totalCount: number;
+	totalCountExact: boolean;
 	truncated: boolean;
 }): EntityViewPageResult {
 	return {
@@ -326,6 +330,7 @@ function buildPageResult(args: {
 		returnedCount: args.records.length,
 		rows: buildEntityViewRows(args.records, args.columns),
 		totalCount: args.totalCount,
+		totalCountExact: args.totalCountExact,
 		truncated: args.truncated,
 	};
 }
@@ -333,12 +338,21 @@ function buildPageResult(args: {
 async function countUnfilteredRecords(
 	ctx: QueryCtx,
 	state: ResolvedViewState
-): Promise<number> {
+): Promise<{ totalCount: number; totalCountExact: boolean }> {
 	let total = 0;
 	let cursor: string | null = null;
 	let isDone = false;
 
 	while (!isDone) {
+		const remainingCapacity = UNFILTERED_TOTAL_COUNT_CAP - total;
+		if (remainingCapacity <= 0) {
+			return {
+				totalCount: UNFILTERED_TOTAL_COUNT_CAP,
+				totalCountExact: false,
+			};
+		}
+		const pageSize = Math.min(COUNT_PAGE_SIZE, remainingCapacity + 1);
+
 		if (state.objectDef.isSystem && state.objectDef.nativeTable) {
 			const page: NativeTablePage = await queryNativeTable(
 				ctx,
@@ -346,10 +360,16 @@ async function countUnfilteredRecords(
 				state.viewDef.orgId,
 				{
 					cursor,
-					numItems: COUNT_PAGE_SIZE,
+					numItems: pageSize,
 				}
 			);
 			total += page.page.length;
+			if (total > UNFILTERED_TOTAL_COUNT_CAP) {
+				return {
+					totalCount: UNFILTERED_TOTAL_COUNT_CAP,
+					totalCountExact: false,
+				};
+			}
 			cursor = page.continueCursor;
 			isDone = page.isDone;
 			continue;
@@ -365,14 +385,20 @@ async function countUnfilteredRecords(
 			.filter((q) => q.eq(q.field("isDeleted"), false))
 			.paginate({
 				cursor,
-				numItems: COUNT_PAGE_SIZE,
+				numItems: pageSize,
 			});
 		total += page.page.length;
+		if (total > UNFILTERED_TOTAL_COUNT_CAP) {
+			return {
+				totalCount: UNFILTERED_TOTAL_COUNT_CAP,
+				totalCountExact: false,
+			};
+		}
 		cursor = page.continueCursor;
 		isDone = page.isDone;
 	}
 
-	return total;
+	return { totalCount: total, totalCountExact: true };
 }
 
 async function paginateUnfilteredTableRecords(
@@ -563,7 +589,7 @@ async function queryTableView(
 		recordFilters.length > 0 || state.view.aggregatePresets.length > 0;
 
 	if (!hasWindowedViewRequirements) {
-		const [pagedRecords, totalCount] = await Promise.all([
+		const [pagedRecords, totalCountSummary] = await Promise.all([
 			paginateUnfilteredTableRecords(ctx, state, cursor ?? null, limit),
 			countUnfilteredRecords(ctx, state),
 		]);
@@ -581,11 +607,13 @@ async function queryTableView(
 				limit,
 				records: pagedRecords.records,
 				columns: state.columns,
-				totalCount,
+				totalCount: totalCountSummary.totalCount,
+				totalCountExact: totalCountSummary.totalCountExact,
 				truncated: false,
 			}),
 			rows,
-			totalCount,
+			totalCount: totalCountSummary.totalCount,
+			totalCountExact: totalCountSummary.totalCountExact,
 			truncated: false,
 		};
 	}
@@ -619,10 +647,12 @@ async function queryTableView(
 			records: page,
 			columns: state.columns,
 			totalCount: filtered.length,
+			totalCountExact: !assembled.truncated,
 			truncated: assembled.truncated,
 		}),
 		rows,
 		totalCount: filtered.length,
+		totalCountExact: !assembled.truncated,
 		truncated: assembled.truncated,
 	};
 }
@@ -663,6 +693,7 @@ async function queryKanbanView(
 			state.columns
 		),
 		totalCount: filtered.length,
+		totalCountExact: !assembled.truncated,
 		truncated: assembled.truncated,
 	};
 }
@@ -749,25 +780,30 @@ export const getViewSchema = crmQuery
 		const sortableFieldIds = new Set(
 			sortCapabilities.map((cap) => cap.fieldDefId.toString())
 		);
+		const schemaFieldsByName = new Map(
+			state.fields.map((field) => [field.name, field])
+		);
 
 		const columns = state.columns.flatMap((column) => {
-			const fieldDef = state.fieldDefsById.get(column.fieldDefId.toString());
-			if (!fieldDef) {
+			const schemaField = schemaFieldsByName.get(column.name);
+			if (!schemaField) {
 				return [];
 			}
 
 			return [
 				{
 					...column,
-					normalizedFieldKind: fieldDef.normalizedFieldKind,
-					rendererHint: fieldDef.rendererHint,
-					relation: fieldDef.relation,
-					layoutEligibility: fieldDef.layoutEligibility,
-					aggregation: fieldDef.aggregation,
-					editability: fieldDef.editability,
-					options: fieldDef.options,
-					isVisibleByDefault: fieldDef.isVisibleByDefault,
-					hasSortCapability: sortableFieldIds.has(column.fieldDefId.toString()),
+					normalizedFieldKind: schemaField.normalizedFieldKind,
+					rendererHint: schemaField.rendererHint,
+					relation: schemaField.relation,
+					layoutEligibility: schemaField.layoutEligibility,
+					aggregation: schemaField.aggregation,
+					editability: schemaField.editability,
+					options: schemaField.options,
+					isVisibleByDefault: schemaField.isVisibleByDefault,
+					hasSortCapability:
+						schemaField.fieldSource === "persisted" &&
+						sortableFieldIds.has(column.fieldDefId.toString()),
 				},
 			];
 		});

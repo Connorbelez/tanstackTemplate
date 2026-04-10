@@ -1110,6 +1110,28 @@ describe("View Engine", () => {
 				expect(["new", "qualified"]).toContain(row.fields.status);
 			}
 		});
+
+		it("between filter throws a clear error for table views", async () => {
+			const fixture = await seedLeadFixture(t);
+
+			await t.run(async (ctx) => {
+				await ctx.db.insert("viewFilters", {
+					viewDefId: fixture.defaultViewId,
+					fieldDefId: fixture.fieldDefs.deal_value,
+					operator: "between",
+					value: JSON.stringify([10_000, 50_000]),
+				});
+			});
+
+			await expect(
+				asAdmin(t).query(api.crm.viewQueries.queryViewRecords, {
+					viewDefId: fixture.defaultViewId,
+					limit: 25,
+				})
+			).rejects.toThrow(
+				'Operator "between" is not supported by table or kanban view filtering yet'
+			);
+		});
 	});
 
 	// ── View schema ─────────────────────────────────────────────────
@@ -1439,11 +1461,10 @@ describe("System object view queries", () => {
 		expect(borrowerObjDef.nativeTable).toBeTruthy();
 
 		await t.run(async (ctx) => {
-			const now = Date.now();
 			const userId = await ctx.db.insert("users", {
-				authId: "crm-system-borrower",
-				email: "crm-system-borrower@test.fairlend.ca",
-				firstName: "System",
+				authId: "borrower-auth-1",
+				email: "borrower@test.fairlend.ca",
+				firstName: "Native",
 				lastName: "Borrower",
 			});
 
@@ -1451,7 +1472,7 @@ describe("System object view queries", () => {
 				status: "active",
 				orgId: CRM_ADMIN_IDENTITY.org_id,
 				userId,
-				createdAt: now,
+				createdAt: Date.now(),
 			});
 		});
 

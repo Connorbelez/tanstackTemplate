@@ -1,6 +1,7 @@
 "use client";
 
 import { Link } from "@tanstack/react-router";
+import type { ReactNode } from "react";
 import { useAdminDetailSheet } from "#/hooks/useAdminDetailSheet";
 import {
 	getDedicatedAdminRecordRoute,
@@ -32,7 +33,7 @@ export function AdminDetailSheet({ entityType }: AdminDetailSheetProps) {
 		entityType: undefined,
 		recordId: undefined,
 	} as const;
-	let recordLink = (
+	let recordLink: ReactNode = (
 		<span className="cursor-not-allowed text-muted-foreground">
 			View record (select a row first)
 		</span>
