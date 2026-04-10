@@ -13,9 +13,9 @@ import { generateObligationsImpl } from "../payments/obligations/generateImpl";
 // ---------------------------------------------------------------------------
 
 interface SeedPaymentDataResult {
+	createdPlanEntryIds: Id<"collectionPlanEntries">[];
 	generated: { obligations: number; planEntries: number };
 	obligationIds: Id<"obligations">[];
-	planEntryIds: Id<"collectionPlanEntries">[];
 	reused: {
 		obligations: number;
 		planEntries: number;
@@ -101,7 +101,7 @@ async function seedPaymentDataImpl(
 
 	return {
 		obligationIds,
-		planEntryIds: schedulingResult.createdPlanEntryIds,
+		createdPlanEntryIds: schedulingResult.createdPlanEntryIds,
 		generated: {
 			obligations: generatedObligations,
 			planEntries: schedulingResult.created,

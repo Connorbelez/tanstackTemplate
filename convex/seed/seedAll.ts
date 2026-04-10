@@ -56,9 +56,9 @@ interface SeedOnboardingRequestResult {
 }
 
 interface SeedPaymentDataResult {
+	createdPlanEntryIds: Id<"collectionPlanEntries">[];
 	generated: { obligations: number; planEntries: number };
 	obligationIds: Id<"obligations">[];
-	planEntryIds: Id<"collectionPlanEntries">[];
 	reused: { obligations: number; planEntries: number };
 }
 
