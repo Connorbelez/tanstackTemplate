@@ -179,6 +179,7 @@ async function setupFullSettlementState(
 	// 3. Create collectionPlanEntry + collectionAttempt
 	const attemptId = await t.run(async (ctx) => {
 		const planEntryId = await ctx.db.insert("collectionPlanEntries", {
+			mortgageId,
 			obligationIds: [obligationId],
 			amount: TOTAL_AMOUNT,
 			method: "manual",
@@ -191,6 +192,8 @@ async function setupFullSettlementState(
 		return ctx.db.insert("collectionAttempts", {
 			status: "settled",
 			planEntryId,
+			mortgageId,
+			obligationIds: [obligationId],
 			method: "manual",
 			amount: TOTAL_AMOUNT,
 			initiatedAt: Date.now() - 60_000,

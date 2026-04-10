@@ -108,9 +108,9 @@ export const findOrphanedConfirmedTransfersForHealing = internalQuery({
 
 /**
  * Placeholder effect for retrying transfer confirmation.
- * TODO: Replace with actual publishTransferConfirmed call when implemented.
- * WARNING: This is a no-op — the cron counts the result as "retriggered"
- * but no actual retry occurs. The healing attempt record tracks state.
+ * TODO: Replace with an actual publishTransferConfirmed retrigger hook.
+ * This mutation intentionally does nothing today; callers must treat the
+ * resulting healing state as "pending_no_effect", not as a real retry.
  */
 export const retryTransferConfirmationEffect = internalMutation({
 	args: {
@@ -323,9 +323,9 @@ export const retriggerTransferConfirmation = internalMutation({
 			}
 		);
 
-		// NOTE: retryTransferConfirmationEffect is currently a no-op placeholder.
-		// Return "pending_no_effect" so the batch summary distinguishes real retries
-		// from placeholder no-ops. Change to "retriggered" once a real publish hook exists.
+		// NOTE: retryTransferConfirmationEffect is an explicit no-op placeholder.
+		// Return "pending_no_effect" so reports distinguish documented placeholder
+		// scheduling from a real publishTransferConfirmed retrigger.
 		return { action: "pending_no_effect" as const, attemptCount };
 	},
 });

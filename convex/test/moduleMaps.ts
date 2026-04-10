@@ -388,16 +388,10 @@ export const convexModules: ModuleMap = {
 		await import("./../payments/collectionPlan/seed.ts"),
 	"/convex/payments/collectionPlan/stubs.ts": async () =>
 		await import("./../payments/collectionPlan/stubs.ts"),
+	"/convex/payments/collectionPlan/workout.ts": async () =>
+		await import("./../payments/collectionPlan/workout.ts"),
 	"/convex/payments/dispersal/stubs.ts": async () =>
 		await import("./../payments/dispersal/stubs.ts"),
-	"/convex/payments/methods/interface.ts": async () =>
-		await import("./../payments/methods/interface.ts"),
-	"/convex/payments/methods/manual.ts": async () =>
-		await import("./../payments/methods/manual.ts"),
-	"/convex/payments/methods/mockPAD.ts": async () =>
-		await import("./../payments/methods/mockPAD.ts"),
-	"/convex/payments/methods/registry.ts": async () =>
-		await import("./../payments/methods/registry.ts"),
 	"/convex/payments/obligations/createCorrectiveObligation.ts": async () =>
 		await import("./../payments/obligations/createCorrectiveObligation.ts"),
 	"/convex/payments/obligations/crons.ts": async () =>
@@ -442,8 +436,6 @@ export const convexModules: ModuleMap = {
 		await import("./../payments/transfers/principalReturn.logic.ts"),
 	"/convex/payments/transfers/principalReturn.ts": async () =>
 		await import("./../payments/transfers/principalReturn.ts"),
-	"/convex/payments/transfers/providers/adapter.ts": async () =>
-		await import("./../payments/transfers/providers/adapter.ts"),
 	"/convex/payments/transfers/providers/manual.ts": async () =>
 		await import("./../payments/transfers/providers/manual.ts"),
 	"/convex/payments/transfers/providers/mock.ts": async () =>

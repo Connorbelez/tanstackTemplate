@@ -124,10 +124,12 @@ async function createPlanEntryAndReversedAttempt(
 	args: {
 		obligationIds: Id<"obligations">[];
 		amount: number;
+		mortgageId: Id<"mortgages">;
 	}
 ) {
 	return t.run(async (ctx) => {
 		const planEntryId = await ctx.db.insert("collectionPlanEntries", {
+			mortgageId: args.mortgageId,
 			obligationIds: args.obligationIds,
 			amount: args.amount,
 			method: "manual",
@@ -139,6 +141,8 @@ async function createPlanEntryAndReversedAttempt(
 
 		const attemptId = await ctx.db.insert("collectionAttempts", {
 			planEntryId,
+			mortgageId: args.mortgageId,
+			obligationIds: args.obligationIds,
 			amount: args.amount,
 			method: "manual",
 			status: "reversed",
@@ -167,6 +171,7 @@ describe("emitPaymentReversed integration", () => {
 		const { attemptId } = await createPlanEntryAndReversedAttempt(t, {
 			obligationIds: [], // placeholder — will be updated
 			amount: partialPayAmount,
+			mortgageId: seeded.mortgageId,
 		});
 
 		const postingGroupId = `cash-receipt:${attemptId as string}`;
@@ -272,6 +277,7 @@ describe("emitPaymentReversed integration", () => {
 		const { attemptId } = await createPlanEntryAndReversedAttempt(t, {
 			obligationIds: [],
 			amount,
+			mortgageId: seeded.mortgageId,
 		});
 
 		const postingGroupId = `cash-receipt:${attemptId as string}`;
@@ -342,6 +348,7 @@ describe("emitPaymentReversed integration", () => {
 		const { attemptId } = await createPlanEntryAndReversedAttempt(t, {
 			obligationIds: [],
 			amount,
+			mortgageId: seeded.mortgageId,
 		});
 
 		const postingGroupId = `cash-receipt:${attemptId as string}`;
@@ -436,6 +443,7 @@ describe("emitPaymentReversed integration", () => {
 		const { attemptId } = await createPlanEntryAndReversedAttempt(t, {
 			obligationIds: [],
 			amount,
+			mortgageId: seeded.mortgageId,
 		});
 
 		const postingGroupId = `cash-receipt:${attemptId as string}`;

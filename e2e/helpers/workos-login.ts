@@ -36,8 +36,30 @@ export async function loginViaWorkOS(
 		.then(() => true)
 		.catch(() => false);
 	if (hasOrgPicker) {
-		// Org picker page only contains org buttons — pick the first one
-		await page.getByRole("button").first().click();
+		const orgPicker = orgHeading.locator("xpath=ancestor::*[.//button][1]");
+		const preferredOrgButton = orgPicker.getByRole("button", {
+			name: "FairLendStaff",
+			exact: true,
+		});
+		const fallbackOrgButton = orgPicker.getByRole("button").first();
+		const targetOrgButton = await preferredOrgButton
+			.waitFor({ state: "visible", timeout: 2000 })
+			.then(() => preferredOrgButton)
+			.catch(() => fallbackOrgButton);
+		await targetOrgButton.waitFor({ state: "visible", timeout: 2000 });
+		await targetOrgButton.click();
+	}
+
+	// ── Step 3b: Optional passkey prompt ──
+	const skipPasskeyButton = page.getByRole("button", {
+		name: "Skip for now",
+	});
+	const hasPasskeyPrompt = await skipPasskeyButton
+		.waitFor({ state: "visible", timeout: 5000 })
+		.then(() => true)
+		.catch(() => false);
+	if (hasPasskeyPrompt) {
+		await skipPasskeyButton.click();
 	}
 
 	// ── Step 4: Wait for redirect back to app ──

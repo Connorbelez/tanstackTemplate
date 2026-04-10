@@ -4,7 +4,7 @@ import dotenv from "dotenv";
 
 dotenv.config({ path: path.resolve(import.meta.dirname, ".env.local") });
 
-const e2ePort = 3100;
+const e2ePort = Number(process.env.E2E_PORT ?? 3100);
 const e2eBaseUrl = `http://127.0.0.1:${e2ePort}`;
 
 export default defineConfig({
@@ -19,7 +19,11 @@ export default defineConfig({
 		trace: "on-first-retry",
 	},
 	webServer: {
-		command: "bun run dev:e2e",
+		command: `vite dev --host 127.0.0.1 --port ${e2ePort}`,
+		env: {
+			WORKOS_REDIRECT_URI: `http://127.0.0.1:${e2ePort}/callback`,
+			VITE_E2E: "true",
+		},
 		url: `${e2eBaseUrl}/about`,
 		reuseExistingServer: !process.env.CI,
 		timeout: 120_000,
@@ -34,6 +38,7 @@ export default defineConfig({
 			name: "chromium",
 			testDir: "./e2e",
 			testIgnore: [
+				"amps/**",
 				"auth/**",
 				"rbac/**",
 				"deal-closing/**",
@@ -88,6 +93,24 @@ export default defineConfig({
 			use: {
 				...devices["Desktop Chrome"],
 				storageState: ".auth/admin.json",
+			},
+		},
+		{
+			name: "amps-demo",
+			testDir: "./e2e/amps",
+			testIgnore: ["auth.setup.ts"],
+			dependencies: ["amps-setup"],
+			use: {
+				...devices["Desktop Chrome"],
+				storageState: ".auth/amps-admin.json",
+			},
+		},
+		{
+			name: "amps-setup",
+			testDir: "./e2e/amps",
+			testMatch: "auth.setup.ts",
+			use: {
+				...devices["Desktop Chrome"],
 			},
 		},
 	],

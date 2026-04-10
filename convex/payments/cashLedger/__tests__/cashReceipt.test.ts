@@ -284,6 +284,7 @@ describe("postOverpaymentToUnappliedCash", () => {
 		// Need a collectionAttempt for the attemptId
 		const attemptId = await t.run(async (ctx) => {
 			const planEntryId = await ctx.db.insert("collectionPlanEntries", {
+				mortgageId: seeded.mortgageId,
 				obligationIds: [],
 				amount: 75_000,
 				method: "manual",
@@ -294,6 +295,8 @@ describe("postOverpaymentToUnappliedCash", () => {
 			});
 			return ctx.db.insert("collectionAttempts", {
 				planEntryId,
+				mortgageId: seeded.mortgageId,
+				obligationIds: [],
 				amount: 75_000,
 				method: "manual",
 				status: "confirmed",
@@ -329,6 +332,7 @@ describe("postOverpaymentToUnappliedCash", () => {
 
 		const attemptId = await t.run(async (ctx) => {
 			const planEntryId = await ctx.db.insert("collectionPlanEntries", {
+				mortgageId: seeded.mortgageId,
 				obligationIds: [],
 				amount: 50_000,
 				method: "manual",
@@ -339,6 +343,8 @@ describe("postOverpaymentToUnappliedCash", () => {
 			});
 			return ctx.db.insert("collectionAttempts", {
 				planEntryId,
+				mortgageId: seeded.mortgageId,
+				obligationIds: [],
 				amount: 50_000,
 				method: "manual",
 				status: "confirmed",
@@ -369,6 +375,7 @@ describe("postOverpaymentToUnappliedCash", () => {
 
 		const attemptId = await t.run(async (ctx) => {
 			const planEntryId = await ctx.db.insert("collectionPlanEntries", {
+				mortgageId: seeded.mortgageId,
 				obligationIds: [],
 				amount: 50_000,
 				method: "manual",
@@ -379,6 +386,8 @@ describe("postOverpaymentToUnappliedCash", () => {
 			});
 			return ctx.db.insert("collectionAttempts", {
 				planEntryId,
+				mortgageId: seeded.mortgageId,
+				obligationIds: [],
 				amount: 50_000,
 				method: "manual",
 				status: "confirmed",
@@ -407,6 +416,7 @@ describe("postOverpaymentToUnappliedCash", () => {
 
 		const attemptId = await t.run(async (ctx) => {
 			const planEntryId = await ctx.db.insert("collectionPlanEntries", {
+				mortgageId: seeded.mortgageId,
 				obligationIds: [],
 				amount: 50_000,
 				method: "manual",
@@ -417,6 +427,8 @@ describe("postOverpaymentToUnappliedCash", () => {
 			});
 			return ctx.db.insert("collectionAttempts", {
 				planEntryId,
+				mortgageId: seeded.mortgageId,
+				obligationIds: [],
 				amount: 50_000,
 				method: "manual",
 				status: "confirmed",

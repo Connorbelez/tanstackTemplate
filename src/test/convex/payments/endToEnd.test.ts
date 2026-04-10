@@ -8,6 +8,7 @@ import {
 	seedBorrowerProfile,
 	seedCollectionAttempt,
 	seedCollectionRules,
+	seedCollectionSettlementPrereqs,
 	seedDefaultGovernedActors,
 	seedMortgage,
 	seedObligation,
@@ -20,8 +21,6 @@ const emitPaymentReceived =
 	internal.engine.effects.collectionAttempt.emitPaymentReceived;
 const emitCollectionFailed =
 	internal.engine.effects.collectionAttempt.emitCollectionFailed;
-const recordProviderRef =
-	internal.engine.effects.collectionAttempt.recordProviderRef;
 const applyPayment = internal.engine.effects.obligationPayment.applyPayment;
 const emitObligationSettled =
 	internal.engine.effects.obligation.emitObligationSettled;
@@ -37,16 +36,20 @@ async function seedBaseEntities(t: GovernedTestConvex) {
 	const obligationId = await seedObligation(t, mortgageId, borrowerId, {
 		status: "due",
 	});
+	await seedCollectionSettlementPrereqs(t, {
+		mortgageId,
+		obligationId,
+	});
 
 	return { mortgageId, obligationId, borrowerId };
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// AC4: Legacy manual compatibility lifecycle
+// AC4: Compatibility-only manual attempt lifecycle
 // Compatibility-only attempt flow: seed → obligation due → plan entry → attempt initiated → FUNDS_SETTLED → confirmed → PAYMENT_APPLIED → obligation settled → PAYMENT_CONFIRMED → mortgage active
 // ══════════════════════════════════════════════════════════════════════════════
 
-describe("AC4: legacy manual compatibility lifecycle", () => {
+describe("AC4: compatibility-only manual attempt lifecycle", () => {
 	beforeEach(() => {
 		vi.useFakeTimers();
 	});
@@ -57,7 +60,7 @@ describe("AC4: legacy manual compatibility lifecycle", () => {
 		vi.useRealTimers();
 	});
 
-	it("should complete the legacy manual compatibility lifecycle: initiated → confirmed → settled → mortgage active", async () => {
+	it("should complete the compatibility-only manual attempt lifecycle: initiated → confirmed → settled → mortgage active", async () => {
 		const t = createGovernedTestConvex();
 		await seedDefaultGovernedActors(t);
 		const { mortgageId, obligationId } = await seedBaseEntities(t);
@@ -80,7 +83,7 @@ describe("AC4: legacy manual compatibility lifecycle", () => {
 			machineContext: { attemptId: "", retryCount: 0, maxRetries: 3 },
 		});
 
-		// Step 1: Fire FUNDS_SETTLED on attempt → confirmed (legacy manual compatibility path)
+		// Step 1: Fire FUNDS_SETTLED on attempt → confirmed (compatibility-only manual path)
 		const result = await fireTransition(
 			t,
 			"collectionAttempt",
@@ -216,11 +219,11 @@ describe("AC4: legacy manual compatibility lifecycle", () => {
 });
 
 // ══════════════════════════════════════════════════════════════════════════════
-// AC5: Legacy mock PAD compatibility path
+// AC5: Compatibility-only mock PAD path
 // Compatibility-only attempt flow with async `pending` state: initiated → pending → confirmed
 // ══════════════════════════════════════════════════════════════════════════════
 
-describe("AC5: legacy mock PAD compatibility path (initiated → pending → confirmed)", () => {
+describe("AC5: compatibility-only mock PAD path (initiated → pending → confirmed)", () => {
 	beforeEach(() => {
 		vi.useFakeTimers();
 	});
@@ -253,32 +256,17 @@ describe("AC5: legacy mock PAD compatibility path (initiated → pending → con
 			machineContext: { attemptId: "", retryCount: 0, maxRetries: 3 },
 		});
 
-		// Step 1: Fire DRAW_INITIATED → pending (async path, providerRef: "mock-pad-ref")
+		// Step 1: Fire DRAW_INITIATED → pending
 		const r1 = await fireTransition(
 			t,
 			"collectionAttempt",
 			attemptId,
 			"DRAW_INITIATED",
-			{ providerRef: "mock-pad-ref" },
 		);
 
 		expect(r1.success).toBe(true);
 		expect(r1.newState).toBe("pending");
-		expect(r1.effectsScheduled).toContain("recordProviderRef");
-
-		// Invoke recordProviderRef effect
-		await t.mutation(
-			recordProviderRef,
-			buildEffectArgs(attemptId, "collectionAttempt", "recordProviderRef", {
-				providerRef: "mock-pad-ref",
-			}),
-		);
-
-		// Verify providerRef was recorded
-		const attemptPending = await t.run(async (ctx) =>
-			ctx.db.get(attemptId),
-		);
-		expect(attemptPending?.providerRef).toBe("mock-pad-ref");
+		expect(r1.effectsScheduled).toHaveLength(0);
 
 		// Step 2: Fire FUNDS_SETTLED on attempt → confirmed
 		const r2 = await fireTransition(
@@ -615,7 +603,7 @@ describe("AC7: retry chain to eventual success", () => {
 			obligationIds: [obligationId],
 			amount,
 			method: "manual",
-			ruleId: rules.retryRuleId,
+			createdByRuleId: rules.retryRuleId,
 		});
 
 		const attemptId = await seedCollectionAttempt(t, {
@@ -631,7 +619,6 @@ describe("AC7: retry chain to eventual success", () => {
 			"collectionAttempt",
 			attemptId,
 			"DRAW_INITIATED",
-			{ providerRef: "test-ref" },
 		);
 		expect(r1.success).toBe(true);
 		expect(r1.newState).toBe("pending");
@@ -664,18 +651,18 @@ describe("AC7: retry chain to eventual success", () => {
 		// Step 5: Drain scheduled work → RetryRule creates new plan entry
 		await drainScheduledWork(t);
 
-		// Verify: new plan entry with source="retry_rule", rescheduledFromId=originalPlanEntryId
+		// Verify: new plan entry with source="retry_rule", retryOfId=originalPlanEntryId
 		const allPlanEntries = await t.run(async (ctx) =>
 			ctx.db.query("collectionPlanEntries").collect(),
 		);
 
 		const retryPlanEntry = allPlanEntries.find(
-			(e) => e.source === "retry_rule" && e.rescheduledFromId === planEntryId,
+			(e) => e.source === "retry_rule" && e.retryOfId === planEntryId,
 		);
 
 		expect(retryPlanEntry).toBeDefined();
 		expect(retryPlanEntry?.status).toBe("planned");
-		expect(retryPlanEntry?.rescheduledFromId).toBe(planEntryId);
+		expect(retryPlanEntry?.retryOfId).toBe(planEntryId);
 
 		// Verify backoff date
 		// retryCount=1 (from machineContext), backoffBaseDays=3

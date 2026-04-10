@@ -66,6 +66,18 @@ function normalizeActionDescriptors(
 	return descriptors;
 }
 
+function randomJournalIdSuffix() {
+	const randomUuid = globalThis.crypto?.randomUUID?.();
+	if (randomUuid) {
+		return randomUuid.slice(0, 8);
+	}
+
+	// Convex-test and some isolated runtimes do not expose Web Crypto globally.
+	// Falling back here preserves unique-enough audit IDs without changing any
+	// transition or persistence semantics.
+	return Math.random().toString(36).slice(2, 10);
+}
+
 /**
  * Checks whether a named action resolves to an XState built-in action (assign, raise, etc.)
  * rather than an effect-marker action. Built-in actions are executed during the pure COMPUTE
@@ -211,7 +223,7 @@ export async function executeTransition(
 	const newStateSerialized = serializeState(newStateValue);
 
 	const resourceType = tableName;
-	let journalEntryId = `${entityType}:${entityId}:${eventType}:${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
+	let journalEntryId = `${entityType}:${entityId}:${eventType}:${Date.now()}-${randomJournalIdSuffix()}`;
 
 	// ── 5. DETECT ────────────────────────────────────────────────────────
 	const scheduledEffects = normalizeActionDescriptors(transitionActions);

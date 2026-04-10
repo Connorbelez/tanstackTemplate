@@ -8,6 +8,7 @@ import {
 	seedBorrowerProfile,
 	seedCollectionAttempt,
 	seedCollectionRules,
+	seedCollectionSettlementPrereqs,
 	seedDefaultGovernedActors,
 	seedMortgage,
 	seedObligation,
@@ -36,6 +37,10 @@ async function seedBaseEntities(t: GovernedTestConvex) {
 	});
 	const obligationId = await seedObligation(t, mortgageId, borrowerId, {
 		status: "due",
+	});
+	await seedCollectionSettlementPrereqs(t, {
+		mortgageId,
+		obligationId,
 	});
 
 	return { mortgageId, obligationId, borrowerId };
@@ -252,7 +257,6 @@ describe("AC2: failure chain (attempt permanent_fail -> COLLECTION_FAILED -> Ret
 			"collectionAttempt",
 			attemptId,
 			"DRAW_INITIATED",
-			{ providerRef: "test-ref" },
 		);
 		expect(r1.success).toBe(true);
 		expect(r1.newState).toBe("pending");
@@ -293,13 +297,13 @@ describe("AC2: failure chain (attempt permanent_fail -> COLLECTION_FAILED -> Ret
 		const retryEntry = allPlanEntries.find(
 			(e) =>
 				e.source === "retry_rule" &&
-				e.rescheduledFromId === planEntryId,
+				e.retryOfId === planEntryId,
 		);
 
 		expect(retryEntry).toBeDefined();
 		expect(retryEntry?.status).toBe("planned");
-		expect(retryEntry?.rescheduledFromId).toBe(planEntryId);
-		expect(retryEntry?.ruleId).toBe(rules.retryRuleId);
+		expect(retryEntry?.retryOfId).toBe(planEntryId);
+		expect(retryEntry?.createdByRuleId).toBe(rules.retryRuleId);
 
 		// Verify the scheduled date has backoff applied
 		// retryCount=1 (incremented by DRAW_FAILED), baseDays=3

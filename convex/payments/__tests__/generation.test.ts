@@ -49,6 +49,7 @@ interface SeedOverrides {
 }
 
 function createTestHarness() {
+	process.env.DISABLE_CASH_LEDGER_HASHCHAIN = "true";
 	return convexTest(schema, modules);
 }
 

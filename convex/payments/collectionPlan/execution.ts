@@ -23,10 +23,15 @@ import {
 	type ProviderCode,
 } from "../transfers/types";
 import {
+	buildBalancePreCheckPatch,
+	evaluateBalancePreCheckForPlanEntry,
+} from "./balancePreCheck";
+import {
 	buildAlreadyExecutedResult,
 	buildAttemptCreatedResult,
 	buildExecutionSource,
 	buildNoopResult,
+	buildNotEligibleResult,
 	buildRejectedResult,
 	buildTransferHandoffIdempotencyKey,
 	buildTransferHandoffMetadata,
@@ -36,6 +41,7 @@ import {
 	executePlanEntryInputValidator,
 	normalizeExecutionIdempotencyKey,
 	type StagePlanEntryExecutionResult,
+	type TransferHandoffRequest,
 } from "./executionContract";
 import {
 	classifyExecutionEligibility,
@@ -151,6 +157,27 @@ function buildTransferHandoffRequest(args: {
 		planEntryId: args.planEntry._id,
 		source: args.context.source,
 	};
+}
+
+class MissingTransferRequestError extends Error {
+	constructor(message: string) {
+		super(message);
+		this.name = "MissingTransferRequestError";
+	}
+}
+
+const RETRY_SAFE_TRANSFERLESS_ATTEMPT_STATES = new Set([
+	"failed",
+	"retry_scheduled",
+	"permanent_fail",
+]);
+
+function canReplayTransferlessAttempt(result: ExecutePlanEntryResult): boolean {
+	return (
+		result.outcome === "already_executed" &&
+		!result.transferRequestId &&
+		RETRY_SAFE_TRANSFERLESS_ATTEMPT_STATES.has(result.attemptStatusAfter)
+	);
 }
 
 async function logPlanEntryExecutionAudit(
@@ -291,37 +318,42 @@ const stagePlanEntryExecution = convex
 				};
 			}
 
-			const handoffContext = prepareTransferHandoffContext({
-				obligations,
-				planEntry,
-				triggerSource: args.triggerSource,
-				requestedByActorId: args.requestedByActorId,
-			});
-			if ("reasonCode" in handoffContext) {
-				const rejected = buildRejectedResult({
-					executionRecordedAt,
-					idempotencyKey: normalizedIdempotencyKey,
-					planEntryId: planEntry._id,
-					planEntryStatusAfter: "executing",
-					reasonCode: handoffContext.reasonCode,
-					reasonDetail: handoffContext.reasonDetail,
+			let transferHandoffRequest: TransferHandoffRequest | undefined;
+			if (existingAttempt.status === "initiated") {
+				const handoffContext = prepareTransferHandoffContext({
+					obligations,
+					planEntry,
+					triggerSource: args.triggerSource,
+					requestedByActorId: args.requestedByActorId,
 				});
-				await logPlanEntryExecutionAudit(ctx, args, rejected);
-				return {
-					result: rejected,
-				};
+				if ("reasonCode" in handoffContext) {
+					const rejected = buildRejectedResult({
+						executionRecordedAt,
+						idempotencyKey: normalizedIdempotencyKey,
+						planEntryId: planEntry._id,
+						planEntryStatusAfter: "executing",
+						reasonCode: handoffContext.reasonCode,
+						reasonDetail: handoffContext.reasonDetail,
+					});
+					await logPlanEntryExecutionAudit(ctx, args, rejected);
+					return {
+						result: rejected,
+					};
+				}
+
+				transferHandoffRequest = buildTransferHandoffRequest({
+					context: handoffContext,
+					collectionAttemptId: existingAttempt._id,
+					idempotencyKey: reconciledExecutionIdempotencyKey,
+					planEntry,
+				});
 			}
 
 			await logPlanEntryExecutionAudit(ctx, args, result);
 			return {
 				existingTransferRequestId: recoveredTransferRequestId,
 				result,
-				transferHandoffRequest: buildTransferHandoffRequest({
-					context: handoffContext,
-					collectionAttemptId: existingAttempt._id,
-					idempotencyKey: reconciledExecutionIdempotencyKey,
-					planEntry,
-				}),
+				transferHandoffRequest,
 			};
 		}
 
@@ -373,6 +405,33 @@ const stagePlanEntryExecution = convex
 			};
 		}
 
+		const balancePreCheck = await evaluateBalancePreCheckForPlanEntry(ctx, {
+			borrowerId: handoffContext.borrowerId,
+			mortgageId: handoffContext.mortgageId,
+			requestedAt: args.requestedAt,
+		});
+		if (balancePreCheck) {
+			await ctx.db.patch(
+				planEntry._id,
+				buildBalancePreCheckPatch(balancePreCheck.snapshot)
+			);
+
+			if (balancePreCheck.outcome === "block") {
+				const result = buildNotEligibleResult({
+					executionRecordedAt,
+					idempotencyKey: normalizedIdempotencyKey,
+					planEntryId: planEntry._id,
+					planEntryStatusAfter: planEntry.status,
+					reasonCode: balancePreCheck.executionReasonCode,
+					reasonDetail: balancePreCheck.executionReasonDetail,
+				});
+				await logPlanEntryExecutionAudit(ctx, args, result);
+				return {
+					result,
+				};
+			}
+		}
+
 		const attemptId = await ctx.db.insert("collectionAttempts", {
 			status: "initiated",
 			machineContext: {
@@ -381,6 +440,8 @@ const stagePlanEntryExecution = convex
 				maxRetries: 3,
 			},
 			planEntryId: planEntry._id,
+			mortgageId: planEntry.mortgageId,
+			obligationIds: planEntry.obligationIds,
 			method: planEntry.method,
 			amount: planEntry.amount,
 			triggerSource: args.triggerSource,
@@ -501,16 +562,14 @@ async function advanceAttemptForTransferState(args: {
 	let attemptStatusAfter = "initiated";
 
 	if (
-		transfer.providerRef &&
-		(transfer.status === "pending" ||
-			transfer.status === "processing" ||
-			transfer.status === "confirmed")
+		transfer.status === "pending" ||
+		transfer.status === "processing" ||
+		transfer.status === "confirmed"
 	) {
 		const drawInitiated = await fireCollectionAttemptTransition({
 			ctx: args.ctx,
 			attemptId: args.attemptId,
 			eventType: "DRAW_INITIATED",
-			payload: { providerRef: transfer.providerRef },
 			source: args.source,
 		});
 
@@ -599,7 +658,6 @@ export const recordTransferHandoffSuccess = convex
 	.handler(async (ctx, args) => {
 		await ctx.db.patch(args.attemptId, {
 			transferRequestId: args.transferRequestId,
-			providerStatus: "transfer_requested",
 		});
 
 		await auditLog.log(ctx, {
@@ -625,7 +683,6 @@ export const recordTransferHandoffFailure = convex
 	.handler(async (ctx, args) => {
 		await ctx.db.patch(args.attemptId, {
 			failureReason: args.failureReason,
-			providerStatus: "transfer_handoff_failed",
 		});
 
 		await auditLog.log(ctx, {
@@ -709,7 +766,15 @@ export const executePlanEntry = convex
 			}
 
 			if (!transferRequestId) {
-				return result;
+				if (
+					result.outcome === "already_executed" &&
+					canReplayTransferlessAttempt(result)
+				) {
+					return result;
+				}
+				throw new MissingTransferRequestError(
+					`[collection-plan] Attempt ${result.collectionAttemptId} has no transferRequestId after transfer handoff. Legacy transferless attempts are no longer supported.`
+				);
 			}
 
 			await ctx.runAction(
@@ -732,6 +797,10 @@ export const executePlanEntry = convex
 				transferRequestId,
 			};
 		} catch (error) {
+			if (error instanceof MissingTransferRequestError) {
+				throw error;
+			}
+
 			const reasonDetail =
 				error instanceof Error ? error.message : String(error);
 

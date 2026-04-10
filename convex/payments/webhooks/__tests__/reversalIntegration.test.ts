@@ -1,6 +1,9 @@
-import { describe, expect, it } from "vitest";
+import process from "node:process";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { internal } from "../../../_generated/api";
 import type { Id } from "../../../_generated/dataModel";
+import type { MutationCtx } from "../../../_generated/server";
+import { publishTransferReversed } from "../../../engine/effects/transfer";
 import { convexModules } from "../../../test/moduleMaps";
 import { registerAuditLogComponent } from "../../../test/registerAuditLogComponent";
 import {
@@ -21,6 +24,91 @@ import {
 
 const modules = convexModules;
 
+const testGlobal = globalThis as typeof globalThis & {
+	process?: {
+		env: Record<string, string | undefined>;
+	};
+};
+
+if (!testGlobal.process) {
+	testGlobal.process = process as unknown as {
+		env: Record<string, string | undefined>;
+	};
+}
+
+const testEnv = testGlobal.process.env;
+const envRestorers: Array<() => void> = [];
+
+function setTestEnv(key: string, value: string) {
+	const previous = testEnv[key];
+	testEnv[key] = value;
+	envRestorers.push(() => {
+		if (previous === undefined) {
+			delete testEnv[key];
+			return;
+		}
+		testEnv[key] = previous;
+	});
+}
+
+beforeEach(() => {
+	envRestorers.length = 0;
+	setTestEnv("DISABLE_GT_HASHCHAIN", "true");
+	setTestEnv("DISABLE_CASH_LEDGER_HASHCHAIN", "true");
+	vi.useFakeTimers();
+});
+
+afterEach(() => {
+	while (envRestorers.length > 0) {
+		envRestorers.pop()?.();
+	}
+	vi.clearAllTimers();
+	vi.useRealTimers();
+});
+
+interface TransferEffectHandler {
+	_handler: (
+		ctx: MutationCtx,
+		args: {
+			entityId: Id<"transferRequests">;
+			entityType: "transfer";
+			eventType: string;
+			journalEntryId: string;
+			effectName: string;
+			payload?: Record<string, unknown>;
+			source: typeof SYSTEM_SOURCE;
+		}
+	) => Promise<void>;
+}
+
+const publishTransferReversedMutation =
+	publishTransferReversed as unknown as TransferEffectHandler;
+
+async function applyTransferReversalEffect(
+	t: TestHarness,
+	args: {
+		reason: string;
+		reversalRef: string;
+		transferId: Id<"transferRequests">;
+	}
+) {
+	await t.run(async (ctx) => {
+		await publishTransferReversedMutation._handler(ctx, {
+			entityId: args.transferId,
+			entityType: "transfer",
+			eventType: "TRANSFER_REVERSED",
+			journalEntryId: `test-transfer-reversed:${args.transferId}`,
+			effectName: "publishTransferReversed",
+			payload: {
+				reason: args.reason,
+				reversalRef: args.reversalRef,
+				effectiveDate: "2026-03-10",
+			},
+			source: SYSTEM_SOURCE,
+		});
+	});
+}
+
 // ── Amount constants ────────────────────────────────────────────────
 const TOTAL_AMOUNT = 100_000;
 const LENDER_A_AMOUNT = 54_000;
@@ -39,11 +127,12 @@ interface PipelineState {
 	mortgageId: Id<"mortgages">;
 	obligationId: Id<"obligations">;
 	planEntryId: Id<"collectionPlanEntries">;
+	transferId: Id<"transferRequests">;
 }
 
 // ── Seed helper: full settlement pipeline through confirmed ─────────
-// Seeds entities, creates a confirmed collectionAttempt with providerRef,
-// posts accrual + cash receipt + allocation entries.
+// Seeds entities, creates a confirmed collectionAttempt backed by a confirmed
+// transfer request, then posts accrual + cash receipt + allocation entries.
 
 async function seedConfirmedAttemptPipeline(
 	t: TestHarness
@@ -70,9 +159,11 @@ async function seedConfirmedAttemptPipeline(
 		});
 	});
 
-	// Create collectionPlanEntry + confirmed collectionAttempt with providerRef
-	const { attemptId, planEntryId } = await t.run(async (ctx) => {
+	// Create collectionPlanEntry + confirmed collectionAttempt backed by a
+	// confirmed transfer request.
+	const { attemptId, planEntryId, transferId } = await t.run(async (ctx) => {
 		const planEntryId = await ctx.db.insert("collectionPlanEntries", {
+			mortgageId,
 			obligationIds: [obligationId],
 			amount: TOTAL_AMOUNT,
 			method: "manual",
@@ -87,14 +178,39 @@ async function seedConfirmedAttemptPipeline(
 			machineContext: { attemptId: "", retryCount: 0, maxRetries: 3 },
 			lastTransitionAt: Date.now(),
 			planEntryId,
+			mortgageId,
+			obligationIds: [obligationId],
 			method: "manual",
 			amount: TOTAL_AMOUNT,
-			providerRef: "txn_test_reversal_001",
 			initiatedAt: Date.now() - 120_000,
 			settledAt: Date.now() - 60_000,
 		});
 
-		return { attemptId, planEntryId };
+		const transferId = await ctx.db.insert("transferRequests", {
+			status: "confirmed",
+			direction: "inbound",
+			transferType: "borrower_interest_collection",
+			amount: TOTAL_AMOUNT,
+			currency: "CAD",
+			counterpartyType: "borrower",
+			counterpartyId: `${borrowerId}`,
+			providerCode: "pad_rotessa",
+			providerRef: "txn_test_reversal_001",
+			idempotencyKey: `reversal-seed:${attemptId}`,
+			source: SYSTEM_SOURCE,
+			createdAt: Date.now() - 120_000,
+			lastTransitionAt: Date.now() - 60_000,
+			confirmedAt: Date.now() - 60_000,
+			planEntryId,
+			collectionAttemptId: attemptId,
+			obligationId,
+			mortgageId,
+			borrowerId,
+		});
+
+		await ctx.db.patch(attemptId, { transferRequestId: transferId });
+
+		return { attemptId, planEntryId, transferId };
 	});
 
 	// Create dispersalEntry records (one per lender)
@@ -205,6 +321,7 @@ async function seedConfirmedAttemptPipeline(
 		obligationId,
 		attemptId,
 		planEntryId,
+		transferId,
 		dispersalEntryAId,
 		dispersalEntryBId,
 	};
@@ -215,64 +332,80 @@ async function seedConfirmedAttemptPipeline(
 // ═══════════════════════════════════════════════════════════════════
 
 describe("Reversal webhook integration: GT transition (confirmed → reversed)", () => {
-	// ── T-101: Confirmed attempt transitions to reversed ─────────
-	it("T-101: processReversalCascade transitions confirmed attempt to reversed", async () => {
+	// ── T-101: Confirmed transfer reverses the linked attempt ─────
+	it("T-101: processReversalCascade transitions the confirmed transfer and linked attempt to reversed", async () => {
 		const t = createHarness(modules);
 		registerAuditLogComponent(t, "auditLog");
 		const state = await seedConfirmedAttemptPipeline(t);
 
-		// Verify attempt is in confirmed state before reversal
-		const beforeAttempt = await t.run(async (ctx) => {
-			return ctx.db.get(state.attemptId);
-		});
+		const beforeTransfer = await t.run(async (ctx) =>
+			ctx.db.get(state.transferId)
+		);
+		const beforeAttempt = await t.run(async (ctx) =>
+			ctx.db.get(state.attemptId)
+		);
+		expect(beforeTransfer?.status).toBe("confirmed");
 		expect(beforeAttempt?.status).toBe("confirmed");
 
-		// Fire the GT transition via processReversalCascade (same as handlePaymentReversal calls)
 		const result = await t.mutation(
 			internal.payments.webhooks.processReversal.processReversalCascade,
 			{
-				attemptId: state.attemptId,
+				transferId: state.transferId,
 				effectiveDate: "2026-03-10",
 				reason: "NSF — integration test",
 				provider: "rotessa" as const,
 				providerEventId: "evt_nsf_001",
 			}
 		);
+		await applyTransferReversalEffect(t, {
+			transferId: state.transferId,
+			reason: "NSF — integration test",
+			reversalRef: "evt_nsf_001",
+		});
 
 		expect(result.success).toBe(true);
 		expect(result.newState).toBe("reversed");
 
-		// Verify the entity was persisted with reversed status
-		const afterAttempt = await t.run(async (ctx) => {
-			return ctx.db.get(state.attemptId);
-		});
+		const afterTransfer = await t.run(async (ctx) =>
+			ctx.db.get(state.transferId)
+		);
+		const afterAttempt = await t.run(async (ctx) =>
+			ctx.db.get(state.attemptId)
+		);
+		expect(afterTransfer?.status).toBe("reversed");
 		expect(afterAttempt?.status).toBe("reversed");
 	});
 
-	// ── T-102: getAttemptByProviderRef look-up ───────────────────
-	it("T-102: getAttemptByProviderRef returns the seeded attempt", async () => {
+	// ── T-102: transfer lookup by canonical provider boundary ─────
+	it("T-102: getTransferRequestByProviderRef returns the seeded transfer", async () => {
 		const t = createHarness(modules);
 		registerAuditLogComponent(t, "auditLog");
 		const state = await seedConfirmedAttemptPipeline(t);
 
 		const found = await t.query(
-			internal.payments.webhooks.handleReversal.getAttemptByProviderRef,
-			{ providerRef: "txn_test_reversal_001" }
+			internal.payments.webhooks.transferCore.getTransferRequestByProviderRef,
+			{
+				providerCode: "pad_rotessa",
+				providerRef: "txn_test_reversal_001",
+			}
 		);
 
 		expect(found).not.toBeNull();
-		expect(found?._id).toBe(state.attemptId);
+		expect(found?._id).toBe(state.transferId);
 		expect(found?.status).toBe("confirmed");
 	});
 
-	it("T-102b: getAttemptByProviderRef returns null for unknown ref", async () => {
+	it("T-102b: getTransferRequestByProviderRef returns null for unknown ref", async () => {
 		const t = createHarness(modules);
 		registerAuditLogComponent(t, "auditLog");
 		await seedConfirmedAttemptPipeline(t);
 
 		const found = await t.query(
-			internal.payments.webhooks.handleReversal.getAttemptByProviderRef,
-			{ providerRef: "txn_unknown_ref" }
+			internal.payments.webhooks.transferCore.getTransferRequestByProviderRef,
+			{
+				providerCode: "pad_rotessa",
+				providerRef: "txn_unknown_ref",
+			}
 		);
 
 		expect(found).toBeNull();
@@ -284,8 +417,8 @@ describe("Reversal webhook integration: GT transition (confirmed → reversed)",
 // ═══════════════════════════════════════════════════════════════════
 
 describe("Reversal webhook integration: duplicate/idempotent handling", () => {
-	// ── T-103: Second reversal on already-reversed attempt ──────
-	it("T-103: second processReversalCascade on reversed attempt is rejected (GT rejects PAYMENT_REVERSED in reversed state)", async () => {
+	// ── T-103: Second reversal on already-reversed transfer ─────
+	it("T-103: second processReversalCascade on a reversed transfer is rejected", async () => {
 		const t = createHarness(modules);
 		registerAuditLogComponent(t, "auditLog");
 		const state = await seedConfirmedAttemptPipeline(t);
@@ -294,7 +427,7 @@ describe("Reversal webhook integration: duplicate/idempotent handling", () => {
 		const first = await t.mutation(
 			internal.payments.webhooks.processReversal.processReversalCascade,
 			{
-				attemptId: state.attemptId,
+				transferId: state.transferId,
 				effectiveDate: "2026-03-10",
 				reason: "NSF — first call",
 				provider: "rotessa" as const,
@@ -308,7 +441,7 @@ describe("Reversal webhook integration: duplicate/idempotent handling", () => {
 		const second = await t.mutation(
 			internal.payments.webhooks.processReversal.processReversalCascade,
 			{
-				attemptId: state.attemptId,
+				transferId: state.transferId,
 				effectiveDate: "2026-03-10",
 				reason: "NSF — duplicate call",
 				provider: "rotessa" as const,
@@ -318,11 +451,8 @@ describe("Reversal webhook integration: duplicate/idempotent handling", () => {
 		expect(second.success).toBe(false);
 	});
 
-	// ── T-104: handlePaymentReversal logic — already_reversed shortcut ──
-	// Tests the state-check logic that handlePaymentReversal performs:
-	// if attempt.status === "reversed", it returns { success: true, reason: "already_reversed" }
-	// We simulate this by checking the attempt status after first reversal.
-	it("T-104: after reversal, attempt status is 'reversed' enabling idempotent return path", async () => {
+	// ── T-104: reversed transfer + attempt persist the idempotent state ──
+	it("T-104: after reversal, both transfer and attempt persist the reversed state", async () => {
 		const t = createHarness(modules);
 		registerAuditLogComponent(t, "auditLog");
 		const state = await seedConfirmedAttemptPipeline(t);
@@ -330,21 +460,23 @@ describe("Reversal webhook integration: duplicate/idempotent handling", () => {
 		await t.mutation(
 			internal.payments.webhooks.processReversal.processReversalCascade,
 			{
-				attemptId: state.attemptId,
+				transferId: state.transferId,
 				effectiveDate: "2026-03-10",
 				reason: "NSF — idempotency path",
-				provider: "stripe" as const,
-				providerEventId: "evt_stripe_idem_001",
+				provider: "rotessa" as const,
+				providerEventId: "evt_rotessa_idem_001",
 			}
 		);
-
-		// The handler checks attempt.status === "reversed" and returns early
-		const attempt = await t.run(async (ctx) => {
-			return ctx.db.get(state.attemptId);
+		await applyTransferReversalEffect(t, {
+			transferId: state.transferId,
+			reason: "NSF — idempotency path",
+			reversalRef: "evt_rotessa_idem_001",
 		});
+
+		const transfer = await t.run(async (ctx) => ctx.db.get(state.transferId));
+		const attempt = await t.run(async (ctx) => ctx.db.get(state.attemptId));
+		expect(transfer?.status).toBe("reversed");
 		expect(attempt?.status).toBe("reversed");
-		// handlePaymentReversal would return { success: true, reason: "already_reversed" }
-		// for this attempt on a subsequent call — verified via the status check.
 	});
 });
 
@@ -353,12 +485,11 @@ describe("Reversal webhook integration: duplicate/idempotent handling", () => {
 // ═══════════════════════════════════════════════════════════════════
 
 describe("Reversal webhook integration: out-of-order rejection", () => {
-	// ── T-105: Reversal on initiated (pre-confirmed) attempt ────
-	it("T-105: PAYMENT_REVERSED rejected on 'initiated' attempt (not yet confirmed)", async () => {
+	// ── T-105: Reversal on initiated (pre-confirmed) transfer ───
+	it("T-105: TRANSFER_REVERSED is rejected on an initiated transfer", async () => {
 		const t = createHarness(modules);
 		registerAuditLogComponent(t, "auditLog");
 
-		// Seed minimal entities but create an attempt in "initiated" state (no providerRef)
 		const { borrowerId, mortgageId } = await seedMinimalEntities(t);
 
 		const obligationId = await t.run(async (ctx) => {
@@ -378,8 +509,9 @@ describe("Reversal webhook integration: out-of-order rejection", () => {
 			});
 		});
 
-		const attemptId = await t.run(async (ctx) => {
+		const { attemptId, transferId } = await t.run(async (ctx) => {
 			const planEntryId = await ctx.db.insert("collectionPlanEntries", {
+				mortgageId,
 				obligationIds: [obligationId],
 				amount: TOTAL_AMOUNT,
 				method: "manual",
@@ -389,22 +521,48 @@ describe("Reversal webhook integration: out-of-order rejection", () => {
 				createdAt: Date.now(),
 			});
 
-			return ctx.db.insert("collectionAttempts", {
+			const attemptId = await ctx.db.insert("collectionAttempts", {
 				status: "initiated",
 				machineContext: { attemptId: "", retryCount: 0, maxRetries: 3 },
 				lastTransitionAt: Date.now(),
 				planEntryId,
+				mortgageId,
+				obligationIds: [obligationId],
 				method: "manual",
 				amount: TOTAL_AMOUNT,
 				initiatedAt: Date.now(),
 			});
+
+			const transferId = await ctx.db.insert("transferRequests", {
+				status: "initiated",
+				direction: "inbound",
+				transferType: "borrower_interest_collection",
+				amount: TOTAL_AMOUNT,
+				currency: "CAD",
+				counterpartyType: "borrower",
+				counterpartyId: `${borrowerId}`,
+				providerCode: "pad_rotessa",
+				providerRef: "txn_initiated_001",
+				idempotencyKey: `reversal-initiated:${attemptId}`,
+				source: SYSTEM_SOURCE,
+				createdAt: Date.now(),
+				lastTransitionAt: Date.now(),
+				planEntryId,
+				collectionAttemptId: attemptId,
+				obligationId,
+				mortgageId,
+				borrowerId,
+			});
+
+			await ctx.db.patch(attemptId, { transferRequestId: transferId });
+
+			return { attemptId, transferId };
 		});
 
-		// PAYMENT_REVERSED should be rejected — the machine only accepts it in "confirmed"
 		const result = await t.mutation(
 			internal.payments.webhooks.processReversal.processReversalCascade,
 			{
-				attemptId,
+				transferId,
 				effectiveDate: "2026-03-10",
 				reason: "NSF — out-of-order test",
 				provider: "rotessa" as const,
@@ -414,15 +572,14 @@ describe("Reversal webhook integration: out-of-order rejection", () => {
 
 		expect(result.success).toBe(false);
 
-		// Attempt status should remain "initiated"
-		const attempt = await t.run(async (ctx) => {
-			return ctx.db.get(attemptId);
-		});
+		const transfer = await t.run(async (ctx) => ctx.db.get(transferId));
+		const attempt = await t.run(async (ctx) => ctx.db.get(attemptId));
+		expect(transfer?.status).toBe("initiated");
 		expect(attempt?.status).toBe("initiated");
 	});
 
-	// ── T-106: Reversal on pending attempt ──────────────────────
-	it("T-106: PAYMENT_REVERSED rejected on 'pending' attempt", async () => {
+	// ── T-106: Reversal on pending transfer ─────────────────────
+	it("T-106: TRANSFER_REVERSED is rejected on a pending transfer", async () => {
 		const t = createHarness(modules);
 		registerAuditLogComponent(t, "auditLog");
 
@@ -445,8 +602,9 @@ describe("Reversal webhook integration: out-of-order rejection", () => {
 			});
 		});
 
-		const attemptId = await t.run(async (ctx) => {
+		const { attemptId, transferId } = await t.run(async (ctx) => {
 			const planEntryId = await ctx.db.insert("collectionPlanEntries", {
+				mortgageId,
 				obligationIds: [obligationId],
 				amount: TOTAL_AMOUNT,
 				method: "manual",
@@ -456,36 +614,60 @@ describe("Reversal webhook integration: out-of-order rejection", () => {
 				createdAt: Date.now(),
 			});
 
-			return ctx.db.insert("collectionAttempts", {
+			const attemptId = await ctx.db.insert("collectionAttempts", {
 				status: "pending",
 				machineContext: { attemptId: "", retryCount: 0, maxRetries: 3 },
 				lastTransitionAt: Date.now(),
 				planEntryId,
+				mortgageId,
+				obligationIds: [obligationId],
 				method: "manual",
 				amount: TOTAL_AMOUNT,
-				providerRef: "txn_pending_001",
 				initiatedAt: Date.now(),
 			});
+
+			const transferId = await ctx.db.insert("transferRequests", {
+				status: "pending",
+				direction: "inbound",
+				transferType: "borrower_interest_collection",
+				amount: TOTAL_AMOUNT,
+				currency: "CAD",
+				counterpartyType: "borrower",
+				counterpartyId: `${borrowerId}`,
+				providerCode: "pad_rotessa",
+				providerRef: "txn_pending_001",
+				idempotencyKey: `reversal-pending:${attemptId}`,
+				source: SYSTEM_SOURCE,
+				createdAt: Date.now(),
+				lastTransitionAt: Date.now(),
+				planEntryId,
+				collectionAttemptId: attemptId,
+				obligationId,
+				mortgageId,
+				borrowerId,
+			});
+
+			await ctx.db.patch(attemptId, { transferRequestId: transferId });
+
+			return { attemptId, transferId };
 		});
 
-		// PAYMENT_REVERSED should be rejected — machine only accepts it in "confirmed"
 		const result = await t.mutation(
 			internal.payments.webhooks.processReversal.processReversalCascade,
 			{
-				attemptId,
+				transferId,
 				effectiveDate: "2026-03-10",
 				reason: "NSF — pending out-of-order",
-				provider: "stripe" as const,
+				provider: "rotessa" as const,
 				providerEventId: "evt_nsf_ooo_pending_001",
 			}
 		);
 
 		expect(result.success).toBe(false);
 
-		// Attempt status should remain "pending"
-		const attempt = await t.run(async (ctx) => {
-			return ctx.db.get(attemptId);
-		});
+		const transfer = await t.run(async (ctx) => ctx.db.get(transferId));
+		const attempt = await t.run(async (ctx) => ctx.db.get(attemptId));
+		expect(transfer?.status).toBe("pending");
 		expect(attempt?.status).toBe("pending");
 	});
 });
@@ -511,7 +693,7 @@ describe("Reversal webhook integration: emitPaymentReversed journal entries", ()
 		await t.mutation(
 			internal.payments.webhooks.processReversal.processReversalCascade,
 			{
-				attemptId: state.attemptId,
+				transferId: state.transferId,
 				effectiveDate: "2026-03-10",
 				reason: "NSF — journal entry test",
 				provider: "rotessa" as const,
@@ -584,7 +766,7 @@ describe("Reversal webhook integration: emitPaymentReversed journal entries", ()
 		await t.mutation(
 			internal.payments.webhooks.processReversal.processReversalCascade,
 			{
-				attemptId: state.attemptId,
+				transferId: state.transferId,
 				effectiveDate: "2026-03-10",
 				reason: "NSF — balance test",
 				provider: "rotessa" as const,
@@ -658,7 +840,7 @@ describe("Reversal webhook integration: emitPaymentReversed journal entries", ()
 		await t.mutation(
 			internal.payments.webhooks.processReversal.processReversalCascade,
 			{
-				attemptId: state.attemptId,
+				transferId: state.transferId,
 				effectiveDate: "2026-03-10",
 				reason: "NSF — posting group test",
 				provider: "rotessa" as const,

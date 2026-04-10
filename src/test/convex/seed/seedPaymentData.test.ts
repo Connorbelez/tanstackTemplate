@@ -102,7 +102,8 @@ describe("seedPaymentDataInternal", () => {
 			return { rules, entries };
 		});
 
-		expect(state.rules.map((rule) => rule.code ?? rule.name).sort()).toEqual([
+		expect(state.rules.map((rule) => rule.code).sort()).toEqual([
+			"balance_pre_check_rule",
 			"late_fee_rule",
 			"retry_rule",
 			"schedule_rule",
@@ -116,13 +117,18 @@ describe("seedPaymentDataInternal", () => {
 				}))
 				.sort((left, right) => (left.code ?? "").localeCompare(right.code ?? ""))
 		).toEqual([
+			{
+				code: "balance_pre_check_rule",
+				kind: "balance_pre_check",
+				status: "active",
+			},
 			{ code: "late_fee_rule", kind: "late_fee", status: "active" },
 			{ code: "retry_rule", kind: "retry", status: "active" },
 			{ code: "schedule_rule", kind: "schedule", status: "active" },
 		]);
 		expect(state.entries).toHaveLength(1);
 		expect(state.entries[0]?.source).toBe("default_schedule");
-		expect(state.entries[0]?.ruleId).toBeDefined();
+		expect(state.entries[0]?.createdByRuleId).toBeDefined();
 	});
 
 	it("is rerun-safe for canonical initial scheduling", async () => {
@@ -148,7 +154,7 @@ describe("seedPaymentDataInternal", () => {
 			return { ruleCount: rules.length, entryCount: entries.length };
 		});
 
-		expect(state.ruleCount).toBe(3);
+		expect(state.ruleCount).toBe(4);
 		expect(state.entryCount).toBe(1);
 	});
 
@@ -158,12 +164,18 @@ describe("seedPaymentDataInternal", () => {
 
 		const customScheduleRuleId = await t.run(async (ctx) =>
 			ctx.db.insert("collectionRules", {
-				name: "schedule_rule",
+				kind: "schedule",
+				code: "schedule_rule",
+				displayName: "Initial scheduling",
+				description: "Custom schedule rule for seed test",
 				trigger: "schedule",
-				action: "create_plan_entry",
-				parameters: { delayDays: 9 },
+				status: "active",
+				scope: { scopeType: "global" },
+				config: { kind: "schedule", delayDays: 9 },
+				version: 1,
+				createdByActorId: "test",
+				updatedByActorId: "test",
 				priority: 10,
-				enabled: true,
 				createdAt: Date.now(),
 				updatedAt: Date.now(),
 			})
@@ -193,7 +205,7 @@ describe("seedPaymentDataInternal", () => {
 			kind: "schedule",
 			delayDays: 9,
 		});
-		expect(state.entry?.ruleId).toBe(customScheduleRuleId);
+		expect(state.entry?.createdByRuleId).toBe(customScheduleRuleId);
 		expect(state.entry?.scheduledDate).toBe(
 			(state.obligation?.dueDate ?? 0) - 9 * MS_PER_DAY
 		);

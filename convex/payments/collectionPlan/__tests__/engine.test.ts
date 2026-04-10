@@ -34,12 +34,26 @@ interface RuleInsertOptions {
 		| { kind: "schedule"; delayDays: number }
 		| { kind: "retry"; maxRetries: number; backoffBaseDays: number }
 		| { kind: "late_fee"; feeCode: "late_fee"; feeSurface: "borrower_charge" }
+		| {
+				kind: "balance_pre_check";
+				signalSource: "recent_transfer_failures";
+				lookbackDays: number;
+				failureCountThreshold: number;
+				blockingDecision: "defer";
+				deferDays: number;
+		  }
+		| {
+				kind: "balance_pre_check";
+				signalSource: "recent_transfer_failures";
+				lookbackDays: number;
+				failureCountThreshold: number;
+				blockingDecision: "suppress" | "require_operator_review";
+		  }
 		| { kind: "balance_pre_check"; mode: "placeholder" }
 		| { kind: "reschedule_policy"; mode: "placeholder" }
 		| { kind: "workout_policy"; mode: "placeholder" };
 	effectiveFrom?: number;
 	effectiveTo?: number;
-	includeLegacyEnabled?: boolean;
 	kind:
 		| "schedule"
 		| "retry"
@@ -47,7 +61,6 @@ interface RuleInsertOptions {
 		| "balance_pre_check"
 		| "reschedule_policy"
 		| "workout_policy";
-	name?: string;
 	priority: number;
 	scope?:
 		| { scopeType: "global" }
@@ -86,14 +99,7 @@ async function insertCollectionRule(
 			effectiveTo: options.effectiveTo,
 			createdByActorId: "test",
 			updatedByActorId: "test",
-			name: options.name ?? options.code,
-			action: "test_action",
-			parameters: {},
 			priority: options.priority,
-			enabled:
-				options.includeLegacyEnabled === false
-					? undefined
-					: (options.status ?? "active") === "active",
 			createdAt: Date.now(),
 			updatedAt: Date.now(),
 		})
@@ -119,7 +125,6 @@ describe("typed collection-rule engine", () => {
 			kind: "retry",
 			priority: 19,
 			trigger: "event",
-			includeLegacyEnabled: false,
 			config: { kind: "retry", maxRetries: 3, backoffBaseDays: 2 },
 		});
 		await insertCollectionRule(t, {
@@ -134,7 +139,13 @@ describe("typed collection-rule engine", () => {
 			kind: "balance_pre_check",
 			priority: 15,
 			trigger: "event",
-			config: { kind: "balance_pre_check", mode: "placeholder" },
+			config: {
+				kind: "balance_pre_check",
+				signalSource: "recent_transfer_failures",
+				lookbackDays: 14,
+				failureCountThreshold: 1,
+				blockingDecision: "require_operator_review",
+			},
 		});
 		await insertCollectionRule(t, {
 			code: "retry_scoped",
@@ -186,7 +197,7 @@ describe("typed collection-rule engine", () => {
 			}
 		);
 
-		expect(rules.map((rule) => rule.code ?? rule.name)).toEqual([
+		expect(rules.map((rule) => rule.code)).toEqual([
 			"balance_review",
 			"retry_scoped",
 			"retry_status_only",
@@ -213,7 +224,6 @@ describe("typed collection-rule engine", () => {
 		const ruleId = await insertCollectionRule(t, {
 			code: "schedule_explicit_kind",
 			kind: "schedule",
-			name: "legacy_name_not_used_for_dispatch",
 			priority: 10,
 			trigger: "schedule",
 			config: { kind: "schedule", delayDays: 5 },
@@ -229,32 +239,27 @@ describe("typed collection-rule engine", () => {
 		);
 
 		expect(entries).toHaveLength(1);
-		expect(entries[0]?.ruleId).toBe(ruleId);
+		expect(entries[0]?.createdByRuleId).toBe(ruleId);
 		expect(entries[0]?.source).toBe("default_schedule");
 	});
 
-	it("seedCollectionRules backfills typed metadata on a legacy default rule without changing its behavior", async () => {
+	it("seedCollectionRules is idempotent for existing typed default rules", async () => {
 		const t = createGovernedTestConvex();
 
-		const legacyRetryRuleId = await t.run(async (ctx) =>
-			ctx.db.insert("collectionRules", {
-				name: "retry_rule",
-				trigger: "event",
-				action: "create_retry_entry",
-				parameters: { maxRetries: 7, backoffBaseDays: 2 },
-				priority: 20,
-				enabled: true,
-				createdAt: Date.now(),
-				updatedAt: Date.now(),
-			})
-		);
+		const retryRuleId = await insertCollectionRule(t, {
+			code: "retry_rule",
+			kind: "retry",
+			priority: 20,
+			trigger: "event",
+			config: { kind: "retry", maxRetries: 7, backoffBaseDays: 2 },
+		});
 
 		await t.mutation(
 			internal.payments.collectionPlan.seed.seedCollectionRules,
 			{}
 		);
 
-		const retryRule = await t.run(async (ctx) => ctx.db.get(legacyRetryRuleId));
+		const retryRule = await t.run(async (ctx) => ctx.db.get(retryRuleId));
 
 		expect(retryRule?.code).toBe("retry_rule");
 		expect(retryRule?.kind).toBe("retry");
@@ -266,5 +271,69 @@ describe("typed collection-rule engine", () => {
 			maxRetries: 7,
 			backoffBaseDays: 2,
 		});
+	});
+
+	it("seedCollectionRules creates the canonical balance pre-check rule with typed config", async () => {
+		const t = createGovernedTestConvex();
+
+		await t.mutation(
+			internal.payments.collectionPlan.seed.seedCollectionRules,
+			{}
+		);
+
+		const balanceRule = await t.run(async (ctx) =>
+			ctx.db
+				.query("collectionRules")
+				.collect()
+				.then(
+					(rules) =>
+						rules.find((rule) => rule.code === "balance_pre_check_rule") ?? null
+				)
+		);
+
+		expect(balanceRule?._id).toBeTruthy();
+		expect(balanceRule?.kind).toBe("balance_pre_check");
+		expect(balanceRule?.status).toBe("active");
+		expect(balanceRule?.config).toEqual({
+			kind: "balance_pre_check",
+			signalSource: "recent_transfer_failures",
+			lookbackDays: 14,
+			failureCountThreshold: 1,
+			blockingDecision: "defer",
+			deferDays: 3,
+		});
+	});
+
+	it("seedCollectionRules migrates a legacy blank-code default rule without creating a duplicate", async () => {
+		const t = createGovernedTestConvex();
+
+		const legacyScheduleRuleId = await insertCollectionRule(t, {
+			code: "",
+			kind: "schedule",
+			priority: 10,
+			trigger: "schedule",
+			config: { kind: "schedule", delayDays: 9 },
+		});
+
+		await t.mutation(
+			internal.payments.collectionPlan.seed.seedCollectionRules,
+			{}
+		);
+
+		const state = await t.run(async (ctx) => {
+			const rules = await ctx.db.query("collectionRules").collect();
+			const legacyScheduleRule = await ctx.db.get(legacyScheduleRuleId);
+			return { legacyScheduleRule, rules };
+		});
+
+		expect(state.legacyScheduleRule?.code).toBe("schedule_rule");
+		expect(state.legacyScheduleRule?.config).toEqual({
+			kind: "schedule",
+			delayDays: 9,
+		});
+		expect(
+			state.rules.filter((rule) => rule.code === "schedule_rule")
+		).toHaveLength(1);
+		expect(state.rules).toHaveLength(4);
 	});
 });

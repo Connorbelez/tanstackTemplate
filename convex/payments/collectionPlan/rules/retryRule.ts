@@ -12,6 +12,7 @@ interface CollectionFailedPayload {
 	obligationIds: Id<"obligations">[];
 	planEntryId: Id<"collectionPlanEntries">;
 	retryCount: number;
+	workoutPlanId?: Id<"workoutPlans">;
 }
 
 /**
@@ -50,7 +51,9 @@ export const retryRuleHandler: RuleHandler = {
 			typeof payload.amount !== "number" ||
 			typeof payload.method !== "string" ||
 			(payload.retryCount !== undefined &&
-				typeof payload.retryCount !== "number")
+				typeof payload.retryCount !== "number") ||
+			(payload.workoutPlanId !== undefined &&
+				typeof payload.workoutPlanId !== "string")
 		) {
 			console.warn(
 				"[retry-rule] Invalid COLLECTION_FAILED payload: missing or malformed required fields",
@@ -60,6 +63,7 @@ export const retryRuleHandler: RuleHandler = {
 					hasAmount: typeof payload.amount,
 					hasMethod: typeof payload.method,
 					hasRetryCount: typeof payload.retryCount,
+					hasWorkoutPlanId: typeof payload.workoutPlanId,
 				}
 			);
 			return;
@@ -71,6 +75,7 @@ export const retryRuleHandler: RuleHandler = {
 			amount,
 			method,
 			retryCount = 0,
+			workoutPlanId,
 		} = payload as CollectionFailedPayload;
 
 		if (retryCount >= maxRetries) {
@@ -98,8 +103,9 @@ export const retryRuleHandler: RuleHandler = {
 				scheduledDate: Date.now() + delayMs,
 				status: "planned",
 				source: "retry_rule",
-				ruleId: evalCtx.rule._id,
-				rescheduledFromId: planEntryId,
+				createdByRuleId: evalCtx.rule._id,
+				workoutPlanId,
+				retryOfId: planEntryId,
 			}
 		);
 	},

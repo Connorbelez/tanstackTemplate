@@ -52,7 +52,13 @@ async function createConfirmedAttempt(
 	}
 ) {
 	return t.run(async (ctx) => {
+		const obligation = await ctx.db.get(args.obligationId);
+		if (!obligation) {
+			throw new Error("Expected obligation for confirmed attempt setup");
+		}
+
 		const planEntryId = await ctx.db.insert("collectionPlanEntries", {
+			mortgageId: obligation.mortgageId,
 			obligationIds: [args.obligationId],
 			amount: args.amount,
 			method: "manual",
@@ -64,6 +70,8 @@ async function createConfirmedAttempt(
 
 		return ctx.db.insert("collectionAttempts", {
 			planEntryId,
+			mortgageId: obligation.mortgageId,
+			obligationIds: [args.obligationId],
 			amount: args.amount,
 			method: "manual",
 			status: "confirmed",
@@ -586,8 +594,8 @@ describe("retriggerTransferConfirmation self-healing", () => {
 		);
 		await t.finishAllScheduledFunctions(vi.runAllTimers);
 
-		// retryTransferConfirmationEffect is currently a no-op placeholder (see ENG-184).
-		// Returns "pending_no_effect" until a real publish hook is wired.
+		// retryTransferConfirmationEffect is an explicit no-op placeholder
+		// until a real publishTransferConfirmed hook exists.
 		expect(result.action).toBe("pending_no_effect");
 		expect(result.attemptCount).toBe(1);
 

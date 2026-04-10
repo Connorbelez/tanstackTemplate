@@ -4,17 +4,12 @@ import { components, internal } from "../../_generated/api";
 import type { Id } from "../../_generated/dataModel";
 import type { MutationCtx } from "../../_generated/server";
 import { internalMutation } from "../../_generated/server";
-import { orgIdFromMortgageId } from "../../lib/orgScope";
 import { safeBigintToNumber } from "../../payments/cashLedger/accounts";
 import {
 	postOverpaymentToUnappliedCash,
 	postPaymentReversalCascade,
 } from "../../payments/cashLedger/integrations";
 import { IDEMPOTENCY_KEY_PREFIX } from "../../payments/cashLedger/types";
-import {
-	obligationTypeToTransferType,
-	PROVIDER_CODES,
-} from "../../payments/transfers/types";
 import { executeTransition } from "../transition";
 import type { CommandSource } from "../types";
 import { effectPayloadValidator } from "../validators";
@@ -68,7 +63,10 @@ async function scheduleCollectionFailedRuleEvaluation(
 		planEntryId: Id<"collectionPlanEntries">;
 		machineContext?: Record<string, unknown>;
 	},
-	planEntry: { obligationIds: Id<"obligations">[] },
+	planEntry: {
+		obligationIds: Id<"obligations">[];
+		workoutPlanId?: Id<"workoutPlans">;
+	},
 	effectLabel: string
 ) {
 	const firstObligationId = planEntry.obligationIds[0];
@@ -97,6 +95,7 @@ async function scheduleCollectionFailedRuleEvaluation(
 				obligationIds: planEntry.obligationIds,
 				amount: attempt.amount,
 				method: attempt.method,
+				workoutPlanId: planEntry.workoutPlanId,
 				retryCount:
 					typeof attempt.machineContext?.retryCount === "number"
 						? attempt.machineContext.retryCount
@@ -113,6 +112,10 @@ async function scheduleCollectionFailedRuleEvaluation(
 /**
  * Cross-entity effect: fires PAYMENT_APPLIED at each linked obligation.
  * Triggered when a collection attempt transitions to `confirmed` via FUNDS_SETTLED.
+ *
+ * Boundary note: collection attempts stay execution-only. This effect forwards
+ * confirmed money to obligations, which then own mortgage lifecycle and cash
+ * meaning. It must not mutate mortgage state directly.
  */
 export const emitPaymentReceived = internalMutation({
 	args: collectionAttemptEffectValidator,
@@ -193,78 +196,6 @@ export const emitPaymentReceived = internalMutation({
 				);
 			}
 		}
-
-		// ─── Phase M2a: Create parallel transfer record for audit trail ───
-		// Decision D4: Bridged transfers skip cash posting in publishTransferConfirmed
-		// because the collection attempt path already posted via postCashReceiptForObligation().
-		//
-		// The page-03 execution spine links real transfer requests directly onto the
-		// attempt. When that canonical linkage exists, skip the legacy bridge path to
-		// avoid duplicate transfer records for the same collection attempt.
-		if (attempt.transferRequestId) {
-			console.info(
-				`[emitPaymentReceived] Attempt ${args.entityId} already linked to transfer ${attempt.transferRequestId}; skipping legacy bridge transfer creation.`
-			);
-		} else {
-			const bridgeIdempotencyKey = `transfer:bridge:${args.entityId}`;
-			const existingBridge = await ctx.db
-				.query("transferRequests")
-				.withIndex("by_idempotency", (q) =>
-					q.eq("idempotencyKey", bridgeIdempotencyKey)
-				)
-				.first();
-
-			if (!existingBridge) {
-				const firstOblForBridge = await ctx.db.get(planEntry.obligationIds[0]);
-				if (firstOblForBridge?.borrowerId) {
-					const now = Date.now();
-					const bridgeOrgId =
-						firstOblForBridge.orgId ??
-						(firstOblForBridge.mortgageId
-							? await orgIdFromMortgageId(ctx, firstOblForBridge.mortgageId)
-							: undefined);
-					const bridgeTransferId = await ctx.db.insert("transferRequests", {
-						orgId: bridgeOrgId,
-						status: "initiated",
-						direction: "inbound",
-						transferType: obligationTypeToTransferType(firstOblForBridge.type),
-						amount: attempt.amount,
-						currency: "CAD",
-						counterpartyType: "borrower",
-						counterpartyId: String(firstOblForBridge.borrowerId),
-						mortgageId: firstOblForBridge.mortgageId,
-						obligationId: planEntry.obligationIds[0],
-						planEntryId: planEntry._id,
-						collectionAttemptId: args.entityId,
-						providerCode: (PROVIDER_CODES as readonly string[]).includes(
-							planEntry.method ?? ""
-						)
-							? (planEntry.method as (typeof PROVIDER_CODES)[number])
-							: "manual",
-						providerRef: attempt.providerRef ?? `bridge_${args.entityId}`,
-						idempotencyKey: bridgeIdempotencyKey,
-						source: args.source,
-						createdAt: now,
-						lastTransitionAt: now,
-					});
-
-					// Fire GT transition to reach confirmed state — creates audit journal
-					// + hash chain entry. publishTransferConfirmed will see
-					// collectionAttemptId and skip cash posting (D4 conditional).
-					await executeTransition(ctx, {
-						entityType: "transfer",
-						entityId: bridgeTransferId,
-						eventType: "FUNDS_SETTLED",
-						payload: { settledAt: now, providerData: { bridged: true } },
-						source: args.source,
-					});
-				} else {
-					console.warn(
-						`[emitPaymentReceived] Cannot create bridge transfer for attempt=${args.entityId}: no borrowerId on obligation ${planEntry.obligationIds[0]}`
-					);
-				}
-			}
-		}
 	},
 });
 
@@ -311,28 +242,13 @@ export const scheduleRetryEntry = internalMutation({
 });
 
 /**
- * Domain field patch: writes providerRef onto the attempt entity.
- */
-export const recordProviderRef = internalMutation({
-	args: collectionAttemptEffectValidator,
-	handler: async (ctx, args) => {
-		const providerRef = args.payload?.providerRef;
-		if (typeof providerRef === "string") {
-			await ctx.db.patch(args.entityId, { providerRef });
-		}
-	},
-});
-
-/**
  * Stub effect: notifies admin of permanent collection failure.
  * Phase 1 — log only; real notification in Phase 2+.
  */
 export const notifyAdmin = internalMutation({
 	args: collectionAttemptEffectValidator,
 	handler: async (_ctx, args) => {
-		console.info(
-			`[notifyAdmin] stub — permanent failure on attempt=${args.entityId}`
-		);
+		console.info(`[notifyAdmin] permanent failure on attempt=${args.entityId}`);
 	},
 });
 

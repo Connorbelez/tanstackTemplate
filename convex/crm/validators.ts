@@ -175,3 +175,26 @@ export const selectOptionValidator = v.object({
 	color: v.string(),
 	order: v.number(),
 });
+
+export const fieldAvailabilityValidator = v.object({
+	enabled: v.boolean(),
+	reason: v.optional(v.string()),
+});
+
+export const fieldLayoutEligibilityValidator = v.object({
+	table: fieldAvailabilityValidator,
+	kanban: fieldAvailabilityValidator,
+	calendar: fieldAvailabilityValidator,
+	groupBy: fieldAvailabilityValidator,
+});
+
+export const fieldEditabilityValidator = v.object({
+	mode: editabilityModeValidator,
+	reason: v.optional(v.string()),
+});
+
+export const fieldAggregationValidator = v.object({
+	enabled: v.boolean(),
+	reason: v.optional(v.string()),
+	supportedFunctions: v.array(aggregateFnValidator),
+});

@@ -178,6 +178,9 @@ export async function postCashReceiptForObligation(
 		source: CommandSource;
 	}
 ) {
+	// Page 14 boundary lock: borrower cash posting derives meaning from the
+	// obligation and its scoped ledger accounts. Attempt metadata is carried only
+	// for traceability and reconciliation, never as the source of journal meaning.
 	const obligation = await ctx.db.get(args.obligationId);
 	if (!obligation) {
 		throw new ConvexError(`Obligation not found: ${args.obligationId}`);

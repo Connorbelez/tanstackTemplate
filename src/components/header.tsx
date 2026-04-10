@@ -1,32 +1,38 @@
-import { Link, linkOptions } from "@tanstack/react-router";
+import { Link } from "@tanstack/react-router";
 import ThemeToggle from "./theme-toggle";
 import WorkOSHeader from "./workos-user.tsx";
 
-const demoSections = [
+type DemoLink = { label: string; to: string } | { label: string; href: string };
+interface DemoSection {
+	label: string;
+	links: DemoLink[];
+}
+
+const demoSections: DemoSection[] = [
 	{
 		label: "Frontend",
-		links: linkOptions([
+		links: [
 			{ to: "/demo/tanstack-query", label: "TanStack Query" },
 			{ to: "/demo/table", label: "TanStack Table" },
 			{ to: "/demo/form/simple", label: "Simple Form" },
 			{ to: "/demo/form/address", label: "Address Form" },
 			{ to: "/demo/storybook", label: "Storybook" },
-		]),
+		],
 	},
 	{
 		label: "Auth",
-		links: linkOptions([{ to: "/demo/workos", label: "WorkOS" }]),
+		links: [{ to: "/demo/workos", label: "WorkOS" }],
 	},
 	{
 		label: "Convex Core",
-		links: linkOptions([
+		links: [
 			{ to: "/demo/convex", label: "Todos" },
 			{ to: "/demo/convex-ledger", label: "Ownership Ledger" },
-		]),
+		],
 	},
 	{
 		label: "Convex Components",
-		links: linkOptions([
+		links: [
 			{ to: "/demo/convex-rate-limiter", label: "Rate Limiter" },
 			{ to: "/demo/convex-action-cache", label: "Action Cache" },
 			{ to: "/demo/convex-debouncer", label: "Debouncer" },
@@ -43,19 +49,20 @@ const demoSections = [
 			{ to: "/demo/convex-file-management", label: "File Management" },
 			{ to: "/demo/convex-fluent", label: "Fluent Convex" },
 			{ to: "/demo/convex-cascading-delete", label: "Cascading Delete" },
-		]),
+		],
 	},
 	{
 		label: "Convex Helpers",
-		links: linkOptions([{ to: "/demo/convex-triggers", label: "Triggers" }]),
+		links: [{ to: "/demo/convex-triggers", label: "Triggers" }],
 	},
 	{
 		label: "Platform",
-		links: linkOptions([
+		links: [
+			{ to: "/demo/amps", label: "AMPS Demo" },
 			{ to: "/demo/document-engine", label: "Document Engine" },
 			{ to: "/demo/audit-traceability", label: "Audit & Traceability" },
 			{ to: "/demo/governed-transitions", label: "Governed Transitions" },
-		]),
+		],
 	},
 ];
 
@@ -145,20 +152,30 @@ export default function Header() {
 									<div className="px-3 pt-2 pb-1 font-semibold text-[var(--sea-ink-soft)] text-xs uppercase tracking-wider">
 										{section.label}
 									</div>
-									{section.links.map(({ label, ...demoLink }) => (
-										<Link
-											key={demoLink.to}
-											{...demoLink}
-											activeProps={{
-												className:
-													"block rounded-lg bg-[var(--link-bg-hover)] px-3 py-2 text-sm text-[var(--sea-ink)] no-underline transition",
-											}}
-											className={demoLinkClassName}
-											viewTransition
-										>
-											{label}
-										</Link>
-									))}
+									{section.links.map((demoLink) =>
+										"href" in demoLink ? (
+											<a
+												className={demoLinkClassName}
+												href={demoLink.href}
+												key={demoLink.href}
+											>
+												{demoLink.label}
+											</a>
+										) : (
+											<Link
+												activeProps={{
+													className:
+														"block rounded-lg bg-[var(--link-bg-hover)] px-3 py-2 text-sm text-[var(--sea-ink)] no-underline transition",
+												}}
+												className={demoLinkClassName}
+												key={demoLink.to}
+												to={demoLink.to}
+												viewTransition
+											>
+												{demoLink.label}
+											</Link>
+										)
+									)}
 								</div>
 							))}
 						</div>

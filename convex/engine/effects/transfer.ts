@@ -90,6 +90,10 @@ export const recordTransferProviderRef = internalMutation({
  *
  * Always patches settledAt on the transfer record. Cash ledger posting only
  * occurs for non-bridged transfers with a known direction.
+ *
+ * Boundary note: this effect does not inspect collection-plan strategy state.
+ * It only uses explicit transfer linkage (collectionAttemptId) at the
+ * reconciliation seam; money meaning stays transfer- or obligation-driven.
  */
 export const publishTransferConfirmed = internalMutation({
 	args: transferEffectValidator,

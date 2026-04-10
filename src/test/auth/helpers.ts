@@ -124,12 +124,16 @@ export function createMockViewer(options: MockViewerOptions): MockIdentity {
 /**
  * Create a convex-test instance with the auditLog component registered.
  */
-export function createTestConvex() {
+export function createTestConvex(options?: {
+	includeWorkflowComponents?: boolean;
+}) {
 	const t = convexTest(schema, modules);
 	auditLogTest.register(t, "auditLog");
 	t.registerComponent("auditTrail", auditTrailSchema, auditTrailModules);
-	t.registerComponent("workflow", workflowSchema, workflowModules);
-	t.registerComponent("workflow/workpool", workpoolSchema, workpoolModules);
+	if (options?.includeWorkflowComponents ?? true) {
+		t.registerComponent("workflow", workflowSchema, workflowModules);
+		t.registerComponent("workflow/workpool", workpoolSchema, workpoolModules);
+	}
 	return t;
 }
 

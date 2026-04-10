@@ -34,11 +34,9 @@ function snapshotWithContext(
 
 const DRAW_INITIATED = {
 	type: "DRAW_INITIATED" as const,
-	providerRef: "ref-001",
 };
 const PROVIDER_ACKNOWLEDGED = {
 	type: "PROVIDER_ACKNOWLEDGED" as const,
-	providerRef: "ref-001",
 };
 const FUNDS_SETTLED = { type: "FUNDS_SETTLED" as const, settledAt: 1000 };
 const DRAW_FAILED = {
@@ -50,7 +48,6 @@ const RETRY_ELIGIBLE = { type: "RETRY_ELIGIBLE" as const };
 const MAX_RETRIES_EXCEEDED = { type: "MAX_RETRIES_EXCEEDED" as const };
 const RETRY_INITIATED = {
 	type: "RETRY_INITIATED" as const,
-	providerRef: "ref-retry-001",
 };
 const ATTEMPT_CANCELLED = {
 	type: "ATTEMPT_CANCELLED" as const,
@@ -118,14 +115,14 @@ describe("collectionAttempt machine", () => {
 	// ── 7×8 State × Event Matrix ───────────────────────────────────
 
 	describe("initiated state", () => {
-		it("initiated -> pending on DRAW_INITIATED fires recordProviderRef", () => {
+		it("initiated -> pending on DRAW_INITIATED without side effects", () => {
 			const [next, actions] = transition(
 				collectionAttemptMachine,
 				snapshotAt("initiated"),
 				DRAW_INITIATED
 			);
 			expect(next.value).toBe("pending");
-			expect(actions.map((a) => a.type)).toContain("recordProviderRef");
+			expect(actions).toHaveLength(0);
 		});
 
 		it("initiated ignores PROVIDER_ACKNOWLEDGED", () => {
@@ -427,14 +424,14 @@ describe("collectionAttempt machine", () => {
 			expect(actions).toHaveLength(0);
 		});
 
-		it("retry_scheduled -> pending on RETRY_INITIATED fires recordProviderRef", () => {
+		it("retry_scheduled -> pending on RETRY_INITIATED without side effects", () => {
 			const [next, actions] = transition(
 				collectionAttemptMachine,
 				snapshotAt("retry_scheduled"),
 				RETRY_INITIATED
 			);
 			expect(next.value).toBe("pending");
-			expect(actions.map((a) => a.type)).toContain("recordProviderRef");
+			expect(actions).toHaveLength(0);
 		});
 
 		it("retry_scheduled ignores ATTEMPT_CANCELLED", () => {
@@ -623,7 +620,7 @@ describe("collectionAttempt machine", () => {
 				RETRY_INITIATED
 			);
 			expect(step2.value).toBe("pending");
-			expect(actions2.map((a) => a.type)).toContain("recordProviderRef");
+			expect(actions2).toHaveLength(0);
 
 			const [step3, actions3] = transition(
 				collectionAttemptMachine,

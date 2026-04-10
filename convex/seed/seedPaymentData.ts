@@ -96,7 +96,7 @@ async function seedPaymentDataImpl(
 	const schedulingResult = await scheduleInitialEntriesImpl(ctx, {
 		mortgageId,
 		delayDays: scheduleRuleConfig?.delayDays ?? 5,
-		ruleId: rules.ruleIdsByCode.schedule_rule,
+		createdByRuleId: rules.ruleIdsByCode.schedule_rule,
 	});
 
 	return {

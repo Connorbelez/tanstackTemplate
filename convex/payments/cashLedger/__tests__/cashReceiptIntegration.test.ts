@@ -154,7 +154,13 @@ async function createPlanEntryAndAttempt(
 	}
 ) {
 	return t.run(async (ctx) => {
+		const firstObligation = await ctx.db.get(args.obligationIds[0]);
+		if (!firstObligation) {
+			throw new Error("Expected at least one obligation for plan entry setup");
+		}
+
 		const planEntryId = await ctx.db.insert("collectionPlanEntries", {
+			mortgageId: firstObligation.mortgageId,
 			obligationIds: args.obligationIds,
 			amount: args.amount,
 			method: "manual",
@@ -166,6 +172,8 @@ async function createPlanEntryAndAttempt(
 
 		const attemptId = await ctx.db.insert("collectionAttempts", {
 			planEntryId,
+			mortgageId: firstObligation.mortgageId,
+			obligationIds: args.obligationIds,
 			amount: args.amount,
 			method: "manual",
 			status: "confirmed",

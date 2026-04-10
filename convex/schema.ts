@@ -58,11 +58,21 @@ import {
 	listingStatusValidator,
 } from "./listings/validators";
 import {
+	balancePreCheckDecisionValidator,
+	balancePreCheckReasonCodeValidator,
+	balancePreCheckSignalSourceValidator,
+} from "./payments/collectionPlan/balancePreCheckContract";
+import {
 	collectionRuleConfigValidator,
 	collectionRuleKindValidator,
 	collectionRuleScopeValidator,
 	collectionRuleStatusValidator,
 } from "./payments/collectionPlan/ruleContract";
+import {
+	workoutPlanActorTypeValidator,
+	workoutPlanStatusValidator,
+	workoutPlanStrategyValidator,
+} from "./payments/collectionPlan/workoutContract";
 import { payoutFrequencyValidator } from "./payments/payout/validators";
 import {
 	counterpartyTypeValidator,
@@ -786,6 +796,7 @@ export default defineSchema({
 	// ══════════════════════════════════════════════════════════
 
 	collectionPlanEntries: defineTable({
+		mortgageId: v.id("mortgages"),
 		obligationIds: v.array(v.id("obligations")),
 		amount: v.number(), // cents
 		method: v.string(), // "manual", "mock_pad", "rotessa_pad"
@@ -801,43 +812,103 @@ export default defineSchema({
 			v.literal("default_schedule"),
 			v.literal("retry_rule"),
 			v.literal("late_fee_rule"),
-			v.literal("admin")
+			v.literal("admin"),
+			v.literal("admin_reschedule"),
+			v.literal("admin_workout")
 		),
-		ruleId: v.optional(v.id("collectionRules")),
+		createdByRuleId: v.optional(v.id("collectionRules")),
+		retryOfId: v.optional(v.id("collectionPlanEntries")),
+		workoutPlanId: v.optional(v.id("workoutPlans")),
+		supersededByWorkoutPlanId: v.optional(v.id("workoutPlans")),
+		supersededAt: v.optional(v.number()),
 		rescheduledFromId: v.optional(v.id("collectionPlanEntries")),
+		rescheduleReason: v.optional(v.string()),
+		rescheduleRequestedAt: v.optional(v.number()),
+		rescheduleRequestedByActorId: v.optional(v.string()),
+		rescheduleRequestedByActorType: v.optional(
+			v.union(
+				v.literal("admin"),
+				v.literal("borrower"),
+				v.literal("broker"),
+				v.literal("member"),
+				v.literal("system")
+			)
+		),
 		executedAt: v.optional(v.number()),
+		cancelledAt: v.optional(v.number()),
 		executionIdempotencyKey: v.optional(v.string()),
 		collectionAttemptId: v.optional(v.id("collectionAttempts")),
+		balancePreCheckDecision: v.optional(balancePreCheckDecisionValidator),
+		balancePreCheckReasonCode: v.optional(balancePreCheckReasonCodeValidator),
+		balancePreCheckReasonDetail: v.optional(v.string()),
+		balancePreCheckSignalSource: v.optional(
+			balancePreCheckSignalSourceValidator
+		),
+		balancePreCheckRuleId: v.optional(v.id("collectionRules")),
+		balancePreCheckEvaluatedAt: v.optional(v.number()),
+		balancePreCheckNextEvaluationAt: v.optional(v.number()),
 		createdAt: v.number(),
 	})
 		.index("by_scheduled_date", ["scheduledDate", "status"])
 		.index("by_status_scheduled_date", ["status", "scheduledDate"])
 		.index("by_status", ["status"])
-		.index("by_rescheduled_from", ["rescheduledFromId", "source"]),
+		.index("by_mortgage_status_scheduled", [
+			"mortgageId",
+			"status",
+			"scheduledDate",
+		])
+		.index("by_rescheduled_from", ["rescheduledFromId", "source"])
+		.index("by_retry_of", ["retryOfId", "source"])
+		.index("by_created_by_rule", ["createdByRuleId", "source"])
+		.index("by_workout_plan", ["workoutPlanId", "createdAt"])
+		.index("by_workout_supersession", [
+			"supersededByWorkoutPlanId",
+			"supersededAt",
+		]),
 
 	collectionRules: defineTable({
-		kind: v.optional(collectionRuleKindValidator),
-		code: v.optional(v.string()),
-		displayName: v.optional(v.string()),
-		description: v.optional(v.string()),
+		kind: collectionRuleKindValidator,
+		code: v.string(),
+		displayName: v.string(),
+		description: v.string(),
 		trigger: v.union(v.literal("schedule"), v.literal("event")),
-		status: v.optional(collectionRuleStatusValidator),
-		scope: v.optional(collectionRuleScopeValidator),
-		config: v.optional(collectionRuleConfigValidator),
-		version: v.optional(v.number()),
+		status: collectionRuleStatusValidator,
+		scope: collectionRuleScopeValidator,
+		config: collectionRuleConfigValidator,
+		version: v.number(),
 		effectiveFrom: v.optional(v.number()),
 		effectiveTo: v.optional(v.number()),
-		createdByActorId: v.optional(v.string()),
-		updatedByActorId: v.optional(v.string()),
-		name: v.optional(v.string()),
-		condition: v.optional(v.any()),
-		action: v.optional(v.string()),
-		parameters: v.optional(v.any()), // rule-specific config
+		createdByActorId: v.string(),
+		updatedByActorId: v.string(),
 		priority: v.number(),
-		enabled: v.optional(v.boolean()),
 		createdAt: v.number(),
 		updatedAt: v.number(),
-	}).index("by_trigger", ["trigger", "enabled", "priority"]),
+	})
+		.index("by_trigger", ["trigger", "status", "priority"])
+		.index("by_code", ["code"]),
+
+	workoutPlans: defineTable({
+		mortgageId: v.id("mortgages"),
+		name: v.string(),
+		rationale: v.string(),
+		status: workoutPlanStatusValidator,
+		strategy: workoutPlanStrategyValidator,
+		createdByActorId: v.string(),
+		createdByActorType: workoutPlanActorTypeValidator,
+		activatedAt: v.optional(v.number()),
+		activatedByActorId: v.optional(v.string()),
+		activatedByActorType: v.optional(workoutPlanActorTypeValidator),
+		completedAt: v.optional(v.number()),
+		cancelledAt: v.optional(v.number()),
+		cancelledByActorId: v.optional(v.string()),
+		cancelledByActorType: v.optional(workoutPlanActorTypeValidator),
+		cancelReason: v.optional(v.string()),
+		createdAt: v.number(),
+		updatedAt: v.number(),
+	})
+		.index("by_mortgage", ["mortgageId", "createdAt"])
+		.index("by_mortgage_status", ["mortgageId", "status", "createdAt"])
+		.index("by_status", ["status", "createdAt"]),
 
 	collectionAttempts: defineTable({
 		// ─── GT fields ───
@@ -846,6 +917,8 @@ export default defineSchema({
 		lastTransitionAt: v.optional(v.number()), // system timestamp: Unix ms
 		// ─── Domain fields ───
 		planEntryId: v.id("collectionPlanEntries"),
+		mortgageId: v.id("mortgages"),
+		obligationIds: v.array(v.id("obligations")),
 		method: v.string(),
 		amount: v.number(), // cents
 		triggerSource: v.optional(
@@ -864,17 +937,18 @@ export default defineSchema({
 		requestedByActorId: v.optional(v.string()),
 		executionReason: v.optional(v.string()),
 		transferRequestId: v.optional(v.id("transferRequests")),
-		providerRef: v.optional(v.string()),
-		providerStatus: v.optional(v.string()),
-		providerData: v.optional(v.any()),
 		initiatedAt: v.number(), // system timestamp: Unix ms
+		confirmedAt: v.optional(v.number()), // business confirmation timestamp
 		settledAt: v.optional(v.number()), // system timestamp: Unix ms
 		failedAt: v.optional(v.number()), // system timestamp: Unix ms
+		cancelledAt: v.optional(v.number()), // system timestamp: Unix ms
+		reversedAt: v.optional(v.number()), // system timestamp: Unix ms
 		failureReason: v.optional(v.string()),
 	})
 		.index("by_plan_entry", ["planEntryId"])
-		.index("by_status", ["status"])
-		.index("by_provider_ref", ["providerRef"]),
+		.index("by_transfer_request", ["transferRequestId"])
+		.index("by_mortgage_status", ["mortgageId", "status", "initiatedAt"])
+		.index("by_status", ["status"]),
 
 	// ══════════════════════════════════════════════════════════
 	// PROVISIONAL FLOW

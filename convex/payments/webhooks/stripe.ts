@@ -1,7 +1,5 @@
 import { internal } from "../../_generated/api";
 import { httpAction } from "../../_generated/server";
-import { handlePaymentReversal } from "./handleReversal";
-import type { ReversalWebhookPayload } from "./types";
 import { jsonResponse } from "./utils";
 import type { VerificationResult } from "./verification";
 
@@ -24,6 +22,16 @@ export interface StripeWebhookEvent {
 	};
 	id: string;
 	type: string;
+}
+
+interface StripeReversalPayload {
+	originalAmount: number;
+	provider: "stripe";
+	providerEventId: string;
+	providerRef: string;
+	reversalCode?: string;
+	reversalDate: string;
+	reversalReason: string;
 }
 
 // ── Constants ───────────────────────────────────────────────────────
@@ -83,7 +91,7 @@ export function buildReversalCode(
 	}
 }
 
-export function toPayload(event: StripeWebhookEvent): ReversalWebhookPayload {
+export function toPayload(event: StripeWebhookEvent): StripeReversalPayload {
 	const reversalDate = new Date(event.created * 1000)
 		.toISOString()
 		.slice(0, 10);
@@ -147,20 +155,15 @@ export const stripeWebhook = httpAction(async (ctx, request) => {
 		);
 	}
 
-	// 4. Map to payload and process
+	// 4. Build the normalized payload for logging/response metadata.
 	const payload = toPayload(event);
 
-	try {
-		const result = await handlePaymentReversal(ctx, payload);
-		return jsonResponse({ ...result });
-	} catch (err) {
-		// Always return 200 for processing errors to prevent Stripe retry storms.
-		// Non-200 responses are reserved for signature/JSON validation failures only.
-		console.error("[Stripe Webhook] Reversal processing failed:", err);
-		return jsonResponse({
-			error: "processing_failed",
-			message: err instanceof Error ? err.message : "Unknown error",
-			providerEventId: payload.providerEventId,
-		});
-	}
+	console.warn(
+		"[Stripe Webhook] Stripe reversals are not routed through the shared reversal handler."
+	);
+	return jsonResponse({
+		success: false,
+		reason: "unsupported_provider",
+		providerEventId: payload.providerEventId,
+	});
 });
