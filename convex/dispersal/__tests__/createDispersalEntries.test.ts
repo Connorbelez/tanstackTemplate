@@ -6,6 +6,7 @@ import { registerAuditLogComponent } from "../../../src/test/convex/registerAudi
 import type { Doc, Id } from "../../_generated/dataModel";
 import type { MutationCtx } from "../../_generated/server";
 import auditTrailSchema from "../../components/auditTrail/schema";
+import type { CommandSource } from "../../engine/types";
 import schema from "../../schema";
 import {
 	convexModules,
@@ -20,7 +21,10 @@ const auditTrailModules = sharedAuditTrailModules;
 const workflowModules = sharedWorkflowModules;
 const workpoolModules = sharedWorkpoolModules;
 
-const DEFAULT_SOURCE = { type: "system" as const, channel: "test" };
+const DEFAULT_SOURCE: CommandSource = {
+	channel: "scheduler",
+	actorType: "system",
+};
 const NO_ACTIVE_POSITIONS_PATTERN = /no active positions for mortgage/i;
 
 type TestHarness = ReturnType<typeof createHarness>;
@@ -38,7 +42,7 @@ interface CreateDispersalEntriesHandler {
 			settledAmount: number;
 			settledDate: string;
 			idempotencyKey: string;
-			source: typeof DEFAULT_SOURCE;
+			source: CommandSource;
 		}
 	) => Promise<{
 		created: boolean;

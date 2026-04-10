@@ -83,6 +83,7 @@ export function ListingDetailPage({ listing }: ListingDetailPageProps) {
 	const selectedLawyer = listing.checkout.lawyers.find(
 		(lawyer) => lawyer.id === selectedLawyerId
 	);
+	const availableFractions = listing.investment.availableFractions;
 
 	const requestedFractions = useMemo(() => {
 		const parsed = Number.parseInt(fractionInput, 10);
@@ -92,9 +93,9 @@ export function ListingDetailPage({ listing }: ListingDetailPageProps) {
 		return parsed;
 	}, [fractionInput, listing.checkout.defaultFractions]);
 
-	const effectiveFractions = Math.max(
-		listing.checkout.minimumFractions,
-		requestedFractions
+	const effectiveFractions = Math.min(
+		Math.max(listing.checkout.minimumFractions, requestedFractions),
+		availableFractions
 	);
 	const calculatedInvestment =
 		effectiveFractions * listing.checkout.perFractionAmount;
@@ -127,7 +128,12 @@ export function ListingDetailPage({ listing }: ListingDetailPageProps) {
 	}
 
 	function normalizeFractions(value: number) {
-		return String(Math.max(listing.checkout.minimumFractions, value));
+		return String(
+			Math.min(
+				Math.max(listing.checkout.minimumFractions, value),
+				availableFractions
+			)
+		);
 	}
 
 	function handleFractionChange(nextValue: string) {
@@ -506,23 +512,86 @@ export function ListingDetailPage({ listing }: ListingDetailPageProps) {
 				<section className="px-5 pt-6">
 					<SectionLabel>Documents</SectionLabel>
 					{listing.documents.length > 0 ? (
-						<div className="mt-3 space-y-2">
-							{listing.documents.map((document) => (
-								<button
-									className="flex w-full items-center justify-between rounded-xl border border-[#E7E5E4] bg-white px-4 py-4 text-left"
-									key={document.id}
-									onClick={() => setSelectedDocumentId(document.id)}
-									type="button"
-								>
-									<div className="flex items-center gap-3">
-										<FileText className="size-4 text-[#737373]" />
-										<span className="font-medium text-sm">
-											{document.label}
-										</span>
+						<div className="mt-3 space-y-3">
+							<div className="space-y-2">
+								{listing.documents.map((document) => {
+									const isSelected = document.id === selectedDocument?.id;
+									return (
+										<button
+											aria-pressed={isSelected}
+											className={cn(
+												"flex w-full items-center justify-between rounded-xl border px-4 py-4 text-left transition-colors",
+												isSelected
+													? "border-[#204636] bg-[#F1FAF3]"
+													: "border-[#E7E5E4] bg-white"
+											)}
+											key={document.id}
+											onClick={() => setSelectedDocumentId(document.id)}
+											type="button"
+										>
+											<div className="flex items-center gap-3">
+												<FileText
+													className={cn(
+														"size-4",
+														isSelected ? "text-[#204636]" : "text-[#737373]"
+													)}
+												/>
+												<div>
+													<span className="block font-medium text-sm">
+														{document.label}
+													</span>
+													<span className="text-[#737373] text-[12px]">
+														{document.meta}
+													</span>
+												</div>
+											</div>
+											<ChevronRight
+												className={cn(
+													"size-4",
+													isSelected ? "text-[#204636]" : "text-[#A3A3A3]"
+												)}
+											/>
+										</button>
+									);
+								})}
+							</div>
+
+							<WhiteSurface className="px-4 py-4">
+								{selectedDocument ? (
+									<div className="space-y-4">
+										<div className="flex items-start justify-between gap-4">
+											<div>
+												<p className="font-semibold text-[18px] leading-tight">
+													{selectedDocument.label}
+												</p>
+												<p className="mt-1 text-[#737373] text-sm">
+													{selectedDocument.meta}
+												</p>
+											</div>
+											<span className="rounded-full bg-[#F1FAF3] px-3 py-1 font-medium text-[#204636] text-[12px]">
+												Selected
+											</span>
+										</div>
+
+										<div className="flex h-[170px] items-center justify-center rounded-xl border border-[#D6D3CC] border-dashed bg-[#FBFAF8]">
+											<div className="text-center">
+												<FileText className="mx-auto size-8 text-[#B0AEA8]" />
+												<p className="mt-3 font-medium text-[#5A5956] text-sm">
+													{selectedDocument.pageLabel}
+												</p>
+												<p className="mt-1 text-[#A3A3A3] text-xs">
+													Preview details update as you switch documents.
+												</p>
+											</div>
+										</div>
 									</div>
-									<ChevronRight className="size-4 text-[#A3A3A3]" />
-								</button>
-							))}
+								) : (
+									<div className="space-y-2 text-[#6B6B68] text-sm">
+										<p>No documents are attached to this demo listing yet.</p>
+										<p>Tap a document above to preview it here.</p>
+									</div>
+								)}
+							</WhiteSurface>
 						</div>
 					) : (
 						<WhiteSurface className="mt-3 border-dashed px-4 py-5 text-[#6B6B68] text-sm">
@@ -603,13 +672,13 @@ export function ListingDetailPage({ listing }: ListingDetailPageProps) {
 function DesktopTopNav() {
 	return (
 		<header className="flex items-center justify-between border-[#E7E5E4] border-b bg-white px-16 py-4">
-			<a
+			<Link
 				className="inline-flex items-center gap-2 font-medium text-[#3F3F46] text-[13px]"
-				href="/demo/listings"
+				to="/demo/listings"
 			>
 				<ArrowLeft className="size-4" />
 				Back to Listings
-			</a>
+			</Link>
 
 			<div className="flex items-center gap-3">
 				<div className="inline-flex items-center gap-2 rounded-full bg-[#F6FBF7] px-3 py-2 text-[#2E7D4F] text-[12px]">
@@ -631,10 +700,10 @@ function DesktopTopNav() {
 function MobileTopNav() {
 	return (
 		<header className="flex items-center justify-between border-[#E7E5E4] border-b bg-white px-5 py-3">
-			<a href="/demo/listings">
+			<Link to="/demo/listings">
 				<ChevronLeft className="size-5 text-[#3F3F46]" />
 				<span className="sr-only">Back to Listings</span>
-			</a>
+			</Link>
 			<div className="flex items-center gap-3 text-[12px]">
 				<div className="inline-flex items-center gap-1 text-[#2E7D4F]">
 					<span className="size-1.5 rounded-full bg-[#22C55E]" />
@@ -936,6 +1005,10 @@ function InvestmentSummaryCard({
 				</div>
 				<p className="mt-5 text-[#737373] text-sm">
 					{listing.investment.investorCountLabel}
+				</p>
+				<p className="mt-2 text-[#A3A3A3] text-[12px]">
+					Maximum available for this listing:{" "}
+					{listing.investment.availableFractions.toLocaleString()} fractions
 				</p>
 			</WhiteSurface>
 		</section>

@@ -66,6 +66,7 @@ import { Route as AdminDealsRouteRouteImport } from './routes/admin/deals/route'
 import { Route as AdminBorrowersRouteRouteImport } from './routes/admin/borrowers/route'
 import { Route as DemoRbacIndexRouteImport } from './routes/demo/rbac/index'
 import { Route as DemoRbacAuthIndexRouteImport } from './routes/demo/rbac-auth/index'
+import { Route as DemoListingsIndexRouteImport } from './routes/demo/listings/index'
 import { Route as DemoGovernedTransitionsIndexRouteImport } from './routes/demo/governed-transitions/index'
 import { Route as DemoDocumentEngineIndexRouteImport } from './routes/demo/document-engine/index'
 import { Route as DemoCrmIndexRouteImport } from './routes/demo/crm/index'
@@ -403,6 +404,11 @@ const DemoRbacAuthIndexRoute = DemoRbacAuthIndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => DemoRbacAuthRouteRoute,
+} as any)
+const DemoListingsIndexRoute = DemoListingsIndexRouteImport.update({
+  id: '/demo/listings/',
+  path: '/demo/listings/',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const DemoGovernedTransitionsIndexRoute =
   DemoGovernedTransitionsIndexRouteImport.update({
@@ -754,6 +760,7 @@ export interface FileRoutesByFullPath {
   '/demo/crm/': typeof DemoCrmIndexRoute
   '/demo/document-engine/': typeof DemoDocumentEngineIndexRoute
   '/demo/governed-transitions/': typeof DemoGovernedTransitionsIndexRoute
+  '/demo/listings/': typeof DemoListingsIndexRoute
   '/demo/rbac-auth/': typeof DemoRbacAuthIndexRoute
   '/demo/rbac/': typeof DemoRbacIndexRoute
   '/demo/rbac/admin/underwriting': typeof DemoRbacAdminUnderwritingRouteRoute
@@ -852,6 +859,7 @@ export interface FileRoutesByTo {
   '/demo/crm': typeof DemoCrmIndexRoute
   '/demo/document-engine': typeof DemoDocumentEngineIndexRoute
   '/demo/governed-transitions': typeof DemoGovernedTransitionsIndexRoute
+  '/demo/listings': typeof DemoListingsIndexRoute
   '/demo/rbac-auth': typeof DemoRbacAuthIndexRoute
   '/demo/rbac': typeof DemoRbacIndexRoute
   '/demo/rbac/admin/underwriting': typeof DemoRbacAdminUnderwritingRouteRoute
@@ -958,6 +966,7 @@ export interface FileRoutesById {
   '/demo/crm/': typeof DemoCrmIndexRoute
   '/demo/document-engine/': typeof DemoDocumentEngineIndexRoute
   '/demo/governed-transitions/': typeof DemoGovernedTransitionsIndexRoute
+  '/demo/listings/': typeof DemoListingsIndexRoute
   '/demo/rbac-auth/': typeof DemoRbacAuthIndexRoute
   '/demo/rbac/': typeof DemoRbacIndexRoute
   '/demo/rbac/admin/underwriting': typeof DemoRbacAdminUnderwritingRouteRoute
@@ -1065,6 +1074,7 @@ export interface FileRouteTypes {
     | '/demo/crm/'
     | '/demo/document-engine/'
     | '/demo/governed-transitions/'
+    | '/demo/listings/'
     | '/demo/rbac-auth/'
     | '/demo/rbac/'
     | '/demo/rbac/admin/underwriting'
@@ -1163,6 +1173,7 @@ export interface FileRouteTypes {
     | '/demo/crm'
     | '/demo/document-engine'
     | '/demo/governed-transitions'
+    | '/demo/listings'
     | '/demo/rbac-auth'
     | '/demo/rbac'
     | '/demo/rbac/admin/underwriting'
@@ -1268,6 +1279,7 @@ export interface FileRouteTypes {
     | '/demo/crm/'
     | '/demo/document-engine/'
     | '/demo/governed-transitions/'
+    | '/demo/listings/'
     | '/demo/rbac-auth/'
     | '/demo/rbac/'
     | '/demo/rbac/admin/underwriting'
@@ -1327,6 +1339,7 @@ export interface RootRouteChildren {
   DemoFormAddressRoute: typeof DemoFormAddressRoute
   DemoFormSimpleRoute: typeof DemoFormSimpleRoute
   DemoListingsListingidRoute: typeof DemoListingsListingidRoute
+  DemoListingsIndexRoute: typeof DemoListingsIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -1729,6 +1742,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/demo/rbac-auth/'
       preLoaderRoute: typeof DemoRbacAuthIndexRouteImport
       parentRoute: typeof DemoRbacAuthRouteRoute
+    }
+    '/demo/listings/': {
+      id: '/demo/listings/'
+      path: '/demo/listings'
+      fullPath: '/demo/listings/'
+      preLoaderRoute: typeof DemoListingsIndexRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/demo/governed-transitions/': {
       id: '/demo/governed-transitions/'
@@ -2376,6 +2396,7 @@ const rootRouteChildren: RootRouteChildren = {
   DemoFormAddressRoute: DemoFormAddressRoute,
   DemoFormSimpleRoute: DemoFormSimpleRoute,
   DemoListingsListingidRoute: DemoListingsListingidRoute,
+  DemoListingsIndexRoute: DemoListingsIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

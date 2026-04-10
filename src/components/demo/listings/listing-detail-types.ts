@@ -112,6 +112,7 @@ export interface ListingDetailMock {
 	investment: {
 		availabilityLabel: string;
 		availabilityValue: number;
+		availableFractions: number;
 		investorCountLabel: string;
 		projectedYield: string;
 		totalFractions: number;

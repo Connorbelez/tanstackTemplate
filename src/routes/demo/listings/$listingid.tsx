@@ -1,4 +1,4 @@
-import { createFileRoute, notFound } from "@tanstack/react-router";
+import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { AlertCircle, ArrowLeft } from "lucide-react";
 import { ListingDetailPage } from "#/components/demo/listings/ListingDetailPage";
 import { getListingDetailMock } from "#/components/demo/listings/listing-detail-mock-data";
@@ -41,13 +41,13 @@ function DemoListingDetailNotFoundComponent() {
 					</div>
 				</div>
 
-				<a
+				<Link
 					className="mt-8 inline-flex items-center gap-2 rounded-full border border-[#E7E5E4] px-4 py-2 font-medium text-sm hover:bg-[#FBFAF8]"
-					href="/demo/listings"
+					to="/demo/listings"
 				>
 					<ArrowLeft className="size-4" />
 					Back to Listings
-				</a>
+				</Link>
 			</div>
 		</div>
 	);
