@@ -59,39 +59,51 @@ export const processDuePlanEntries = internalAction({
 		for (const entry of dueEntries) {
 			summary.attemptedCount += 1;
 
-			const result = await ctx.runAction(
-				internal.payments.collectionPlan.execution.executePlanEntry,
-				{
-					planEntryId: entry._id,
-					triggerSource: "system_scheduler",
-					requestedAt,
-					idempotencyKey: buildSchedulerExecutionIdempotencyKey(`${entry._id}`),
-					requestedByActorType: "system",
-					requestedByActorId: "collection-plan-runner",
-				}
-			);
-
-			switch (result.outcome) {
-				case "attempt_created":
-					summary.attemptCreatedCount += 1;
-					if (result.reasonCode === "transfer_handoff_failed") {
-						summary.handoffFailureCount += 1;
+			try {
+				const result = await ctx.runAction(
+					internal.payments.collectionPlan.execution.executePlanEntry,
+					{
+						planEntryId: entry._id,
+						triggerSource: "system_scheduler",
+						requestedAt,
+						idempotencyKey: buildSchedulerExecutionIdempotencyKey(
+							`${entry._id}`
+						),
+						requestedByActorType: "system",
+						requestedByActorId: "collection-plan-runner",
 					}
-					break;
-				case "already_executed":
-					summary.alreadyExecutedCount += 1;
-					break;
-				case "not_eligible":
-					summary.notEligibleCount += 1;
-					break;
-				case "rejected":
-					summary.rejectedCount += 1;
-					break;
-				case "noop":
-					summary.noopCount += 1;
-					break;
-				default:
-					break;
+				);
+
+				switch (result.outcome) {
+					case "attempt_created":
+						summary.attemptCreatedCount += 1;
+						if (result.reasonCode === "transfer_handoff_failed") {
+							summary.handoffFailureCount += 1;
+						}
+						break;
+					case "already_executed":
+						summary.alreadyExecutedCount += 1;
+						break;
+					case "not_eligible":
+						summary.notEligibleCount += 1;
+						break;
+					case "rejected":
+						summary.rejectedCount += 1;
+						break;
+					case "noop":
+						summary.noopCount += 1;
+						break;
+					default:
+						break;
+				}
+			} catch (error) {
+				console.error(
+					"[collection-plan-runner] failed to execute due plan entry",
+					{
+						error,
+						planEntryId: `${entry._id}`,
+					}
+				);
 			}
 		}
 

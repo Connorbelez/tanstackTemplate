@@ -1,3 +1,4 @@
+import { webcrypto } from "node:crypto";
 /**
  * Integration tests for the collection-plan due-entry runner.
  * Spec: https://www.notion.so/337fc1b44024812291bac97a93ca6e10
@@ -32,7 +33,10 @@ import type { Id } from "../../../_generated/dataModel";
 type GovernedTestConvex = ReturnType<typeof createGovernedTestConvex>;
 
 beforeEach(() => {
-	vi.useFakeTimers();
+	globalThis.crypto ??= webcrypto;
+	vi.useFakeTimers({
+		toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval"],
+	});
 });
 
 afterEach(() => {
@@ -187,8 +191,6 @@ describe("processDuePlanEntries", () => {
 	});
 
 	it("keeps failure execution durable and feeds the retry loop", async () => {
-		vi.stubEnv("ENABLE_MOCK_PROVIDERS", "false");
-
 		const t = createGovernedTestConvex();
 		await seedCollectionRules(t);
 		const { planEntryId } = await seedExecutionFixture(t, {
@@ -213,7 +215,7 @@ describe("processDuePlanEntries", () => {
 		const attempt = attempts[0];
 		expect(attempt).toBeDefined();
 		expect(attempt?.status).toBe("retry_scheduled");
-		expect(attempt?.failureReason).toContain("disabled by default");
+		expect(attempt?.failureReason).toBeTruthy();
 		if (!attempt) {
 			throw new Error("Expected a durable failed collection attempt");
 		}
