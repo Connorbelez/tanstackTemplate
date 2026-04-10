@@ -1,5 +1,11 @@
 # Unified Payment Rails — Technical Design Document
 
+> Historical design note (2026-04-03): this draft predates the aligned payment
+> contract cleanup. Treat `TransferProvider` and transfer-domain execution as
+> the current canonical direction for new inbound provider work. References to
+> `PaymentMethod` in this document are historical design context unless they
+> explicitly describe migration compatibility.
+
 **Goal:** Unified Payment Rails
 **Author:** AI-assisted (GitNexus code analysis + architecture review)
 **Date:** 2026-03-20
@@ -9,17 +15,18 @@
 
 ## 1. Executive Summary
 
-FairLend's payment system currently processes mortgage payments through a three-layer architecture: **Obligations** (what is owed), **Collection Plans** (rules-driven scheduling), and **Collection Attempts** (execution via pluggable payment methods). This document proposes a unified payment rails design that consolidates payment processing, adds real payment provider integration (Rotessa PAD, Stripe), and ensures financial/domain correctness across the entire money-movement pipeline — from borrower collection through pro-rata lender dispersal.
+FairLend's payment system currently processes mortgage payments through a three-layer architecture: **Obligations** (what is owed), **Collection Plans** (rules-driven scheduling), and **Collection Attempts** (business execution records that can delegate provider work). This document proposes a unified payment rails design that consolidates payment processing, adds real payment provider integration (Rotessa PAD, Stripe), and ensures financial/domain correctness across the entire money-movement pipeline — from borrower collection through pro-rata lender dispersal.
 
 ### Current State
-- Two mock payment methods: `ManualPaymentMethod` (no-op) and `MockPADMethod` (simulated delay + failure)
+- Two legacy compatibility payment methods: `ManualPaymentMethod` (no-op) and `MockPADMethod` (simulated delay + failure)
 - Stripe and Polar components installed but not wired into the collection pipeline
 - Dispersal entries created atomically but no actual payout mechanism
 - No real bank-account verification (Plaid/Flinks) or PAD agreement management
 - Servicing fee calculated as fixed monthly amount, not prorated to actual collection day
+- Transfer-domain execution exists and is the forward-looking boundary for provider mediation
 
 ### Target State
-- Unified `PaymentMethod` strategy pattern with real providers (Rotessa PAD, Stripe ACH/EFT, manual)
+- Unified transfer-domain provider boundary with `TransferProvider` as the canonical inbound abstraction for real providers (Rotessa PAD, Stripe ACH/EFT, manual)
 - Bank account verification (Plaid or Flinks) as a prerequisite for PAD enrollment
 - Automated lender payout via the same payment rails (reverse flow)
 - End-to-end idempotency, reconciliation, and audit trail
@@ -42,8 +49,11 @@ FairLend's payment system currently processes mortgage payments through a three-
 │                                              │                      │
 │                                    ┌─────────▼─────────┐           │
 │                                    │ Collection Attempt │           │
-│                                    │   (PaymentMethod)  │           │
+│                                    │  (business record) │           │
 │                                    └─────────┬─────────┘           │
+│                                              │                      │
+│                                    transfer/provider mediation      │
+│                                       (`TransferProvider`)          │
 │                                              │                      │
 │               ┌──────────────────────────────┼──────────┐          │
 │               ▼                              ▼          ▼          │
@@ -80,9 +90,18 @@ FairLend's payment system currently processes mortgage payments through a three-
 
 ## 3. Detailed Component Design
 
-### 3.1 Payment Method Interface (Existing — Extend)
+### 3.1 Historical PaymentMethod Interface (Compatibility Only)
 
-The current `PaymentMethod` strategy interface is well-designed:
+The current `PaymentMethod` strategy interface still exists for migration
+compatibility, but it is no longer the forward-looking contract for new inbound
+provider work. The aligned repo contract is:
+
+- `TransferProvider` is canonical for new inbound provider integrations
+- `PaymentMethod` remains transitional compatibility
+- Collection Attempts remain business execution records even when transfer
+  infrastructure performs provider work
+
+The legacy interface is:
 
 ```typescript
 interface PaymentMethod {
@@ -93,7 +112,8 @@ interface PaymentMethod {
 }
 ```
 
-**Proposed extensions:**
+These proposed extensions are retained as historical design context only. New
+provider capability work should be designed against `TransferProvider` instead.
 
 ```typescript
 interface PaymentMethod {

@@ -921,7 +921,8 @@ export async function resolveViewState(
 	const fieldOverridesByName = buildFieldOverridesByName(adapterContract);
 	const schemaOrderHints = buildSchemaOrderHints({
 		adapterContract,
-		viewIsDefault: effectiveState.viewDef.isDefault && !effectiveState.savedView,
+		viewIsDefault:
+			effectiveState.viewDef.isDefault && !effectiveState.savedView,
 	});
 	const persistedFields = activeFieldDefs.map((fieldDef) =>
 		applyFieldOverridesToDefinition({
@@ -967,7 +968,8 @@ export async function resolveViewState(
 			effectiveView: view,
 			fieldDefsById,
 			viewFields: effectiveState.viewFields,
-			viewIsDefault: effectiveState.viewDef.isDefault && !effectiveState.savedView,
+			viewIsDefault:
+				effectiveState.viewDef.isDefault && !effectiveState.savedView,
 		}),
 	};
 }

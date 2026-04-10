@@ -1,9 +1,15 @@
 /**
- * PaymentMethod interface — Strategy pattern for payment processing.
+ * PaymentMethod interface — legacy inbound collection compatibility.
  *
- * Defines a family of payment algorithms (Manual, MockPAD, future real PAD)
- * that are interchangeable at runtime. Downstream consumers depend only on
- * this interface, never on concrete implementations.
+ * This interface still supports older borrower-collection flows, but it is no
+ * longer the forward-looking provider contract for new inbound work.
+ *
+ * Canonical contract guidance:
+ * - New inbound provider integrations target `TransferProvider`.
+ * - `PaymentMethod` exists as transitional compatibility while older flows are
+ *   migrated behind the transfer-domain boundary.
+ * - Collection Attempts remain the business execution record even when
+ *   provider execution is delegated through transfer infrastructure.
  */
 
 // ---------------------------------------------------------------------------
@@ -41,7 +47,7 @@ export interface StatusResult {
 }
 
 // ---------------------------------------------------------------------------
-// Strategy interface
+// Compatibility interface
 // ---------------------------------------------------------------------------
 
 export interface PaymentMethod {
