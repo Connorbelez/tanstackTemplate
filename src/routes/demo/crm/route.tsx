@@ -10,8 +10,10 @@ import { RecordSidebar } from "#/components/demo/crm/RecordSidebar";
 import { RecordSidebarProvider } from "#/components/demo/crm/RecordSidebarProvider";
 import { ValidationMetrics } from "#/components/demo/crm/ValidationMetrics";
 import { Badge } from "#/components/ui/badge";
+import { guardPermission } from "#/lib/auth";
 
 export const Route = createFileRoute("/demo/crm")({
+	beforeLoad: guardPermission("admin:access"),
 	ssr: false,
 	component: CrmSandboxLayout,
 });

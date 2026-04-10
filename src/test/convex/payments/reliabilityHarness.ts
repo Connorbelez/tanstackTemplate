@@ -10,6 +10,7 @@ import {
 	createGovernedTestConvex,
 	type GovernedTestConvex,
 } from "./helpers";
+import { drainScheduledWork as drainScheduledRuntime } from "../runtime";
 
 const SYSTEM_SOURCE = {
 	channel: "scheduler" as const,
@@ -25,7 +26,7 @@ const WEBHOOK_SOURCE = {
 
 const LEDGER_SOURCE = {
 	type: "system" as const,
-	channel: "test",
+	channel: "scheduler" as const,
 };
 
 const ADMIN_IDENTITY = {
@@ -252,8 +253,7 @@ export function createReliabilityHarness(): ReliabilityHarness {
 	}
 
 	async function drainScheduledWork() {
-		await t.finishAllScheduledFunctions(() => vi.runAllTimers());
-		await Promise.resolve();
+		await drainScheduledRuntime(t, { flushMicrotasks: true });
 	}
 
 	async function seedReliabilityFixture(): Promise<ReliabilityFixture> {

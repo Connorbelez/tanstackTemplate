@@ -12,7 +12,7 @@
     "dev:e2e": "WORKOS_REDIRECT_URI=http://127.0.0.1:3100/callback VITE_E2E=true vite dev --host 127.0.0.1 --port 3100",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "ALLOW_TEST_AUTH_ENDPOINTS=true DISABLE_GT_HASHCHAIN=true vitest run",
+    "test": "ALLOW_TEST_AUTH_ENDPOINTS=true DISABLE_GT_HASHCHAIN=true DISABLE_CASH_LEDGER_HASHCHAIN=true vitest run",
     "test:e2e": "playwright test",
     "test:e2e:headed": "playwright test --headed",
     "test:e2e:ui": "playwright test --ui",
@@ -25,7 +25,7 @@
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build",
     "typecheck": "tsc --noEmit && tsc --noEmit -p convex/tsconfig.json",
-    "test:coverage": "ALLOW_TEST_AUTH_ENDPOINTS=true DISABLE_GT_HASHCHAIN=true vitest run --coverage",
+    "test:coverage": "ALLOW_TEST_AUTH_ENDPOINTS=true DISABLE_GT_HASHCHAIN=true DISABLE_CASH_LEDGER_HASHCHAIN=true vitest run --coverage",
     "review": "bash scripts/code-review.sh",
     "lint:security": "bun run scripts/lint-security.ts"
   },

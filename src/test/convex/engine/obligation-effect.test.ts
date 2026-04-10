@@ -182,6 +182,11 @@ describe("obligation effect helpers", () => {
 		const ctx = {
 			db: {
 				get: vi.fn().mockResolvedValue(obligation),
+				query: vi.fn(() => ({
+					withIndex: vi.fn(() => ({
+						collect: vi.fn().mockResolvedValue([]),
+					})),
+				})),
 			},
 			scheduler: {
 				runAfter,

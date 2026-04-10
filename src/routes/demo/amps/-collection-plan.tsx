@@ -1,11 +1,15 @@
 import { useQuery } from "convex/react";
 import { ArrowUpRight, GitBranch, Radar } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import {
 	ExecutePlanEntryDialog,
 	ReschedulePlanEntryDialog,
 } from "#/components/demo/amps/dialogs";
-import { useAmpsDemoAccess } from "#/components/demo/amps/hooks";
+import {
+	useAmpsDemoAccess,
+	useMortgageLabelMap,
+	useSelectableSurface,
+} from "#/components/demo/amps/hooks";
 import {
 	buildCountBadgeItems,
 	CountBadgeRow,
@@ -24,7 +28,6 @@ export function AmpsCollectionPlanPage() {
 	const [status, setStatus] = useState<string>("all");
 	const [source, setSource] = useState<string>("all");
 	const [mortgageId, setMortgageId] = useState<string>("all");
-	const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null);
 
 	const entries = useQuery(
 		api.payments.collectionPlan.admin.listCollectionPlanEntries,
@@ -37,35 +40,15 @@ export function AmpsCollectionPlanPage() {
 		}
 	);
 
+	const [selectedEntryId, setSelectedEntryId] = useSelectableSurface(
+		entries?.map((entry) => entry.planEntryId)
+	);
 	const selectedEntry = useQuery(
 		api.payments.collectionPlan.admin.getCollectionPlanEntry,
 		selectedEntryId ? { planEntryId: selectedEntryId as never } : "skip"
 	);
 
-	useEffect(() => {
-		if (!entries?.length) {
-			setSelectedEntryId(null);
-			return;
-		}
-		if (
-			selectedEntryId &&
-			entries.some((entry) => entry.planEntryId === selectedEntryId)
-		) {
-			return;
-		}
-		setSelectedEntryId(entries[0]?.planEntryId ?? null);
-	}, [entries, selectedEntryId]);
-
-	const mortgageLabels = useMemo(
-		() =>
-			new Map(
-				(workspaceOverview?.mortgages ?? []).map((mortgage) => [
-					mortgage.mortgageId,
-					mortgage.propertyLabel,
-				])
-			),
-		[workspaceOverview?.mortgages]
-	);
+	const mortgageLabels = useMortgageLabelMap(workspaceOverview?.mortgages);
 
 	const statusCounts = useMemo(() => {
 		const nextCounts: Record<string, number> = {};

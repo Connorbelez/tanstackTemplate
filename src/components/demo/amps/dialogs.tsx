@@ -1,5 +1,6 @@
 import { useAction, useMutation } from "convex/react";
 import { LoaderCircle, Plus, Send, Shuffle, Workflow } from "lucide-react";
+import type { Dispatch, SetStateAction } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Badge } from "#/components/ui/badge";
@@ -169,6 +170,47 @@ function parsePositiveInteger(value: string, fallback: number) {
 	return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
 }
 
+function describeDialogError(error: unknown) {
+	return error instanceof Error ? error.message : String(error);
+}
+
+function closeDialog(
+	setOpen: Dispatch<SetStateAction<boolean>>,
+	reset?: () => void
+) {
+	setOpen(false);
+	reset?.();
+}
+
+function useDialogSubmitAction(options?: { onClosed?: () => void }) {
+	const [open, setOpen] = useState(false);
+	const [busy, setBusy] = useState(false);
+
+	useEffect(() => {
+		if (!open) {
+			options?.onClosed?.();
+		}
+	}, [open, options]);
+
+	async function run(action: () => Promise<void>) {
+		setBusy(true);
+		try {
+			await action();
+		} catch (error) {
+			toast.error(describeDialogError(error));
+		} finally {
+			setBusy(false);
+		}
+	}
+
+	return {
+		busy,
+		open,
+		run,
+		setOpen,
+	};
+}
+
 function buildRuleConfigFromDraft(
 	draft: RuleEditorDraft
 ): CollectionRuleConfig {
@@ -270,13 +312,13 @@ export function ExecutePlanEntryDialog({
 	const executePlanEntry = useAction(
 		api.payments.collectionPlan.admin.executeCollectionPlanEntry
 	);
-	const [open, setOpen] = useState(false);
 	const [reason, setReason] = useState("");
-	const [busy, setBusy] = useState(false);
+	const { busy, open, run, setOpen } = useDialogSubmitAction({
+		onClosed: () => setReason(""),
+	});
 
 	async function handleSubmit() {
-		setBusy(true);
-		try {
+		await run(async () => {
 			const result = await executePlanEntry({
 				planEntryId,
 				reason: reason.trim() || undefined,
@@ -284,24 +326,18 @@ export function ExecutePlanEntryDialog({
 
 			if (result.outcome === "attempt_created") {
 				toast.success(describeExecuteResult(result));
-				setOpen(false);
-				setReason("");
+				closeDialog(setOpen);
 				return;
 			}
 
 			if (result.outcome === "already_executed") {
 				toast.message(describeExecuteResult(result));
-				setOpen(false);
-				setReason("");
+				closeDialog(setOpen);
 				return;
 			}
 
 			toast.error(describeExecuteResult(result));
-		} catch (error) {
-			toast.error(error instanceof Error ? error.message : String(error));
-		} finally {
-			setBusy(false);
-		}
+		});
 	}
 
 	return (
@@ -357,19 +393,16 @@ export function ReschedulePlanEntryDialog({
 	const reschedule = useAction(
 		api.payments.collectionPlan.admin.rescheduleCollectionPlanEntry
 	);
-	const [open, setOpen] = useState(false);
-	const [busy, setBusy] = useState(false);
 	const [reason, setReason] = useState("");
 	const [newScheduledDate, setNewScheduledDate] = useState(
 		toDateTimeLocalValue(scheduledDate)
 	);
-
-	useEffect(() => {
-		if (!open) {
+	const { busy, open, run, setOpen } = useDialogSubmitAction({
+		onClosed: () => {
 			setReason("");
 			setNewScheduledDate(toDateTimeLocalValue(scheduledDate));
-		}
-	}, [open, scheduledDate]);
+		},
+	});
 
 	async function handleSubmit() {
 		const parsedTimestamp = fromDateTimeLocalValue(newScheduledDate);
@@ -378,8 +411,7 @@ export function ReschedulePlanEntryDialog({
 			return;
 		}
 
-		setBusy(true);
-		try {
+		await run(async () => {
 			const result = await reschedule({
 				planEntryId,
 				newScheduledDate: parsedTimestamp,
@@ -389,16 +421,12 @@ export function ReschedulePlanEntryDialog({
 				toast.success(
 					`Created replacement entry ${result.replacementPlanEntryId} scheduled for ${formatDateOnly(result.replacementScheduledDate)}.`
 				);
-				setOpen(false);
+				closeDialog(setOpen);
 				return;
 			}
 
 			toast.error(result.reasonDetail);
-		} catch (error) {
-			toast.error(error instanceof Error ? error.message : String(error));
-		} finally {
-			setBusy(false);
-		}
+		});
 	}
 
 	return (
@@ -472,9 +500,10 @@ export function WorkoutLifecycleDialog({
 	const completeWorkoutPlan = useAction(
 		api.payments.collectionPlan.admin.completeWorkoutPlan
 	);
-	const [open, setOpen] = useState(false);
-	const [busy, setBusy] = useState(false);
 	const [reason, setReason] = useState("");
+	const { busy, open, run, setOpen } = useDialogSubmitAction({
+		onClosed: () => setReason(""),
+	});
 
 	const dialogCopy = {
 		activate: {
@@ -498,18 +527,17 @@ export function WorkoutLifecycleDialog({
 	}[mode];
 
 	async function handleSubmit() {
-		setBusy(true);
-		try {
+		await run(async () => {
 			if (mode === "activate") {
 				const result = await activateWorkoutPlan({ workoutPlanId });
 				if (result.outcome === "activated") {
 					toast.success("Workout strategy is now active.");
-					setOpen(false);
+					closeDialog(setOpen);
 					return;
 				}
 				if (result.outcome === "already_active") {
 					toast.message("Workout is already active.");
-					setOpen(false);
+					closeDialog(setOpen);
 					return;
 				}
 				toast.error(result.reasonDetail);
@@ -524,7 +552,7 @@ export function WorkoutLifecycleDialog({
 					toast.success(
 						"Workout exited through the canonical completion path."
 					);
-					setOpen(false);
+					closeDialog(setOpen);
 					return;
 				}
 				toast.error(result.reasonDetail);
@@ -540,17 +568,12 @@ export function WorkoutLifecycleDialog({
 					result.outcome === "already_cancelled"
 				) {
 					toast.success("Workout cancelled and default scheduling restored.");
-					setOpen(false);
-					setReason("");
+					closeDialog(setOpen);
 					return;
 				}
 				toast.error(result.reasonDetail);
 			}
-		} catch (error) {
-			toast.error(error instanceof Error ? error.message : String(error));
-		} finally {
-			setBusy(false);
-		}
+		});
 	}
 
 	return (
@@ -607,12 +630,11 @@ export function CreateWorkoutPlanDialog({
 	const createWorkoutPlan = useAction(
 		api.payments.collectionPlan.admin.createWorkoutPlan
 	);
-	const [open, setOpen] = useState(false);
-	const [busy, setBusy] = useState(false);
 	const [name, setName] = useState("Demo hardship extension");
 	const [rationale, setRationale] = useState(
 		"Demo-created workout that shows strategy override without changing obligation truth."
 	);
+	const { busy, open, run, setOpen } = useDialogSubmitAction();
 
 	const installments = useMemo(() => {
 		if (obligations.length === 0) {
@@ -653,8 +675,7 @@ export function CreateWorkoutPlanDialog({
 			return;
 		}
 
-		setBusy(true);
-		try {
+		await run(async () => {
 			const result = await createWorkoutPlan({
 				mortgageId,
 				name,
@@ -663,15 +684,11 @@ export function CreateWorkoutPlanDialog({
 			});
 			if (result.outcome === "created") {
 				toast.success("Draft workout created.");
-				setOpen(false);
+				closeDialog(setOpen);
 				return;
 			}
 			toast.error(result.reasonDetail);
-		} catch (error) {
-			toast.error(error instanceof Error ? error.message : String(error));
-		} finally {
-			setBusy(false);
-		}
+		});
 	}
 
 	return (
@@ -782,11 +799,10 @@ export function RuleEditorDialog({
 	const updateRule = useMutation(
 		api.payments.collectionPlan.admin.updateCollectionRule
 	);
-	const [open, setOpen] = useState(false);
-	const [busy, setBusy] = useState(false);
 	const [draft, setDraft] = useState<RuleEditorDraft>(() =>
 		buildInitialRuleDraft(initialRule)
 	);
+	const { busy, open, run, setOpen } = useDialogSubmitAction();
 
 	useEffect(() => {
 		if (open) {
@@ -812,8 +828,7 @@ export function RuleEditorDialog({
 			status: draft.status,
 		};
 
-		setBusy(true);
-		try {
+		await run(async () => {
 			if (mode === "create") {
 				const result = await createRule({
 					...basePayload,
@@ -822,7 +837,7 @@ export function RuleEditorDialog({
 				});
 				if (result.outcome === "created") {
 					toast.success("Rule created through the canonical admin mutation.");
-					setOpen(false);
+					closeDialog(setOpen);
 					return;
 				}
 				toast.error(result.reasonDetail);
@@ -833,16 +848,12 @@ export function RuleEditorDialog({
 				});
 				if (result.outcome === "updated") {
 					toast.success("Rule updated.");
-					setOpen(false);
+					closeDialog(setOpen);
 					return;
 				}
 				toast.error(result.reasonDetail);
 			}
-		} catch (error) {
-			toast.error(error instanceof Error ? error.message : String(error));
-		} finally {
-			setBusy(false);
-		}
+		});
 	}
 
 	return (

@@ -17,6 +17,7 @@ import {
 	canRetryTransferStatus,
 } from "../mutations";
 import { ManualTransferProvider } from "../providers/manual";
+import { ManualReviewTransferProvider } from "../providers/manualReview";
 import { MockTransferProvider } from "../providers/mock";
 import { getTransferProvider } from "../providers/registry";
 import {
@@ -37,6 +38,7 @@ const NOT_YET_IMPLEMENTED_RE = /not yet implemented/;
 const MOCK_DISABLED_RE = /disabled by default/;
 const EFT_VOPAY_RE = /eft_vopay/;
 const MANUAL_PREFIX_RE = /^manual_/;
+const MANUAL_REVIEW_PREFIX_RE = /^manual_review_/;
 const BRIDGE_PREFIX_RE = /^transfer:bridge:/;
 const RETRY_PREFIX_RE = /^retry:[\w-]+$/;
 // ── Amount Validation ───────────────────────────────────────────────
@@ -193,8 +195,8 @@ describe("provider codes", () => {
 		expect(PROVIDER_CODES).toContain("mock_eft");
 	});
 
-	it("has 9 provider codes", () => {
-		expect(PROVIDER_CODES).toHaveLength(9);
+	it("has 10 provider codes", () => {
+		expect(PROVIDER_CODES).toHaveLength(10);
 	});
 });
 
@@ -364,6 +366,67 @@ describe("ManualTransferProvider", () => {
 		expect(result.providerData).toEqual({
 			providerRef: "manual_lender_dispersal_payout_001",
 			method: "manual",
+		});
+	});
+});
+
+describe("ManualReviewTransferProvider", () => {
+	const provider = new ManualReviewTransferProvider();
+
+	const sampleInput: TransferRequestInput = {
+		amount: 50_000,
+		counterpartyId: toDomainEntityId(
+			"borrower_manual_review",
+			"counterpartyId"
+		),
+		counterpartyType: "borrower",
+		currency: "CAD",
+		direction: "inbound",
+		idempotencyKey: "manual-review-key-001",
+		providerCode: "manual_review",
+		references: {},
+		source: {
+			actorId: "user_01",
+			actorType: "admin",
+			sessionId: "session_01",
+			channel: "admin_dashboard",
+		},
+		transferType: "borrower_interest_collection",
+	};
+
+	it("initiate returns pending for inbound transfers", async () => {
+		const result = await provider.initiate(sampleInput);
+		expect(result.status).toBe("pending");
+		expect(result.providerRef).toMatch(MANUAL_REVIEW_PREFIX_RE);
+	});
+
+	it("initiate returns pending for outbound transfers", async () => {
+		const result = await provider.initiate({
+			...sampleInput,
+			counterpartyId: toDomainEntityId(
+				"lender_manual_review",
+				"counterpartyId"
+			),
+			counterpartyType: "lender",
+			direction: "outbound",
+			transferType: "lender_dispersal_payout",
+		});
+		expect(result.status).toBe("pending");
+	});
+
+	it("confirm returns provider metadata and settledAt", async () => {
+		const result = await provider.confirm("manual_review_ref_001");
+		expect(result.providerRef).toBe("manual_review_ref_001");
+		expect(result.providerData).toEqual({ method: "manual_review" });
+		expect(result.settledAt).toBeLessThanOrEqual(Date.now());
+	});
+
+	it("getStatus returns pending until the transfer machine confirms it", async () => {
+		const result = await provider.getStatus("manual_review_ref_001");
+		expect(result.status).toBe("pending");
+		expect(result.providerData).toEqual({
+			providerRef: "manual_review_ref_001",
+			method: "manual_review",
 		});
 	});
 });

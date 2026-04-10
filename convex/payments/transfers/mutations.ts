@@ -8,6 +8,7 @@
 import { ConvexError, v } from "convex/values";
 import { internal } from "../../_generated/api";
 import type { Doc, Id } from "../../_generated/dataModel";
+import type { ActionCtx, MutationCtx } from "../../_generated/server";
 import { internalAction, internalMutation } from "../../_generated/server";
 import { buildSource } from "../../engine/commands";
 import { executeTransition } from "../../engine/transition";
@@ -26,13 +27,13 @@ import {
 	getCommitmentDepositValidationError,
 } from "./depositCollection.logic";
 import type { TransferRequestInput } from "./interface";
-import { areMockTransferProvidersEnabled } from "./mockProviders";
 import { buildPipelineIdempotencyKey } from "./pipeline";
 import { validatePipelineFields } from "./pipeline.types";
 import { buildPrincipalReturnIdempotencyKey } from "./principalReturn.logic";
 import { getTransferProvider } from "./providers/registry";
 import {
 	InvalidDomainEntityIdError,
+	type ProviderCode,
 	type TransferDirection,
 	toDomainEntityId,
 } from "./types";
@@ -67,15 +68,6 @@ function validateTransferCreationInput(args: {
 	const pipelineError = validatePipelineFields(args.pipelineId, args.legNumber);
 	if (pipelineError) {
 		throw new ConvexError(pipelineError);
-	}
-
-	if (
-		(args.providerCode === "mock_pad" || args.providerCode === "mock_eft") &&
-		!areMockTransferProvidersEnabled()
-	) {
-		throw new ConvexError(
-			`Transfer provider "${args.providerCode}" is disabled by default. Set ENABLE_MOCK_PROVIDERS="true" to opt in.`
-		);
 	}
 
 	try {
@@ -121,6 +113,242 @@ export function canManuallyConfirmTransferStatus(
 	);
 }
 
+export interface CreateTransferRequestRecordArgs {
+	amount: number;
+	bankAccountRef?: string;
+	borrowerId?: Id<"borrowers">;
+	collectionAttemptId?: Id<"collectionAttempts">;
+	counterpartyId: string;
+	counterpartyType: "borrower" | "lender" | "investor" | "trust";
+	currency?: "CAD";
+	dealId?: Id<"deals">;
+	direction: TransferDirection;
+	dispersalEntryId?: Id<"dispersalEntries">;
+	idempotencyKey: string;
+	legNumber?: 1 | 2;
+	lenderId?: Id<"lenders">;
+	metadata?: Record<string, unknown>;
+	mortgageId?: Id<"mortgages">;
+	obligationId?: Id<"obligations">;
+	pipelineId?: string;
+	planEntryId?: Id<"collectionPlanEntries">;
+	providerCode: ProviderCode;
+	source: CommandSource;
+	transferType: TransferRequestInput["transferType"];
+}
+
+export async function createTransferRequestRecord(
+	ctx: MutationCtx,
+	args: CreateTransferRequestRecordArgs
+): Promise<Id<"transferRequests">> {
+	const counterpartyId = validateTransferCreationInput(args);
+
+	const existing = await ctx.db
+		.query("transferRequests")
+		.withIndex("by_idempotency", (q) =>
+			q.eq("idempotencyKey", args.idempotencyKey)
+		)
+		.first();
+
+	if (existing) {
+		return existing._id;
+	}
+
+	const now = Date.now();
+	const orgId = await orgIdForTransferRequest(ctx, {
+		mortgageId: args.mortgageId,
+		obligationId: args.obligationId,
+		dealId: args.dealId,
+		dispersalEntryId: args.dispersalEntryId,
+		lenderId: args.lenderId,
+		borrowerId: args.borrowerId,
+		planEntryId: args.planEntryId,
+		collectionAttemptId: args.collectionAttemptId,
+	});
+
+	return ctx.db.insert("transferRequests", {
+		orgId,
+		status: "initiated",
+		direction: args.direction,
+		transferType: args.transferType,
+		amount: args.amount,
+		currency: args.currency ?? "CAD",
+		counterpartyType: args.counterpartyType,
+		counterpartyId,
+		bankAccountRef: args.bankAccountRef,
+		mortgageId: args.mortgageId,
+		obligationId: args.obligationId,
+		dealId: args.dealId,
+		dispersalEntryId: args.dispersalEntryId,
+		planEntryId: args.planEntryId,
+		collectionAttemptId: args.collectionAttemptId,
+		lenderId: args.lenderId,
+		borrowerId: args.borrowerId,
+		providerCode: args.providerCode,
+		idempotencyKey: args.idempotencyKey,
+		source: args.source,
+		pipelineId: args.pipelineId,
+		legNumber: args.legNumber,
+		metadata: args.metadata,
+		createdAt: now,
+		lastTransitionAt: now,
+	});
+}
+
+const createTransferRequestInput = {
+	direction: directionValidator,
+	transferType: transferTypeValidator,
+	amount: v.number(),
+	currency: v.optional(v.literal("CAD")),
+	counterpartyType: counterpartyTypeValidator,
+	counterpartyId: v.string(),
+	bankAccountRef: v.optional(v.string()),
+	mortgageId: v.optional(v.id("mortgages")),
+	obligationId: v.optional(v.id("obligations")),
+	dealId: v.optional(v.id("deals")),
+	dispersalEntryId: v.optional(v.id("dispersalEntries")),
+	planEntryId: v.optional(v.id("collectionPlanEntries")),
+	collectionAttemptId: v.optional(v.id("collectionAttempts")),
+	lenderId: v.optional(v.id("lenders")),
+	borrowerId: v.optional(v.id("borrowers")),
+	providerCode: providerCodeValidator,
+	idempotencyKey: v.string(),
+	metadata: v.optional(v.record(v.string(), v.any())),
+	pipelineId: v.optional(v.string()),
+	legNumber: v.optional(legNumberValidator),
+};
+
+const initiateTransferInput = {
+	transferId: v.id("transferRequests"),
+};
+
+type TransferInitiationCtx = Pick<ActionCtx, "runMutation" | "runQuery">;
+
+function resolveTransferCounterpartyId(counterpartyId: string) {
+	try {
+		return toDomainEntityId(counterpartyId, "counterpartyId");
+	} catch (error) {
+		if (error instanceof InvalidDomainEntityIdError) {
+			throw new ConvexError(error.message);
+		}
+		throw error;
+	}
+}
+
+function buildTransferInitiationInput(
+	transfer: Doc<"transferRequests">,
+	source: CommandSource
+): TransferRequestInput {
+	const counterpartyId = resolveTransferCounterpartyId(transfer.counterpartyId);
+
+	return {
+		amount: transfer.amount,
+		bankAccountRef: transfer.bankAccountRef,
+		counterpartyId,
+		counterpartyType: transfer.counterpartyType,
+		currency: transfer.currency,
+		direction: transfer.direction,
+		idempotencyKey: transfer.idempotencyKey,
+		legNumber: transfer.legNumber,
+		metadata: transfer.metadata as Record<string, unknown> | undefined,
+		pipelineId: transfer.pipelineId,
+		providerCode: transfer.providerCode,
+		references: {
+			mortgageId: transfer.mortgageId,
+			obligationId: transfer.obligationId,
+			dealId: transfer.dealId,
+			dispersalEntryId: transfer.dispersalEntryId,
+			planEntryId: transfer.planEntryId,
+			collectionAttemptId: transfer.collectionAttemptId,
+		},
+		source,
+		transferType: transfer.transferType,
+	};
+}
+
+async function runTransferInitiation(args: {
+	ctx: TransferInitiationCtx;
+	retrySafe: boolean;
+	source: CommandSource;
+	transferId: Id<"transferRequests">;
+}): Promise<TransitionResult> {
+	const transfer = (await args.ctx.runQuery(
+		internal.payments.transfers.queries.getTransferInternal,
+		{ transferId: args.transferId }
+	)) as Doc<"transferRequests"> | null;
+	if (!transfer) {
+		throw new ConvexError("Transfer request not found");
+	}
+
+	if (transfer.status !== "initiated") {
+		if (args.retrySafe) {
+			console.info(
+				`[initiateTransferInternal] Transfer ${args.transferId} already in "${transfer.status}" — skipping initiation (retry-safe).`
+			);
+			return {
+				success: true,
+				previousState: transfer.status,
+				newState: transfer.status,
+				reason: "already_initiated_or_beyond",
+			};
+		}
+
+		throw new ConvexError(
+			`Transfer must be in "initiated" status to initiate, currently: "${transfer.status}"`
+		);
+	}
+
+	const input = buildTransferInitiationInput(transfer, args.source);
+	const provider = getTransferProvider(transfer.providerCode);
+
+	assertBankValidation(
+		await args.ctx.runQuery(
+			internal.payments.bankAccounts.validation.validateBankAccountForTransfer,
+			{
+				counterpartyType: transfer.counterpartyType,
+				counterpartyId: input.counterpartyId,
+				providerCode: transfer.providerCode,
+			}
+		)
+	);
+
+	const result = await provider.initiate(input);
+
+	await args.ctx.runMutation(
+		internal.payments.transfers.mutations.persistProviderRef,
+		{
+			transferId: args.transferId,
+			providerRef: result.providerRef,
+		}
+	);
+
+	if (result.status === "confirmed") {
+		return args.ctx.runMutation(
+			internal.payments.transfers.mutations.fireInitiateTransition,
+			{
+				transferId: args.transferId,
+				eventType: "FUNDS_SETTLED",
+				payload: {
+					settledAt: Date.now(),
+					providerData: {},
+					providerRef: result.providerRef,
+				},
+				source: args.source,
+			}
+		);
+	}
+
+	return args.ctx.runMutation(
+		internal.payments.transfers.mutations.fireInitiateTransition,
+		{
+			transferId: args.transferId,
+			eventType: "PROVIDER_INITIATED",
+			payload: { providerRef: result.providerRef },
+			source: args.source,
+		}
+	);
+}
+
 // ── createTransferRequest ──────────────────────────────────────────
 /**
  * Creates a new transfer request record with status "initiated".
@@ -128,131 +356,31 @@ export function canManuallyConfirmTransferStatus(
  * the existing record's ID without creating a duplicate.
  */
 export const createTransferRequest = paymentMutation
-	.input({
-		direction: directionValidator,
-		transferType: transferTypeValidator,
-		amount: v.number(),
-		currency: v.optional(v.literal("CAD")),
-		counterpartyType: counterpartyTypeValidator,
-		counterpartyId: v.string(),
-		bankAccountRef: v.optional(v.string()),
-		// References
-		mortgageId: v.optional(v.id("mortgages")),
-		obligationId: v.optional(v.id("obligations")),
-		dealId: v.optional(v.id("deals")),
-		dispersalEntryId: v.optional(v.id("dispersalEntries")),
-		planEntryId: v.optional(v.id("collectionPlanEntries")),
-		collectionAttemptId: v.optional(v.id("collectionAttempts")),
-		// Participant references (required for ledger scoping)
-		lenderId: v.optional(v.id("lenders")),
-		borrowerId: v.optional(v.id("borrowers")),
-		// Provider & idempotency
-		providerCode: providerCodeValidator,
-		idempotencyKey: v.string(),
-		// Optional metadata
-		metadata: v.optional(v.record(v.string(), v.any())),
-		pipelineId: v.optional(v.string()),
-		legNumber: v.optional(legNumberValidator),
-	})
+	.input(createTransferRequestInput)
 	.handler(async (ctx, args): Promise<Id<"transferRequests">> => {
-		// 1. Validate amount is positive integer (safe-integer cents)
-		if (!Number.isInteger(args.amount) || args.amount <= 0) {
-			throw new ConvexError("Amount must be a positive integer (cents)");
-		}
-
-		// 1a. Pipeline fields must be co-required: both present or both absent
-		const pipelineError = validatePipelineFields(
-			args.pipelineId,
-			args.legNumber
-		);
-		if (pipelineError) {
-			throw new ConvexError(pipelineError);
-		}
-
-		// 1b. Guard against auth-ID / entity-ID confusion (ENG-218).
-		// counterpartyId must stay in domain entity ID space.
-		let counterpartyId: TransferRequestInput["counterpartyId"];
-		try {
-			counterpartyId = toDomainEntityId(args.counterpartyId, "counterpartyId");
-		} catch (error) {
-			if (error instanceof InvalidDomainEntityIdError) {
-				throw new ConvexError(error.message);
-			}
-			throw error;
-		}
-
-		if (
-			(args.providerCode === "mock_pad" || args.providerCode === "mock_eft") &&
-			!areMockTransferProvidersEnabled()
-		) {
-			throw new ConvexError(
-				`Transfer provider "${args.providerCode}" is disabled by default. Set ENABLE_MOCK_PROVIDERS="true" to opt in.`
-			);
-		}
-
-		// 2. Idempotency check
-		const existing = await ctx.db
-			.query("transferRequests")
-			.withIndex("by_idempotency", (q) =>
-				q.eq("idempotencyKey", args.idempotencyKey)
-			)
-			.first();
-
-		if (existing) {
-			return existing._id;
-		}
-
-		// 3. Build source from authenticated viewer
-		const source = buildSource(ctx.viewer, "admin_dashboard");
-
-		// 4. Insert transfer record
-		const now = Date.now();
-		const orgId = await orgIdForTransferRequest(ctx, {
-			mortgageId: args.mortgageId,
-			obligationId: args.obligationId,
-			dealId: args.dealId,
-			dispersalEntryId: args.dispersalEntryId,
-			lenderId: args.lenderId,
-			borrowerId: args.borrowerId,
-			planEntryId: args.planEntryId,
-			collectionAttemptId: args.collectionAttemptId,
-		});
-		const transferId = await ctx.db.insert("transferRequests", {
-			orgId,
-			status: "initiated",
-			direction: args.direction,
-			transferType: args.transferType,
+		return createTransferRequestRecord(ctx, {
 			amount: args.amount,
-			currency: args.currency ?? "CAD",
-			counterpartyType: args.counterpartyType,
-			counterpartyId,
 			bankAccountRef: args.bankAccountRef,
-			// References
+			borrowerId: args.borrowerId,
+			collectionAttemptId: args.collectionAttemptId,
+			counterpartyId: args.counterpartyId,
+			counterpartyType: args.counterpartyType,
+			currency: args.currency,
+			dealId: args.dealId,
+			direction: args.direction,
+			dispersalEntryId: args.dispersalEntryId,
+			idempotencyKey: args.idempotencyKey,
+			legNumber: args.legNumber,
+			lenderId: args.lenderId,
+			metadata: args.metadata,
 			mortgageId: args.mortgageId,
 			obligationId: args.obligationId,
-			dealId: args.dealId,
-			dispersalEntryId: args.dispersalEntryId,
-			planEntryId: args.planEntryId,
-			collectionAttemptId: args.collectionAttemptId,
-			// Participant references
-			lenderId: args.lenderId,
-			borrowerId: args.borrowerId,
-			// Provider & idempotency
-			providerCode: args.providerCode,
-			idempotencyKey: args.idempotencyKey,
-			source,
-			// Pipeline
 			pipelineId: args.pipelineId,
-			legNumber: args.legNumber,
-			// Metadata
-			metadata: args.metadata,
-			// Timestamps
-			createdAt: now,
-			lastTransitionAt: now,
+			planEntryId: args.planEntryId,
+			providerCode: args.providerCode,
+			source: buildSource(ctx.viewer, "admin_dashboard"),
+			transferType: args.transferType,
 		});
-
-		// 5. Return the new transfer ID
-		return transferId;
 	})
 	.public();
 
@@ -305,114 +433,15 @@ export const persistProviderRef = internalMutation({
  * external HTTP calls to VoPay/Rotessa/Plaid, which only actions can do.
  */
 export const initiateTransfer = paymentAction
-	.input({
-		transferId: v.id("transferRequests"),
-	})
+	.input(initiateTransferInput)
 	.handler(async (ctx, args): Promise<TransitionResult> => {
-		const transfer = await ctx.runQuery(
-			internal.payments.transfers.queries.getTransferInternal,
-			{ transferId: args.transferId }
-		);
-		if (!transfer) {
-			throw new ConvexError("Transfer request not found");
-		}
-
-		if (transfer.status !== "initiated") {
-			throw new ConvexError(
-				`Transfer must be in "initiated" status to initiate, currently: "${transfer.status}"`
-			);
-		}
-
-		// Canonical provider boundary: AMPS hands off before this point and the
-		// transfer domain resolves the concrete provider implementation.
-		const provider = getTransferProvider(transfer.providerCode);
-
-		let counterpartyId: TransferRequestInput["counterpartyId"];
-		try {
-			counterpartyId = toDomainEntityId(
-				transfer.counterpartyId,
-				"counterpartyId"
-			);
-		} catch (error) {
-			if (error instanceof InvalidDomainEntityIdError) {
-				throw new ConvexError(error.message);
-			}
-			throw error;
-		}
-
-		// ── Bank account validation gate (ENG-205) ────────────────────
-		assertBankValidation(
-			await ctx.runQuery(
-				internal.payments.bankAccounts.validation
-					.validateBankAccountForTransfer,
-				{
-					counterpartyType: transfer.counterpartyType,
-					counterpartyId,
-					providerCode: transfer.providerCode,
-				}
-			)
-		);
-
-		const input: TransferRequestInput = {
-			amount: transfer.amount,
-			bankAccountRef: transfer.bankAccountRef,
-			counterpartyId,
-			counterpartyType: transfer.counterpartyType,
-			currency: transfer.currency,
-			direction: transfer.direction,
-			idempotencyKey: transfer.idempotencyKey,
-			legNumber: transfer.legNumber,
-			metadata: transfer.metadata as Record<string, unknown> | undefined,
-			pipelineId: transfer.pipelineId,
-			providerCode: transfer.providerCode,
-			references: {
-				mortgageId: transfer.mortgageId,
-				obligationId: transfer.obligationId,
-				dealId: transfer.dealId,
-				dispersalEntryId: transfer.dispersalEntryId,
-				planEntryId: transfer.planEntryId,
-				collectionAttemptId: transfer.collectionAttemptId,
-			},
-			source: buildSource(ctx.viewer, "admin_dashboard"),
-			transferType: transfer.transferType,
-		};
-
-		const result = await provider.initiate(input);
 		const source = buildSource(ctx.viewer, "admin_dashboard");
-
-		await ctx.runMutation(
-			internal.payments.transfers.mutations.persistProviderRef,
-			{
-				transferId: args.transferId,
-				providerRef: result.providerRef,
-			}
-		);
-
-		if (result.status === "confirmed") {
-			return ctx.runMutation(
-				internal.payments.transfers.mutations.fireInitiateTransition,
-				{
-					transferId: args.transferId,
-					eventType: "FUNDS_SETTLED",
-					payload: {
-						settledAt: Date.now(),
-						providerData: {},
-						providerRef: result.providerRef,
-					},
-					source,
-				}
-			);
-		}
-
-		return ctx.runMutation(
-			internal.payments.transfers.mutations.fireInitiateTransition,
-			{
-				transferId: args.transferId,
-				eventType: "PROVIDER_INITIATED",
-				payload: { providerRef: result.providerRef },
-				source,
-			}
-		);
+		return runTransferInitiation({
+			ctx,
+			retrySafe: false,
+			source,
+			transferId: args.transferId,
+		});
 	})
 	.public();
 
@@ -432,87 +461,32 @@ const PIPELINE_SOURCE: CommandSource = {
  */
 export const createTransferRequestInternal = internalMutation({
 	args: {
-		direction: directionValidator,
-		transferType: transferTypeValidator,
-		amount: v.number(),
-		currency: v.optional(v.literal("CAD")),
-		counterpartyType: counterpartyTypeValidator,
-		counterpartyId: v.string(),
-		bankAccountRef: v.optional(v.string()),
-		// References
-		mortgageId: v.optional(v.id("mortgages")),
-		obligationId: v.optional(v.id("obligations")),
-		dealId: v.optional(v.id("deals")),
-		dispersalEntryId: v.optional(v.id("dispersalEntries")),
-		planEntryId: v.optional(v.id("collectionPlanEntries")),
-		collectionAttemptId: v.optional(v.id("collectionAttempts")),
-		// Participant references
-		lenderId: v.optional(v.id("lenders")),
-		borrowerId: v.optional(v.id("borrowers")),
-		// Provider & idempotency
-		providerCode: providerCodeValidator,
-		idempotencyKey: v.string(),
-		// Pipeline
-		pipelineId: v.optional(v.string()),
-		legNumber: v.optional(legNumberValidator),
-		// Metadata
-		metadata: v.optional(v.record(v.string(), v.any())),
-		// Optional source override — defaults to PIPELINE_SOURCE when omitted
+		...createTransferRequestInput,
 		source: v.optional(sourceValidator),
 	},
 	handler: async (ctx, args): Promise<Id<"transferRequests">> => {
-		// Validate inputs (amount, pipeline co-requirement, mock provider guard, counterparty ID)
-		const counterpartyId = validateTransferCreationInput(args);
-
-		// Idempotency check
-		const existing = await ctx.db
-			.query("transferRequests")
-			.withIndex("by_idempotency", (q) =>
-				q.eq("idempotencyKey", args.idempotencyKey)
-			)
-			.first();
-
-		if (existing) {
-			return existing._id;
-		}
-
-		const now = Date.now();
-		const orgId = await orgIdForTransferRequest(ctx, {
-			mortgageId: args.mortgageId,
-			obligationId: args.obligationId,
-			dealId: args.dealId,
-			dispersalEntryId: args.dispersalEntryId,
-			lenderId: args.lenderId,
-			borrowerId: args.borrowerId,
-			planEntryId: args.planEntryId,
-			collectionAttemptId: args.collectionAttemptId,
-		});
-		return ctx.db.insert("transferRequests", {
-			orgId,
-			status: "initiated",
-			direction: args.direction,
-			transferType: args.transferType,
+		return createTransferRequestRecord(ctx, {
 			amount: args.amount,
-			currency: args.currency ?? "CAD",
-			counterpartyType: args.counterpartyType,
-			counterpartyId,
 			bankAccountRef: args.bankAccountRef,
+			borrowerId: args.borrowerId,
+			collectionAttemptId: args.collectionAttemptId,
+			counterpartyId: args.counterpartyId,
+			counterpartyType: args.counterpartyType,
+			currency: args.currency,
+			dealId: args.dealId,
+			direction: args.direction,
+			dispersalEntryId: args.dispersalEntryId,
+			idempotencyKey: args.idempotencyKey,
+			legNumber: args.legNumber,
+			lenderId: args.lenderId,
+			metadata: args.metadata,
 			mortgageId: args.mortgageId,
 			obligationId: args.obligationId,
-			dealId: args.dealId,
-			dispersalEntryId: args.dispersalEntryId,
-			planEntryId: args.planEntryId,
-			collectionAttemptId: args.collectionAttemptId,
-			lenderId: args.lenderId,
-			borrowerId: args.borrowerId,
-			providerCode: args.providerCode,
-			idempotencyKey: args.idempotencyKey,
-			source: args.source ?? PIPELINE_SOURCE,
 			pipelineId: args.pipelineId,
-			legNumber: args.legNumber,
-			metadata: args.metadata,
-			createdAt: now,
-			lastTransitionAt: now,
+			planEntryId: args.planEntryId,
+			providerCode: args.providerCode,
+			source: args.source ?? PIPELINE_SOURCE,
+			transferType: args.transferType,
 		});
 	},
 });
@@ -523,124 +497,14 @@ export const createTransferRequestInternal = internalMutation({
  * Same logic as initiateTransfer but with system source.
  */
 export const initiateTransferInternal = internalAction({
-	args: {
-		transferId: v.id("transferRequests"),
-	},
+	args: initiateTransferInput,
 	handler: async (ctx, args): Promise<TransitionResult> => {
-		const transfer = await ctx.runQuery(
-			internal.payments.transfers.queries.getTransferInternal,
-			{ transferId: args.transferId }
-		);
-		if (!transfer) {
-			throw new ConvexError("Transfer request not found");
-		}
-
-		// Retry-safe: if the transfer is already beyond "initiated" (e.g., "pending"
-		// or "confirmed" from a prior run), return early instead of throwing.
-		// This makes pipeline retry/idempotency safe — createDealClosingPipeline and
-		// createAndInitiateLeg2 may be re-scheduled by Convex's retry mechanism.
-		if (transfer.status !== "initiated") {
-			console.info(
-				`[initiateTransferInternal] Transfer ${args.transferId} already in "${transfer.status}" — skipping initiation (retry-safe).`
-			);
-			return {
-				success: true,
-				previousState: transfer.status,
-				newState: transfer.status,
-				reason: "already_initiated_or_beyond",
-			};
-		}
-
-		// Canonical provider boundary: internal orchestration still resolves
-		// providers through the transfer-domain registry, never through
-		// legacy PaymentMethod lookup.
-		const provider = getTransferProvider(transfer.providerCode);
-
-		let counterpartyId: TransferRequestInput["counterpartyId"];
-		try {
-			counterpartyId = toDomainEntityId(
-				transfer.counterpartyId,
-				"counterpartyId"
-			);
-		} catch (error) {
-			if (error instanceof InvalidDomainEntityIdError) {
-				throw new ConvexError(error.message);
-			}
-			throw error;
-		}
-
-		// ── Bank account validation gate (ENG-205) ────────────────────
-		assertBankValidation(
-			await ctx.runQuery(
-				internal.payments.bankAccounts.validation
-					.validateBankAccountForTransfer,
-				{
-					counterpartyType: transfer.counterpartyType,
-					counterpartyId,
-					providerCode: transfer.providerCode,
-				}
-			)
-		);
-
-		const input: TransferRequestInput = {
-			amount: transfer.amount,
-			bankAccountRef: transfer.bankAccountRef,
-			counterpartyId,
-			counterpartyType: transfer.counterpartyType,
-			currency: transfer.currency,
-			direction: transfer.direction,
-			idempotencyKey: transfer.idempotencyKey,
-			legNumber: transfer.legNumber,
-			metadata: transfer.metadata as Record<string, unknown> | undefined,
-			pipelineId: transfer.pipelineId,
-			providerCode: transfer.providerCode,
-			references: {
-				mortgageId: transfer.mortgageId,
-				obligationId: transfer.obligationId,
-				dealId: transfer.dealId,
-				dispersalEntryId: transfer.dispersalEntryId,
-				planEntryId: transfer.planEntryId,
-				collectionAttemptId: transfer.collectionAttemptId,
-			},
+		return runTransferInitiation({
+			ctx,
+			retrySafe: true,
 			source: PIPELINE_SOURCE,
-			transferType: transfer.transferType,
-		};
-
-		const result = await provider.initiate(input);
-
-		await ctx.runMutation(
-			internal.payments.transfers.mutations.persistProviderRef,
-			{
-				transferId: args.transferId,
-				providerRef: result.providerRef,
-			}
-		);
-
-		if (result.status === "confirmed") {
-			return ctx.runMutation(
-				internal.payments.transfers.mutations.fireInitiateTransition,
-				{
-					transferId: args.transferId,
-					eventType: "FUNDS_SETTLED",
-					payload: {
-						settledAt: Date.now(),
-						providerData: {},
-						providerRef: result.providerRef,
-					},
-					source: PIPELINE_SOURCE,
-				}
-			);
-		}
-
-		return ctx.runMutation(
-			internal.payments.transfers.mutations.fireInitiateTransition,
-			{
-				transferId: args.transferId,
-				eventType: "PROVIDER_INITIATED",
-				payload: { providerRef: result.providerRef },
-				source: PIPELINE_SOURCE,
-			}
-		);
+			transferId: args.transferId,
+		});
 	},
 });
 
@@ -914,9 +778,12 @@ export const confirmManualTransfer = paymentMutation
 			throw new ConvexError("Transfer request not found");
 		}
 
-		if (transfer.providerCode !== "manual") {
+		if (
+			transfer.providerCode !== "manual" &&
+			transfer.providerCode !== "manual_review"
+		) {
 			throw new ConvexError(
-				`Only manual transfers can be confirmed manually, got "${transfer.providerCode}"`
+				`Only manual and manual_review transfers can be confirmed manually, got "${transfer.providerCode}"`
 			);
 		}
 
@@ -948,7 +815,7 @@ export const confirmManualTransfer = paymentMutation
 				settledAt: now,
 				providerData: {
 					providerRef,
-					method: "manual",
+					method: transfer.providerCode,
 				},
 			},
 			source,

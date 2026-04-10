@@ -301,7 +301,7 @@ describe("checkOrphanedReversedTransfers", () => {
 		expect(result.items[0]?.amount).toBe(30_000);
 	});
 
-	it("treats attempt-linked inbound reversals as healthy when attempt-owned reversal entries exist", async () => {
+	it("treats attempt-linked inbound reversals as healthy when transfer-owned reversal entries exist", async () => {
 		const t = createHarness(modules);
 		const seeded = await seedMinimalEntities(t);
 		const obligationId = await createDueObligation(t, {
@@ -370,8 +370,8 @@ describe("checkOrphanedReversedTransfers", () => {
 			causedBy: original.entry._id,
 			mortgageId: seeded.mortgageId,
 			obligationId,
-			attemptId,
-			postingGroupId: `reversal-group:${attemptId}`,
+			transferRequestId: transferId,
+			postingGroupId: `reversal-group:transfer:${transferId}`,
 			source: SYSTEM_SOURCE,
 		});
 
@@ -575,11 +575,18 @@ describe("retriggerTransferConfirmation self-healing", () => {
 		vi.useFakeTimers();
 		const t = createComponentHarness();
 		const seeded = await seedMinimalEntities(t);
+		const obligationId = await createDueObligation(t, {
+			mortgageId: seeded.mortgageId,
+			borrowerId: seeded.borrowerId,
+			amount: 50_000,
+		});
 
 		const transferId = await createConfirmedTransfer(t, {
 			direction: "inbound",
 			amount: 50_000,
 			mortgageId: seeded.mortgageId,
+			obligationId,
+			borrowerId: seeded.borrowerId,
 		});
 
 		const result = await t.mutation(
@@ -594,9 +601,7 @@ describe("retriggerTransferConfirmation self-healing", () => {
 		);
 		await t.finishAllScheduledFunctions(vi.runAllTimers);
 
-		// retryTransferConfirmationEffect is an explicit no-op placeholder
-		// until a real publishTransferConfirmed hook exists.
-		expect(result.action).toBe("pending_no_effect");
+		expect(result.action).toBe("retriggered");
 		expect(result.attemptCount).toBe(1);
 
 		// Verify transferHealingAttempts record was created
@@ -607,6 +612,17 @@ describe("retriggerTransferConfirmation self-healing", () => {
 		expect(healingRecord).not.toBeNull();
 		expect(healingRecord?.status).toBe("retrying");
 		expect(healingRecord?.attemptCount).toBe(1);
+
+		const healedEntries = await t.run(async (ctx) =>
+			ctx.db
+				.query("cash_ledger_journal_entries")
+				.withIndex("by_transfer_request", (q) =>
+					q.eq("transferRequestId", transferId)
+				)
+				.collect()
+		);
+		expect(healedEntries).toHaveLength(1);
+		expect(healedEntries[0]?.entryType).toBe("CASH_RECEIVED");
 		vi.useRealTimers();
 	});
 

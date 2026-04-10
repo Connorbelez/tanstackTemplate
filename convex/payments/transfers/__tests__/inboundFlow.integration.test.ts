@@ -5,11 +5,11 @@
  * - T-012: Manual inbound transfer (non-bridged) -> cash ledger CASH_RECEIVED
  *   posting with correct accounts
  *
- * Compatibility-only bridge coverage in this file:
+ * Compatibility-only transfer-linkage coverage in this file:
  * - T-013: Bridge transfer D4 conditional — bridged transfer skips cash posting,
  *   non-bridged posts
- * - T-014: Bridge idempotency — re-running emitPaymentReceived does not create
- *   duplicate transfer
+ * - T-014: Re-running emitPaymentReceived remains idempotent and does not
+ *   resurrect the removed legacy bridge transfer path
  */
 
 import { convexTest } from "convex-test";
@@ -539,17 +539,17 @@ describe("T-013: compatibility bridge D4 conditional — bridged skips cash post
 });
 
 // ══════════════════════════════════════════════════════════════════════
-// T-014: Compatibility bridge idempotency
-// Calls emitPaymentReceived twice in the same mutation to verify that
-// the idempotency key check prevents duplicate bridge transfers. The
-// key check runs inline inside the handler (not as a scheduled effect),
-// so finishAllScheduledFunctions is not required.
+// T-014: Legacy bridge removal / idempotency
+// Calls emitPaymentReceived twice in the same mutation to verify that the
+// handler remains idempotent and does not create the removed compatibility
+// bridge transfer. The key checks run inline inside the handler (not as a
+// scheduled effect), so finishAllScheduledFunctions is not required.
 // Must run BEFORE T-011 (which uses finishAllScheduledFunctions and
 // corrupts global crypto/process references in convex-test).
 // ══════════════════════════════════════════════════════════════════════
 
-describe("T-014: compatibility bridge idempotency — re-running emitPaymentReceived does not create duplicate transfer", () => {
-	it("second invocation of emitPaymentReceived for same attempt does not create a second bridge transfer", async () => {
+describe("T-014: emitPaymentReceived idempotency — no legacy bridge transfer is created", () => {
+	it("second invocation of emitPaymentReceived for the same attempt does not recreate the removed bridge transfer path", async () => {
 		const t = createFullHarness();
 		const seeded = await seedCoreEntities(t);
 
@@ -568,7 +568,7 @@ describe("T-014: compatibility bridge idempotency — re-running emitPaymentRece
 		// The second call should find the existing bridge transfer by
 		// idempotency key and skip creation.
 		await t.run(async (ctx) => {
-			// First invocation — creates bridge transfer
+			// First invocation — settles via obligation transitions only
 			await emitPaymentReceivedMutation._handler(ctx, {
 				entityId: attemptId,
 				entityType: "collectionAttempt",
@@ -578,7 +578,7 @@ describe("T-014: compatibility bridge idempotency — re-running emitPaymentRece
 				source: SYSTEM_SOURCE,
 			});
 
-			// Second invocation — should find existing bridge and skip
+			// Second invocation — should remain a no-op for transfer linkage
 			await emitPaymentReceivedMutation._handler(ctx, {
 				entityId: attemptId,
 				entityType: "collectionAttempt",
@@ -588,16 +588,14 @@ describe("T-014: compatibility bridge idempotency — re-running emitPaymentRece
 				source: SYSTEM_SOURCE,
 			});
 
-			// Verify: only ONE bridge transfer exists for this attempt
+			// Verify: the legacy compatibility bridge transfer path stays removed.
 			const bridgeKey = `transfer:bridge:${attemptId}`;
 			const bridgeTransfers = await ctx.db
 				.query("transferRequests")
 				.withIndex("by_idempotency", (q) => q.eq("idempotencyKey", bridgeKey))
 				.collect();
 
-			expect(bridgeTransfers).toHaveLength(1);
-			expect(bridgeTransfers[0].collectionAttemptId).toBe(attemptId);
-			expect(bridgeTransfers[0].direction).toBe("inbound");
+			expect(bridgeTransfers).toHaveLength(0);
 		});
 	});
 

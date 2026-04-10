@@ -10,6 +10,10 @@ describe("getHoldPeriod", () => {
 		expect(getHoldPeriod("manual")).toEqual({ holdBusinessDays: 0 });
 	});
 
+	it("returns 0 days for manual_review", () => {
+		expect(getHoldPeriod("manual_review")).toEqual({ holdBusinessDays: 0 });
+	});
+
 	it("returns 5 days for mock_pad", () => {
 		expect(getHoldPeriod("mock_pad")).toEqual({ holdBusinessDays: 5 });
 	});
@@ -31,6 +35,12 @@ describe("getHoldPeriod", () => {
 describe("calculatePayoutEligibleDate", () => {
 	it("manual: same day (0 hold)", () => {
 		expect(calculatePayoutEligibleDate("2026-03-20", "manual")).toBe(
+			"2026-03-20"
+		);
+	});
+
+	it("manual_review: same day (0 hold)", () => {
+		expect(calculatePayoutEligibleDate("2026-03-20", "manual_review")).toBe(
 			"2026-03-20"
 		);
 	});

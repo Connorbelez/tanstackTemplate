@@ -8,7 +8,7 @@ const ADMIN_IDENTITY = {
 	issuer: "https://api.workos.com",
 	org_id: FAIRLEND_STAFF_ORG_ID,
 	organization_name: "FairLend Staff",
-	permissions: JSON.stringify(["admin:access"]),
+	permissions: JSON.stringify(["admin:access", "payment:manage"]),
 	role: "admin",
 	roles: JSON.stringify(["admin"]),
 	subject: "user_fairlend_admin",

@@ -17,6 +17,7 @@ import type { Doc, Id } from "../../_generated/dataModel";
 import type { ActionCtx, MutationCtx } from "../../_generated/server";
 import { auditLog } from "../../auditLog";
 import { convex } from "../../fluent";
+import { createTransferRequestRecord } from "../transfers/mutations";
 import {
 	obligationTypeToTransferType,
 	PROVIDER_CODES,
@@ -166,20 +167,6 @@ class MissingTransferRequestError extends Error {
 	}
 }
 
-const RETRY_SAFE_TRANSFERLESS_ATTEMPT_STATES = new Set([
-	"failed",
-	"retry_scheduled",
-	"permanent_fail",
-]);
-
-function canReplayTransferlessAttempt(result: ExecutePlanEntryResult): boolean {
-	return (
-		result.outcome === "already_executed" &&
-		!result.transferRequestId &&
-		RETRY_SAFE_TRANSFERLESS_ATTEMPT_STATES.has(result.attemptStatusAfter)
-	);
-}
-
 async function logPlanEntryExecutionAudit(
 	ctx: MutationCtx,
 	args: ExecutePlanEntryArgs,
@@ -280,6 +267,65 @@ const stagePlanEntryExecution = convex
 					await ctx.db.patch(existingAttempt._id, {
 						transferRequestId: existingTransfer._id,
 					});
+				} else {
+					const handoffContext = prepareTransferHandoffContext({
+						obligations,
+						planEntry,
+						triggerSource: args.triggerSource,
+						requestedByActorId: args.requestedByActorId,
+					});
+					if ("reasonCode" in handoffContext) {
+						const rejected = buildRejectedResult({
+							executionRecordedAt,
+							idempotencyKey: normalizedIdempotencyKey,
+							planEntryId: planEntry._id,
+							planEntryStatusAfter: "executing",
+							reasonCode: handoffContext.reasonCode,
+							reasonDetail: handoffContext.reasonDetail,
+						});
+						await logPlanEntryExecutionAudit(ctx, args, rejected);
+						return {
+							result: rejected,
+						};
+					}
+
+					const transferHandoffRequest = buildTransferHandoffRequest({
+						context: handoffContext,
+						collectionAttemptId: existingAttempt._id,
+						idempotencyKey: reconciledExecutionIdempotencyKey,
+						planEntry,
+					});
+
+					recoveredTransferRequestId = await createTransferRequestRecord(
+						ctx,
+						{
+							direction: "inbound",
+							transferType: obligationTypeToTransferType(
+								transferHandoffRequest.primaryObligationType
+							),
+							amount: transferHandoffRequest.amount,
+							counterpartyType: "borrower",
+							counterpartyId: transferHandoffRequest.counterpartyId,
+							mortgageId: transferHandoffRequest.mortgageId,
+							obligationId: transferHandoffRequest.obligationIds[0],
+							planEntryId: transferHandoffRequest.planEntryId,
+							collectionAttemptId: transferHandoffRequest.collectionAttemptId,
+							borrowerId: transferHandoffRequest.borrowerId,
+							providerCode: transferHandoffRequest.providerCode,
+							idempotencyKey: buildTransferHandoffIdempotencyKey(
+								transferHandoffRequest.planEntryId
+							),
+							metadata: buildTransferHandoffMetadata(
+								transferHandoffRequest,
+								transferHandoffRequest.primaryObligationType
+							),
+							source: transferHandoffRequest.source,
+						}
+					);
+
+					await ctx.db.patch(existingAttempt._id, {
+						transferRequestId: recoveredTransferRequestId,
+					});
 				}
 			}
 
@@ -310,50 +356,10 @@ const stagePlanEntryExecution = convex
 				reasonDetail:
 					"Collection plan entry already has a business collection attempt.",
 			});
-			if (recoveredTransferRequestId) {
-				await logPlanEntryExecutionAudit(ctx, args, result);
-				return {
-					existingTransferRequestId: recoveredTransferRequestId,
-					result,
-				};
-			}
-
-			let transferHandoffRequest: TransferHandoffRequest | undefined;
-			if (existingAttempt.status === "initiated") {
-				const handoffContext = prepareTransferHandoffContext({
-					obligations,
-					planEntry,
-					triggerSource: args.triggerSource,
-					requestedByActorId: args.requestedByActorId,
-				});
-				if ("reasonCode" in handoffContext) {
-					const rejected = buildRejectedResult({
-						executionRecordedAt,
-						idempotencyKey: normalizedIdempotencyKey,
-						planEntryId: planEntry._id,
-						planEntryStatusAfter: "executing",
-						reasonCode: handoffContext.reasonCode,
-						reasonDetail: handoffContext.reasonDetail,
-					});
-					await logPlanEntryExecutionAudit(ctx, args, rejected);
-					return {
-						result: rejected,
-					};
-				}
-
-				transferHandoffRequest = buildTransferHandoffRequest({
-					context: handoffContext,
-					collectionAttemptId: existingAttempt._id,
-					idempotencyKey: reconciledExecutionIdempotencyKey,
-					planEntry,
-				});
-			}
-
 			await logPlanEntryExecutionAudit(ctx, args, result);
 			return {
 				existingTransferRequestId: recoveredTransferRequestId,
 				result,
-				transferHandoffRequest,
 			};
 		}
 
@@ -453,12 +459,44 @@ const stagePlanEntryExecution = convex
 			initiatedAt: executionRecordedAt,
 		});
 
+		const transferHandoffRequest = buildTransferHandoffRequest({
+			context: handoffContext,
+			collectionAttemptId: attemptId,
+			idempotencyKey: normalizedIdempotencyKey,
+			planEntry,
+		});
+
+		const transferRequestId = await createTransferRequestRecord(ctx, {
+			direction: "inbound",
+			transferType: obligationTypeToTransferType(
+				transferHandoffRequest.primaryObligationType
+			),
+			amount: transferHandoffRequest.amount,
+			counterpartyType: "borrower",
+			counterpartyId: transferHandoffRequest.counterpartyId,
+			mortgageId: transferHandoffRequest.mortgageId,
+			obligationId: transferHandoffRequest.obligationIds[0],
+			planEntryId: transferHandoffRequest.planEntryId,
+			collectionAttemptId: transferHandoffRequest.collectionAttemptId,
+			borrowerId: transferHandoffRequest.borrowerId,
+			providerCode: transferHandoffRequest.providerCode,
+			idempotencyKey: buildTransferHandoffIdempotencyKey(
+				transferHandoffRequest.planEntryId
+			),
+			metadata: buildTransferHandoffMetadata(
+				transferHandoffRequest,
+				transferHandoffRequest.primaryObligationType
+			),
+			source: transferHandoffRequest.source,
+		});
+
 		await ctx.db.patch(attemptId, {
 			machineContext: {
 				attemptId: `${attemptId}`,
 				retryCount: 0,
 				maxRetries: 3,
 			},
+			transferRequestId,
 		});
 
 		await ctx.db.patch(planEntry._id, {
@@ -475,17 +513,13 @@ const stagePlanEntryExecution = convex
 			planEntryStatusAfter: "executing",
 			collectionAttemptId: attemptId,
 			attemptStatusAfter: "initiated",
+			transferRequestId,
 		});
 		await logPlanEntryExecutionAudit(ctx, args, result);
 
 		return {
 			result,
-			transferHandoffRequest: buildTransferHandoffRequest({
-				context: handoffContext,
-				collectionAttemptId: attemptId,
-				idempotencyKey: normalizedIdempotencyKey,
-				planEntry,
-			}),
+			existingTransferRequestId: transferRequestId,
 		};
 	});
 
@@ -682,6 +716,7 @@ export const recordTransferHandoffFailure = convex
 	})
 	.handler(async (ctx, args) => {
 		await ctx.db.patch(args.attemptId, {
+			failedAt: Date.now(),
 			failureReason: args.failureReason,
 		});
 
@@ -708,8 +743,7 @@ export const executePlanEntry = convex
 				.stagePlanEntryExecutionMutation,
 			args
 		);
-		const { existingTransferRequestId, result, transferHandoffRequest } =
-			staged;
+		const { existingTransferRequestId, result } = staged;
 		const executionSource = buildExecutionSource({
 			triggerSource: args.triggerSource,
 			requestedByActorId: args.requestedByActorId,
@@ -722,58 +756,14 @@ export const executePlanEntry = convex
 			return result;
 		}
 
-		let transferRequestId =
-			existingTransferRequestId ?? result.transferRequestId;
+		const transferRequestId =
+			existingTransferRequestId ??
+			("transferRequestId" in result ? result.transferRequestId : undefined);
 
 		try {
-			if (!transferRequestId && transferHandoffRequest) {
-				const firstObligationId = transferHandoffRequest.obligationIds[0];
-				transferRequestId = await ctx.runMutation(
-					internal.payments.transfers.mutations.createTransferRequestInternal,
-					{
-						direction: "inbound",
-						transferType: obligationTypeToTransferType(
-							transferHandoffRequest.primaryObligationType
-						),
-						amount: transferHandoffRequest.amount,
-						counterpartyType: "borrower",
-						counterpartyId: transferHandoffRequest.counterpartyId,
-						mortgageId: transferHandoffRequest.mortgageId,
-						obligationId: firstObligationId,
-						planEntryId: transferHandoffRequest.planEntryId,
-						collectionAttemptId: transferHandoffRequest.collectionAttemptId,
-						borrowerId: transferHandoffRequest.borrowerId,
-						providerCode: transferHandoffRequest.providerCode,
-						idempotencyKey: buildTransferHandoffIdempotencyKey(
-							transferHandoffRequest.planEntryId
-						),
-						metadata: buildTransferHandoffMetadata(
-							transferHandoffRequest,
-							transferHandoffRequest.primaryObligationType
-						),
-						source: transferHandoffRequest.source,
-					}
-				);
-
-				await ctx.runMutation(
-					internal.payments.collectionPlan.execution
-						.recordTransferHandoffSuccessMutation,
-					{
-						attemptId: result.collectionAttemptId,
-						transferRequestId,
-					}
-				);
-			}
-
 			if (!transferRequestId) {
-				if (
-					result.outcome === "already_executed" &&
-					canReplayTransferlessAttempt(result)
-				) {
-					return result;
-				}
 				throw new MissingTransferRequestError(
-					`[collection-plan] Attempt ${result.collectionAttemptId} has no transferRequestId after transfer handoff. Legacy transferless attempts are no longer supported.`
+					`[collection-plan] Attempt ${result.collectionAttemptId} has no transferRequestId after stagePlanEntryExecution. Transferless attempts are no longer supported.`
 				);
 			}
 

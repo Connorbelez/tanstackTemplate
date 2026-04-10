@@ -6,6 +6,7 @@ import { getCashAccountBalance } from "../accounts";
 import { postLenderPayout } from "../mutations";
 import { postCashEntryInternal } from "../postEntry";
 import { internalGetLenderPayableBalance } from "../queries";
+import { buildIdempotencyKey } from "../types";
 import {
 	createHarness,
 	createTestAccount,
@@ -42,6 +43,10 @@ const postLenderPayoutMutation =
 
 const internalGetLenderPayableBalanceQuery =
 	internalGetLenderPayableBalance as unknown as InternalGetLenderPayableBalanceHandler;
+
+function lenderPayableKey(scope: string) {
+	return buildIdempotencyKey("lender-payable-balance", scope);
+}
 
 describe("getLenderPayableBalance query", () => {
 	it("returns 0n for a lender with no payable accounts", async () => {
@@ -95,7 +100,7 @@ describe("getLenderPayableBalance query", () => {
 				amount: 55_000,
 				debitAccountId: controlAccount._id,
 				creditAccountId: payableAccount._id,
-				idempotencyKey: "lpb-test-single-1",
+				idempotencyKey: lenderPayableKey("single-1"),
 				mortgageId: seeded.mortgageId,
 				lenderId: seeded.lenderAId,
 				postingGroupId: "allocation:test-1",
@@ -186,7 +191,7 @@ describe("getLenderPayableBalance query", () => {
 				amount: 30_000,
 				debitAccountId: control1._id,
 				creditAccountId: payable1._id,
-				idempotencyKey: "lpb-multi-mortgage-1",
+				idempotencyKey: lenderPayableKey("multi-mortgage-1"),
 				mortgageId: seeded.mortgageId,
 				lenderId: seeded.lenderAId,
 				postingGroupId: "allocation:multi-1",
@@ -199,7 +204,7 @@ describe("getLenderPayableBalance query", () => {
 				amount: 20_000,
 				debitAccountId: control2._id,
 				creditAccountId: payable2._id,
-				idempotencyKey: "lpb-multi-mortgage-2",
+				idempotencyKey: lenderPayableKey("multi-mortgage-2"),
 				mortgageId: mortgage2Id,
 				lenderId: seeded.lenderAId,
 				postingGroupId: "allocation:multi-2",
@@ -259,7 +264,7 @@ describe("getLenderPayableBalance query", () => {
 				amount: 55_000,
 				debitAccountId: controlAccount._id,
 				creditAccountId: payableAccount._id,
-				idempotencyKey: "lpb-payout-payable",
+				idempotencyKey: lenderPayableKey("payout-payable"),
 				mortgageId: seeded.mortgageId,
 				lenderId: seeded.lenderAId,
 				postingGroupId: "allocation:payout-test",
@@ -272,7 +277,7 @@ describe("getLenderPayableBalance query", () => {
 				lenderId: seeded.lenderAId,
 				amount: 20_000,
 				effectiveDate: "2026-03-02",
-				idempotencyKey: "lpb-payout-partial",
+				idempotencyKey: lenderPayableKey("payout-partial"),
 				source: SYSTEM_SOURCE,
 			});
 
@@ -327,7 +332,7 @@ describe("getLenderPayableBalance query", () => {
 				amount: 60_000,
 				debitAccountId: controlAccount._id,
 				creditAccountId: payableA._id,
-				idempotencyKey: "lpb-per-lender-a",
+				idempotencyKey: lenderPayableKey("per-lender-a"),
 				mortgageId: seeded.mortgageId,
 				lenderId: seeded.lenderAId,
 				postingGroupId: "allocation:per-lender",
@@ -340,7 +345,7 @@ describe("getLenderPayableBalance query", () => {
 				amount: 40_000,
 				debitAccountId: controlAccount._id,
 				creditAccountId: payableB._id,
-				idempotencyKey: "lpb-per-lender-b",
+				idempotencyKey: lenderPayableKey("per-lender-b"),
 				mortgageId: seeded.mortgageId,
 				lenderId: seeded.lenderBId,
 				postingGroupId: "allocation:per-lender",

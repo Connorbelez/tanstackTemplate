@@ -1,9 +1,6 @@
 import { ConvexError, v } from "convex/values";
-import { adminMutation, authedQuery } from "../fluent";
+import { adminMutation, documentQuery } from "../fluent";
 import { formatOptionsValidator, variableTypeValidator } from "./validators";
-
-// TODO: Read queries (list, getByKey) use authedQuery (authentication only).
-// Add permission gate (e.g. requirePermission("variable:view")) when moving to production.
 
 const SNAKE_CASE_RE = /^[a-z][a-z0-9]*(_[a-z0-9]+)*$/;
 
@@ -91,14 +88,14 @@ export const remove = adminMutation
 	})
 	.public();
 
-export const list = authedQuery
+export const list = documentQuery
 	.input({})
 	.handler(async (ctx) => {
 		return await ctx.db.query("systemVariables").collect();
 	})
 	.public();
 
-export const getByKey = authedQuery
+export const getByKey = documentQuery
 	.input({ key: v.string() })
 	.handler(async (ctx, args) => {
 		return await ctx.db

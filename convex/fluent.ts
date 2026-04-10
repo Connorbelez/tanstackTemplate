@@ -416,13 +416,13 @@ export const ledgerQuery = authedQuery.use(requirePermission("ledger:view"));
 export const ledgerMutation = authedMutation.use(
 	requirePermission("ledger:correct")
 );
-export const cashLedgerQuery = authedQuery.use(
+export const cashLedgerQuery = adminQuery.use(
 	requirePermission("cash_ledger:view")
 );
 export const cashLedgerMutation = authedMutation.use(
 	requirePermission("cash_ledger:correct")
 );
-export const paymentQuery = authedQuery.use(requirePermission("payment:view"));
+export const paymentQuery = adminQuery.use(requirePermission("payment:view"));
 export const paymentMutation = authedMutation.use(
 	requirePermission("payment:manage")
 );
@@ -445,6 +445,22 @@ export const paymentWebhookAction = authedAction.use(
 	requirePermissionAction("payment:webhook_process")
 );
 
+// ── Document Engine Chains ──────────────────────────────────────────
+// Document authoring/generation remains staff-only until the product has a
+// dedicated non-admin document operations role model.
+export const documentQuery = adminQuery.use(
+	requirePermission("document:review")
+);
+export const documentUploadMutation = adminMutation.use(
+	requirePermission("document:upload")
+);
+export const documentUploadAction = adminAction.use(
+	requirePermissionAction("document:upload")
+);
+export const documentGenerateAction = adminAction.use(
+	requirePermissionAction("document:generate")
+);
+
 // ── CRM Chains ──────────────────────────────────────────────────────
 // Control Plane mutations (admin + org context)
 export const crmAdminMutation = authedMutation
@@ -455,9 +471,9 @@ export const crmAdminQuery = authedQuery
 	.use(requireOrgContext)
 	.use(requireAdmin);
 
-// Data Plane queries (any authed user with org context)
-export const crmQuery = authedQuery.use(requireOrgContext);
-export const crmMutation = authedMutation.use(requireOrgContext);
+// Data plane remains admin-only until viewer/editor permission splits exist.
+export const crmQuery = crmAdminQuery;
+export const crmMutation = crmAdminMutation;
 
 export const whoAmI = convex
 	.query()

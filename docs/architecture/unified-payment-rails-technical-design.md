@@ -1,9 +1,10 @@
 # Unified Payment Rails Technical Design
 
-> Status note (2026-04-03): this document is still useful background, but the
-> aligned repo contract now treats `TransferProvider` as the canonical inbound
-> provider abstraction. References to `PaymentMethod` below describe legacy
-> compatibility context unless explicitly stated otherwise.
+> Status note (2026-04-09): this document is historical design background.
+> The live repo contract is centered on `transferRequests` plus
+> `TransferProvider`. Older drafts used `PaymentMethod` terminology for the
+> borrower-only collection adapter, but that is no longer the canonical
+> extension point.
 
 ## Goal
 
@@ -15,12 +16,13 @@ This design is intentionally grounded in the current codebase, not just the prod
 
 ### What already exists
 
-- Borrower collection legacy compatibility exists as `PaymentMethod` in [convex/payments/methods/interface.ts](../../convex/payments/methods/interface.ts).
-- Two implementations exist today:
-  - `ManualPaymentMethod` in [convex/payments/methods/manual.ts](../../convex/payments/methods/manual.ts)
-  - `MockPADMethod` in [convex/payments/methods/mockPAD.ts](../../convex/payments/methods/mockPAD.ts)
-- Runtime method lookup exists in [convex/payments/methods/registry.ts](../../convex/payments/methods/registry.ts) as a compatibility-only shim.
+- The canonical provider contract now lives in [convex/payments/transfers/interface.ts](../../convex/payments/transfers/interface.ts).
+- Provider implementations exist today in:
+  - [convex/payments/transfers/providers/manual.ts](../../convex/payments/transfers/providers/manual.ts)
+  - [convex/payments/transfers/providers/manualReview.ts](../../convex/payments/transfers/providers/manualReview.ts)
+  - [convex/payments/transfers/providers/mock.ts](../../convex/payments/transfers/providers/mock.ts)
 - Canonical provider resolution belongs to the transfer-domain registry in [convex/payments/transfers/providers/registry.ts](../../convex/payments/transfers/providers/registry.ts).
+- Transfer requests already exist as the canonical provider-facing rail record in schema and runtime flows.
 - Collection attempts are already modeled as a governed entity with a lifecycle in [convex/engine/machines/collectionAttempt.machine.ts](../../convex/engine/machines/collectionAttempt.machine.ts).
 - Collection attempt effects already fan out to obligations and retry rules in [convex/engine/effects/collectionAttempt.ts](../../convex/engine/effects/collectionAttempt.ts).
 - Obligation settlement already schedules lender dispersal creation in [convex/engine/effects/obligation.ts](../../convex/engine/effects/obligation.ts).
@@ -31,8 +33,7 @@ This design is intentionally grounded in the current codebase, not just the prod
 
 ### What does not exist yet
 
-- A transfer abstraction that handles both inbound and outbound money movement.
-- A provider registry keyed by transfer type plus direction.
+- Full production provider coverage across both inbound and outbound money movement.
 - Bank account validation / mandate lifecycle as a first-class prerequisite for PAD/EFT.
 - A real provider webhook ingestion layer for transfer settlement.
 - A multi-leg deal closing transfer orchestrator that moves actual cash, not just future payout routing.
@@ -45,10 +46,10 @@ The repo currently has:
 - A lender dispersal allocation model.
 - A mortgage ownership ledger.
 - A deal-closing ownership reroute mechanism.
-- A transfer-domain provider boundary centered on `TransferProvider`, with
-  legacy borrower-collection compatibility bridged behind it.
+- A transfer-domain provider boundary centered on `TransferProvider` and
+  `transferRequests`.
 
-It does **not** currently have a unified cash movement domain model. The proposed goal therefore spans multiple existing bounded contexts and must not be implemented as a thin extension of `PaymentMethod`.
+It does **not** currently have a fully unified cash movement domain model across all rails. The proposed goal therefore spans multiple existing bounded contexts and must not be implemented as a thin extension of a borrower-only collection adapter.
 
 ## Design Principles
 
@@ -122,7 +123,7 @@ This creates a replay-safe audit trail and a dedupe barrier.
 
 ## Canonical Contract
 
-Replace the current borrower-only `InitiateParams` contract with a new transfer contract. The current interface in [convex/payments/methods/interface.ts](../../convex/payments/methods/interface.ts) is too collection-specific because it hardcodes `borrowerId`, `mortgageId`, and `planEntryId`.
+Replace the older borrower-only collection contract with a transfer contract. The prior shape was too collection-specific because it hardcoded `borrowerId`, `mortgageId`, and `planEntryId`.
 
 ```ts
 export interface TransferRequestInput {
@@ -259,7 +260,7 @@ Suggested module split:
 - `convex/payments/transfers/providers/rotessaPad.ts`
 - `convex/payments/transfers/providers/registry.ts`
 
-Do not mutate the existing `PaymentMethod` registry into a kitchen sink. It is simpler and safer to create a new transfer provider layer and then bridge the existing collection attempt flow into it during migration.
+Do not mutate a borrower-only collection adapter into a kitchen sink. It is simpler and safer to keep the transfer provider layer canonical and bridge the existing collection attempt flow into it during migration.
 
 ## Integration Points
 
@@ -416,9 +417,9 @@ These are the non-negotiable invariants for unified rails.
 
 ## Major Foot Guns
 
-### Foot gun 1: Extending `PaymentMethod` directly
+### Foot gun 1: Extending a borrower-only collection adapter directly
 
-The current interface is borrower-collection specific. Reusing it directly for outbound payouts will leak collection terminology into disbursement and closing flows, creating a brittle abstraction.
+The older borrower-collection interface was collection-specific. Reusing that shape directly for outbound payouts would leak collection terminology into disbursement and closing flows, creating a brittle abstraction.
 
 ### Foot gun 2: Treating `dispersalEntries` as cash payouts
 
@@ -572,7 +573,7 @@ Before any outbound initiation, the system must verify sufficient available trus
 
 ## Concrete Recommendations
 
-1. Create a new `transferRequests` bounded context rather than broadening `PaymentMethod`.
+1. Keep `transferRequests` as the bounded context rather than broadening a borrower-only collection adapter.
 2. Keep `collectionAttempts` temporarily as an adapter to reduce blast radius.
 3. Treat `dispersalEntries` as calculation records, then add a separate outbound payout lifecycle.
 4. Do not use the current ownership ledger as the cash ledger.
@@ -592,7 +593,7 @@ Before any outbound initiation, the system must verify sufficient available trus
 
 The repo already contains most of the surrounding systems needed for unified payment rails, but they are currently split across collection execution, dispersal allocation, ownership accounting, and deal-closing ownership transfer. The missing piece is a canonical cash-movement domain.
 
-The correct implementation is not “add more providers to `PaymentMethod`.” The correct implementation is:
+The correct implementation is not “add more providers to a borrower-only collection adapter.” The correct implementation is:
 
 - add a transfer domain
 - bridge it into collections

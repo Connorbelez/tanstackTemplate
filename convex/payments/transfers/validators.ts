@@ -56,6 +56,7 @@ export const counterpartyTypeValidator = v.union(
 // ── Provider Codes ───────────────────────────────────────────────────
 export const providerCodeValidator = v.union(
 	v.literal("manual"),
+	v.literal("manual_review"),
 	v.literal("mock_pad"),
 	v.literal("mock_eft"),
 	v.literal("pad_vopay"),
@@ -71,15 +72,11 @@ export const legNumberValidator = v.union(v.literal(1), v.literal(2));
 
 // ── Transfer Statuses ────────────────────────────────────────────────
 export const transferStatusValidator = v.union(
-	// Machine states
 	v.literal("initiated"),
 	v.literal("pending"),
 	v.literal("processing"),
 	v.literal("confirmed"),
 	v.literal("failed"),
 	v.literal("cancelled"),
-	v.literal("reversed"),
-	// TODO: Remove legacy statuses once all existing records are migrated
-	v.literal("approved"), // LEGACY
-	v.literal("completed") // LEGACY
+	v.literal("reversed")
 );

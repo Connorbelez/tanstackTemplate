@@ -201,54 +201,33 @@ async function reverseInboundTransfer(
 	}
 }
 
-async function getReversalEntriesForAttempt(
+async function getReversalEntriesForTransfer(
 	harness: ReliabilityHarness,
-	attemptId: Id<"collectionAttempts">
+	transferId: Id<"transferRequests">
 ) {
 	return harness.t.run(async (ctx) =>
 		ctx.db
 			.query("cash_ledger_journal_entries")
 			.withIndex("by_posting_group", (q) =>
-				q.eq("postingGroupId", `reversal-group:${attemptId}`)
+				q.eq("postingGroupId", `reversal-group:transfer:${transferId}`)
 			)
 			.collect()
 	);
 }
 
-async function executeReversalCascadeStep(
-	harness: ReliabilityHarness,
-	attemptId: Id<"collectionAttempts">,
-	reason: string,
-	effectiveDate: string
-) {
-	await harness.t.mutation(
-		internal.engine.effects.collectionAttempt.executeReversalCascadeStep,
-		{
-			entityId: attemptId,
-			source: {
-				actorId: "reliability-chaos",
-				actorType: "system",
-				channel: "api_webhook",
-			},
-			reason,
-			effectiveDate,
-		}
-	);
-}
-
 async function createCorrectiveObligationFromReversal(
 	harness: ReliabilityHarness,
-	attemptId: Id<"collectionAttempts">,
+	transferId: Id<"transferRequests">,
 	originalObligationId: Id<"obligations">,
 	reason: string
 ) {
-	const reversalEntries = await getReversalEntriesForAttempt(harness, attemptId);
+	const reversalEntries = await getReversalEntriesForTransfer(harness, transferId);
 	const cashReceivedReversal = reversalEntries.find((entry) =>
 		entry.idempotencyKey.includes("reversal:cash-received:")
 	);
 	if (!cashReceivedReversal) {
 		throw new Error(
-			`Expected CASH_RECEIVED reversal for attempt ${attemptId as string}`
+			`Expected CASH_RECEIVED reversal for transfer ${transferId as string}`
 		);
 	}
 
@@ -259,7 +238,7 @@ async function createCorrectiveObligationFromReversal(
 			originalObligationId,
 			reversedAmount: Number(cashReceivedReversal.amount),
 			reason,
-			postingGroupId: `reversal-group:${attemptId}`,
+			postingGroupId: `reversal-group:transfer:${transferId}`,
 			source: {
 				actorId: "reliability-chaos",
 				actorType: "system",
@@ -567,30 +546,27 @@ describe("mortgage lifecycle chaos", () => {
 			"NSF reversal",
 			"2026-01-22"
 		);
+		await harness.drainScheduledWork();
 		expect((await getAttemptOrThrow(harness, record.attemptId)).status).toBe(
 			"reversed"
 		);
 
-		await executeReversalCascadeStep(
+		const firstReversalEntries = await getReversalEntriesForTransfer(
 			harness,
-			record.attemptId,
-			"NSF reversal",
-			"2026-01-22"
-		);
-		const firstReversalEntries = await getReversalEntriesForAttempt(
-			harness,
-			record.attemptId
+			record.inboundTransferId
 		);
 		expect(firstReversalEntries.length).toBeGreaterThan(0);
-		await executeReversalCascadeStep(
+		await applyTransferReversalEffect(
 			harness,
-			record.attemptId,
+			record.inboundTransferId,
+			"mock_evt_inbound_1_reversed",
 			"NSF reversal",
 			"2026-01-22"
 		);
-		const secondReversalEntries = await getReversalEntriesForAttempt(
+		await harness.drainScheduledWork();
+		const secondReversalEntries = await getReversalEntriesForTransfer(
 			harness,
-			record.attemptId
+			record.inboundTransferId
 		);
 		expect(secondReversalEntries.map((entry) => entry._id).sort()).toEqual(
 			firstReversalEntries.map((entry) => entry._id).sort()
@@ -601,13 +577,13 @@ describe("mortgage lifecycle chaos", () => {
 
 		await createCorrectiveObligationFromReversal(
 			harness,
-			record.attemptId,
+			record.inboundTransferId,
 			record.obligationId,
 			"NSF reversal"
 		);
 		await createCorrectiveObligationFromReversal(
 			harness,
-			record.attemptId,
+			record.inboundTransferId,
 			record.obligationId,
 			"NSF reversal"
 		);

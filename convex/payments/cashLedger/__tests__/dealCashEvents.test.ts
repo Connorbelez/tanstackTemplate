@@ -9,11 +9,20 @@ import {
 	postLockingFeeReceived,
 } from "../integrations";
 import { postCashEntryInternal } from "../postEntry";
+import { buildIdempotencyKey } from "../types";
 import { createHarness, SYSTEM_SOURCE, seedMinimalEntities } from "./testUtils";
 
 const modules = convexModules;
 
 const DEAL_NOT_FOUND_PATTERN = /Deal not found/;
+
+function prefundLenderPayableKey(lenderId: Id<"lenders">) {
+	return buildIdempotencyKey("prefund-lender-payable", lenderId);
+}
+
+function familyMapTestKey(scope: string) {
+	return buildIdempotencyKey("family-map-test", scope);
+}
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -57,7 +66,7 @@ async function prefundLenderPayable(
 			amount,
 			debitAccountId: controlAccount._id,
 			creditAccountId: lenderPayableAccount._id,
-			idempotencyKey: `prefund-lender-payable:${lenderId}`,
+			idempotencyKey: prefundLenderPayableKey(lenderId),
 			mortgageId,
 			lenderId,
 			source: SYSTEM_SOURCE,
@@ -474,7 +483,7 @@ describe("CASH_RECEIVED family map expansion", () => {
 				amount: 100_000,
 				debitAccountId: trustCash._id,
 				creditAccountId: cashClearing._id,
-				idempotencyKey: "family-map-test-cash-clearing",
+				idempotencyKey: familyMapTestKey("cash-clearing"),
 				mortgageId,
 				source: SYSTEM_SOURCE,
 			});
@@ -502,7 +511,7 @@ describe("CASH_RECEIVED family map expansion", () => {
 				amount: 100_000,
 				debitAccountId: trustCash._id,
 				creditAccountId: unappliedCash._id,
-				idempotencyKey: "family-map-test-unapplied-cash",
+				idempotencyKey: familyMapTestKey("unapplied-cash"),
 				mortgageId,
 				source: SYSTEM_SOURCE,
 			});
@@ -548,7 +557,7 @@ describe("CASH_RECEIVED family map expansion", () => {
 				amount: 100_000,
 				debitAccountId: trustCash._id,
 				creditAccountId: receivable._id,
-				idempotencyKey: "family-map-test-borrower-receivable",
+				idempotencyKey: familyMapTestKey("borrower-receivable"),
 				mortgageId,
 				obligationId,
 				borrowerId,

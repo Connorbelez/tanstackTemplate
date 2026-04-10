@@ -1,6 +1,7 @@
 import type { FunctionReference, FunctionType } from "convex/server";
 import { makeFunctionReference } from "convex/server";
 import { v } from "convex/values";
+import { internal } from "../../_generated/api";
 import type { Id } from "../../_generated/dataModel";
 import {
 	internalAction,
@@ -104,33 +105,10 @@ export const findOrphanedConfirmedTransfersForHealing = internalQuery({
 	},
 });
 
-// ── TR-012: retriggerTransferConfirmation ────────────────────────────
-
-/**
- * Placeholder effect for retrying transfer confirmation.
- * TODO: Replace with an actual publishTransferConfirmed retrigger hook.
- * This mutation intentionally does nothing today; callers must treat the
- * resulting healing state as "pending_no_effect", not as a real retry.
- */
-export const retryTransferConfirmationEffect = internalMutation({
-	args: {
-		transferRequestId: v.id("transferRequests"),
-		direction: v.union(v.literal("inbound"), v.literal("outbound")),
-		amount: v.number(),
-	},
-	handler: async (_ctx, args) => {
-		console.error(
-			"[TRANSFER-HEALING] retryTransferConfirmationEffect is a PLACEHOLDER — " +
-				`transfer=${args.transferRequestId} was NOT actually retried. ` +
-				`direction=${args.direction}, amount=${args.amount}.`
-		);
-	},
-});
-
 /**
  * Attempt to retrigger confirmation journal entry for an orphaned transfer.
  * Four code paths: skip (already escalated), escalate with SUSPENSE entry,
- * escalate without entry (no mortgageId), or retry.
+ * escalate without entry (no mortgageId), or schedule a real retry.
  */
 export const retriggerTransferConfirmation = internalMutation({
 	args: {
@@ -286,7 +264,20 @@ export const retriggerTransferConfirmation = internalMutation({
 			return { action: "escalated" as const, attemptCount };
 		}
 
-		// ── Retry: schedule placeholder retrigger ──
+		const transfer = await ctx.db.get(args.transferRequestId);
+		if (!transfer) {
+			throw new Error(
+				`[TRANSFER-HEALING] Transfer ${args.transferRequestId} not found during confirmation retrigger`
+			);
+		}
+
+		const settledAt =
+			transfer.settledAt ??
+			transfer.confirmedAt ??
+			transfer.createdAt ??
+			Date.now();
+
+		// ── Retry: schedule the real publishTransferConfirmed effect ──
 		if (existing) {
 			await ctx.db.patch(existing._id, {
 				status: "retrying",
@@ -305,28 +296,23 @@ export const retriggerTransferConfirmation = internalMutation({
 
 		await ctx.scheduler.runAfter(
 			0,
-			makeInternalRef<
-				"mutation",
-				{
-					transferRequestId: Id<"transferRequests">;
-					direction: "inbound" | "outbound";
-					amount: number;
-				},
-				void
-			>(
-				"payments/cashLedger/transferReconciliationCron:retryTransferConfirmationEffect"
-			),
+			internal.engine.effects.transfer.publishTransferConfirmed,
 			{
-				transferRequestId: args.transferRequestId,
-				direction: args.direction,
-				amount: args.amount,
+				entityId: args.transferRequestId,
+				entityType: "transfer",
+				eventType: "FUNDS_SETTLED",
+				journalEntryId: `healing:publishTransferConfirmed:${args.transferRequestId}:${attemptCount}`,
+				effectName: "publishTransferConfirmed",
+				payload: {
+					settledAt,
+					healingAttemptCount: attemptCount,
+					healingRetrigger: true,
+				},
+				source: HEALING_SOURCE,
 			}
 		);
 
-		// NOTE: retryTransferConfirmationEffect is an explicit no-op placeholder.
-		// Return "pending_no_effect" so reports distinguish documented placeholder
-		// scheduling from a real publishTransferConfirmed retrigger.
-		return { action: "pending_no_effect" as const, attemptCount };
+		return { action: "retriggered" as const, attemptCount };
 	},
 });
 
@@ -394,11 +380,6 @@ export const transferReconciliationCron = internalAction({
 		if (escalated > 0) {
 			console.error(
 				`[TRANSFER-HEALING P0] ${escalated} transfers escalated to SUSPENSE`
-			);
-		}
-		if (pendingNoEffect > 0) {
-			console.warn(
-				`[TRANSFER-HEALING] ${pendingNoEffect} transfers scheduled placeholder retry (no real effect)`
 			);
 		}
 		console.info(

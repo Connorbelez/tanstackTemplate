@@ -1,7 +1,11 @@
 import { useQuery } from "convex/react";
 import { ArrowUpRight, ShieldCheck, Waves } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
-import { useAmpsDemoAccess } from "#/components/demo/amps/hooks";
+import { useMemo, useState } from "react";
+import {
+	useAmpsDemoAccess,
+	useMortgageLabelMap,
+	useSelectableSurface,
+} from "#/components/demo/amps/hooks";
 import {
 	buildCountBadgeItems,
 	CountBadgeRow,
@@ -19,9 +23,6 @@ export function AmpsCollectionAttemptsPage() {
 	const { workspaceOverview } = useAmpsDemoAccess();
 	const [status, setStatus] = useState<string>("all");
 	const [mortgageId, setMortgageId] = useState<string>("all");
-	const [selectedAttemptId, setSelectedAttemptId] = useState<string | null>(
-		null
-	);
 
 	const attempts = useQuery(
 		api.payments.collectionPlan.admin.listCollectionAttempts,
@@ -32,37 +33,15 @@ export function AmpsCollectionAttemptsPage() {
 		}
 	);
 
+	const [selectedAttemptId, setSelectedAttemptId] = useSelectableSurface(
+		attempts?.map((attempt) => attempt.collectionAttemptId)
+	);
 	const selectedAttempt = useQuery(
 		api.payments.collectionPlan.admin.getCollectionAttempt,
 		selectedAttemptId ? { attemptId: selectedAttemptId as never } : "skip"
 	);
 
-	useEffect(() => {
-		if (!attempts?.length) {
-			setSelectedAttemptId(null);
-			return;
-		}
-		if (
-			selectedAttemptId &&
-			attempts.some(
-				(attempt) => attempt.collectionAttemptId === selectedAttemptId
-			)
-		) {
-			return;
-		}
-		setSelectedAttemptId(attempts[0]?.collectionAttemptId ?? null);
-	}, [attempts, selectedAttemptId]);
-
-	const mortgageLabels = useMemo(
-		() =>
-			new Map(
-				(workspaceOverview?.mortgages ?? []).map((mortgage) => [
-					mortgage.mortgageId,
-					mortgage.propertyLabel,
-				])
-			),
-		[workspaceOverview?.mortgages]
-	);
+	const mortgageLabels = useMortgageLabelMap(workspaceOverview?.mortgages);
 
 	const attemptCounts = useMemo(() => {
 		const nextCounts: Record<string, number> = {};

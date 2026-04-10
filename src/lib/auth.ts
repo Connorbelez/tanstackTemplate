@@ -1,4 +1,5 @@
 import { redirect } from "@tanstack/react-router";
+import { FAIRLEND_STAFF_ORG_ID } from "../../convex/constants";
 import { buildSignInRedirect } from "./auth-redirect";
 
 /** Permissions that control island-level route access. */
@@ -17,34 +18,43 @@ export type IslandPermission =
 
 export function hasPermission(
 	permissions: readonly string[],
-	permission: IslandPermission
+	permission: string
 ): boolean {
 	return permissions.includes(permission);
 }
 
 export function hasAnyPermission(
 	permissions: readonly string[],
-	requiredPermissions: readonly IslandPermission[]
+	requiredPermissions: readonly string[]
 ): boolean {
 	return requiredPermissions.some((permission) =>
 		hasPermission(permissions, permission)
 	);
 }
 
+export function isFairLendStaffAdmin(context: {
+	orgId: string | null;
+	roles: readonly string[];
+}): boolean {
+	return (
+		context.orgId === FAIRLEND_STAFF_ORG_ID && context.roles.includes("admin")
+	);
+}
+
 export function canAccessAdminPath(
 	pathname: string,
-	permissions: readonly string[]
+	context: Pick<RouteAuthContext, "orgId" | "permissions" | "roles">
 ): boolean {
-	if (hasPermission(permissions, "admin:access")) {
+	if (isFairLendStaffAdmin(context)) {
 		return true;
 	}
 
 	if (pathname === "/admin/underwriting") {
-		return hasPermission(permissions, "underwriter:access");
+		return hasPermission(context.permissions, "underwriter:access");
 	}
 
 	return pathname.startsWith("/admin/underwriting/")
-		? hasPermission(permissions, "underwriter:access")
+		? hasPermission(context.permissions, "underwriter:access")
 		: false;
 }
 
@@ -78,7 +88,7 @@ export function guardAuthenticated() {
  * Creates a TanStack Router `beforeLoad` guard that checks for a required permission.
  * Redirects to /sign-in if not authenticated, /unauthorized if missing permission.
  */
-export function guardPermission(permission: IslandPermission) {
+export function guardPermission(permission: string) {
 	return ({
 		context,
 		location,
@@ -95,9 +105,44 @@ export function guardPermission(permission: IslandPermission) {
 	};
 }
 
-export function guardAnyPermission(
-	requiredPermissions: readonly IslandPermission[]
-) {
+export function guardFairLendAdmin() {
+	return ({
+		context,
+		location,
+	}: {
+		context: RouteAuthContext;
+		location: { href: string };
+	}) => {
+		if (!context.userId) {
+			throw redirect(buildSignInRedirect(location.href));
+		}
+		if (!isFairLendStaffAdmin(context)) {
+			throw redirect({ to: "/unauthorized" });
+		}
+	};
+}
+
+export function guardFairLendAdminWithPermission(permission: string) {
+	return ({
+		context,
+		location,
+	}: {
+		context: RouteAuthContext;
+		location: { href: string };
+	}) => {
+		if (!context.userId) {
+			throw redirect(buildSignInRedirect(location.href));
+		}
+		if (!isFairLendStaffAdmin(context)) {
+			throw redirect({ to: "/unauthorized" });
+		}
+		if (!context.permissions.includes(permission)) {
+			throw redirect({ to: "/unauthorized" });
+		}
+	};
+}
+
+export function guardAnyPermission(requiredPermissions: readonly string[]) {
 	return ({
 		context,
 		location,

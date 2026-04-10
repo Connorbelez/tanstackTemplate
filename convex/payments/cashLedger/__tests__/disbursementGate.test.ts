@@ -551,7 +551,7 @@ describe("disbursementGate", () => {
 		});
 	});
 
-	it("all three in-flight statuses are counted", async () => {
+	it("all in-flight transfer statuses are counted", async () => {
 		const t = createHarness(modules);
 		const seeded = await seedMinimalEntities(t);
 		await seedPayable(t, seeded, 90_000);
@@ -559,7 +559,7 @@ describe("disbursementGate", () => {
 		await t.run(async (ctx) => {
 			const now = Date.now();
 			// One transfer per in-flight status
-			for (const status of ["pending", "approved", "processing"] as const) {
+			for (const status of ["pending", "processing"] as const) {
 				await ctx.db.insert("transferRequests", {
 					status,
 					direction: "outbound",
@@ -577,31 +577,31 @@ describe("disbursementGate", () => {
 				});
 			}
 
-			// Available = 90,000 - 30,000 = 60,000
+			// Available = 90,000 - 20,000 = 70,000
 			const result = await validateDisbursementAmount(ctx, {
 				lenderId: seeded.lenderAId,
 				requestedAmount: 65_000,
 			});
-			expect(result.allowed).toBe(false);
-			expect(result.availableBalance).toBe(60_000);
+			expect(result.allowed).toBe(true);
+			expect(result.availableBalance).toBe(70_000);
 
 			const allowed = await validateDisbursementAmount(ctx, {
 				lenderId: seeded.lenderAId,
-				requestedAmount: 55_000,
+				requestedAmount: 75_000,
 			});
-			expect(allowed.allowed).toBe(true);
+			expect(allowed.allowed).toBe(false);
 		});
 	});
 
-	it("completed and confirmed transfers are NOT deducted", async () => {
+	it("confirmed transfers are NOT deducted", async () => {
 		const t = createHarness(modules);
 		const seeded = await seedMinimalEntities(t);
 		await seedPayable(t, seeded, 55_000);
 
 		await t.run(async (ctx) => {
 			const now = Date.now();
-			// These terminal-state transfers should NOT reduce balance
-			for (const status of ["completed", "confirmed"] as const) {
+			// Terminal-state transfers should NOT reduce balance
+			for (const status of ["confirmed"] as const) {
 				await ctx.db.insert("transferRequests", {
 					status,
 					direction: "outbound",
@@ -624,7 +624,7 @@ describe("disbursementGate", () => {
 				lenderId: seeded.lenderAId,
 				requestedAmount: 55_000,
 			});
-			// Full balance — completed/confirmed are not in-flight
+			// Full balance — confirmed transfers are not in-flight
 			expect(result.allowed).toBe(true);
 			expect(result.availableBalance).toBe(55_000);
 		});

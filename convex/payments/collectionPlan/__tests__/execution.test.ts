@@ -35,7 +35,6 @@ import {
 } from "../../../../src/test/convex/payments/helpers";
 import { internal } from "../../../_generated/api";
 import type { Doc, Id } from "../../../_generated/dataModel";
-import { obligationTypeToTransferType } from "../../transfers/types";
 
 const testGlobal = globalThis as typeof globalThis & {
 	process?: {
@@ -287,35 +286,18 @@ describe("executePlanEntry", () => {
 			args
 		);
 		expect(staged.result.outcome).toBe("attempt_created");
-		expect(staged.transferHandoffRequest).toBeTruthy();
+		expect(staged.result.transferRequestId).toBeTruthy();
 
-		const handoff = staged.transferHandoffRequest;
-		if (!handoff) {
-			throw new Error("Expected transfer handoff request");
+		const transferRequestId = staged.result.transferRequestId;
+		if (!transferRequestId) {
+			throw new Error("Expected transferRequestId from staged execution");
 		}
-		const transferRequestId = await t.mutation(
-			internal.payments.transfers.mutations.createTransferRequestInternal,
-			{
-				direction: "inbound",
-				transferType: obligationTypeToTransferType(
-					handoff.primaryObligationType
-				),
-				amount: handoff.amount,
-				counterpartyType: "borrower",
-				counterpartyId: handoff.counterpartyId,
-				mortgageId: handoff.mortgageId,
-				obligationId: handoff.obligationIds[0],
-				planEntryId: handoff.planEntryId,
-				collectionAttemptId: handoff.collectionAttemptId,
-				borrowerId: handoff.borrowerId,
-				providerCode: "manual",
-				idempotencyKey: `transfer:plan-entry-execution:${planEntryId}`,
-				metadata: {
-					executionContract: "collection_plan.execute_plan_entry.v1",
-				},
-				source: handoff.source,
-			}
-		);
+
+		await t.run(async (ctx) => {
+			await ctx.db.patch(staged.result.collectionAttemptId, {
+				transferRequestId: undefined,
+			});
+		});
 
 		const replay = await t.action(
 			internal.payments.collectionPlan.execution.executePlanEntry,
@@ -711,7 +693,7 @@ describe("executePlanEntry", () => {
 		expect(result.reasonCode).toBe("transfer_handoff_failed");
 		expect(result.collectionAttemptId).toBeTruthy();
 		expect(result.attemptStatusAfter).toBe("retry_scheduled");
-		expect(result.transferRequestId).toBeUndefined();
+		expect(result.transferRequestId).toBeTruthy();
 
 		const planEntry = await t.run((ctx) => ctx.db.get(planEntryId));
 		expect(planEntry?.collectionAttemptId).toBe(result.collectionAttemptId);
@@ -721,6 +703,7 @@ describe("executePlanEntry", () => {
 		expect(attempts).toHaveLength(1);
 		expect(attempts[0]?.status).toBe("retry_scheduled");
 		expect(attempts[0]?.failureReason).toContain("disabled by default");
+		expect(attempts[0]?.transferRequestId).toBe(result.transferRequestId);
 		expect(attempts[0]).not.toHaveProperty("providerStatus");
 		expect(attempts[0]?.triggerSource).toBe("workflow_replay");
 
@@ -728,7 +711,9 @@ describe("executePlanEntry", () => {
 			t,
 			result.collectionAttemptId as Id<"collectionAttempts">
 		);
-		expect(transfer).toBeNull();
+		expect(transfer?._id).toBe(result.transferRequestId);
+		expect(transfer?.status).toBe("initiated");
+		expect(transfer?.providerRef).toBeUndefined();
 
 		const replay = await t.action(
 			internal.payments.collectionPlan.execution.executePlanEntry,
@@ -742,7 +727,7 @@ describe("executePlanEntry", () => {
 		expect(replay.outcome).toBe("already_executed");
 		expect(replay.collectionAttemptId).toBe(result.collectionAttemptId);
 		expect(replay.attemptStatusAfter).toBe("retry_scheduled");
-		expect(replay.transferRequestId).toBeUndefined();
+		expect(replay.transferRequestId).toBe(result.transferRequestId);
 
 		const replayAttempts = await getAttemptsForPlanEntry(t, planEntryId);
 		expect(replayAttempts).toHaveLength(1);
@@ -750,7 +735,8 @@ describe("executePlanEntry", () => {
 			t,
 			result.collectionAttemptId as Id<"collectionAttempts">
 		);
-		expect(replayTransfers).toHaveLength(0);
+		expect(replayTransfers).toHaveLength(1);
+		expect(replayTransfers[0]?._id).toBe(result.transferRequestId);
 
 		const retryEntry = await t.run(async (ctx) =>
 			ctx.db
@@ -767,7 +753,7 @@ describe("executePlanEntry", () => {
 	it("replays without duplicates after transfer creation succeeds but initiation fails", async () => {
 		const t = createBackendTestConvex();
 		const { planEntryId } = await seedExecutionFixture(t, {
-			method: "manual",
+			method: "pad_vopay",
 		});
 		const args = {
 			planEntryId,
@@ -778,49 +764,13 @@ describe("executePlanEntry", () => {
 			requestedByActorId: "workflow:collection-plan-replay",
 		};
 
-		const staged = await t.mutation(
-			internal.payments.collectionPlan.execution
-				.stagePlanEntryExecutionMutation,
+		const first = await t.action(
+			internal.payments.collectionPlan.execution.executePlanEntry,
 			args
 		);
-		expect(staged.result.outcome).toBe("attempt_created");
-		expect(staged.transferHandoffRequest).toBeTruthy();
-
-		const handoff = staged.transferHandoffRequest;
-		if (!handoff) {
-			throw new Error("Expected transfer handoff request");
-		}
-		const transferRequestId = await t.mutation(
-			internal.payments.transfers.mutations.createTransferRequestInternal,
-			{
-				direction: "inbound",
-				transferType: obligationTypeToTransferType(
-					handoff.primaryObligationType
-				),
-				amount: handoff.amount,
-				counterpartyType: "borrower",
-				counterpartyId: handoff.counterpartyId,
-				mortgageId: handoff.mortgageId,
-				obligationId: handoff.obligationIds[0],
-				planEntryId: handoff.planEntryId,
-				collectionAttemptId: handoff.collectionAttemptId,
-				borrowerId: handoff.borrowerId,
-				providerCode: "pad_vopay",
-				idempotencyKey: `transfer:plan-entry-execution:${planEntryId}`,
-				metadata: {
-					executionContract: "collection_plan.execute_plan_entry.v1",
-				},
-				source: handoff.source,
-			}
-		);
-		await t.mutation(
-			internal.payments.collectionPlan.execution
-				.recordTransferHandoffSuccessMutation,
-			{
-				attemptId: staged.result.collectionAttemptId,
-				transferRequestId,
-			}
-		);
+		expect(first.outcome).toBe("attempt_created");
+		expect(first.reasonCode).toBe("transfer_handoff_failed");
+		expect(first.transferRequestId).toBeTruthy();
 
 		const replay = await t.action(
 			internal.payments.collectionPlan.execution.executePlanEntry,
@@ -833,17 +783,18 @@ describe("executePlanEntry", () => {
 		await drainScheduledWork(t);
 		expect(replay.outcome).toBe("already_executed");
 		expect(replay.reasonCode).toBe("transfer_handoff_failed");
-		expect(replay.collectionAttemptId).toBe(staged.result.collectionAttemptId);
-		expect(replay.transferRequestId).toBe(transferRequestId);
+		expect(replay.collectionAttemptId).toBe(first.collectionAttemptId);
+		expect(replay.transferRequestId).toBe(first.transferRequestId);
 
 		const attempts = await getAttemptsForPlanEntry(t, planEntryId);
 		expect(attempts).toHaveLength(1);
+		expect(attempts[0]?.transferRequestId).toBe(first.transferRequestId);
 		const transfers = await getTransfersForAttempt(
 			t,
-			staged.result.collectionAttemptId as Id<"collectionAttempts">
+			first.collectionAttemptId as Id<"collectionAttempts">
 		);
 		expect(transfers).toHaveLength(1);
-		expect(transfers[0]?._id).toBe(transferRequestId);
+		expect(transfers[0]?._id).toBe(first.transferRequestId);
 		expect(transfers[0]?.status).toBe("initiated");
 	});
 });

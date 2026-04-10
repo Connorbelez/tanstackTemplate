@@ -4,6 +4,7 @@ import { executeTransition } from "../../engine/transition";
 import type { CommandSource } from "../../engine/types";
 
 interface TransferAttemptLink {
+	_id?: Id<"transferRequests">;
 	collectionAttemptId?: Id<"collectionAttempts">;
 	direction?: string;
 }
@@ -24,6 +25,7 @@ type DbReader = Pick<QueryCtx, "db">;
 export function isAttemptLinkedInboundTransfer(
 	transfer: TransferAttemptLink
 ): transfer is {
+	_id?: Id<"transferRequests">;
 	collectionAttemptId: Id<"collectionAttempts">;
 	direction: "inbound";
 } {
@@ -40,9 +42,9 @@ export function cashReceiptPostingGroupId(
 }
 
 export function reversalPostingGroupId(
-	attemptId: Id<"collectionAttempts">
+	transferRequestId: Id<"transferRequests">
 ): string {
-	return `reversal-group:${attemptId}`;
+	return `reversal-group:transfer:${transferRequestId}`;
 }
 
 async function loadAttemptPostingHealth(
@@ -52,6 +54,7 @@ async function loadAttemptPostingHealth(
 		expectedAttemptStatus: "confirmed" | "reversed";
 		postingGroupId: string;
 		entryType: "CASH_RECEIVED" | "REVERSAL";
+		transferRequestId?: Id<"transferRequests">;
 	}
 ): Promise<AttemptPostingHealth> {
 	if (!isAttemptLinkedInboundTransfer(args.transfer)) {
@@ -80,7 +83,10 @@ async function loadAttemptPostingHealth(
 
 	const hasPostingEntry = postingEntries.some(
 		(entry) =>
-			entry.entryType === args.entryType && entry.attemptId === attempt._id
+			entry.entryType === args.entryType &&
+			(args.transferRequestId
+				? entry.transferRequestId === args.transferRequestId
+				: entry.attemptId === attempt._id)
 	);
 	const hasExpectedStatus = attempt.status === args.expectedAttemptStatus;
 	let reason: AttemptPostingHealth["reason"];
@@ -122,7 +128,7 @@ export async function getAttemptLinkedInboundReversalHealth(
 	ctx: DbReader,
 	transfer: TransferAttemptLink
 ): Promise<AttemptPostingHealth> {
-	if (!isAttemptLinkedInboundTransfer(transfer)) {
+	if (!(isAttemptLinkedInboundTransfer(transfer) && transfer._id)) {
 		return {
 			hasPostingEntry: false,
 			isHealthy: false,
@@ -132,8 +138,9 @@ export async function getAttemptLinkedInboundReversalHealth(
 	return loadAttemptPostingHealth(ctx, {
 		transfer,
 		expectedAttemptStatus: "reversed",
-		postingGroupId: reversalPostingGroupId(transfer.collectionAttemptId),
+		postingGroupId: reversalPostingGroupId(transfer._id),
 		entryType: "REVERSAL",
+		transferRequestId: transfer._id,
 	});
 }
 
@@ -174,12 +181,24 @@ export async function reconcileAttemptLinkedInboundSettlement(
 		source: CommandSource;
 	}
 ): Promise<boolean> {
-	return transitionAttempt(ctx, {
+	if (!isAttemptLinkedInboundTransfer(args.transfer)) {
+		return false;
+	}
+
+	const attemptId = args.transfer.collectionAttemptId;
+	const transitioned = await transitionAttempt(ctx, {
 		transfer: args.transfer,
 		eventType: "FUNDS_SETTLED",
 		payload: { settledAt: args.settledAt },
 		source: args.source,
 	});
+	if (transitioned) {
+		await ctx.db.patch(attemptId, {
+			confirmedAt: args.settledAt,
+			settledAt: args.settledAt,
+		});
+	}
+	return transitioned;
 }
 
 export async function reconcileAttemptLinkedInboundFailure(
@@ -196,6 +215,7 @@ export async function reconcileAttemptLinkedInboundFailure(
 	}
 
 	await ctx.db.patch(args.transfer.collectionAttemptId, {
+		failedAt: Date.now(),
 		failureReason: args.failureReason,
 	});
 
@@ -276,6 +296,10 @@ export async function reconcileAttemptLinkedInboundReversal(
 			effectiveDate: args.effectiveDate,
 		},
 		source: args.source,
+	});
+
+	await ctx.db.patch(args.transfer.collectionAttemptId, {
+		reversedAt: Date.now(),
 	});
 
 	return true;

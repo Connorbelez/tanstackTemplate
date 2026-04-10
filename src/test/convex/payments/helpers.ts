@@ -6,7 +6,6 @@
  * effect invocation so payment chain tests stay concise and consistent.
  */
 
-import { vi } from "vitest";
 import { internal } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import type { EntityType } from "../../../../convex/engine/types";
@@ -20,6 +19,7 @@ import {
 	createGovernedTestConvex,
 	seedDefaultGovernedActors,
 } from "../onboarding/helpers";
+import { drainScheduledWork as drainScheduledRuntime } from "../runtime";
 
 export type GovernedTestConvex = ReturnType<typeof createGovernedTestConvex>;
 
@@ -471,5 +471,5 @@ export function buildEffectArgs(
  * Re-exported from onboarding helpers for convenience.
  */
 export async function drainScheduledWork(t: GovernedTestConvex) {
-	await t.finishAllScheduledFunctions(() => vi.runAllTimers());
+	await drainScheduledRuntime(t);
 }

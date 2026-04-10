@@ -260,6 +260,11 @@ export const PERMISSION_DISPLAY_METADATA: Record<
 		description: "View a borrower's own mortgages",
 		domain: "mortgage",
 	},
+	"payment:view": {
+		name: "View Payments",
+		description: "View transfer and payment operations",
+		domain: "payment",
+	},
 	"payment:manage": {
 		name: "Manage Payments",
 		description: "Manage collection and workout plans",
@@ -339,6 +344,16 @@ export const PERMISSION_DISPLAY_METADATA: Record<
 		name: "Manage Deals",
 		description: "Create and manage deal records",
 		domain: "deal",
+	},
+	"cash_ledger:view": {
+		name: "View Cash Ledger",
+		description: "View cash-ledger balances, journals, and reconciliations",
+		domain: "cash_ledger",
+	},
+	"cash_ledger:correct": {
+		name: "Correct Cash Ledger",
+		description: "Post corrective cash-ledger operations",
+		domain: "cash_ledger",
 	},
 	"ledger:view": {
 		name: "View Ledger",

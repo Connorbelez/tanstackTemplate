@@ -9,9 +9,7 @@
 
 import { makeFunctionReference } from "convex/server";
 import { convexTest } from "convex-test";
-import { describe, expect, it } from "vitest";
-import workflowSchema from "../../../node_modules/@convex-dev/workflow/dist/component/schema.js";
-import workpoolSchema from "../../../node_modules/@convex-dev/workpool/dist/component/schema.js";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { internal } from "../../_generated/api";
 import type { Id } from "../../_generated/dataModel";
 import auditTrailSchema from "../../components/auditTrail/schema";
@@ -19,16 +17,12 @@ import schema from "../../schema";
 import {
 	convexModules,
 	auditTrailModules as sharedAuditTrailModules,
-	workflowModules as sharedWorkflowModules,
-	workpoolModules as sharedWorkpoolModules,
 } from "../../test/moduleMaps";
 import { registerAuditLogComponent } from "../../test/registerAuditLogComponent";
 
 // ── Module glob ─────────────────────────────────────────────────────
 const modules = convexModules;
 const auditTrailModules = sharedAuditTrailModules;
-const workflowModules = sharedWorkflowModules;
-const workpoolModules = sharedWorkpoolModules;
 
 // ── Fixtures ────────────────────────────────────────────────────────
 const ADMIN_SOURCE = {
@@ -52,17 +46,27 @@ interface TransitionResult {
 // ── Test harness factory ────────────────────────────────────────────
 
 /**
- * Creates a convex-test instance with all required components registered.
- * The transition engine uses auditLog, auditTrail, workflow, and workpool.
+ * Creates a convex-test instance with the transition engine's required audit
+ * components. Hash-chain workflows are disabled in test, so workflow/workpool
+ * are intentionally omitted to avoid unsupported scheduler recursion.
  */
 function createTestHarness(): TestHarness {
+	process.env.DISABLE_GT_HASHCHAIN = "true";
+	process.env.DISABLE_CASH_LEDGER_HASHCHAIN = "true";
 	const t = convexTest(schema, modules);
 	registerAuditLogComponent(t, "auditLog");
 	t.registerComponent("auditTrail", auditTrailSchema, auditTrailModules);
-	t.registerComponent("workflow", workflowSchema, workflowModules);
-	t.registerComponent("workflow/workpool", workpoolSchema, workpoolModules);
 	return t;
 }
+
+afterEach(async () => {
+	vi.clearAllTimers();
+	vi.useRealTimers();
+});
+
+beforeEach(() => {
+	vi.useFakeTimers();
+});
 
 // ── Seed helper ─────────────────────────────────────────────────────
 

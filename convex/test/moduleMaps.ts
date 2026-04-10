@@ -1,7 +1,33 @@
 type ModuleLoader = () => Promise<unknown>;
 type ModuleMap = Record<string, ModuleLoader>;
 
-export const convexModules: ModuleMap = {
+function withModuleAliases(modules: ModuleMap): ModuleMap {
+	const aliasedModules: ModuleMap = { ...modules };
+
+	for (const [key, loader] of Object.entries(modules)) {
+		const keyWithoutLeadingSlash = key.startsWith("/") ? key.slice(1) : key;
+		aliasedModules[keyWithoutLeadingSlash] = loader;
+
+		if (key.startsWith("/convex/")) {
+			const convexRelativeKey = key.slice("/convex/".length);
+			aliasedModules[convexRelativeKey] = loader;
+
+			if (convexRelativeKey.endsWith(".ts")) {
+				aliasedModules[convexRelativeKey.slice(0, -3)] = loader;
+				aliasedModules[`${convexRelativeKey.slice(0, -3)}.js`] = loader;
+				aliasedModules[`${key.slice(0, -3)}.js`] = loader;
+			}
+		}
+
+		if (keyWithoutLeadingSlash.endsWith(".js")) {
+			aliasedModules[keyWithoutLeadingSlash.slice(0, -3)] = loader;
+		}
+	}
+
+	return aliasedModules;
+}
+
+export const convexModules: ModuleMap = withModuleAliases({
 	"/convex/accrual/calculateAccruedByMortgage.ts": async () =>
 		await import("./../accrual/calculateAccruedByMortgage.ts"),
 	"/convex/accrual/calculateAccruedInterest.ts": async () =>
@@ -116,6 +142,8 @@ export const convexModules: ModuleMap = {
 		await import("./../demo/aggregate.ts"),
 	"/convex/demo/apiCredentials.ts": async () =>
 		await import("./../demo/apiCredentials.ts"),
+	"/convex/demo/amps.ts": async () => await import("./../demo/amps.ts"),
+	"/convex/demo/ampsE2e.ts": async () => await import("./../demo/ampsE2e.ts"),
 	"/convex/demo/auditLog.ts": async () => await import("./../demo/auditLog.ts"),
 	"/convex/demo/auditTraceability.ts": async () =>
 		await import("./../demo/auditTraceability.ts"),
@@ -374,16 +402,24 @@ export const convexModules: ModuleMap = {
 		await import("./../payments/cashLedger/waiveObligationBalanceHandler.ts"),
 	"/convex/payments/collectionPlan/engine.ts": async () =>
 		await import("./../payments/collectionPlan/engine.ts"),
+	"/convex/payments/collectionPlan/admin.ts": async () =>
+		await import("./../payments/collectionPlan/admin.ts"),
 	"/convex/payments/collectionPlan/mutations.ts": async () =>
 		await import("./../payments/collectionPlan/mutations.ts"),
 	"/convex/payments/collectionPlan/queries.ts": async () =>
 		await import("./../payments/collectionPlan/queries.ts"),
+	"/convex/payments/collectionPlan/readModels.ts": async () =>
+		await import("./../payments/collectionPlan/readModels.ts"),
+	"/convex/payments/collectionPlan/reschedule.ts": async () =>
+		await import("./../payments/collectionPlan/reschedule.ts"),
 	"/convex/payments/collectionPlan/rules/lateFeeRule.ts": async () =>
 		await import("./../payments/collectionPlan/rules/lateFeeRule.ts"),
 	"/convex/payments/collectionPlan/rules/retryRule.ts": async () =>
 		await import("./../payments/collectionPlan/rules/retryRule.ts"),
 	"/convex/payments/collectionPlan/rules/scheduleRule.ts": async () =>
 		await import("./../payments/collectionPlan/rules/scheduleRule.ts"),
+	"/convex/payments/collectionPlan/runner.ts": async () =>
+		await import("./../payments/collectionPlan/runner.ts"),
 	"/convex/payments/collectionPlan/seed.ts": async () =>
 		await import("./../payments/collectionPlan/seed.ts"),
 	"/convex/payments/collectionPlan/stubs.ts": async () =>
@@ -438,6 +474,10 @@ export const convexModules: ModuleMap = {
 		await import("./../payments/transfers/principalReturn.ts"),
 	"/convex/payments/transfers/providers/manual.ts": async () =>
 		await import("./../payments/transfers/providers/manual.ts"),
+	"/convex/payments/transfers/providers/manualReview.ts": async () =>
+		await import("./../payments/transfers/providers/manualReview.ts"),
+	"/convex/payments/collectionPlan/execution.ts": async () =>
+		await import("./../payments/collectionPlan/execution.ts"),
 	"/convex/payments/transfers/providers/mock.ts": async () =>
 		await import("./../payments/transfers/providers/mock.ts"),
 	"/convex/payments/transfers/providers/registry.ts": async () =>
@@ -501,9 +541,9 @@ export const convexModules: ModuleMap = {
 	"/convex/test/registerAuditLogComponent.ts": async () =>
 		await import("./registerAuditLogComponent.ts"),
 	"/convex/todos.ts": async () => await import("./../todos.ts"),
-};
+});
 
-export const auditTrailModules: ModuleMap = {
+export const auditTrailModules: ModuleMap = withModuleAliases({
 	"/convex/components/auditTrail/_generated/api.ts": async () =>
 		await import("./../components/auditTrail/_generated/api.ts"),
 	"/convex/components/auditTrail/_generated/component.ts": async () =>
@@ -522,9 +562,9 @@ export const auditTrailModules: ModuleMap = {
 		await import("./../components/auditTrail/lib.ts"),
 	"/convex/components/auditTrail/schema.ts": async () =>
 		await import("./../components/auditTrail/schema.ts"),
-};
+});
 
-export const workflowModules: ModuleMap = {
+export const workflowModules: ModuleMap = withModuleAliases({
 	"/node_modules/@convex-dev/workflow/dist/component/_generated/api.js":
 		async () =>
 			await import(
@@ -582,9 +622,9 @@ export const workflowModules: ModuleMap = {
 		await import(
 			"./../../node_modules/@convex-dev/workflow/dist/component/workflow.js"
 		),
-};
+});
 
-export const workpoolModules: ModuleMap = {
+export const workpoolModules: ModuleMap = withModuleAliases({
 	"/node_modules/@convex-dev/workpool/dist/component/_generated/api.js":
 		async () =>
 			await import(
@@ -662,4 +702,4 @@ export const workpoolModules: ModuleMap = {
 		await import(
 			"./../../node_modules/@convex-dev/workpool/dist/component/worker.js"
 		),
-};
+});

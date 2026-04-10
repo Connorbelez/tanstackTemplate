@@ -12,8 +12,10 @@ import {
 	Play,
 	Variable,
 } from "lucide-react";
+import { guardFairLendAdminWithPermission } from "#/lib/auth";
 
 export const Route = createFileRoute("/demo/document-engine")({
+	beforeLoad: guardFairLendAdminWithPermission("document:review"),
 	ssr: false,
 	component: DocumentEngineLayout,
 });

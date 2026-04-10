@@ -6,7 +6,6 @@
  * - Collection Attempts remain the business execution record.
  * - Transfer execution is delegated through this interface and related
  *   transfer lifecycle infrastructure.
- * - Legacy `PaymentMethod` support remains transitional compatibility only.
  *
  * Phase 1: only ManualTransferProvider is implemented.
  * Phase 2+: real PAD, EFT, wire, and other providers are added without

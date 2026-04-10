@@ -1,11 +1,7 @@
-import { convexTest } from "convex-test";
 import { describe, expect, it } from "vitest";
 import { api } from "../../_generated/api";
 import { FAIRLEND_STAFF_ORG_ID } from "../../constants";
-import schema from "../../schema";
-import { convexModules } from "../../test/moduleMaps";
-
-const modules = convexModules;
+import { createTestHarness } from "./testUtils.test";
 
 const ADMIN_IDENTITY = {
 	subject: "test-bootstrap-admin",
@@ -32,10 +28,6 @@ const NON_ADMIN_IDENTITY = {
 	user_first_name: "Regular",
 	user_last_name: "User",
 };
-
-function createTestHarness() {
-	return convexTest(schema, modules);
-}
 
 function asAdmin(t: ReturnType<typeof createTestHarness>) {
 	return t.withIdentity(ADMIN_IDENTITY);

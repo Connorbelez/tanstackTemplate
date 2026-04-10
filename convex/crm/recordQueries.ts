@@ -878,70 +878,9 @@ export const getRecord = crmQuery
 			updatedAt: record.updatedAt,
 		};
 
-		// 5. Load outbound links (this record is source)
-		const outboundLinks = await ctx.db
-			.query("recordLinks")
-			.withIndex("by_org_source", (q) =>
-				q
-					.eq("orgId", orgId)
-					.eq("sourceKind", "record")
-					.eq("sourceId", record._id as string)
-			)
-			.filter((q) => q.eq(q.field("isDeleted"), false))
-			.collect();
-
-		// 6. Load inbound links (this record is target)
-		const inboundLinks = await ctx.db
-			.query("recordLinks")
-			.withIndex("by_org_target", (q) =>
-				q
-					.eq("orgId", orgId)
-					.eq("targetKind", "record")
-					.eq("targetId", record._id as string)
-			)
-			.filter((q) => q.eq(q.field("isDeleted"), false))
-			.collect();
-
-		// 7. Resolve link display info (lightweight — labelValue only)
-		const resolveLinks = async (
-			links: Doc<"recordLinks">[],
-			direction: "outbound" | "inbound"
-		): Promise<LinkedRecord[]> => {
-			return Promise.all(
-				links.map(async (link) => {
-					const peerRecordId =
-						direction === "outbound" ? link.targetId : link.sourceId;
-					const peerKind =
-						direction === "outbound" ? link.targetKind : link.sourceKind;
-					const peerObjectDefId =
-						direction === "outbound"
-							? link.targetObjectDefId
-							: link.sourceObjectDefId;
-
-					let labelValue: string | undefined;
-					if (peerKind === "record") {
-						const peerRecord = await ctx.db.get(peerRecordId as Id<"records">);
-						labelValue = peerRecord?.labelValue ?? undefined;
-					}
-
-					return {
-						linkId: link._id,
-						linkTypeDefId: link.linkTypeDefId,
-						recordId: peerRecordId,
-						recordKind: peerKind,
-						objectDefId: peerObjectDefId,
-						labelValue,
-					};
-				})
-			);
-		};
-
 		return {
 			record: unifiedRecord,
-			links: {
-				outbound: await resolveLinks(outboundLinks, "outbound"),
-				inbound: await resolveLinks(inboundLinks, "inbound"),
-			},
+			links: await loadLinksForReference(ctx, orgId, "record", `${record._id}`),
 		};
 	})
 	.public();

@@ -2,7 +2,7 @@ import { ConvexError, v } from "convex/values";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { internalAction } from "../_generated/server";
-import { authedAction, authedMutation } from "../fluent";
+import { documentGenerateAction, documentUploadMutation } from "../fluent";
 
 // ── Types for generation results ──────────────────────────────────
 
@@ -335,8 +335,7 @@ const signatoryMappingArg = v.array(
 	})
 );
 
-// TODO: Add requirePermission("document:generate") when moving to production
-export const prepareGeneration = authedAction
+export const prepareGeneration = documentGenerateAction
 	.input({
 		templateId: v.id("documentTemplates"),
 		pinnedVersion: v.optional(v.number()),
@@ -448,8 +447,7 @@ export const prepareGeneration = authedAction
 
 // ── Upload URL for client-generated PDFs ────────────────────────
 
-// TODO: Add requirePermission("document:upload") when moving to production
-export const generateUploadUrl = authedMutation
+export const generateUploadUrl = documentUploadMutation
 	.input({})
 	.handler(async (ctx) => {
 		return await ctx.storage.generateUploadUrl();
@@ -566,8 +564,7 @@ export const generateSingleTemplate = internalAction({
 
 // ── Public actions ────────────────────────────────────────────────
 
-// TODO: Add requirePermission("document:generate") when moving to production
-export const generateFromTemplate = authedAction
+export const generateFromTemplate = documentGenerateAction
 	.input({
 		templateId: v.id("documentTemplates"),
 		pinnedVersion: v.optional(v.number()),
@@ -582,8 +579,7 @@ export const generateFromTemplate = authedAction
 	})
 	.public();
 
-// TODO: Add requirePermission("document:generate") when moving to production
-export const generateFromGroup = authedAction
+export const generateFromGroup = documentGenerateAction
 	.input({
 		groupId: v.id("documentTemplateGroups"),
 		variables: v.record(v.string(), v.string()),

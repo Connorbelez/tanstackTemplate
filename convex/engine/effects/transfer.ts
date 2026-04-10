@@ -21,6 +21,7 @@ import { PROVIDER_CODES } from "../../payments/transfers/types";
 import { appendAuditJournalEntry } from "../auditJournal";
 import type { CommandSource } from "../types";
 import { effectPayloadValidator } from "../validators";
+import { runPaymentReversalCascadeForPlanEntry } from "./collectionAttempt";
 
 function assertProviderCode(value: string): ProviderCode {
 	if ((PROVIDER_CODES as readonly string[]).includes(value)) {
@@ -108,7 +109,10 @@ export const publishTransferConfirmed = internalMutation({
 				: Date.now();
 
 		// Persist settledAt BEFORE posting cash so posting helpers see the authoritative timestamp.
-		await ctx.db.patch(args.entityId, { settledAt });
+		await ctx.db.patch(args.entityId, {
+			confirmedAt: transfer.confirmedAt ?? settledAt,
+			settledAt,
+		});
 
 		const reconciledAttempt = await reconcileAttemptLinkedInboundSettlement(
 			ctx,
@@ -565,9 +569,8 @@ async function handlePipelineLegFailed(
  * a matching journal entry exists.
  *
  * Always patches reversedAt and reversalRef on the transfer entity.
- * Cash ledger reversal only occurs if a journal entry exists.
- * Bridged transfers (collectionAttemptId set) are expected to lack journal
- * entries — their cash was reversed via the collection attempt path.
+ * Attempt-linked inbound reversals are orchestrated from the transfer domain
+ * and emit compensating journal entries keyed to the canonical transfer ID.
  */
 export const publishTransferReversed = internalMutation({
 	args: transferEffectValidator,
@@ -599,50 +602,67 @@ export const publishTransferReversed = internalMutation({
 			source: args.source,
 		});
 
-		// Look up original journal entry for cash reversal
-		const originalEntry = await ctx.db
-			.query("cash_ledger_journal_entries")
-			.withIndex("by_transfer_request", (q) =>
-				q.eq("transferRequestId", args.entityId)
-			)
-			.first();
-
-		if (originalEntry) {
-			const journalAmount = safeBigintToNumber(originalEntry.amount);
-			const amount = transfer.amount ?? journalAmount;
-
-			if (transfer.amount != null && transfer.amount !== journalAmount) {
-				console.warn(
-					`[publishTransferReversed] Amount mismatch for transfer ${args.entityId}: ` +
-						`transfer.amount=${transfer.amount}, journal.amount=${journalAmount}. ` +
-						"Using transfer.amount for reversal."
+		if (transfer.collectionAttemptId) {
+			const attempt = await ctx.db.get(transfer.collectionAttemptId);
+			if (!attempt) {
+				throw new Error(
+					`[publishTransferReversed] Linked collection attempt not found for transfer ${args.entityId}: ${transfer.collectionAttemptId}`
 				);
 			}
 
-			await postTransferReversal(ctx, {
-				transferRequestId: args.entityId,
-				originalEntryId: originalEntry._id,
-				amount,
+			await runPaymentReversalCascadeForPlanEntry(ctx, {
 				effectiveDate,
-				source: args.source,
+				planEntryId: attempt.planEntryId,
 				reason,
+				source: args.source,
+				transferRequestId: args.entityId,
 			});
 
 			console.info(
-				`[publishTransferReversed] Posted cash reversal for transfer ${args.entityId}`
-			);
-		} else if (transfer.collectionAttemptId) {
-			console.info(
-				`[publishTransferReversed] No journal entry for bridged transfer ${args.entityId}. Cash reversal skipped (handled by collection attempt path).`
+				`[publishTransferReversed] Posted transfer-owned reversal cascade for attempt-linked transfer ${args.entityId}`
 			);
 		} else {
-			// Fail closed: a non-bridged transfer MUST have a journal entry for reversal.
-			// Returning silently would leave permanent ledger drift with no retry/healing signal.
-			throw new Error(
-				`[publishTransferReversed] No journal entry found for NON-bridged transfer ${args.entityId}. ` +
-					"Cash reversal cannot be posted — failing closed to prevent ledger drift. " +
-					"Investigate and reconcile manually or enqueue a healing action."
-			);
+			// Look up original journal entry for cash reversal
+			const originalEntry = await ctx.db
+				.query("cash_ledger_journal_entries")
+				.withIndex("by_transfer_request", (q) =>
+					q.eq("transferRequestId", args.entityId)
+				)
+				.first();
+
+			if (originalEntry) {
+				const journalAmount = safeBigintToNumber(originalEntry.amount);
+				const amount = transfer.amount ?? journalAmount;
+
+				if (transfer.amount != null && transfer.amount !== journalAmount) {
+					console.warn(
+						`[publishTransferReversed] Amount mismatch for transfer ${args.entityId}: ` +
+							`transfer.amount=${transfer.amount}, journal.amount=${journalAmount}. ` +
+							"Using transfer.amount for reversal."
+					);
+				}
+
+				await postTransferReversal(ctx, {
+					transferRequestId: args.entityId,
+					originalEntryId: originalEntry._id,
+					amount,
+					effectiveDate,
+					source: args.source,
+					reason,
+				});
+
+				console.info(
+					`[publishTransferReversed] Posted cash reversal for transfer ${args.entityId}`
+				);
+			} else {
+				// Fail closed: a non-attempt-linked transfer MUST have a journal entry
+				// for reversal. Returning silently would leave permanent ledger drift.
+				throw new Error(
+					`[publishTransferReversed] No journal entry found for transfer ${args.entityId}. ` +
+						"Cash reversal cannot be posted — failing closed to prevent ledger drift. " +
+						"Investigate and reconcile manually or enqueue a healing action."
+				);
+			}
 		}
 
 		// ── Dispersal entry reversal ──────────────────────────────────────

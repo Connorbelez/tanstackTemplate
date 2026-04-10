@@ -9,8 +9,6 @@ import schema from "../../schema";
 import { convexModules } from "../../test/moduleMaps";
 import { registerAuditLogComponent } from "../../test/registerAuditLogComponent";
 
-const modules = convexModules;
-
 // ── Identity Fixtures ───────────────────────────────────────────────
 
 export const CRM_ADMIN_IDENTITY = {
@@ -53,6 +51,8 @@ export const DIFFERENT_ORG_IDENTITY = {
 };
 
 // ── Harness Factory ─────────────────────────────────────────────────
+
+const modules = convexModules;
 
 export type CrmTestHarness = ReturnType<typeof convexTest>;
 

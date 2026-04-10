@@ -54,7 +54,10 @@ interface CreateDispersalEntriesHandler {
 			settledAmount: number;
 			settledDate: string;
 			idempotencyKey: string;
-			source: { type: "system"; channel: "test" };
+			source: {
+				channel: "scheduler";
+				actorType: "system";
+			};
 		}
 	) => Promise<{
 		created: boolean;
@@ -126,7 +129,15 @@ const GET_DISPERSALS_BY_OBLIGATION = makeFunctionReference<
 	DispersalsByObligationResult
 >("dispersal/queries:getDispersalsByObligation");
 
-const SYS_SOURCE = { type: "system" as const, channel: "test" } as const;
+const LEDGER_SYSTEM_SOURCE = {
+	type: "system" as const,
+	channel: "scheduler" as const,
+} as const;
+
+const CASH_LEDGER_SOURCE = {
+	channel: "scheduler" as const,
+	actorType: "system" as const,
+} as const;
 
 // ---------------------------------------------------------------------------
 // Identity helpers
@@ -165,6 +176,8 @@ function lenderIdentity(subject: string) {
 // ---------------------------------------------------------------------------
 
 function createHarness() {
+	process.env.DISABLE_GT_HASHCHAIN = "true";
+	process.env.DISABLE_CASH_LEDGER_HASHCHAIN = "true";
 	return convexTest(schema, modules);
 }
 
@@ -333,7 +346,7 @@ async function mintAndIssue(
 		mortgageId,
 		effectiveDate,
 		idempotencyKey: `mint-${mortgageId}`,
-		source: SYS_SOURCE,
+		source: LEDGER_SYSTEM_SOURCE,
 	});
 	await auth.mutation(internal.ledger.mutations.issueShares, {
 		mortgageId,
@@ -341,7 +354,7 @@ async function mintAndIssue(
 		amount,
 		effectiveDate,
 		idempotencyKey: `issue-${mortgageId}-${lenderId}`,
-		source: SYS_SOURCE,
+		source: LEDGER_SYSTEM_SOURCE,
 	});
 }
 
@@ -389,7 +402,7 @@ async function runCreateDispersal(
 	return t.run(async (ctx) =>
 		createDispersalEntriesMutation._handler(ctx, {
 			...args,
-			source: SYS_SOURCE,
+			source: CASH_LEDGER_SOURCE,
 		})
 	);
 }
@@ -579,7 +592,7 @@ describe("dispersal integration — dealCloseProration", () => {
 			amount: 5000,
 			effectiveDate: "2026-01-15",
 			idempotencyKey: "test:dealClose:transfer",
-			source: SYS_SOURCE,
+			source: LEDGER_SYSTEM_SOURCE,
 		});
 
 		const lenderA = asLender(t, "lender-a");

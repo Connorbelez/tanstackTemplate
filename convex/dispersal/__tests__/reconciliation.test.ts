@@ -18,7 +18,10 @@ import { createDispersalEntries } from "../createDispersalEntries";
 
 const modules = convexModules;
 
-const DEFAULT_SOURCE = { type: "system" as const, channel: "test" } as const;
+const DEFAULT_SOURCE = {
+	channel: "scheduler" as const,
+	actorType: "system" as const,
+} as const;
 
 interface CreateDispersalEntriesHandler {
 	_handler: (
@@ -152,6 +155,8 @@ const GET_SERVICING_FEE_HISTORY = makeFunctionReference<
 >("dispersal/queries:getServicingFeeHistory");
 
 function createHarness() {
+	process.env.DISABLE_GT_HASHCHAIN = "true";
+	process.env.DISABLE_CASH_LEDGER_HASHCHAIN = "true";
 	return convexTest(schema, modules);
 }
 
@@ -911,8 +916,9 @@ describe("dispersal reconciliation queries", () => {
 		const gap = Math.abs(expectedAccrual - reconcilingTotal);
 		expect(gap).toBeLessThanOrEqual(oneDayTolerance);
 
-		// Also verify individual monthly figures are consistent
-		expect(history.entryCount).toBe(3);
+		// April's settlement is fully absorbed by servicing, so only Feb/Mar
+		// produce lender-facing dispersal rows while all three months record fees.
+		expect(history.entryCount).toBe(2);
 		expect(fees.entryCount).toBe(3);
 	});
 });

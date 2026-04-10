@@ -175,6 +175,7 @@ export const processSingleDisbursement = internalMutation({
 		providerCode: v.optional(
 			v.union(
 				v.literal("manual"),
+				v.literal("manual_review"),
 				v.literal("mock_pad"),
 				v.literal("mock_eft"),
 				v.literal("pad_vopay"),
@@ -373,6 +374,7 @@ export const triggerDisbursementBridge = internalAction({
 		providerCode: v.optional(
 			v.union(
 				v.literal("manual"),
+				v.literal("manual_review"),
 				v.literal("mock_pad"),
 				v.literal("mock_eft"),
 				v.literal("pad_vopay"),

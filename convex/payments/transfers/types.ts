@@ -109,6 +109,7 @@ export function toDomainEntityId(
 // ── Provider Codes ───────────────────────────────────────────────────
 export const PROVIDER_CODES = [
 	"manual",
+	"manual_review",
 	"mock_pad",
 	"mock_eft",
 	"pad_vopay",
@@ -133,18 +134,6 @@ export const TRANSFER_STATUSES = [
 ] as const;
 
 export type TransferStatus = (typeof TRANSFER_STATUSES)[number];
-
-/** Legacy statuses kept for backward compatibility with existing records. */
-export const LEGACY_TRANSFER_STATUSES = ["approved", "completed"] as const;
-
-export type LegacyTransferStatus = (typeof LEGACY_TRANSFER_STATUSES)[number];
-
-/**
- * Union of current and legacy statuses — represents all values that may exist
- * in the database. Use this type for query return types / reads until the
- * ENG-190 migration has retired legacy rows.
- */
-export type PersistedTransferStatus = TransferStatus | LegacyTransferStatus;
 
 // ── Transfer Type → Obligation Type Mapping ─────────────────────────
 /**

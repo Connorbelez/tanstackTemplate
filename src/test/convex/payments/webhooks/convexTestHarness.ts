@@ -2,8 +2,6 @@ import { readdirSync } from "node:fs";
 import { join } from "node:path";
 import { convexTest } from "convex-test";
 import aggregateSchema from "../../../../../node_modules/@convex-dev/aggregate/dist/component/schema.js";
-import workflowSchema from "../../../../../node_modules/@convex-dev/workflow/dist/component/schema.js";
-import workpoolSchema from "../../../../../node_modules/@convex-dev/workpool/dist/component/schema.js";
 import auditLogSchema from "../../../../../node_modules/convex-audit-log/dist/component/schema.js";
 import auditTrailSchema from "../../../../../convex/components/auditTrail/schema";
 import schema from "../../../../../convex/schema";
@@ -105,28 +103,9 @@ function loadAggregateModules() {
 	);
 }
 
-function loadWorkflowModules() {
-	return loadModulesFromRoot(
-		new URL(
-			"../../../../../node_modules/@convex-dev/workflow/dist/component/",
-			import.meta.url
-		),
-		"/node_modules/@convex-dev/workflow/dist/component"
-	);
-}
-
-function loadWorkpoolModules() {
-	return loadModulesFromRoot(
-		new URL(
-			"../../../../../node_modules/@convex-dev/workpool/dist/component/",
-			import.meta.url
-		),
-		"/node_modules/@convex-dev/workpool/dist/component"
-	);
-}
-
 export function createWebhookTestHarness() {
 	process.env.DISABLE_GT_HASHCHAIN = "true";
+	process.env.DISABLE_CASH_LEDGER_HASHCHAIN = "true";
 
 	const t = convexTest(schema, loadConvexModules());
 	t.registerComponent("auditLog", auditLogSchema, loadAuditLogModules());
@@ -141,11 +120,5 @@ export function createWebhookTestHarness() {
 		loadAggregateModules()
 	);
 	t.registerComponent("auditTrail", auditTrailSchema, loadAuditTrailModules());
-	t.registerComponent("workflow", workflowSchema, loadWorkflowModules());
-	t.registerComponent(
-		"workflow/workpool",
-		workpoolSchema,
-		loadWorkpoolModules()
-	);
 	return t;
 }

@@ -1,20 +1,11 @@
 import { ConvexError, v } from "convex/values";
 import {
-	authedAction,
-	authedMutation,
-	authedQuery,
-	requirePermission,
+	documentQuery,
+	documentUploadAction,
+	documentUploadMutation,
 } from "../fluent";
 
-// TODO: Read queries (list, get, getUrl, checkDuplicate) and extractPdfMetadata action
-// use authedQuery/authedAction (authentication only). Add permission gates
-// (e.g. requirePermission("document:view")) when moving to production.
-
-const docUploadMutation = authedMutation.use(
-	requirePermission("document:upload")
-);
-
-export const generateUploadUrl = docUploadMutation
+export const generateUploadUrl = documentUploadMutation
 	.input({})
 	.handler(async (ctx) => {
 		const uploadUrl = await ctx.storage.generateUploadUrl();
@@ -22,7 +13,7 @@ export const generateUploadUrl = docUploadMutation
 	})
 	.public();
 
-export const checkDuplicate = authedQuery
+export const checkDuplicate = documentQuery
 	.input({ fileHash: v.string() })
 	.handler(async (ctx, args) => {
 		return await ctx.db
@@ -32,7 +23,7 @@ export const checkDuplicate = authedQuery
 	})
 	.public();
 
-export const create = docUploadMutation
+export const create = documentUploadMutation
 	.input({
 		name: v.string(),
 		description: v.optional(v.string()),
@@ -66,28 +57,28 @@ export const create = docUploadMutation
 	})
 	.public();
 
-export const list = authedQuery
+export const list = documentQuery
 	.input({})
 	.handler(async (ctx) => {
 		return await ctx.db.query("documentBasePdfs").order("desc").collect();
 	})
 	.public();
 
-export const get = authedQuery
+export const get = documentQuery
 	.input({ id: v.id("documentBasePdfs") })
 	.handler(async (ctx, args) => {
 		return await ctx.db.get(args.id);
 	})
 	.public();
 
-export const getUrl = authedQuery
+export const getUrl = documentQuery
 	.input({ fileRef: v.id("_storage") })
 	.handler(async (ctx, args) => {
 		return await ctx.storage.getUrl(args.fileRef);
 	})
 	.public();
 
-export const remove = docUploadMutation
+export const remove = documentUploadMutation
 	.input({ id: v.id("documentBasePdfs") })
 	.handler(async (ctx, args) => {
 		const templatesUsing = await ctx.db
@@ -110,7 +101,7 @@ export const remove = docUploadMutation
 	})
 	.public();
 
-export const extractPdfMetadata = authedAction
+export const extractPdfMetadata = documentUploadAction
 	.input({ fileRef: v.id("_storage") })
 	.handler(
 		async (

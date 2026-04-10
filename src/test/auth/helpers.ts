@@ -5,41 +5,9 @@
  * and user seeding helpers so every test file uses the same patterns.
  */
 
-import auditLogTest from "convex-audit-log/test";
 import { convexTest } from "convex-test";
-import auditTrailSchema from "../../../convex/components/auditTrail/schema";
-import schema from "../../../convex/schema";
-import workflowSchema from "../../../node_modules/@convex-dev/workflow/dist/component/schema.js";
-import workpoolSchema from "../../../node_modules/@convex-dev/workpool/dist/component/schema.js";
+import { createConvexTestKit } from "../convex/testKit";
 import { lookupPermissions } from "./permissions";
-
-const modules = {
-	...import.meta.glob("../../../convex/_generated/**/*.*s"),
-	...import.meta.glob("../../../convex/audit/**/*.*s"),
-	...import.meta.glob("../../../convex/auth/**/*.*s"),
-	...import.meta.glob("../../../convex/engine/**/*.*s"),
-	...import.meta.glob("../../../convex/fees/**/*.*s"),
-	...import.meta.glob("../../../convex/ledger/**/*.*s"),
-	...import.meta.glob("../../../convex/onboarding/**/*.*s"),
-	...import.meta.glob("../../../convex/dispersal/**/*.*s"),
-	...import.meta.glob("../../../convex/deals/**/*.*s"),
-	...import.meta.glob("../../../convex/payments/**/*.*s"),
-	...import.meta.glob("../../../convex/obligations/**/*.*s"),
-	...import.meta.glob("../../../convex/seed/**/*.*s"),
-	...import.meta.glob("../../../convex/test/**/*.*s"),
-	...import.meta.glob("../../../convex/auditLog.ts"),
-	...import.meta.glob("../../../convex/constants.ts"),
-	...import.meta.glob("../../../convex/fluent.ts"),
-};
-const auditTrailModules = import.meta.glob(
-	"../../../convex/components/auditTrail/**/*.ts"
-);
-const workflowModules = import.meta.glob(
-	"../../../node_modules/@convex-dev/workflow/dist/component/**/*.js"
-);
-const workpoolModules = import.meta.glob(
-	"../../../node_modules/@convex-dev/workpool/dist/component/**/*.js"
-);
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -127,14 +95,7 @@ export function createMockViewer(options: MockViewerOptions): MockIdentity {
 export function createTestConvex(options?: {
 	includeWorkflowComponents?: boolean;
 }) {
-	const t = convexTest(schema, modules);
-	auditLogTest.register(t, "auditLog");
-	t.registerComponent("auditTrail", auditTrailSchema, auditTrailModules);
-	if (options?.includeWorkflowComponents ?? true) {
-		t.registerComponent("workflow", workflowSchema, workflowModules);
-		t.registerComponent("workflow/workpool", workpoolSchema, workpoolModules);
-	}
-	return t;
+	return createConvexTestKit(options);
 }
 
 // ── Seeding Helpers ──────────────────────────────────────────────────

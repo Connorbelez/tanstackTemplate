@@ -23,6 +23,7 @@ import type { Doc, Id } from "../../_generated/dataModel";
 import type { MutationCtx } from "../../_generated/server";
 import { FAIRLEND_STAFF_ORG_ID } from "../../constants";
 import schema from "../../schema";
+import { registerAuditLogComponent } from "../../test/registerAuditLogComponent";
 import {
 	commitReservation,
 	reserveShares,
@@ -51,7 +52,9 @@ export const LEDGER_TEST_IDENTITY = {
 // ── Test harness helpers ─────────────────────────────────────────
 
 export function createTestHarness() {
-	return convexTest(schema, modules);
+	const t = convexTest(schema, modules);
+	registerAuditLogComponent(t, "auditLog");
+	return t;
 }
 
 export type TestHarness = ReturnType<typeof createTestHarness>;

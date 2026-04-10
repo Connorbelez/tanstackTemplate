@@ -109,6 +109,75 @@ async function scheduleCollectionFailedRuleEvaluation(
 	);
 }
 
+export async function runPaymentReversalCascadeForPlanEntry(
+	ctx: MutationCtx,
+	args: {
+		attemptId?: Id<"collectionAttempts">;
+		effectiveDate: string;
+		planEntryId: Id<"collectionPlanEntries">;
+		reason: string;
+		source: CommandSource;
+		transferRequestId?: Id<"transferRequests">;
+	}
+) {
+	const planEntry = await ctx.db.get(args.planEntryId);
+	if (!planEntry) {
+		throw new Error(
+			`[runPaymentReversalCascadeForPlanEntry] Plan entry not found: ${args.planEntryId}`
+		);
+	}
+
+	for (const obligationId of planEntry.obligationIds) {
+		const obligation = await ctx.db.get(obligationId);
+		if (!obligation) {
+			throw new Error(
+				`[runPaymentReversalCascadeForPlanEntry] Obligation not found: ${obligationId}. ` +
+					"Cannot complete reversal without a matching obligation record."
+			);
+		}
+
+		const shouldCreateCorrective = obligation.status === "settled";
+
+		const cascadeResult = await postPaymentReversalCascade(ctx, {
+			attemptId: args.attemptId,
+			transferRequestId: args.transferRequestId,
+			obligationId,
+			mortgageId: obligation.mortgageId,
+			effectiveDate: args.effectiveDate,
+			source: args.source,
+			reason: args.reason,
+		});
+
+		if (shouldCreateCorrective && obligation.type !== "late_fee") {
+			const cashReceivedReversalPrefix = `${IDEMPOTENCY_KEY_PREFIX}reversal:cash-received:`;
+			const cashReceivedReversal = cascadeResult.reversalEntries.find((entry) =>
+				entry.idempotencyKey.startsWith(cashReceivedReversalPrefix)
+			);
+			if (!cashReceivedReversal) {
+				throw new Error(
+					"[runPaymentReversalCascadeForPlanEntry] No CASH_RECEIVED reversal entry found in cascade result " +
+						`for obligation=${obligationId}. Cannot determine reversedAmount for corrective obligation.`
+				);
+			}
+
+			const reversedAmount = safeBigintToNumber(cashReceivedReversal.amount);
+
+			await ctx.scheduler.runAfter(
+				0,
+				internal.payments.obligations.createCorrectiveObligation
+					.createCorrectiveObligation,
+				{
+					originalObligationId: obligationId,
+					reversedAmount,
+					reason: args.reason,
+					postingGroupId: cascadeResult.postingGroupId,
+					source: args.source,
+				}
+			);
+		}
+	}
+}
+
 /**
  * Cross-entity effect: fires PAYMENT_APPLIED at each linked obligation.
  * Triggered when a collection attempt transitions to `confirmed` via FUNDS_SETTLED.
@@ -125,6 +194,15 @@ export const emitPaymentReceived = internalMutation({
 			args,
 			"emitPaymentReceived"
 		);
+		const settledAt =
+			typeof args.payload?.settledAt === "number"
+				? args.payload.settledAt
+				: Date.now();
+
+		await ctx.db.patch(args.entityId, {
+			confirmedAt: attempt.confirmedAt ?? settledAt,
+			settledAt: attempt.settledAt ?? settledAt,
+		});
 
 		let remainingAmount = attempt.amount;
 		const postingGroupId = `cash-receipt:${args.entityId}`;
@@ -273,86 +351,13 @@ export const executeReversalCascadeStep = internalMutation({
 				`[executeReversalCascadeStep] Collection attempt not found: ${args.entityId}`
 			);
 		}
-		const planEntry = await ctx.db.get(attempt.planEntryId);
-		if (!planEntry) {
-			throw new Error(
-				`[executeReversalCascadeStep] Plan entry not found: ${attempt.planEntryId} (attempt=${args.entityId})`
-			);
-		}
-
-		for (const obligationId of planEntry.obligationIds) {
-			const obligation = await ctx.db.get(obligationId);
-			if (!obligation) {
-				throw new Error(
-					`[executeReversalCascadeStep] Obligation not found: ${obligationId} ` +
-						`(attempt=${args.entityId}). Cannot complete reversal — ` +
-						"the cash ledger would be left in an inconsistent state."
-				);
-			}
-
-			// Capture status BEFORE cascade — postPaymentReversalCascade does not
-			// modify obligation status today, but capturing early prevents a latent
-			// bug if the cascade is ever extended to update status.
-			const shouldCreateCorrective = obligation.status === "settled";
-
-			console.info(
-				`[executeReversalCascadeStep] Starting reversal cascade for attempt=${args.entityId}, obligation=${obligationId}`
-			);
-
-			const cascadeResult = await postPaymentReversalCascade(ctx, {
-				attemptId: args.entityId,
-				obligationId,
-				mortgageId: obligation.mortgageId,
-				effectiveDate: args.effectiveDate,
-				source: args.source,
-				reason: args.reason,
-			});
-
-			console.info(
-				`[executeReversalCascadeStep] Reversal cascade complete for attempt=${args.entityId}, obligation=${obligationId}`
-			);
-
-			// Schedule corrective obligation creation (ENG-180)
-			// Only for settled obligations — non-settled obligations were never fully
-			// paid and don't need a corrective receivable.
-			// Skip late_fee obligations — corrective creation is not supported for
-			// late fees (they require feeCode/mortgageFeeId and are filtered from
-			// corrective queries).
-			if (shouldCreateCorrective && obligation.type !== "late_fee") {
-				// Derive reversedAmount from the cascade's REVERSAL of CASH_RECEIVED
-				// rather than obligation.amount — partial payments mean the attempt
-				// may have settled less than the full obligation amount.
-				const cashReceivedReversalPrefix = `${IDEMPOTENCY_KEY_PREFIX}reversal:cash-received:`;
-				const cashReceivedReversal = cascadeResult.reversalEntries.find((e) =>
-					e.idempotencyKey.startsWith(cashReceivedReversalPrefix)
-				);
-				if (!cashReceivedReversal) {
-					throw new Error(
-						"[executeReversalCascadeStep] No CASH_RECEIVED reversal entry found in cascade result " +
-							`for attempt=${args.entityId}, obligation=${obligationId}. ` +
-							"Cannot determine reversedAmount for corrective obligation."
-					);
-				}
-				const reversedAmount = safeBigintToNumber(cashReceivedReversal.amount);
-
-				await ctx.scheduler.runAfter(
-					0,
-					internal.payments.obligations.createCorrectiveObligation
-						.createCorrectiveObligation,
-					{
-						originalObligationId: obligationId,
-						reversedAmount,
-						reason: args.reason,
-						postingGroupId: cascadeResult.postingGroupId,
-						source: args.source,
-					}
-				);
-
-				console.info(
-					`[executeReversalCascadeStep] Scheduled corrective obligation for attempt=${args.entityId}, obligation=${obligationId}`
-				);
-			}
-		}
+		await runPaymentReversalCascadeForPlanEntry(ctx, {
+			attemptId: args.entityId,
+			effectiveDate: args.effectiveDate,
+			planEntryId: attempt.planEntryId,
+			reason: args.reason,
+			source: args.source,
+		});
 	},
 });
 
@@ -405,6 +410,13 @@ export const reversalCascadeWorkflow = workflow.define({
 export const emitPaymentReversed = internalMutation({
 	args: collectionAttemptEffectValidator,
 	handler: async (ctx, args) => {
+		const attempt = await ctx.db.get(args.entityId);
+		if (!attempt) {
+			throw new Error(
+				`[emitPaymentReversed] Collection attempt not found: ${args.entityId}`
+			);
+		}
+
 		let reason: string;
 		if (typeof args.payload?.reason === "string") {
 			reason = args.payload.reason;
@@ -421,6 +433,17 @@ export const emitPaymentReversed = internalMutation({
 			typeof args.payload?.effectiveDate === "string"
 				? args.payload.effectiveDate
 				: new Date().toISOString().slice(0, 10);
+
+		await ctx.db.patch(args.entityId, {
+			reversedAt: attempt.reversedAt ?? Date.now(),
+		});
+
+		if (attempt.transferRequestId) {
+			console.info(
+				`[emitPaymentReversed] Attempt ${args.entityId} is linked to transfer ${attempt.transferRequestId}; transfer-owned reversal cascade already handled the ledger work.`
+			);
+			return;
+		}
 
 		// Start durable workflow — the workflow component handles retries
 		// automatically if the reversal cascade step fails. The cascade is

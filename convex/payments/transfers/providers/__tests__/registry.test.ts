@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ManualTransferProvider } from "../manual";
+import { ManualReviewTransferProvider } from "../manualReview";
 import { MockTransferProvider } from "../mock";
 import { getTransferProvider } from "../registry";
 
@@ -16,6 +17,11 @@ describe("Provider registry — resolution", () => {
 	it('resolves "manual" to ManualTransferProvider', () => {
 		const provider = getTransferProvider("manual");
 		expect(provider).toBeInstanceOf(ManualTransferProvider);
+	});
+
+	it('resolves "manual_review" to ManualReviewTransferProvider', () => {
+		const provider = getTransferProvider("manual_review");
+		expect(provider).toBeInstanceOf(ManualReviewTransferProvider);
 	});
 
 	it('resolves "mock_pad" to MockTransferProvider when mocks enabled', () => {
