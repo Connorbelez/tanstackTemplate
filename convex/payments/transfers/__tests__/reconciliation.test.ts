@@ -8,10 +8,10 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { checkOrphanedConfirmedTransfers } from "../../cashLedger/transferReconciliation";
-import { cashReceiptPostingGroupId } from "../collectionAttemptReconciliation";
 import type { Id } from "../../../_generated/dataModel";
 import type { QueryCtx } from "../../../_generated/server";
+import { checkOrphanedConfirmedTransfers } from "../../cashLedger/transferReconciliation";
+import { cashReceiptPostingGroupId } from "../collectionAttemptReconciliation";
 
 // ── Constants (mirrored from reconciliation.ts) ─────────────────────
 
@@ -89,9 +89,9 @@ describe("isFreshTransfer", () => {
 
 // ── Orphan Detection Logic ──────────────────────────────────────────
 
-type FakeTransferRequest = {
-	_id: Id<"transferRequests">;
+interface FakeTransferRequest {
 	_creationTime: number;
+	_id: Id<"transferRequests">;
 	amount: number;
 	collectionAttemptId?: Id<"collectionAttempts">;
 	confirmedAt?: number;
@@ -99,20 +99,20 @@ type FakeTransferRequest = {
 	mortgageId?: Id<"mortgages">;
 	obligationId?: Id<"obligations">;
 	status: "confirmed";
-};
+}
 
-type FakeCollectionAttempt = {
+interface FakeCollectionAttempt {
 	_id: Id<"collectionAttempts">;
 	status: "confirmed" | "reversed";
-};
+}
 
-type FakeJournalEntry = {
+interface FakeJournalEntry {
 	_id: Id<"cash_ledger_journal_entries">;
 	attemptId?: Id<"collectionAttempts">;
 	entryType: "CASH_RECEIVED" | "LENDER_PAYOUT_SENT" | "REVERSAL";
 	postingGroupId?: string;
 	transferRequestId?: Id<"transferRequests">;
-};
+}
 
 function createTransferReconciliationCtx(args: {
 	attempts?: FakeCollectionAttempt[];

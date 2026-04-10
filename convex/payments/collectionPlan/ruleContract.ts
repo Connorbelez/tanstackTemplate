@@ -155,10 +155,12 @@ function readLegacyNumberParameter(
 	if (
 		parameters &&
 		typeof parameters === "object" &&
-		!Array.isArray(parameters) &&
-		typeof (parameters as Record<string, unknown>)[key] === "number"
+		!Array.isArray(parameters)
 	) {
-		return (parameters as Record<string, number>)[key];
+		const value = (parameters as Record<string, unknown>)[key];
+		if (typeof value === "number" && Number.isInteger(value) && value >= 0) {
+			return value;
+		}
 	}
 
 	return undefined;
@@ -167,11 +169,17 @@ function readLegacyNumberParameter(
 export function getCollectionRuleKind(
 	rule: Doc<"collectionRules">
 ): CollectionRuleKind | null {
+	const configKind = rule.config?.kind;
+	if (rule.kind && configKind && rule.kind !== configKind) {
+		throw new Error(
+			`Collection rule kind mismatch for ${rule._id}: rule.kind=${rule.kind} config.kind=${configKind}`
+		);
+	}
+
 	if (rule.kind) {
 		return rule.kind;
 	}
 
-	const configKind = rule.config?.kind;
 	if (isCollectionRuleKind(configKind)) {
 		return configKind;
 	}
