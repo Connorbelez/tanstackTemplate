@@ -1,3 +1,4 @@
+import auditLogTest from "convex-audit-log/test";
 import { convexTest } from "convex-test";
 import { describe, expect, it, vi } from "vitest";
 import { api } from "../../../_generated/api";
@@ -5,7 +6,6 @@ import type { Id } from "../../../_generated/dataModel";
 import { FAIRLEND_STAFF_ORG_ID } from "../../../constants";
 import schema from "../../../schema";
 import { convexModules } from "../../../test/moduleMaps";
-import { registerAuditLogComponent } from "../../../test/registerAuditLogComponent";
 import { getOrCreateCashAccount } from "../../cashLedger/accounts";
 import { postObligationAccrued } from "../../cashLedger/integrations";
 
@@ -47,7 +47,7 @@ function createHarness() {
 	process.env.DISABLE_GT_HASHCHAIN = "true";
 	process.env.DISABLE_CASH_LEDGER_HASHCHAIN = "true";
 	const t = convexTest(schema, modules);
-	registerAuditLogComponent(t, "auditLog");
+	auditLogTest.register(t, "auditLog");
 	return t;
 }
 
@@ -482,33 +482,38 @@ describe("transfer handlers integration: mutations", () => {
 	});
 
 	it("cancelTransfer transitions initiated -> cancelled", async () => {
-		const t = createHarness();
-		const auth = asPaymentUser(t);
-		const seeded = await seedCoreEntities(t);
+		vi.useFakeTimers();
+		try {
+			const t = createHarness();
+			const auth = asPaymentUser(t);
+			const seeded = await seedCoreEntities(t);
 
-		const transferId = await insertTransfer(t, {
-			status: "initiated",
-			counterpartyId: `${seeded.borrowerId}`,
-			dealId: seeded.dealAId,
-			idempotencyKey: "cancel-valid-1",
-			createdAt: 1000,
-			lastTransitionAt: 1000,
-		});
+			const transferId = await insertTransfer(t, {
+				status: "initiated",
+				counterpartyId: `${seeded.borrowerId}`,
+				dealId: seeded.dealAId,
+				idempotencyKey: "cancel-valid-1",
+				createdAt: 1000,
+				lastTransitionAt: 1000,
+			});
 
-		const result = await auth.mutation(
-			api.payments.transfers.mutations.cancelTransfer,
-			{
-				transferId,
-				reason: "cancel integration test",
-			}
-		);
+			const result = await auth.mutation(
+				api.payments.transfers.mutations.cancelTransfer,
+				{
+					transferId,
+					reason: "cancel integration test",
+				}
+			);
 
-		expect(result.success).toBe(true);
-		expect(result.previousState).toBe("initiated");
-		expect(result.newState).toBe("cancelled");
+			expect(result.success).toBe(true);
+			expect(result.previousState).toBe("initiated");
+			expect(result.newState).toBe("cancelled");
 
-		const updated = await t.run(async (ctx) => ctx.db.get(transferId));
-		expect(updated?.status).toBe("cancelled");
+			const updated = await t.run(async (ctx) => ctx.db.get(transferId));
+			expect(updated?.status).toBe("cancelled");
+		} finally {
+			vi.useRealTimers();
+		}
 	});
 
 	it("cancelTransfer rejects non-initiated statuses", async () => {

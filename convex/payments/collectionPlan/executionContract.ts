@@ -144,6 +144,7 @@ export interface TransferHandoffRequest {
 }
 
 export interface StagePlanEntryExecutionResult {
+	existingTransferRequestId?: Id<"transferRequests">;
 	result: ExecutePlanEntryResult;
 	transferHandoffRequest?: TransferHandoffRequest;
 }

@@ -3,26 +3,19 @@ import type { Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 import { internalMutation } from "../_generated/server";
 import { adminMutation } from "../fluent";
-import {
-	generateObligationsImpl,
-	MS_PER_DAY,
-} from "../payments/obligations/generateImpl";
-
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-
-/** How far ahead (in ms) to schedule plan entries from "now" */
-const SCHEDULING_WINDOW_DAYS = 5;
+import { seedCollectionRulesImpl } from "../payments/collectionPlan/defaultRules";
+import { scheduleInitialEntriesImpl } from "../payments/collectionPlan/initialScheduling";
+import { getScheduleRuleConfig } from "../payments/collectionPlan/ruleContract";
+import { generateObligationsImpl } from "../payments/obligations/generateImpl";
 
 // ---------------------------------------------------------------------------
 // Result type
 // ---------------------------------------------------------------------------
 
 interface SeedPaymentDataResult {
+	createdPlanEntryIds: Id<"collectionPlanEntries">[];
 	generated: { obligations: number; planEntries: number };
 	obligationIds: Id<"obligations">[];
-	planEntryIds: Id<"collectionPlanEntries">[];
 	reused: {
 		obligations: number;
 		planEntries: number;
@@ -93,84 +86,30 @@ async function seedPaymentDataImpl(
 		generatedObligations = result.generated;
 	}
 
-	// 4. Load obligations due within the scheduling window
-	const now = Date.now();
-	const schedulingCutoff = now + SCHEDULING_WINDOW_DAYS * MS_PER_DAY;
+	// 4. Ensure canonical collection rules exist before initial scheduling runs
+	const rules = await seedCollectionRulesImpl(ctx);
+	const scheduleRule = await ctx.db.get(rules.ruleIdsByCode.schedule_rule);
+	const scheduleRuleConfig =
+		scheduleRule !== null ? getScheduleRuleConfig(scheduleRule) : null;
 
-	const dueSoonObligations = await ctx.db
-		.query("obligations")
-		.withIndex("by_mortgage_and_date", (q) =>
-			q
-				.eq("mortgageId", mortgageId)
-				.gte("dueDate", now)
-				.lte("dueDate", schedulingCutoff)
-		)
-		.collect();
-
-	// 5. Create plan entries for obligations that don't already have one
-	const planEntryIds: Id<"collectionPlanEntries">[] = [];
-	const reusedPlanEntryIds: Id<"collectionPlanEntries">[] = [];
-	let generatedPlanEntries = 0;
-	let reusedPlanEntries = 0;
-
-	// Load existing non-cancelled plan entries to check for duplicates
-	// (obligationIds is an array field — no index available, must scan)
-	const nonCancelledStatuses = [
-		"planned",
-		"executing",
-		"completed",
-		"rescheduled",
-	] as const;
-	const existingPlanEntries = (
-		await Promise.all(
-			nonCancelledStatuses.map((status) =>
-				ctx.db
-					.query("collectionPlanEntries")
-					.withIndex("by_status", (q) => q.eq("status", status))
-					.collect()
-			)
-		)
-	).flat();
-
-	for (const obligation of dueSoonObligations) {
-		// Check if this obligation already has a non-cancelled plan entry
-		const existingEntry = existingPlanEntries.find(
-			(entry) =>
-				entry.status !== "cancelled" &&
-				entry.obligationIds.includes(obligation._id)
-		);
-
-		if (existingEntry) {
-			reusedPlanEntries++;
-			reusedPlanEntryIds.push(existingEntry._id);
-			continue;
-		}
-
-		const planEntryId = await ctx.db.insert("collectionPlanEntries", {
-			obligationIds: [obligation._id],
-			amount: obligation.amount,
-			method: "manual",
-			scheduledDate: obligation.dueDate,
-			status: "planned",
-			source: "default_schedule",
-			createdAt: now,
-		});
-
-		planEntryIds.push(planEntryId);
-		generatedPlanEntries++;
-	}
+	// 5. Generate initial plan entries through canonical schedule-rule semantics
+	const schedulingResult = await scheduleInitialEntriesImpl(ctx, {
+		mortgageId,
+		delayDays: scheduleRuleConfig?.delayDays ?? 5,
+		ruleId: rules.ruleIdsByCode.schedule_rule,
+	});
 
 	return {
 		obligationIds,
-		planEntryIds,
+		createdPlanEntryIds: schedulingResult.createdPlanEntryIds,
 		generated: {
 			obligations: generatedObligations,
-			planEntries: generatedPlanEntries,
+			planEntries: schedulingResult.created,
 		},
 		reused: {
 			obligations: reusedObligations,
-			planEntries: reusedPlanEntries,
-			planEntryIds: reusedPlanEntryIds,
+			planEntries: schedulingResult.reused,
+			planEntryIds: schedulingResult.reusedPlanEntryIds,
 		},
 	};
 }

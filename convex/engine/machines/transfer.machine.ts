@@ -29,6 +29,9 @@ export const transferMachine = setup({
 		publishTransferConfirmed: () => {
 			/* resolved by GT effect registry */
 		},
+		publishTransferCancelled: () => {
+			/* resolved by GT effect registry */
+		},
 		publishTransferFailed: () => {
 			/* resolved by GT effect registry */
 		},
@@ -58,6 +61,7 @@ export const transferMachine = setup({
 				},
 				TRANSFER_CANCELLED: {
 					target: "cancelled",
+					actions: ["publishTransferCancelled"],
 				},
 			},
 		},

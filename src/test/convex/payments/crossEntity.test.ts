@@ -223,8 +223,13 @@ describe("AC2: failure chain (attempt permanent_fail -> COLLECTION_FAILED -> Ret
 	it("attempt DRAW_INITIATED -> pending -> DRAW_FAILED -> failed -> MAX_RETRIES_EXCEEDED -> permanent_fail, retry rule creates new plan entry", async () => {
 		const t = createGovernedTestConvex();
 		await seedDefaultGovernedActors(t);
-		const { obligationId } = await seedBaseEntities(t);
+		const { mortgageId, obligationId } = await seedBaseEntities(t);
 		const rules = await seedCollectionRules(t);
+		await t.run(async (ctx) => {
+			await ctx.db.patch(rules.retryRuleId, {
+				scope: { scopeType: "mortgage", mortgageId },
+			});
+		});
 
 		const obligation = await t.run(async (ctx) => ctx.db.get(obligationId));
 		const amount = obligation!.amount;
@@ -294,6 +299,7 @@ describe("AC2: failure chain (attempt permanent_fail -> COLLECTION_FAILED -> Ret
 		expect(retryEntry).toBeDefined();
 		expect(retryEntry?.status).toBe("planned");
 		expect(retryEntry?.rescheduledFromId).toBe(planEntryId);
+		expect(retryEntry?.ruleId).toBe(rules.retryRuleId);
 
 		// Verify the scheduled date has backoff applied
 		// retryCount=1 (incremented by DRAW_FAILED), baseDays=3

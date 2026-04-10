@@ -323,7 +323,8 @@ export const initiateTransfer = paymentAction
 			);
 		}
 
-		// Schema guarantees these are typed — no unsafe casts needed
+		// Canonical provider boundary: AMPS hands off before this point and the
+		// transfer domain resolves the concrete provider implementation.
 		const provider = getTransferProvider(transfer.providerCode);
 
 		let counterpartyId: TransferRequestInput["counterpartyId"];
@@ -379,17 +380,15 @@ export const initiateTransfer = paymentAction
 		const result = await provider.initiate(input);
 		const source = buildSource(ctx.viewer, "admin_dashboard");
 
+		await ctx.runMutation(
+			internal.payments.transfers.mutations.persistProviderRef,
+			{
+				transferId: args.transferId,
+				providerRef: result.providerRef,
+			}
+		);
+
 		if (result.status === "confirmed") {
-			// Persist providerRef before transitioning — the FUNDS_SETTLED path
-			// in the state machine does not fire recordTransferProviderRef, so
-			// without this the provider reference would be lost.
-			await ctx.runMutation(
-				internal.payments.transfers.mutations.persistProviderRef,
-				{
-					transferId: args.transferId,
-					providerRef: result.providerRef,
-				}
-			);
 			return ctx.runMutation(
 				internal.payments.transfers.mutations.fireInitiateTransition,
 				{
@@ -552,6 +551,9 @@ export const initiateTransferInternal = internalAction({
 			};
 		}
 
+		// Canonical provider boundary: internal orchestration still resolves
+		// providers through the transfer-domain registry, never through
+		// legacy PaymentMethod lookup.
 		const provider = getTransferProvider(transfer.providerCode);
 
 		let counterpartyId: TransferRequestInput["counterpartyId"];
@@ -606,14 +608,15 @@ export const initiateTransferInternal = internalAction({
 
 		const result = await provider.initiate(input);
 
+		await ctx.runMutation(
+			internal.payments.transfers.mutations.persistProviderRef,
+			{
+				transferId: args.transferId,
+				providerRef: result.providerRef,
+			}
+		);
+
 		if (result.status === "confirmed") {
-			await ctx.runMutation(
-				internal.payments.transfers.mutations.persistProviderRef,
-				{
-					transferId: args.transferId,
-					providerRef: result.providerRef,
-				}
-			);
 			return ctx.runMutation(
 				internal.payments.transfers.mutations.fireInitiateTransition,
 				{

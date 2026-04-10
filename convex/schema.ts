@@ -57,6 +57,12 @@ import {
 	listingRateTypeValidator,
 	listingStatusValidator,
 } from "./listings/validators";
+import {
+	collectionRuleConfigValidator,
+	collectionRuleKindValidator,
+	collectionRuleScopeValidator,
+	collectionRuleStatusValidator,
+} from "./payments/collectionPlan/ruleContract";
 import { payoutFrequencyValidator } from "./payments/payout/validators";
 import {
 	counterpartyTypeValidator,
@@ -805,17 +811,30 @@ export default defineSchema({
 		createdAt: v.number(),
 	})
 		.index("by_scheduled_date", ["scheduledDate", "status"])
+		.index("by_status_scheduled_date", ["status", "scheduledDate"])
 		.index("by_status", ["status"])
 		.index("by_rescheduled_from", ["rescheduledFromId", "source"]),
 
 	collectionRules: defineTable({
-		name: v.string(),
+		kind: v.optional(collectionRuleKindValidator),
+		code: v.optional(v.string()),
+		displayName: v.optional(v.string()),
+		description: v.optional(v.string()),
 		trigger: v.union(v.literal("schedule"), v.literal("event")),
+		status: v.optional(collectionRuleStatusValidator),
+		scope: v.optional(collectionRuleScopeValidator),
+		config: v.optional(collectionRuleConfigValidator),
+		version: v.optional(v.number()),
+		effectiveFrom: v.optional(v.number()),
+		effectiveTo: v.optional(v.number()),
+		createdByActorId: v.optional(v.string()),
+		updatedByActorId: v.optional(v.string()),
+		name: v.optional(v.string()),
 		condition: v.optional(v.any()),
-		action: v.string(),
+		action: v.optional(v.string()),
 		parameters: v.optional(v.any()), // rule-specific config
 		priority: v.number(),
-		enabled: v.boolean(),
+		enabled: v.optional(v.boolean()),
 		createdAt: v.number(),
 		updatedAt: v.number(),
 	}).index("by_trigger", ["trigger", "enabled", "priority"]),

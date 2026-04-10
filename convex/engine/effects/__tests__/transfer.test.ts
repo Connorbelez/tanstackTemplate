@@ -1,4 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
+import auditLogTest from "convex-audit-log/test";
+import { afterAll, describe, expect, it, vi } from "vitest";
 import type { Id } from "../../../_generated/dataModel";
 import type { MutationCtx } from "../../../_generated/server";
 import {
@@ -9,7 +10,6 @@ import {
 	type TestHarness,
 } from "../../../payments/cashLedger/__tests__/testUtils";
 import { convexModules } from "../../../test/moduleMaps";
-import { registerAuditLogComponent } from "../../../test/registerAuditLogComponent";
 import { effectRegistry } from "../registry";
 import {
 	publishTransferConfirmed,
@@ -21,6 +21,13 @@ import {
 const modules = convexModules;
 const NO_DIRECTION_RE = /has no direction set/;
 const NO_JOURNAL_ENTRY_RE = /No journal entry found for NON-bridged transfer/;
+
+vi.useFakeTimers();
+
+afterAll(() => {
+	vi.clearAllTimers();
+	vi.useRealTimers();
+});
 
 interface TransferEffectArgs {
 	effectName: string;
@@ -47,7 +54,7 @@ const publishTransferReversedMutation =
 
 function createTransferHarness() {
 	const t = createHarness(modules);
-	registerAuditLogComponent(t, "auditLog");
+	auditLogTest.register(t, "auditLog");
 	return t;
 }
 

@@ -12,6 +12,17 @@
  *   provider execution is delegated through transfer infrastructure.
  */
 
+export const LEGACY_PAYMENT_METHOD_CODES = ["manual", "mock_pad"] as const;
+
+export type LegacyPaymentMethodCode =
+	(typeof LEGACY_PAYMENT_METHOD_CODES)[number];
+
+export function isLegacyPaymentMethodCode(
+	value: string
+): value is LegacyPaymentMethodCode {
+	return (LEGACY_PAYMENT_METHOD_CODES as readonly string[]).includes(value);
+}
+
 // ---------------------------------------------------------------------------
 // Params & Results
 // ---------------------------------------------------------------------------
@@ -21,7 +32,7 @@ export interface InitiateParams {
 	amount: number;
 	borrowerId: string;
 	metadata?: Record<string, unknown>;
-	method: string;
+	method: LegacyPaymentMethodCode;
 	mortgageId: string;
 	planEntryId: string;
 }
@@ -50,6 +61,10 @@ export interface StatusResult {
 // Compatibility interface
 // ---------------------------------------------------------------------------
 
+/**
+ * @deprecated Compatibility-only inbound provider contract. New provider work
+ * must target `TransferProvider` instead.
+ */
 export interface PaymentMethod {
 	cancel(ref: string): Promise<CancelResult>;
 	confirm(ref: string): Promise<ConfirmResult>;

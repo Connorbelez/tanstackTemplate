@@ -52,46 +52,27 @@ export interface SeededRules {
 export async function seedCollectionRules(
 	t: GovernedTestConvex,
 ): Promise<SeededRules> {
-	const now = Date.now();
+	await t.mutation(internal.payments.collectionPlan.seed.seedCollectionRules, {});
 
-	const scheduleRuleId = await t.run(async (ctx) =>
-		ctx.db.insert("collectionRules", {
-			name: "schedule_rule",
-			trigger: "schedule",
-			action: "create_plan_entry",
-			parameters: { delayDays: 5 },
-			priority: 10,
-			enabled: true,
-			createdAt: now,
-			updatedAt: now,
-		}),
+	const rules = await t.run(async (ctx) =>
+		ctx.db.query("collectionRules").collect()
 	);
 
-	const retryRuleId = await t.run(async (ctx) =>
-		ctx.db.insert("collectionRules", {
-			name: "retry_rule",
-			trigger: "event",
-			action: "create_retry_entry",
-			parameters: { maxRetries: 3, backoffBaseDays: 3 },
-			priority: 20,
-			enabled: true,
-			createdAt: now,
-			updatedAt: now,
-		}),
-	);
+	const getCanonicalRuleId = (ruleCode: string) => {
+		const matches = rules.filter(
+			(rule) => (rule.code ?? rule.name) === ruleCode
+		);
+		if (matches.length !== 1) {
+			throw new Error(
+				`Expected exactly one canonical ${ruleCode} rule, found ${matches.length}`
+			);
+		}
+		return matches[0]._id;
+	};
 
-	const lateFeeRuleId = await t.run(async (ctx) =>
-		ctx.db.insert("collectionRules", {
-			name: "late_fee_rule",
-			trigger: "event",
-			action: "create_late_fee",
-			parameters: { feeAmountCents: 5000, dueDays: 30, graceDays: 45 },
-			priority: 30,
-			enabled: true,
-			createdAt: now,
-			updatedAt: now,
-		}),
-	);
+	const scheduleRuleId = getCanonicalRuleId("schedule_rule");
+	const retryRuleId = getCanonicalRuleId("retry_rule");
+	const lateFeeRuleId = getCanonicalRuleId("late_fee_rule");
 
 	return { scheduleRuleId, retryRuleId, lateFeeRuleId };
 }

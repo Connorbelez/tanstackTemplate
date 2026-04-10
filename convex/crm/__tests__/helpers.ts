@@ -135,7 +135,7 @@ export async function seedObjectWithFields(
 	const views = await admin.query(api.crm.viewDefs.listViews, {
 		objectDefId,
 	});
-	const defaultView = views.find((v) => v.isDefault);
+	const defaultView = views.find((v: (typeof views)[number]) => v.isDefault);
 	if (!defaultView) {
 		throw new Error("Expected auto-created default view, but none found");
 	}

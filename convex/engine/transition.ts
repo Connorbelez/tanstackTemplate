@@ -1,7 +1,7 @@
 import type { GenericId } from "convex/values";
 import { ConvexError } from "convex/values";
 import type { AnyStateMachine, StateValue } from "xstate";
-import { getNextSnapshot } from "xstate";
+import { transition as computeTransition } from "xstate";
 import type { TableNames } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 import { auditLog } from "../auditLog";
@@ -30,11 +30,6 @@ function isGovernedEntityType(
 interface ScheduledEffectDescriptor {
 	actionType: string;
 	params?: Record<string, unknown>;
-}
-
-interface MachineConfigStateNode {
-	on?: Record<string, unknown>;
-	states?: Record<string, MachineConfigStateNode>;
 }
 
 function normalizeActionDescriptors(
@@ -71,86 +66,6 @@ function normalizeActionDescriptors(
 	return descriptors;
 }
 
-function getActiveStatePath(stateValue: StateValue): string[] {
-	if (typeof stateValue === "string") {
-		return [stateValue];
-	}
-
-	const entries = Object.entries(stateValue);
-	if (entries.length !== 1) {
-		throw new Error(
-			`extractScheduledEffects only supports a single active state path; got: ${Object.keys(stateValue).join(", ")}`
-		);
-	}
-
-	const [region, subState] = entries[0] as [string, StateValue];
-	if (typeof subState === "string") {
-		return [region, subState];
-	}
-
-	return [region, ...getActiveStatePath(subState)];
-}
-
-function getActiveStateNodes(
-	machine: AnyStateMachine,
-	activeStatePath: string[]
-): MachineConfigStateNode[] {
-	const nodes: MachineConfigStateNode[] = [];
-	let states = machine.config.states as
-		| Record<string, MachineConfigStateNode>
-		| undefined;
-
-	for (const segment of activeStatePath) {
-		if (!states) {
-			break;
-		}
-
-		const stateNode = states[segment];
-		if (!stateNode) {
-			break;
-		}
-
-		nodes.push(stateNode);
-		states = stateNode.states;
-	}
-
-	return nodes;
-}
-
-function extractScheduledEffects(
-	machine: AnyStateMachine,
-	previousStateValue: StateValue,
-	eventType: string
-): ScheduledEffectDescriptor[] {
-	const activeStateNodes = getActiveStateNodes(
-		machine,
-		getActiveStatePath(previousStateValue)
-	);
-	const eventConfig =
-		[...activeStateNodes]
-			.reverse()
-			.find((stateNode) => stateNode.on?.[eventType] !== undefined)?.on?.[
-			eventType
-		] ??
-		(machine.config.on as Record<string, unknown> | undefined)?.[eventType];
-	let candidates: unknown[] = [];
-	if (eventConfig) {
-		candidates = Array.isArray(eventConfig) ? eventConfig : [eventConfig];
-	}
-
-	return candidates.flatMap((candidate) => {
-		if (!candidate || typeof candidate !== "object") {
-			return [];
-		}
-
-		if (!("actions" in candidate)) {
-			return [];
-		}
-
-		return normalizeActionDescriptors(candidate.actions);
-	});
-}
-
 /**
  * Checks whether a named action resolves to an XState built-in action (assign, raise, etc.)
  * rather than an effect-marker action. Built-in actions are executed during the pure COMPUTE
@@ -165,7 +80,7 @@ function isBuiltInAction(
 		return false;
 	}
 	const impl = implementations[actionName];
-	if (!impl || typeof impl !== "object") {
+	if (!impl || (typeof impl !== "object" && typeof impl !== "function")) {
 		return false;
 	}
 	const implType = (impl as { type?: string }).type;
@@ -286,10 +201,12 @@ export async function executeTransition(
 	});
 
 	// ── 4. COMPUTE ───────────────────────────────────────────────────────
-	const event = { ...(payload ?? {}), type: eventType } as Parameters<
-		typeof getNextSnapshot<typeof machine>
-	>[2];
-	const nextSnapshot = getNextSnapshot(machine, currentSnapshot, event);
+	const event = { ...(payload ?? {}), type: eventType };
+	const [nextSnapshot, transitionActions] = computeTransition(
+		machine,
+		currentSnapshot,
+		event
+	);
 	const newStateValue = nextSnapshot.value as StateValue;
 	const newStateSerialized = serializeState(newStateValue);
 
@@ -297,11 +214,7 @@ export async function executeTransition(
 	let journalEntryId = `${entityType}:${entityId}:${eventType}:${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
 
 	// ── 5. DETECT ────────────────────────────────────────────────────────
-	const scheduledEffects = extractScheduledEffects(
-		machine,
-		previousStateValue,
-		eventType
-	);
+	const scheduledEffects = normalizeActionDescriptors(transitionActions);
 	const hasEffects = scheduledEffects.length > 0;
 
 	if (newStateSerialized === previousStateSerialized) {

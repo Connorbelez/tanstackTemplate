@@ -18,6 +18,7 @@ import type {
 	StatusResult,
 } from "./interface";
 
+/** @deprecated Compatibility-only manual inbound implementation. */
 export class ManualPaymentMethod implements PaymentMethod {
 	async initiate(params: InitiateParams): Promise<InitiateResult> {
 		return {

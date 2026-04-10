@@ -1,5 +1,12 @@
 import type { Id } from "../../_generated/dataModel";
 import type { QueryCtx } from "../../_generated/server";
+import {
+	cashReceiptPostingGroupId,
+	getAttemptLinkedInboundReversalHealth,
+	getAttemptLinkedInboundSettlementHealth,
+	isAttemptLinkedInboundTransfer,
+	reversalPostingGroupId,
+} from "../transfers/collectionAttemptReconciliation";
 import { safeBigintToNumber } from "./accounts";
 import { buildIdempotencyKey } from "./types";
 
@@ -86,6 +93,7 @@ export function ageDays(creationTime: number, now: number): number {
 /** Raw candidate returned by the shared orphan filter. */
 export interface OrphanedConfirmedCandidate {
 	amount: number;
+	collectionAttemptId?: Id<"collectionAttempts">;
 	confirmedAt: number;
 	direction: "inbound" | "outbound";
 	lenderId?: Id<"lenders">;
@@ -126,6 +134,28 @@ export async function findOrphanedConfirmedTransferCandidates(
 			console.warn(
 				`[TRANSFER-RECONCILIATION] Skipping legacy stub transfer=${transfer._id}: missing direction or amount`
 			);
+			continue;
+		}
+
+		if (isAttemptLinkedInboundTransfer(transfer)) {
+			const attemptHealth = await getAttemptLinkedInboundSettlementHealth(
+				ctx,
+				transfer
+			);
+			if (attemptHealth.isHealthy) {
+				continue;
+			}
+
+			candidates.push({
+				transferRequestId: transfer._id,
+				collectionAttemptId: transfer.collectionAttemptId,
+				direction: transfer.direction,
+				amount: transfer.amount,
+				confirmedAt: effectiveConfirmedAt,
+				mortgageId: transfer.mortgageId ?? undefined,
+				obligationId: transfer.obligationId ?? undefined,
+				lenderId: transfer.lenderId ?? undefined,
+			});
 			continue;
 		}
 
@@ -176,13 +206,14 @@ export async function checkOrphanedConfirmedTransfers(
 	let totalAmountCents = 0;
 
 	for (const c of candidates) {
-		const keyType =
-			c.direction === "inbound" ? "cash-received" : "lender-payout-sent";
-		const expectedIdempotencyKey = buildIdempotencyKey(
-			keyType,
-			"transfer",
-			c.transferRequestId
-		);
+		const expectedIdempotencyKey =
+			c.direction === "inbound" && c.collectionAttemptId
+				? cashReceiptPostingGroupId(c.collectionAttemptId)
+				: buildIdempotencyKey(
+						c.direction === "inbound" ? "cash-received" : "lender-payout-sent",
+						"transfer",
+						c.transferRequestId
+					);
 		items.push({
 			transferRequestId: c.transferRequestId,
 			direction: c.direction,
@@ -234,6 +265,30 @@ export async function checkOrphanedReversedTransfers(
 			console.warn(
 				`[TRANSFER-RECONCILIATION] Skipping legacy stub reversed transfer=${transfer._id}: missing direction or amount`
 			);
+			continue;
+		}
+
+		if (isAttemptLinkedInboundTransfer(transfer)) {
+			const attemptHealth = await getAttemptLinkedInboundReversalHealth(
+				ctx,
+				transfer
+			);
+			if (attemptHealth.isHealthy) {
+				continue;
+			}
+
+			items.push({
+				transferRequestId: transfer._id,
+				direction: transfer.direction,
+				amount: transfer.amount,
+				reversedAt: transfer.reversedAt,
+				ageDays: ageDays(transfer.reversedAt, now),
+				mortgageId: transfer.mortgageId ?? undefined,
+				expectedIdempotencyKey: reversalPostingGroupId(
+					transfer.collectionAttemptId
+				),
+			});
+			totalAmountCents += transfer.amount;
 			continue;
 		}
 

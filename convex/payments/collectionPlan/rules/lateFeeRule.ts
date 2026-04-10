@@ -3,6 +3,7 @@ import { internal } from "../../../_generated/api";
 import type { Id } from "../../../_generated/dataModel";
 import type { ActionCtx } from "../../../_generated/server";
 import type { RuleEvalContext, RuleHandler } from "../engine";
+import { getLateFeeRuleConfig } from "../ruleContract";
 
 const MS_PER_DAY = 86_400_000;
 
@@ -45,6 +46,14 @@ export const lateFeeRuleHandler: RuleHandler = {
 			return;
 		}
 
+		const config = getLateFeeRuleConfig(evalCtx.rule);
+		if (!config) {
+			console.warn(
+				`[late-fee-rule] Missing typed config for rule ${String(evalCtx.rule._id)}`
+			);
+			return;
+		}
+
 		const payload = evalCtx.eventPayload as
 			| ObligationOverduePayload
 			| undefined;
@@ -83,8 +92,8 @@ export const lateFeeRuleHandler: RuleHandler = {
 		const now = Date.now();
 		const mortgageFee = await ctx.runQuery(getActiveMortgageFeeReference, {
 			mortgageId,
-			code: "late_fee",
-			surface: "borrower_charge",
+			code: config.feeCode,
+			surface: config.feeSurface,
 			asOfDate: toIsoDateString(now),
 		});
 		if (!mortgageFee) {
@@ -122,7 +131,7 @@ export const lateFeeRuleHandler: RuleHandler = {
 			dueDate: now + dueDays * MS_PER_DAY,
 			gracePeriodEnd: now + graceDays * MS_PER_DAY,
 			sourceObligationId: obligationId,
-			feeCode: "late_fee",
+			feeCode: config.feeCode,
 			mortgageFeeId: mortgageFee._id,
 			status: "upcoming",
 		});

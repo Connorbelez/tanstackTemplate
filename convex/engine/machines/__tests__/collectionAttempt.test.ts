@@ -86,9 +86,9 @@ describe("collectionAttempt machine", () => {
 		expect(collectionAttemptMachine.id).toBe("collectionAttempt");
 	});
 
-	it("has version 1.1.0", () => {
-		expect(collectionAttemptMachine.version).toBe("1.1.0");
-		expect(COLLECTION_ATTEMPT_MACHINE_VERSION).toBe("1.1.0");
+	it("has version 1.2.0", () => {
+		expect(collectionAttemptMachine.version).toBe("1.2.0");
+		expect(COLLECTION_ATTEMPT_MACHINE_VERSION).toBe("1.2.0");
 	});
 
 	it("confirmed is NOT a final state (has outbound PAYMENT_REVERSED transition)", () => {
@@ -148,14 +148,15 @@ describe("collectionAttempt machine", () => {
 			expect(actions.map((a) => a.type)).toContain("emitPaymentReceived");
 		});
 
-		it("initiated ignores DRAW_FAILED", () => {
+		it("initiated -> failed on DRAW_FAILED increments retryCount", () => {
 			const [next, actions] = transition(
 				collectionAttemptMachine,
 				snapshotAt("initiated"),
 				DRAW_FAILED
 			);
-			expect(next.value).toBe("initiated");
+			expect(next.value).toBe("failed");
 			expect(actions).toHaveLength(0);
+			expect(next.context.retryCount).toBe(1);
 		});
 
 		it("initiated ignores RETRY_ELIGIBLE", () => {
@@ -567,7 +568,7 @@ describe("collectionAttempt machine", () => {
 	// ── Happy path integration tests ────────────────────────────────
 
 	describe("happy paths", () => {
-		it("ManualPaymentMethod path: initiated -> confirmed (skips pending)", () => {
+		it("legacy manual compatibility path: initiated -> confirmed (skips pending)", () => {
 			const [next, actions] = transition(
 				collectionAttemptMachine,
 				snapshotAt("initiated"),

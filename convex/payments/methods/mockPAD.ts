@@ -64,6 +64,7 @@ export type ScheduleSettlementFn = (
 // Implementation
 // ---------------------------------------------------------------------------
 
+/** @deprecated Compatibility-only mock inbound implementation. */
 export class MockPADMethod implements PaymentMethod {
 	private readonly config: MockPADConfig;
 	private readonly scheduleSettlement: ScheduleSettlementFn;

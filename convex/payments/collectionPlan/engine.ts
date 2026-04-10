@@ -3,6 +3,11 @@ import { internal } from "../../_generated/api";
 import type { Doc, Id } from "../../_generated/dataModel";
 import type { ActionCtx } from "../../_generated/server";
 import { internalAction } from "../../_generated/server";
+import {
+	type CollectionRuleKind,
+	getCollectionRuleCode,
+	getCollectionRuleKind,
+} from "./ruleContract";
 import { lateFeeRuleHandler } from "./rules/lateFeeRule";
 import { retryRuleHandler } from "./rules/retryRule";
 import { scheduleRuleHandler } from "./rules/scheduleRule";
@@ -22,10 +27,10 @@ export interface RuleHandler {
 
 // ─── Handler Registry ────────────────────────────────────
 
-const ruleHandlerRegistry: Record<string, RuleHandler> = {
-	schedule_rule: scheduleRuleHandler,
-	retry_rule: retryRuleHandler,
-	late_fee_rule: lateFeeRuleHandler,
+const ruleHandlerRegistry: Partial<Record<CollectionRuleKind, RuleHandler>> = {
+	schedule: scheduleRuleHandler,
+	retry: retryRuleHandler,
+	late_fee: lateFeeRuleHandler,
 };
 
 // ─── Engine Action ───────────────────────────────────────
@@ -44,14 +49,26 @@ export const evaluateRules = internalAction({
 	handler: async (ctx, args) => {
 		const rules = await ctx.runQuery(
 			internal.payments.collectionPlan.queries.getEnabledRules,
-			{ trigger: args.trigger }
+			{
+				asOfMs: Date.now(),
+				mortgageId: args.mortgageId,
+				trigger: args.trigger,
+			}
 		);
 
 		for (const rule of rules) {
-			const handler = ruleHandlerRegistry[rule.name];
+			const ruleKind = getCollectionRuleKind(rule);
+			if (!ruleKind) {
+				console.warn(
+					`[rules-engine] Rule ${getCollectionRuleCode(rule)} has no resolvable kind`
+				);
+				continue;
+			}
+
+			const handler = ruleHandlerRegistry[ruleKind];
 			if (!handler) {
 				console.warn(
-					`[rules-engine] No handler registered for rule: ${rule.name}`
+					`[rules-engine] No handler registered for kind=${ruleKind} code=${getCollectionRuleCode(rule)}`
 				);
 				continue;
 			}

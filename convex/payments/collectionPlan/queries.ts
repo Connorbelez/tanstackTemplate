@@ -1,21 +1,34 @@
 import { v } from "convex/values";
 import { internalQuery } from "../../_generated/server";
+import {
+	compareCollectionRules,
+	isCollectionRuleActive,
+	isCollectionRuleEffectiveAt,
+	matchesCollectionRuleScope,
+} from "./ruleContract";
 
 /**
- * Returns all enabled collection rules for a given trigger type,
- * sorted by priority (ascending) via the by_trigger index.
+ * Returns all active collection rules for a given trigger type, filtered by
+ * optional scope and effective window, then sorted deterministically.
  */
 export const getEnabledRules = internalQuery({
 	args: {
+		asOfMs: v.optional(v.number()),
+		mortgageId: v.optional(v.id("mortgages")),
 		trigger: v.union(v.literal("schedule"), v.literal("event")),
 	},
-	handler: async (ctx, { trigger }) => {
-		return await ctx.db
+	handler: async (ctx, { trigger, mortgageId, asOfMs }) => {
+		const ruleCandidates = await ctx.db
 			.query("collectionRules")
-			.withIndex("by_trigger", (q) =>
-				q.eq("trigger", trigger).eq("enabled", true)
-			)
+			.withIndex("by_trigger", (q) => q.eq("trigger", trigger))
 			.collect();
+
+		const effectiveAt = asOfMs ?? Date.now();
+		return ruleCandidates
+			.filter((rule) => isCollectionRuleActive(rule))
+			.filter((rule) => isCollectionRuleEffectiveAt(rule, effectiveAt))
+			.filter((rule) => matchesCollectionRuleScope(rule, mortgageId))
+			.sort(compareCollectionRules);
 	},
 });
 
@@ -109,6 +122,30 @@ export const getPlanEntriesByStatus = internalQuery({
 		}
 
 		return await query.collect();
+	},
+});
+
+/**
+ * Returns due `planned` collection plan entries up to a bounded limit.
+ *
+ * This is the production-safe scheduler selection path for the page-03
+ * execution spine. It intentionally returns only rows that are still in the
+ * `planned` state so cron reruns naturally skip already-consumed work.
+ */
+export const getDuePlannedEntries = internalQuery({
+	args: {
+		asOf: v.number(),
+		limit: v.optional(v.number()),
+	},
+	handler: async (ctx, { asOf, limit }) => {
+		const boundedLimit = Math.max(1, Math.min(limit ?? 25, 100));
+
+		return await ctx.db
+			.query("collectionPlanEntries")
+			.withIndex("by_status_scheduled_date", (q) =>
+				q.eq("status", "planned").lte("scheduledDate", asOf)
+			)
+			.take(boundedLimit);
 	},
 });
 

@@ -24,6 +24,17 @@ crons.daily(
 	internal.payments.obligations.crons.processObligationTransitions
 );
 
+// Collection plan execution spine: discover due planned entries and execute
+// them through the canonical page-02 contract. Runs in bounded batches and
+// relies on plan-entry consumption plus business-layer idempotency for replay
+// safety across cron reruns.
+crons.interval(
+	"collection plan execution spine",
+	{ minutes: 15 },
+	internal.payments.collectionPlan.runner.processDuePlanEntries,
+	{}
+);
+
 // Dispersal self-healing: detect settled obligations missing dispersal entries.
 // Runs every 15 minutes to catch scheduler.runAfter(0) failures quickly.
 // See Tech Design §6.4 and Integration Foot Gun I1.

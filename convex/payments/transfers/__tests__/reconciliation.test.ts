@@ -8,6 +8,10 @@
  */
 
 import { describe, expect, it } from "vitest";
+import type { Id } from "../../../_generated/dataModel";
+import type { QueryCtx } from "../../../_generated/server";
+import { checkOrphanedConfirmedTransfers } from "../../cashLedger/transferReconciliation";
+import { cashReceiptPostingGroupId } from "../collectionAttemptReconciliation";
 
 // ── Constants (mirrored from reconciliation.ts) ─────────────────────
 
@@ -85,24 +89,118 @@ describe("isFreshTransfer", () => {
 
 // ── Orphan Detection Logic ──────────────────────────────────────────
 
+interface FakeTransferRequest {
+	_creationTime: number;
+	_id: Id<"transferRequests">;
+	amount: number;
+	collectionAttemptId?: Id<"collectionAttempts">;
+	confirmedAt?: number;
+	direction: "inbound" | "outbound";
+	mortgageId?: Id<"mortgages">;
+	obligationId?: Id<"obligations">;
+	status: "confirmed";
+}
+
+interface FakeCollectionAttempt {
+	_id: Id<"collectionAttempts">;
+	status: "confirmed" | "reversed";
+}
+
+interface FakeJournalEntry {
+	_id: Id<"cash_ledger_journal_entries">;
+	attemptId?: Id<"collectionAttempts">;
+	entryType: "CASH_RECEIVED" | "LENDER_PAYOUT_SENT" | "REVERSAL";
+	postingGroupId?: string;
+	transferRequestId?: Id<"transferRequests">;
+}
+
+function createTransferReconciliationCtx(args: {
+	attempts?: FakeCollectionAttempt[];
+	entries?: FakeJournalEntry[];
+	transfers: FakeTransferRequest[];
+}): Pick<QueryCtx, "db"> {
+	return {
+		db: {
+			get: async (id) =>
+				args.attempts?.find((attempt) => attempt._id === id) ?? null,
+			query: (table: string) => ({
+				withIndex: () => ({
+					collect: async () => {
+						if (table === "transferRequests") {
+							return args.transfers;
+						}
+						if (table === "cash_ledger_journal_entries") {
+							return args.entries ?? [];
+						}
+						return [];
+					},
+				}),
+			}),
+		},
+	};
+}
+
 describe("orphan detection", () => {
-	it("confirmed transfer with collectionAttemptId is NOT orphaned (bridged)", () => {
-		// The reconciliation cron skips transfers with collectionAttemptId
+	it("treats attempt-linked inbound transfers as healthy when the matching cash receipt exists", async () => {
+		const now = Date.now();
+		const attemptId = "attempt_001" as Id<"collectionAttempts">;
+		const transferId = "transfer_001" as Id<"transferRequests">;
 		const transfer = {
-			status: "confirmed",
-			collectionAttemptId: "attempt_001",
+			_id: transferId,
+			_creationTime: now - 10 * 60 * 1000,
+			amount: 50_000,
+			collectionAttemptId: attemptId,
+			confirmedAt: now - 10 * 60 * 1000,
+			direction: "inbound" as const,
+			status: "confirmed" as const,
 		};
-		const isBridged = !!transfer.collectionAttemptId;
-		expect(isBridged).toBe(true);
+		const ctx = createTransferReconciliationCtx({
+			attempts: [{ _id: attemptId, status: "confirmed" }],
+			entries: [
+				{
+					_id: "entry_001" as Id<"cash_ledger_journal_entries">,
+					attemptId,
+					entryType: "CASH_RECEIVED",
+					postingGroupId: cashReceiptPostingGroupId(attemptId),
+					transferRequestId: transferId,
+				},
+			],
+			transfers: [transfer],
+		});
+
+		const result = await checkOrphanedConfirmedTransfers(ctx, {
+			nowMs: now,
+		});
+
+		expect(result.isHealthy).toBe(true);
+		expect(result.count).toBe(0);
 	});
 
-	it("confirmed transfer without collectionAttemptId IS a candidate for orphan check", () => {
+	it("treats non-attempt-linked confirmed transfers as orphaned when no journal entry exists", async () => {
+		const now = Date.now();
 		const transfer = {
-			status: "confirmed",
-			collectionAttemptId: undefined,
+			_id: "transfer_002" as Id<"transferRequests">,
+			_creationTime: now - 10 * 60 * 1000,
+			amount: 50_000,
+			confirmedAt: now - 10 * 60 * 1000,
+			direction: "inbound" as const,
+			status: "confirmed" as const,
 		};
-		const isBridged = !!transfer.collectionAttemptId;
-		expect(isBridged).toBe(false);
+		const ctx = createTransferReconciliationCtx({
+			transfers: [transfer],
+		});
+
+		const result = await checkOrphanedConfirmedTransfers(ctx, {
+			nowMs: now,
+		});
+
+		expect(result.isHealthy).toBe(false);
+		expect(result.count).toBe(1);
+		expect(result.items[0]).toMatchObject({
+			transferRequestId: transfer._id,
+			direction: "inbound",
+			amount: 50_000,
+		});
 	});
 
 	it("only confirmed transfers are checked (not pending, failed, etc.)", () => {
