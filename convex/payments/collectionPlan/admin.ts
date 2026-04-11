@@ -32,6 +32,7 @@ import { workoutPlanInstallmentInputValidator } from "./workoutContract";
 
 const collectionPlanEntryStatusValidator = v.union(
 	v.literal("planned"),
+	v.literal("provider_scheduled"),
 	v.literal("executing"),
 	v.literal("completed"),
 	v.literal("cancelled"),

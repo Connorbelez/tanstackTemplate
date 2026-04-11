@@ -332,7 +332,7 @@ Single-entry reversal for transfer-backed payments. Validates `transferRequestId
 
 ## 5. Query API (Frontend Integration)
 
-Public queries use `cashLedgerQuery` from fluent-convex, which requires `payment:view` permission.
+Public queries use `cashLedgerQuery` from fluent-convex. The current wrapper composes `adminQuery` with `cash_ledger:view`; the target RBAC policy is documented in [docs/architecture/rbac-and-permissions.md](./architecture/rbac-and-permissions.md).
 
 ### `getAccountBalance({ accountId })`
 Returns the current balance of a single cash ledger account.
@@ -721,7 +721,7 @@ export const getAccountBalance = cashLedgerQuery
   .public();
 ```
 
-`cashLedgerQuery` requires `payment:view` permission via fluent-convex middleware.
+`cashLedgerQuery` is a staff-scoped chain that currently layers `adminQuery` with `cash_ledger:view`. During RBAC realignment, `admin:access` is being standardized as the admin super-permission, but explicit FairLend staff boundaries still remain separate from raw permission checks.
 
 ### Mutation Access
 

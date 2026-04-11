@@ -31,6 +31,7 @@ export const processDuePlanEntries = internalAction({
 	args: {
 		asOf: v.optional(v.number()),
 		batchSize: v.optional(v.number()),
+		mortgageId: v.optional(v.id("mortgages")),
 	},
 	handler: async (ctx, args): Promise<DuePlanEntriesSummary> => {
 		const requestedAt = args.asOf ?? Date.now();
@@ -40,6 +41,7 @@ export const processDuePlanEntries = internalAction({
 			{
 				asOf: requestedAt,
 				limit: batchSize,
+				mortgageId: args.mortgageId,
 			}
 		);
 

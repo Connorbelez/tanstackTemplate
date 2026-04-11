@@ -83,6 +83,7 @@ export type PlanEntryExecutionOutcome =
 
 export type PlanEntryStatus =
 	| "planned"
+	| "provider_scheduled"
 	| "executing"
 	| "completed"
 	| "cancelled"

@@ -105,6 +105,7 @@ export const getPlanEntriesByStatus = internalQuery({
 	args: {
 		status: v.union(
 			v.literal("planned"),
+			v.literal("provider_scheduled"),
 			v.literal("executing"),
 			v.literal("completed"),
 			v.literal("cancelled"),
@@ -138,14 +139,33 @@ export const getDuePlannedEntries = internalQuery({
 	args: {
 		asOf: v.number(),
 		limit: v.optional(v.number()),
+		mortgageId: v.optional(v.id("mortgages")),
 	},
-	handler: async (ctx, { asOf, limit }) => {
+	handler: async (ctx, { asOf, limit, mortgageId }) => {
 		const boundedLimit = Math.max(1, Math.min(limit ?? 25, 100));
 
-		return await ctx.db
-			.query("collectionPlanEntries")
-			.withIndex("by_status_scheduled_date", (q) =>
-				q.eq("status", "planned").lte("scheduledDate", asOf)
+		const duePlannedEntries =
+			mortgageId === undefined
+				? ctx.db
+						.query("collectionPlanEntries")
+						.withIndex("by_status_scheduled_date", (q) =>
+							q.eq("status", "planned").lte("scheduledDate", asOf)
+						)
+				: ctx.db
+						.query("collectionPlanEntries")
+						.withIndex("by_mortgage_status_scheduled", (q) =>
+							q
+								.eq("mortgageId", mortgageId)
+								.eq("status", "planned")
+								.lte("scheduledDate", asOf)
+						);
+
+		return await duePlannedEntries
+			.filter((q) =>
+				q.or(
+					q.eq(q.field("executionMode"), undefined),
+					q.eq(q.field("executionMode"), "app_owned")
+				)
 			)
 			.filter((q) =>
 				q.or(

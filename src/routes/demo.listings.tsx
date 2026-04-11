@@ -1,5 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { ListingsClient } from "#/components/demo/listings/ListingsClient";
+import { createFileRoute, Outlet } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/demo/listings")({
 	ssr: false,
@@ -12,7 +11,7 @@ function ListingsDemo() {
 			className="flex min-h-[calc(100vh-4rem)] w-full flex-col"
 			data-testid="listings-page"
 		>
-			<ListingsClient />
+			<Outlet />
 		</section>
 	);
 }

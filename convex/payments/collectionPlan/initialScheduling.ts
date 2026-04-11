@@ -12,7 +12,11 @@ import {
 
 const MS_PER_DAY = 86_400_000;
 
-const LIVE_COVERING_PLAN_ENTRY_STATUSES = ["planned", "executing"] as const;
+const LIVE_COVERING_PLAN_ENTRY_STATUSES = [
+	"planned",
+	"provider_scheduled",
+	"executing",
+] as const;
 
 const DEFAULT_SCHEDULABLE_OBLIGATION_STATUSES = new Set<
 	Doc<"obligations">["status"]
@@ -29,6 +33,9 @@ export type CollectionPlanEntrySource =
 export interface CreateCollectionPlanEntryArgs {
 	amount: number;
 	createdByRuleId?: Id<"collectionRules">;
+	executionMode?: "app_owned" | "provider_managed";
+	externalCollectionScheduleId?: Id<"externalCollectionSchedules">;
+	externalOccurrenceOrdinal?: number;
 	method: string;
 	obligationIds: Id<"obligations">[];
 	rescheduledFromId?: Id<"collectionPlanEntries">;
@@ -44,7 +51,13 @@ export interface CreateCollectionPlanEntryArgs {
 	retryOfId?: Id<"collectionPlanEntries">;
 	scheduledDate: number;
 	source: CollectionPlanEntrySource;
-	status: "planned" | "executing" | "completed" | "cancelled" | "rescheduled";
+	status:
+		| "planned"
+		| "provider_scheduled"
+		| "executing"
+		| "completed"
+		| "cancelled"
+		| "rescheduled";
 	workoutPlanId?: Id<"workoutPlans">;
 }
 
@@ -83,6 +96,7 @@ export async function createEntryImpl(
 	ctx: Pick<MutationCtx, "db">,
 	args: CreateCollectionPlanEntryArgs
 ): Promise<Id<"collectionPlanEntries">> {
+	const executionMode = args.executionMode ?? "app_owned";
 	const [firstObligationId] = args.obligationIds;
 	if (!firstObligationId) {
 		throw new ConvexError(
@@ -110,6 +124,23 @@ export async function createEntryImpl(
 			);
 		}
 	}
+	if (args.status === "provider_scheduled") {
+		if (executionMode !== "provider_managed") {
+			throw new ConvexError(
+				'Provider-scheduled collection plan entries require executionMode = "provider_managed".'
+			);
+		}
+		if (!args.externalCollectionScheduleId) {
+			throw new ConvexError(
+				"Provider-scheduled collection plan entries require externalCollectionScheduleId."
+			);
+		}
+		if (args.externalOccurrenceOrdinal === undefined) {
+			throw new ConvexError(
+				"Provider-scheduled collection plan entries require externalOccurrenceOrdinal."
+			);
+		}
+	}
 
 	return await ctx.db.insert("collectionPlanEntries", {
 		mortgageId: firstObligation.mortgageId,
@@ -118,6 +149,9 @@ export async function createEntryImpl(
 		method: args.method,
 		scheduledDate: args.scheduledDate,
 		status: args.status,
+		executionMode,
+		externalCollectionScheduleId: args.externalCollectionScheduleId,
+		externalOccurrenceOrdinal: args.externalOccurrenceOrdinal,
 		source: args.source,
 		createdByRuleId: args.createdByRuleId,
 		retryOfId: args.retryOfId,

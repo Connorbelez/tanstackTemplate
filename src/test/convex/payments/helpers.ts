@@ -164,10 +164,12 @@ export async function seedRecentFailedInboundTransfer(
 interface SeedPlanEntryOptions {
 	obligationIds: Id<"obligations">[];
 	amount: number;
+	executionMode?: "app_owned" | "provider_managed";
 	method: string;
 	scheduledDate?: number;
 	status?:
 		| "planned"
+		| "provider_scheduled"
 		| "executing"
 		| "completed"
 		| "cancelled"
@@ -223,15 +225,20 @@ export async function seedPlanEntry(
 			}
 		}
 
-		return ctx.db.insert("collectionPlanEntries", {
-			mortgageId: firstObligation.mortgageId,
-			obligationIds: opts.obligationIds,
-			amount: opts.amount,
-			method: opts.method,
-			scheduledDate: opts.scheduledDate ?? Date.now(),
-			status: opts.status ?? "planned",
-			source: opts.source ?? "default_schedule",
-			createdByRuleId: opts.createdByRuleId,
+			return ctx.db.insert("collectionPlanEntries", {
+				mortgageId: firstObligation.mortgageId,
+				obligationIds: opts.obligationIds,
+				amount: opts.amount,
+				method: opts.method,
+				scheduledDate: opts.scheduledDate ?? Date.now(),
+				status: opts.status ?? "planned",
+				executionMode:
+					opts.executionMode ??
+					((opts.status ?? "planned") === "provider_scheduled"
+						? "provider_managed"
+						: "app_owned"),
+				source: opts.source ?? "default_schedule",
+				createdByRuleId: opts.createdByRuleId,
 			retryOfId: opts.retryOfId,
 			workoutPlanId: opts.workoutPlanId,
 			rescheduledFromId: opts.rescheduledFromId,

@@ -43,7 +43,6 @@ import {
 	executePlanEntryInputValidator,
 	normalizeExecutionIdempotencyKey,
 	type StagePlanEntryExecutionResult,
-	type TransferHandoffRequest,
 } from "./executionContract";
 import {
 	classifyExecutionEligibility,
@@ -297,32 +296,29 @@ const stagePlanEntryExecution = convex
 						planEntry,
 					});
 
-					recoveredTransferRequestId = await createTransferRequestRecord(
-						ctx,
-						{
-							direction: "inbound",
-							transferType: obligationTypeToTransferType(
-								transferHandoffRequest.primaryObligationType
-							),
-							amount: transferHandoffRequest.amount,
-							counterpartyType: "borrower",
-							counterpartyId: transferHandoffRequest.counterpartyId,
-							mortgageId: transferHandoffRequest.mortgageId,
-							obligationId: transferHandoffRequest.obligationIds[0],
-							planEntryId: transferHandoffRequest.planEntryId,
-							collectionAttemptId: transferHandoffRequest.collectionAttemptId,
-							borrowerId: transferHandoffRequest.borrowerId,
-							providerCode: transferHandoffRequest.providerCode,
-							idempotencyKey: buildTransferHandoffIdempotencyKey(
-								transferHandoffRequest.planEntryId
-							),
-							metadata: buildTransferHandoffMetadata(
-								transferHandoffRequest,
-								transferHandoffRequest.primaryObligationType
-							),
-							source: transferHandoffRequest.source,
-						}
-					);
+					recoveredTransferRequestId = await createTransferRequestRecord(ctx, {
+						direction: "inbound",
+						transferType: obligationTypeToTransferType(
+							transferHandoffRequest.primaryObligationType
+						),
+						amount: transferHandoffRequest.amount,
+						counterpartyType: "borrower",
+						counterpartyId: transferHandoffRequest.counterpartyId,
+						mortgageId: transferHandoffRequest.mortgageId,
+						obligationId: transferHandoffRequest.obligationIds[0],
+						planEntryId: transferHandoffRequest.planEntryId,
+						collectionAttemptId: transferHandoffRequest.collectionAttemptId,
+						borrowerId: transferHandoffRequest.borrowerId,
+						providerCode: transferHandoffRequest.providerCode,
+						idempotencyKey: buildTransferHandoffIdempotencyKey(
+							transferHandoffRequest.planEntryId
+						),
+						metadata: buildTransferHandoffMetadata(
+							transferHandoffRequest,
+							transferHandoffRequest.primaryObligationType
+						),
+						source: transferHandoffRequest.source,
+					});
 
 					await ctx.db.patch(existingAttempt._id, {
 						transferRequestId: recoveredTransferRequestId,
@@ -509,9 +505,9 @@ const stagePlanEntryExecution = convex
 			previousState: "none",
 			newState: "initiated",
 			outcome: "transitioned",
-			actorId: executionSource.actorId ?? "system",
-			actorType: executionSource.actorType,
-			channel: executionSource.channel,
+			actorId: transferHandoffRequest.source.actorId ?? "system",
+			actorType: transferHandoffRequest.source.actorType,
+			channel: transferHandoffRequest.source.channel,
 			payload: {
 				amount: planEntry.amount,
 				idempotencyKey: normalizedIdempotencyKey,

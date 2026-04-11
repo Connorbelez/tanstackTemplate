@@ -1,7 +1,12 @@
-import { cronJobs } from "convex/server";
+import { cronJobs, makeFunctionReference } from "convex/server";
 import { internal } from "./_generated/api";
 
 const crons = cronJobs();
+const providerManagedSchedulePollingRef = makeFunctionReference<
+	"action",
+	{ asOf?: number; limit?: number },
+	Promise<unknown>
+>("payments/recurringSchedules/poller:pollProviderManagedSchedules");
 
 // Audit trail crons (outbox processor + retention) are managed by the
 // auditTrail component — see convex/components/auditTrail/crons.ts
@@ -32,6 +37,17 @@ crons.interval(
 	"collection plan execution spine",
 	{ minutes: 15 },
 	internal.payments.collectionPlan.runner.processDuePlanEntries,
+	{}
+);
+
+// Provider-managed schedule polling spine: keeps externally managed recurring
+// schedules in sync, materializes missed webhooks, and never initiates draws
+// itself. This runs alongside the app-owned execution spine and only polls
+// schedules that have already been delegated to a provider-managed rail.
+crons.interval(
+	"provider-managed schedule polling spine",
+	{ minutes: 15 },
+	providerManagedSchedulePollingRef,
 	{}
 );
 

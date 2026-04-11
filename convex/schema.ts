@@ -75,6 +75,11 @@ import {
 } from "./payments/collectionPlan/workoutContract";
 import { payoutFrequencyValidator } from "./payments/payout/validators";
 import {
+	collectionExecutionModeValidator,
+	externalCollectionScheduleStatusValidator,
+	externalOccurrenceChannelValidator,
+} from "./payments/recurringSchedules/validators";
+import {
 	counterpartyTypeValidator,
 	directionValidator,
 	manualSettlementValidator,
@@ -534,6 +539,14 @@ export default defineSchema({
 		// ─── Servicing ───
 		annualServicingRate: v.optional(v.number()),
 
+		// ─── Collection execution ownership ───
+		collectionExecutionMode: v.optional(collectionExecutionModeValidator),
+		collectionExecutionProviderCode: v.optional(providerCodeValidator),
+		activeExternalCollectionScheduleId: v.optional(
+			v.id("externalCollectionSchedules")
+		),
+		collectionExecutionUpdatedAt: v.optional(v.number()),
+
 		// ─── Key dates ───
 		interestAdjustmentDate: v.string(),
 		termStartDate: v.string(),
@@ -563,7 +576,11 @@ export default defineSchema({
 		.index("by_prior_mortgage", ["priorMortgageId"])
 		.index("by_simulation", ["simulationId"])
 		.index("by_org", ["orgId"])
-		.index("by_org_status", ["orgId", "status"]),
+		.index("by_org_status", ["orgId", "status"])
+		.index("by_collection_execution_mode", [
+			"collectionExecutionMode",
+			"status",
+		]),
 
 	mortgageBorrowers: defineTable({
 		mortgageId: v.id("mortgages"),
@@ -804,11 +821,23 @@ export default defineSchema({
 		scheduledDate: v.number(), // unix timestamp
 		status: v.union(
 			v.literal("planned"),
+			v.literal("provider_scheduled"),
 			v.literal("executing"),
 			v.literal("completed"),
 			v.literal("cancelled"),
 			v.literal("rescheduled")
 		),
+		executionMode: v.optional(collectionExecutionModeValidator),
+		externalCollectionScheduleId: v.optional(
+			v.id("externalCollectionSchedules")
+		),
+		externalOccurrenceOrdinal: v.optional(v.number()),
+		externalOccurrenceRef: v.optional(v.string()),
+		externalProviderEventStatus: v.optional(v.string()),
+		externalProviderReason: v.optional(v.string()),
+		externallyManagedAt: v.optional(v.number()),
+		externalLastReportedAt: v.optional(v.number()),
+		externalLastIngestedVia: v.optional(externalOccurrenceChannelValidator),
 		source: v.union(
 			v.literal("default_schedule"),
 			v.literal("retry_rule"),
@@ -865,6 +894,24 @@ export default defineSchema({
 		.index("by_workout_supersession", [
 			"supersededByWorkoutPlanId",
 			"supersededAt",
+		])
+		.index("by_execution_mode_status_scheduled", [
+			"executionMode",
+			"status",
+			"scheduledDate",
+		])
+		.index("by_external_occurrence_ref", ["externalOccurrenceRef"])
+		.index("by_external_schedule_occurrence_ref", [
+			"externalCollectionScheduleId",
+			"externalOccurrenceRef",
+		])
+		.index("by_external_schedule_ordinal", [
+			"externalCollectionScheduleId",
+			"externalOccurrenceOrdinal",
+		])
+		.index("by_external_schedule_date", [
+			"externalCollectionScheduleId",
+			"scheduledDate",
 		]),
 
 	collectionRules: defineTable({
@@ -927,7 +974,9 @@ export default defineSchema({
 				v.literal("system_scheduler"),
 				v.literal("admin_manual"),
 				v.literal("workflow_replay"),
-				v.literal("migration_backfill")
+				v.literal("migration_backfill"),
+				v.literal("provider_webhook"),
+				v.literal("provider_poller")
 			)
 		),
 		executionRequestedAt: v.optional(v.number()),
@@ -945,11 +994,54 @@ export default defineSchema({
 		cancelledAt: v.optional(v.number()), // system timestamp: Unix ms
 		reversedAt: v.optional(v.number()), // system timestamp: Unix ms
 		failureReason: v.optional(v.string()),
+		providerLifecycleStatus: v.optional(v.string()),
+		providerLifecycleReason: v.optional(v.string()),
+		providerLastReportedAt: v.optional(v.number()),
+		providerLastReportedVia: v.optional(externalOccurrenceChannelValidator),
+		providerOccurrenceKey: v.optional(v.string()),
 	})
 		.index("by_plan_entry", ["planEntryId"])
 		.index("by_transfer_request", ["transferRequestId"])
 		.index("by_mortgage_status", ["mortgageId", "status", "initiatedAt"])
-		.index("by_status", ["status"]),
+		.index("by_status", ["status"])
+		.index("by_provider_occurrence_key", ["providerOccurrenceKey"]),
+
+	externalCollectionSchedules: defineTable({
+		status: externalCollectionScheduleStatusValidator,
+		machineContext: v.optional(v.any()),
+		lastTransitionAt: v.optional(v.number()),
+		mortgageId: v.id("mortgages"),
+		borrowerId: v.id("borrowers"),
+		providerCode: providerCodeValidator,
+		bankAccountId: v.id("bankAccounts"),
+		externalScheduleRef: v.optional(v.string()),
+		activationIdempotencyKey: v.string(),
+		startDate: v.number(),
+		endDate: v.number(),
+		cadence: v.string(),
+		coveredFromPlanEntryId: v.id("collectionPlanEntries"),
+		coveredToPlanEntryId: v.id("collectionPlanEntries"),
+		activatedAt: v.optional(v.number()),
+		cancelledAt: v.optional(v.number()),
+		lastSyncedAt: v.optional(v.number()),
+		lastSyncCursor: v.optional(v.string()),
+		lastSyncAttemptAt: v.optional(v.number()),
+		nextPollAt: v.optional(v.number()),
+		syncLeaseOwner: v.optional(v.string()),
+		syncLeaseExpiresAt: v.optional(v.number()),
+		lastSyncErrorAt: v.optional(v.number()),
+		lastSyncErrorMessage: v.optional(v.string()),
+		consecutiveSyncFailures: v.number(),
+		lastProviderScheduleStatus: v.optional(v.string()),
+		providerData: v.optional(v.record(v.string(), v.any())),
+		source: v.string(),
+		createdAt: v.number(),
+	})
+		.index("by_mortgage", ["mortgageId", "createdAt"])
+		.index("by_provider_ref", ["providerCode", "externalScheduleRef"])
+		.index("by_activation_key", ["activationIdempotencyKey"])
+		.index("by_status", ["status", "createdAt"])
+		.index("by_status_and_next_poll", ["status", "nextPollAt"]),
 
 	// ══════════════════════════════════════════════════════════
 	// PROVISIONAL FLOW
@@ -1946,6 +2038,72 @@ export default defineSchema({
 	// ══════════════════════════════════════════════════════════
 	// DEMO TABLES
 	// ══════════════════════════════════════════════════════════
+
+	demo_collection_execution_workspaces: defineTable({
+		ownerAuthId: v.string(),
+		workspaceKey: v.string(),
+		executionMode: collectionExecutionModeValidator,
+		paymentRail: providerCodeValidator,
+		mortgageId: v.id("mortgages"),
+		borrowerId: v.id("borrowers"),
+		brokerId: v.id("brokers"),
+		propertyId: v.id("properties"),
+		bankAccountId: v.id("bankAccounts"),
+		externalCollectionScheduleId: v.optional(
+			v.id("externalCollectionSchedules")
+		),
+		currentMonthIndex: v.number(),
+		currentDate: v.string(),
+		startDate: v.string(),
+		createdAt: v.number(),
+		updatedAt: v.number(),
+		lastAdvancedAt: v.optional(v.number()),
+	})
+		.index("by_owner_workspace", ["ownerAuthId", "workspaceKey"])
+		.index("by_mortgage", ["mortgageId"]),
+
+	demo_collection_external_occurrences: defineTable({
+		workspaceId: v.id("demo_collection_execution_workspaces"),
+		planEntryId: v.id("collectionPlanEntries"),
+		externalCollectionScheduleId: v.id("externalCollectionSchedules"),
+		monthIndex: v.number(),
+		externalScheduleRef: v.string(),
+		externalOccurrenceRef: v.string(),
+		providerRef: v.string(),
+		scheduledDate: v.string(),
+		status: v.union(
+			v.literal("Future"),
+			v.literal("Pending"),
+			v.literal("Approved"),
+			v.literal("Declined"),
+			v.literal("Chargeback")
+		),
+		statusReason: v.optional(v.string()),
+		lastDeliveredVia: v.optional(externalOccurrenceChannelValidator),
+		lastDeliveredAt: v.optional(v.number()),
+		history: v.array(
+			v.object({
+				status: v.union(
+					v.literal("Future"),
+					v.literal("Pending"),
+					v.literal("Approved"),
+					v.literal("Declined"),
+					v.literal("Chargeback")
+				),
+				deliveredVia: externalOccurrenceChannelValidator,
+				occurredAt: v.number(),
+				reason: v.optional(v.string()),
+			})
+		),
+		createdAt: v.number(),
+		updatedAt: v.number(),
+	})
+		.index("by_workspace_month", ["workspaceId", "monthIndex"])
+		.index("by_plan_entry", ["planEntryId"])
+		.index("by_external_schedule", [
+			"externalCollectionScheduleId",
+			"monthIndex",
+		]),
 
 	products: defineTable({
 		title: v.string(),

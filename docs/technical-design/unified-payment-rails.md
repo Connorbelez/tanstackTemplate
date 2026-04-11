@@ -505,16 +505,16 @@ For each mortgage with status "funded":
 
 ### 5.4 Authorization Integration
 
-Payment operations must respect the three-layer auth model:
+Payment operations must respect the three-layer auth model. The canonical FairLend RBAC vocabulary now lives in [docs/architecture/rbac-and-permissions.md](../architecture/rbac-and-permissions.md).
 
 | Operation | WorkOS RBAC | Convex Ownership | GT Guard |
 |-----------|-------------|-------------------|----------|
-| View obligations | `mortgage:read` | `canAccessMortgage(borrowerId)` | — |
-| Initiate manual payment | `payment:write` | `canAccessMortgage(mortgageId)` | Obligation must be in `became_due` or `grace_period_expired` |
-| Approve PAD agreement | `payment:admin` | — | PAD agreement must be in `draft` |
-| View dispersals | `dispersal:read` | `canAccessAccrual(lenderId)` | — |
-| Initiate lender payout | `payout:admin` | — | Dispersal must be past hold period |
-| Process refund | `payment:admin` | — | Attempt must be in `settled` and within reversal window |
+| Borrower payment self-service reads | `payment:view_own` | `canAccessMortgage(mortgageId)` | — |
+| FairLend staff payment reads | `payment:view` or `admin:access` | Staff-only routes should still use `adminQuery` / `requireFairLendAdmin` when the surface is globally scoped | — |
+| Cash ledger reads | `cash_ledger:view` or `admin:access` | Resource checks where the endpoint is not purely staff-global | — |
+| Manual payment execution and reversals | `payment:manage` or `admin:access` | Depends on the operation target | Obligation / transfer must be in a valid governed state |
+| Retry or cancel transfer operations | `payment:retry`, `payment:cancel`, or `admin:access` | Depends on the operation target | Transfer must be in a retryable / cancellable state |
+| View dispersals | `dispersal:view` or `admin:access` | `canAccessAccrual(lenderId)` | — |
 
 ---
 

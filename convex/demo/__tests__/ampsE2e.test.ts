@@ -25,38 +25,59 @@ const ADMIN_IDENTITY = {
 };
 
 function createHarness() {
+	const previousGtHashchain = process.env.DISABLE_GT_HASHCHAIN;
+	const previousCashLedgerHashchain = process.env.DISABLE_CASH_LEDGER_HASHCHAIN;
 	process.env.DISABLE_GT_HASHCHAIN = "true";
 	process.env.DISABLE_CASH_LEDGER_HASHCHAIN = "true";
 	const t = convexTest(schema, convexModules);
 	auditLogTest.register(t, "auditLog");
-	return t;
+	return {
+		t,
+		restoreEnv() {
+			if (previousGtHashchain === undefined) {
+				Reflect.deleteProperty(process.env, "DISABLE_GT_HASHCHAIN");
+			} else {
+				process.env.DISABLE_GT_HASHCHAIN = previousGtHashchain;
+			}
+
+			if (previousCashLedgerHashchain === undefined) {
+				Reflect.deleteProperty(process.env, "DISABLE_CASH_LEDGER_HASHCHAIN");
+			} else {
+				process.env.DISABLE_CASH_LEDGER_HASHCHAIN = previousCashLedgerHashchain;
+			}
+		},
+	};
 }
 
 describe("demo.ampsE2e", () => {
 	it("seeds a minimal offline lifecycle scenario without bank accounts", async () => {
-		const t = createHarness();
+		const { restoreEnv, t } = createHarness();
 		const admin = t.withIdentity(ADMIN_IDENTITY);
 		const runId = `seed-${Date.now()}`;
 
-		const seeded = await admin.mutation(
-			api.demo.ampsE2e.seedOfflineLifecycleScenario,
-			{ runId }
-		);
+		try {
+			const seeded = await admin.mutation(
+				api.demo.ampsE2e.seedOfflineLifecycleScenario,
+				{ runId }
+			);
 
-		expect(seeded.state.exists).toBe(true);
-		expect(seeded.state.stage).toBe("seeded");
-		expect(seeded.state.planEntry?.method).toBe("manual_review");
-		expect(seeded.state.rowCounts.planEntries).toBe(1);
+			expect(seeded.state.exists).toBe(true);
+			expect(seeded.state.stage).toBe("seeded");
+			expect(seeded.state.planEntry?.method).toBe("manual_review");
+			expect(seeded.state.rowCounts.planEntries).toBe(1);
 
-		const bankAccounts = await t.run(async (ctx) => {
-			return ctx.db.query("bankAccounts").collect();
-		});
-		expect(bankAccounts).toHaveLength(0);
+			const bankAccounts = await t.run(async (ctx) => {
+				return ctx.db.query("bankAccounts").collect();
+			});
+			expect(bankAccounts).toHaveLength(0);
+		} finally {
+			restoreEnv();
+		}
 	});
 
 	it("runs the full inbound-to-outbound offline lifecycle for a run-scoped scenario", async () => {
 		vi.useFakeTimers();
-		const t = createHarness();
+		const { restoreEnv, t } = createHarness();
 		const admin = t.withIdentity(ADMIN_IDENTITY);
 		const runId = `full-${Date.now()}`;
 
@@ -119,12 +140,13 @@ describe("demo.ampsE2e", () => {
 			expect(state.dispersal?.status).toBe("disbursed");
 		} finally {
 			vi.useRealTimers();
+			restoreEnv();
 		}
 	});
 
 	it("cleanup removes partial scenarios and is replay-safe", async () => {
 		vi.useFakeTimers();
-		const t = createHarness();
+		const { restoreEnv, t } = createHarness();
 		const admin = t.withIdentity(ADMIN_IDENTITY);
 		const runId = `cleanup-${Date.now()}`;
 
@@ -161,12 +183,13 @@ describe("demo.ampsE2e", () => {
 			expect(state.stage).toBe("not_seeded");
 		} finally {
 			vi.useRealTimers();
+			restoreEnv();
 		}
 	});
 
 	it("seed replay and payout replay stay idempotent for the same runId", async () => {
 		vi.useFakeTimers();
-		const t = createHarness();
+		const { restoreEnv, t } = createHarness();
 		const admin = t.withIdentity(ADMIN_IDENTITY);
 		const runId = `replay-${Date.now()}`;
 
@@ -217,6 +240,7 @@ describe("demo.ampsE2e", () => {
 			expect(state.outboundTransfer?.status).toBe("pending");
 		} finally {
 			vi.useRealTimers();
+			restoreEnv();
 		}
 	});
 });

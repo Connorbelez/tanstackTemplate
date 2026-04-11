@@ -4,10 +4,12 @@ import type { ActionCtx } from "../../_generated/server";
 import type { PersistedTransferStatus, ProviderCode } from "../transfers/types";
 import type { ReversalResult, ReversalWebhookPayload } from "./types";
 
+type ReversalTransferStatus = PersistedTransferStatus;
+
 interface ReversalTransferRecord {
 	_id: Id<"transferRequests">;
 	collectionAttemptId?: Id<"collectionAttempts">;
-	status: PersistedTransferStatus;
+	status: ReversalTransferStatus;
 }
 
 const REVERSAL_PROVIDER_CODE_MAP: Record<
@@ -38,7 +40,7 @@ async function getTransferByProviderRef(
 	return null;
 }
 
-function isConfirmedLikeTransferStatus(status: PersistedTransferStatus) {
+function isConfirmedLikeTransferStatus(status: ReversalTransferStatus) {
 	return status === "confirmed" || status === "completed";
 }
 
