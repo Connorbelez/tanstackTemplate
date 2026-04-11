@@ -40,6 +40,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
           actorId: string;
           afterState?: string;
           beforeState?: string;
+          canonicalEnvelope?: string;
           entityId: string;
           entityType: string;
           eventType: string;
@@ -58,7 +59,9 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
           _id: string;
           actorId: string;
           afterState?: string;
+          archivedAt?: number;
           beforeState?: string;
+          canonicalEnvelope?: string;
           emitFailures?: number;
           emitted: boolean;
           emittedAt?: number;
@@ -68,6 +71,8 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
           hash: string;
           metadata?: string;
           prevHash: string;
+          retentionUntilAt: number;
+          sinkReference?: string;
           timestamp: number;
         }>,
         Name

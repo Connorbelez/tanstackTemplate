@@ -7,6 +7,9 @@ export type EntityType =
 	| "collectionAttempt"
 	| "deal"
 	| "transfer"
+	| "servicingFeeEntry"
+	| "dispersalCalculationRun"
+	| "auditEvidencePackage"
 	| "provisionalApplication"
 	| "applicationPackage"
 	| "broker"
@@ -149,22 +152,42 @@ export interface AuditJournalEntry {
 	// Source fields flattened (Convex cannot index nested objects)
 	actorId: string;
 	actorType?: ActorType;
+	afterState?: Record<string, unknown>;
+	beforeState?: Record<string, unknown>;
 	channel: CommandChannel;
+	correlationId?: string;
+	delta?: Record<string, unknown>;
+	effectiveDate: string;
 	effectsScheduled?: string[];
 	entityId: string;
 	entityType: EntityType;
+	eventCategory: string;
+	eventId: string;
 	eventType: string;
+	/** Canonical idempotency key for the domain write, when available. */
+	idempotencyKey?: string;
 	ip?: string;
+	/** WorkOS organization id or other legal-entity scope for compliance exports. */
+	legalEntityId?: string;
+	lenderId?: string;
+	/** Linked record IDs that tie the event to related domain/ledger entities. */
+	linkedRecordIds?: Record<string, unknown>;
 	machineVersion?: string;
+	mortgageId?: string;
 	newState: string;
-	/** WorkOS organization id for org-scoped audit queries */
+	obligationId?: string;
 	organizationId?: string;
+	/** WorkOS organization id for org-scoped audit queries */
+	originSystem: string;
 	outcome: "transitioned" | "rejected";
 	payload?: Record<string, unknown>;
 	previousState: string;
 	reason?: string;
+	requestId?: string;
+	sequenceNumber: bigint;
 	sessionId?: string;
 	timestamp: number;
+	transferRequestId?: string;
 }
 
 // ── Entity Type → Table Name Mapping ────────────────────────────────
@@ -175,6 +198,9 @@ export const ENTITY_TABLE_MAP = {
 	collectionAttempt: "collectionAttempts",
 	deal: "deals",
 	transfer: "transferRequests",
+	servicingFeeEntry: "servicingFeeEntries",
+	dispersalCalculationRun: "dispersalCalculationRuns",
+	auditEvidencePackage: "auditEvidencePackages",
 	provisionalApplication: "provisionalApplications",
 	applicationPackage: "applicationPackages",
 	broker: "brokers",

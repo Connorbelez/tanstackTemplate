@@ -22,6 +22,15 @@ import type {
 	TransferType,
 } from "./types";
 
+export interface ManualSettlementDetails {
+	enteredBy?: string;
+	evidenceAttachmentIds?: string[];
+	externalReference?: string;
+	instrumentType: "cash" | "cheque" | "wire" | "journal" | "other";
+	location?: string;
+	settlementOccurredAt: number;
+}
+
 // ---------------------------------------------------------------------------
 // Input contract
 // ---------------------------------------------------------------------------
@@ -38,6 +47,7 @@ export interface TransferRequestInput {
 	direction: TransferDirection;
 	idempotencyKey: string;
 	legNumber?: number;
+	manualSettlement?: ManualSettlementDetails;
 	metadata?: Record<string, unknown>;
 	pipelineId?: string;
 	providerCode: ProviderCode;
@@ -59,7 +69,9 @@ export interface TransferRequestInput {
 
 /** Result of provider initiation */
 export interface InitiateResult {
+	providerData?: Record<string, unknown>;
 	providerRef: string;
+	settledAt?: number;
 	status: "pending" | "confirmed";
 }
 

@@ -10,7 +10,7 @@ crons.interval(
 	internal.internal.processOutbox
 );
 
-// Retention cleanup: runs daily at midnight UTC
+// Retention archival: runs daily at midnight UTC
 crons.daily(
 	"audit-retention-cleanup",
 	{ hourUTC: 0, minuteUTC: 0 },

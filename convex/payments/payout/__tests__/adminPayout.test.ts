@@ -1,4 +1,5 @@
 import { ConvexError } from "convex/values";
+import auditLogTest from "convex-audit-log/test";
 import type { convexTest } from "convex-test";
 import { describe, expect, it } from "vitest";
 import { api } from "../../../_generated/api";
@@ -18,6 +19,13 @@ const modules = convexModules;
 
 const YYYY_MM_DD_RE = /^\d{4}-\d{2}-\d{2}$/;
 const NOT_FOUND_OR_INACTIVE_RE = /not found or not active/;
+
+function createPayoutActionHarness() {
+	process.env.DISABLE_GT_HASHCHAIN = "true";
+	const t = createHarness(modules);
+	auditLogTest.register(t, "auditLog");
+	return t;
+}
 
 // ── Type wrapper for _handler access ─────────────────────────────────
 
@@ -362,12 +370,13 @@ describe("admin payout — component tests", () => {
 
 // ── Integration Tests ───────────────────────────────────────────────
 // These tests invoke triggerImmediatePayout end-to-end via the action API
-// with an admin identity, validating the full flow: posting LENDER_PAYOUT_SENT
-// journal entries, marking dispersal entries disbursed, and updating lastPayoutDate.
+// with an admin identity, validating the transfer-owned payout flow:
+// one outbound transfer per dispersal entry, canonical confirmation,
+// ledger posting from transfer settlement, and transfer-linked entry state.
 
 describe("admin payout — integration tests (triggerImmediatePayout)", () => {
-	it("posts LENDER_PAYOUT_SENT journal entry and marks entries disbursed", async () => {
-		const t = createHarness(modules);
+	it("creates one transfer-owned payout per eligible entry and disburses via transfer confirmation", async () => {
+		const t = createPayoutActionHarness();
 		const seeded = await seedMinimalEntities(t);
 
 		// Pre-create cash ledger accounts required by postLenderPayout
@@ -412,24 +421,34 @@ describe("admin payout — integration tests (triggerImmediatePayout)", () => {
 			);
 			expect(payoutEntries).toHaveLength(1);
 			expect(payoutEntries[0].amount).toBe(5000n);
-			// buildIdempotencyKey("lender-payout-sent", "admin", ...) produces
-			// "cash-ledger:lender-payout-sent:admin:<today>:<lenderId>:<mortgageId>"
-			expect(payoutEntries[0].idempotencyKey).toContain(
-				"cash-ledger:lender-payout-sent:admin:"
-			);
+			expect(payoutEntries[0].transferRequestId).toBeDefined();
 		});
 
-		// Assert: dispersal entry marked as disbursed with payoutDate
+		// Assert: entry linked to a canonical transfer and disbursed via transfer settlement
 		await t.run(async (ctx) => {
 			const entry = await ctx.db.get(entryId);
 			expect(entry).not.toBeNull();
 			expect(entry?.status).toBe("disbursed");
 			expect(entry?.payoutDate).toBeDefined();
+			expect(entry?.transferRequestId).toBeDefined();
+			expect(entry?.processingAt).toBeTypeOf("number");
+			expect(entry?.disbursedAt).toBeTypeOf("number");
+
+			const transfer = entry?.transferRequestId
+				? await ctx.db.get(entry.transferRequestId)
+				: null;
+			expect(transfer?.status).toBe("confirmed");
+			expect(transfer?.providerCode).toBe("manual");
+			expect(transfer?.dispersalEntryId).toBe(entryId);
+			expect(transfer?.cashJournalEntryIds).toHaveLength(1);
+			expect(transfer?.manualSettlement).toMatchObject({
+				instrumentType: "journal",
+			});
 		});
 	});
 
 	it("updates lender lastPayoutDate after successful payout", async () => {
-		const t = createHarness(modules);
+		const t = createPayoutActionHarness();
 		const seeded = await seedMinimalEntities(t);
 
 		await createTestAccount(t, {
@@ -474,7 +493,7 @@ describe("admin payout — integration tests (triggerImmediatePayout)", () => {
 	});
 
 	it("scopes payout to a specific mortgageId when provided", async () => {
-		const t = createHarness(modules);
+		const t = createPayoutActionHarness();
 		const seeded = await seedMinimalEntities(t);
 		const secondMortgageId = await seedSecondMortgage(t, seeded);
 
@@ -534,14 +553,16 @@ describe("admin payout — integration tests (triggerImmediatePayout)", () => {
 		// First mortgage entry should be disbursed
 		const entry1 = await t.run(async (ctx) => ctx.db.get(entry1Id));
 		expect(entry1?.status).toBe("disbursed");
+		expect(entry1?.transferRequestId).toBeDefined();
 
 		// Second mortgage entry should still be pending
 		const entry2 = await t.run(async (ctx) => ctx.db.get(entry2Id));
 		expect(entry2?.status).toBe("pending");
+		expect(entry2?.transferRequestId).toBeUndefined();
 	});
 
 	it("skips mortgage groups below minimum threshold", async () => {
-		const t = createHarness(modules);
+		const t = createPayoutActionHarness();
 		const seeded = await seedMinimalEntities(t);
 
 		await createTestAccount(t, {
@@ -596,7 +617,7 @@ describe("admin payout — integration tests (triggerImmediatePayout)", () => {
 	});
 
 	it("returns zero payouts when lender has no eligible entries", async () => {
-		const t = createHarness(modules);
+		const t = createPayoutActionHarness();
 		const seeded = await seedMinimalEntities(t);
 
 		// No dispersal entries seeded — lender is active but has nothing to pay out
@@ -611,7 +632,7 @@ describe("admin payout — integration tests (triggerImmediatePayout)", () => {
 	});
 
 	it("rejects payout for inactive lender", async () => {
-		const t = createHarness(modules);
+		const t = createPayoutActionHarness();
 		const seeded = await seedMinimalEntities(t);
 
 		// Suspend the lender
@@ -629,7 +650,7 @@ describe("admin payout — integration tests (triggerImmediatePayout)", () => {
 	});
 
 	it("reports partial failures with ConvexError containing details", async () => {
-		const t = createHarness(modules);
+		const t = createPayoutActionHarness();
 		const seeded = await seedMinimalEntities(t);
 		const secondMortgageId = await seedSecondMortgage(t, seeded);
 
@@ -683,20 +704,30 @@ describe("admin payout — integration tests (triggerImmediatePayout)", () => {
 				message: string;
 				payoutCount: number;
 				totalAmountCents: number;
-				failures: Array<{ mortgageId: string; error: string }>;
+				failures: Array<{
+					dispersalEntryId: string;
+					error: string;
+					mortgageId: string;
+				}>;
 			};
-			// One mortgage group succeeded, one failed
+			// One dispersal entry succeeded, one failed
 			expect(data.payoutCount).toBe(1);
 			expect(data.totalAmountCents).toBe(5000);
 			expect(data.failures).toHaveLength(1);
+			expect(data.failures[0].dispersalEntryId).toBeDefined();
 			expect(data.failures[0].mortgageId).toBe(
 				secondMortgageId as unknown as string
 			);
 		}
+
+		const lenderAfter = await t.run(async (ctx) =>
+			ctx.db.get(seeded.lenderAId)
+		);
+		expect(lenderAfter?.lastPayoutDate).toBeUndefined();
 	});
 
-	it("handles multiple entries per mortgage — sums them for payout", async () => {
-		const t = createHarness(modules);
+	it("handles multiple entries per mortgage by creating one canonical payout transfer per entry", async () => {
+		const t = createPayoutActionHarness();
 		const seeded = await seedMinimalEntities(t);
 
 		await createTestAccount(t, {
@@ -733,8 +764,8 @@ describe("admin payout — integration tests (triggerImmediatePayout)", () => {
 				lenderId: seeded.lenderAId,
 			});
 
-		// Should post a single payout for the combined amount
-		expect(result.payoutCount).toBe(1);
+		// Each eligible entry becomes its own payout transfer
+		expect(result.payoutCount).toBe(2);
 		expect(result.totalAmountCents).toBe(5000);
 
 		// Both entries should be disbursed
@@ -743,7 +774,7 @@ describe("admin payout — integration tests (triggerImmediatePayout)", () => {
 		expect(entry1?.status).toBe("disbursed");
 		expect(entry2?.status).toBe("disbursed");
 
-		// Single journal entry for the summed amount
+		// Two journal entries, one per transfer / dispersal entry
 		await t.run(async (ctx) => {
 			const entries = await ctx.db
 				.query("cash_ledger_journal_entries")
@@ -751,8 +782,10 @@ describe("admin payout — integration tests (triggerImmediatePayout)", () => {
 			const payoutEntries = entries.filter(
 				(e) => e.entryType === "LENDER_PAYOUT_SENT"
 			);
-			expect(payoutEntries).toHaveLength(1);
-			expect(payoutEntries[0].amount).toBe(5000n);
+			expect(payoutEntries).toHaveLength(2);
+			expect(
+				payoutEntries.map((entry) => Number(entry.amount)).sort((a, b) => a - b)
+			).toEqual([2000, 3000]);
 		});
 	});
 });

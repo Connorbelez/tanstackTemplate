@@ -88,6 +88,28 @@ export const createObligation = internalMutation({
 			machineContext: undefined,
 			settledAt: undefined,
 		});
+		const obligationSnapshot = {
+			_id: `${obligationId}`,
+			amount: args.amount,
+			amountSettled: args.amountSettled,
+			borrowerId: `${args.borrowerId}`,
+			createdAt,
+			dueDate: args.dueDate,
+			feeCode: args.feeCode,
+			gracePeriodEnd: args.gracePeriodEnd,
+			lastTransitionAt: createdAt,
+			machineContext: undefined,
+			mortgageFeeId: args.mortgageFeeId ? `${args.mortgageFeeId}` : undefined,
+			mortgageId: `${args.mortgageId}`,
+			orgId,
+			paymentNumber: args.paymentNumber,
+			settledAt: undefined,
+			sourceObligationId: args.sourceObligationId
+				? `${args.sourceObligationId}`
+				: undefined,
+			status: args.status,
+			type: args.type,
+		};
 
 		const journalEntryId = await appendAuditJournalEntry(ctx, {
 			actorId: "system",
@@ -108,8 +130,15 @@ export const createObligation = internalMutation({
 				feeCode: args.feeCode,
 				mortgageFeeId: args.mortgageFeeId,
 			},
+			eventCategory: "domain_write",
 			previousState: "none",
 			newState: args.status,
+			linkedRecordIds: {
+				borrowerId: `${args.borrowerId}`,
+				mortgageId: `${args.mortgageId}`,
+				obligationId: `${obligationId}`,
+			},
+			afterState: obligationSnapshot,
 			outcome: "transitioned",
 			timestamp: createdAt,
 		});

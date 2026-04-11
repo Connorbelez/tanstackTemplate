@@ -1,7 +1,6 @@
 import type { FunctionReference, FunctionType } from "convex/server";
 import { makeFunctionReference } from "convex/server";
 import { v } from "convex/values";
-import { internal } from "../../_generated/api";
 import type { Id } from "../../_generated/dataModel";
 import {
 	internalAction,
@@ -9,17 +8,11 @@ import {
 	internalQuery,
 } from "../../_generated/server";
 import { auditLog } from "../../auditLog";
-import type { CommandSource } from "../../engine/types";
-import { unixMsToBusinessDate } from "../../lib/businessDates";
-import { getOrCreateCashAccount, requireCashAccount } from "./accounts";
-import { postCashEntryInternal } from "./postEntry";
 import type {
 	TransferHealingCandidate,
 	TransferHealingResult,
 } from "./transferHealingTypes";
-import { MAX_TRANSFER_HEALING_ATTEMPTS } from "./transferHealingTypes";
 import { findOrphanedConfirmedTransferCandidates } from "./transferReconciliation";
-import { buildIdempotencyKey } from "./types";
 
 // ── Typed function references to break circular type inference ────────
 
@@ -58,11 +51,6 @@ const retriggerTransferConfirmationRef = makeInternalRef<
 >(
 	"payments/cashLedger/transferReconciliationCron:retriggerTransferConfirmation"
 );
-
-const HEALING_SOURCE: CommandSource = {
-	actorType: "system",
-	channel: "scheduler",
-};
 
 // ── TR-011: findOrphanedConfirmedTransfersForHealing ─────────────────
 
@@ -106,9 +94,12 @@ export const findOrphanedConfirmedTransfersForHealing = internalQuery({
 });
 
 /**
- * Attempt to retrigger confirmation journal entry for an orphaned transfer.
- * Four code paths: skip (already escalated), escalate with SUSPENSE entry,
- * escalate without entry (no mortgageId), or schedule a real retry.
+ * Surface a confirmed transfer without ledger linkage as an integrity defect.
+ *
+ * Audit policy: a transfer that has already reached `confirmed` without an
+ * authoritative ledger entry is a primary-state defect, not a retriable
+ * derived-state gap. The cron must surface and escalate it, not silently
+ * reconfirm it.
  */
 export const retriggerTransferConfirmation = internalMutation({
 	args: {
@@ -136,191 +127,52 @@ export const retriggerTransferConfirmation = internalMutation({
 		}
 
 		const attemptCount = (existing?.attemptCount ?? 0) + 1;
-
-		if (attemptCount > MAX_TRANSFER_HEALING_ATTEMPTS) {
-			// ── Escalate to SUSPENSE ──
-			if (existing) {
-				await ctx.db.patch(existing._id, {
-					status: "escalated",
-					attemptCount,
-					lastAttemptAt: Date.now(),
-					escalatedAt: Date.now(),
-				});
-			} else {
-				await ctx.db.insert("transferHealingAttempts", {
-					transferRequestId: args.transferRequestId,
-					attemptCount,
-					lastAttemptAt: Date.now(),
-					escalatedAt: Date.now(),
-					status: "escalated",
-					createdAt: Date.now(),
-				});
-			}
-
-			// Cannot create SUSPENSE account without a mortgageId
-			if (!args.mortgageId) {
-				console.error(
-					`[TRANSFER-HEALING] Cannot escalate transfer=${args.transferRequestId} ` +
-						"to SUSPENSE: missing mortgageId. Skipping journal entry."
-				);
-				await auditLog.log(ctx, {
-					action: "transfer.self_healing_escalated_no_mortgage",
-					actorId: "system",
-					resourceType: "transferRequest",
-					resourceId: args.transferRequestId,
-					severity: "error",
-					metadata: {
-						attemptCount,
-						direction: args.direction,
-						amount: args.amount,
-					},
-				});
-				return { action: "escalated" as const, attemptCount };
-			}
-
-			const suspenseAccount = await getOrCreateCashAccount(ctx, {
-				family: "SUSPENSE",
-				mortgageId: args.mortgageId,
-			});
-
-			// For inbound transfers, credit BORROWER_RECEIVABLE; for outbound, credit LENDER_PAYABLE
-			const creditFamily =
-				args.direction === "inbound"
-					? ("BORROWER_RECEIVABLE" as const)
-					: ("LENDER_PAYABLE" as const);
-
-			// Cannot resolve LENDER_PAYABLE account without a lenderId
-			if (creditFamily === "LENDER_PAYABLE" && !args.lenderId) {
-				console.error(
-					`[TRANSFER-HEALING] Cannot escalate transfer=${args.transferRequestId} ` +
-						"to SUSPENSE: missing lenderId. Skipping journal entry."
-				);
-				await auditLog.log(ctx, {
-					action: "transfer.self_healing_escalated_no_lender",
-					actorId: "system",
-					resourceType: "transferRequest",
-					resourceId: args.transferRequestId,
-					severity: "error",
-					metadata: {
-						attemptCount,
-						mortgageId: args.mortgageId,
-						direction: args.direction,
-						amount: args.amount,
-					},
-				});
-				return { action: "escalated" as const, attemptCount };
-			}
-			const creditAccountSpec =
-				creditFamily === "LENDER_PAYABLE"
-					? {
-							family: creditFamily,
-							mortgageId: args.mortgageId,
-							lenderId: args.lenderId,
-						}
-					: {
-							family: creditFamily,
-							mortgageId: args.mortgageId,
-							obligationId: args.obligationId,
-						};
-			const creditAccount = await requireCashAccount(
-				ctx.db,
-				creditAccountSpec,
-				"transferSelfHealing:escalation"
-			);
-
-			await postCashEntryInternal(ctx, {
-				entryType: "SUSPENSE_ESCALATED",
-				effectiveDate: unixMsToBusinessDate(Date.now()),
-				amount: args.amount,
-				debitAccountId: suspenseAccount._id,
-				creditAccountId: creditAccount._id,
-				idempotencyKey: buildIdempotencyKey(
-					"suspense-escalation",
-					"transfer",
-					args.transferRequestId
-				),
-				mortgageId: args.mortgageId,
-				obligationId: args.obligationId,
-				source: HEALING_SOURCE,
-				reason: `Transfer confirmation retrigger failed after ${MAX_TRANSFER_HEALING_ATTEMPTS} attempts`,
-				metadata: { attemptCount },
-				transferRequestId: args.transferRequestId,
-				lenderId: args.direction === "outbound" ? args.lenderId : undefined,
-			});
-
-			await auditLog.log(ctx, {
-				action: "transfer.self_healing_escalated",
-				actorId: "system",
-				resourceType: "transferRequest",
-				resourceId: args.transferRequestId,
-				severity: "error",
-				metadata: {
-					attemptCount,
-					mortgageId: args.mortgageId,
-					direction: args.direction,
-				},
-			});
-
-			return { action: "escalated" as const, attemptCount };
-		}
-
-		const transfer = await ctx.db.get(args.transferRequestId);
-		if (!transfer) {
-			throw new Error(
-				`[TRANSFER-HEALING] Transfer ${args.transferRequestId} not found during confirmation retrigger`
-			);
-		}
-
-		const settledAt =
-			transfer.settledAt ??
-			transfer.confirmedAt ??
-			transfer.createdAt ??
-			Date.now();
-
-		// ── Retry: schedule the real publishTransferConfirmed effect ──
 		if (existing) {
 			await ctx.db.patch(existing._id, {
-				status: "retrying",
+				status: "escalated",
 				attemptCount,
 				lastAttemptAt: Date.now(),
+				escalatedAt: existing.escalatedAt ?? Date.now(),
 			});
 		} else {
 			await ctx.db.insert("transferHealingAttempts", {
 				transferRequestId: args.transferRequestId,
 				attemptCount,
 				lastAttemptAt: Date.now(),
-				status: "retrying",
+				escalatedAt: Date.now(),
+				status: "escalated",
 				createdAt: Date.now(),
 			});
 		}
 
-		await ctx.scheduler.runAfter(
-			0,
-			internal.engine.effects.transfer.publishTransferConfirmed,
-			{
-				entityId: args.transferRequestId,
-				entityType: "transfer",
-				eventType: "FUNDS_SETTLED",
-				journalEntryId: `healing:publishTransferConfirmed:${args.transferRequestId}:${attemptCount}`,
-				effectName: "publishTransferConfirmed",
-				payload: {
-					settledAt,
-					healingAttemptCount: attemptCount,
-					healingRetrigger: true,
-				},
-				source: HEALING_SOURCE,
-			}
-		);
+		await auditLog.log(ctx, {
+			action: "transfer.integrity_defect.confirmed_without_ledger",
+			actorId: "system",
+			resourceType: "transferRequest",
+			resourceId: args.transferRequestId,
+			severity: "error",
+			metadata: {
+				amount: args.amount,
+				attemptCount,
+				direction: args.direction,
+				lenderId: args.lenderId,
+				mortgageId: args.mortgageId,
+				obligationId: args.obligationId,
+				reason:
+					"Confirmed transfer has no authoritative cash-ledger linkage. Manual investigation required.",
+			},
+		});
 
-		return { action: "retriggered" as const, attemptCount };
+		return { action: "escalated" as const, attemptCount };
 	},
 });
 
 // ── TR-013: transferReconciliationCron ───────────────────────────────
 
 /**
- * Cron handler: find confirmed transfers missing journal entries and retrigger them.
- * Per-candidate error handling ensures one failure does not abort the batch.
+ * Cron handler: find confirmed transfers missing journal entries and surface
+ * them as integrity defects. Per-candidate error handling ensures one failure
+ * does not abort the batch.
  */
 export const transferReconciliationCron = internalAction({
 	handler: async (ctx): Promise<TransferHealingResult> => {

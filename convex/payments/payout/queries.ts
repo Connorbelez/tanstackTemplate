@@ -21,6 +21,9 @@ export const getEligibleDispersalEntries = internalQuery({
 		const eligible: typeof entries = [];
 		let legacyWithoutPayoutEligibleAfter = 0;
 		for (const entry of entries) {
+			if (entry.transferRequestId) {
+				continue;
+			}
 			if (entry.payoutEligibleAfter === undefined) {
 				legacyWithoutPayoutEligibleAfter += 1;
 				eligible.push(entry);

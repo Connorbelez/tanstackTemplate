@@ -55,6 +55,8 @@ export const effectRegistry: Record<
 	// Collection Attempt effects (ENG-64)
 	emitPaymentReceived:
 		internal.engine.effects.collectionAttempt.emitPaymentReceived,
+	recordSettlementObserved:
+		internal.engine.effects.collectionAttempt.recordSettlementObserved,
 	scheduleRetryEntry:
 		internal.engine.effects.collectionAttempt.scheduleRetryEntry,
 	emitCollectionFailed:

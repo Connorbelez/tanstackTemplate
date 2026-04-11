@@ -120,6 +120,25 @@ export const createCorrectiveObligation = internalMutation({
 			settledAt: undefined,
 			createdAt: now,
 		});
+		const correctiveSnapshot = {
+			_id: `${correctiveId}`,
+			amount: args.reversedAmount,
+			amountSettled: 0,
+			borrowerId: `${original.borrowerId}`,
+			createdAt: now,
+			dueDate: now,
+			gracePeriodEnd: now + FIFTEEN_DAYS_MS,
+			lastTransitionAt: now,
+			machineContext: undefined,
+			mortgageId: `${original.mortgageId}`,
+			orgId,
+			paymentNumber: original.paymentNumber,
+			postingGroupId: args.postingGroupId,
+			settledAt: undefined,
+			sourceObligationId: `${args.originalObligationId}`,
+			status: "upcoming",
+			type: original.type,
+		};
 
 		// 5. Audit journal entry (Layer 1 — hash-chained)
 		const source = args.source as CommandSource;
@@ -143,8 +162,15 @@ export const createCorrectiveObligation = internalMutation({
 				postingGroupId: args.postingGroupId,
 				correctiveOf: args.originalObligationId,
 			},
+			eventCategory: "domain_write",
 			previousState: "none",
 			newState: "upcoming",
+			linkedRecordIds: {
+				mortgageId: `${original.mortgageId}`,
+				obligationId: `${correctiveId}`,
+				sourceObligationId: `${args.originalObligationId}`,
+			},
+			afterState: correctiveSnapshot,
 			outcome: "transitioned",
 			timestamp: now,
 		});

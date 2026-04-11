@@ -16,6 +16,7 @@ import { internal } from "../../_generated/api";
 import type { Doc, Id } from "../../_generated/dataModel";
 import type { ActionCtx, MutationCtx } from "../../_generated/server";
 import { auditLog } from "../../auditLog";
+import { appendAuditJournalEntry } from "../../engine/auditJournal";
 import { convex } from "../../fluent";
 import { createTransferRequestRecord } from "../transfers/mutations";
 import {
@@ -497,6 +498,59 @@ const stagePlanEntryExecution = convex
 				maxRetries: 3,
 			},
 			transferRequestId,
+		});
+
+		await appendAuditJournalEntry(ctx, {
+			entityType: "collectionAttempt",
+			entityId: `${attemptId}`,
+			eventType: "CREATED",
+			eventCategory: "domain_write",
+			organizationId: undefined,
+			previousState: "none",
+			newState: "initiated",
+			outcome: "transitioned",
+			actorId: executionSource.actorId ?? "system",
+			actorType: executionSource.actorType,
+			channel: executionSource.channel,
+			payload: {
+				amount: planEntry.amount,
+				idempotencyKey: normalizedIdempotencyKey,
+				method: planEntry.method,
+				planEntryId: `${planEntry._id}`,
+				transferRequestId: `${transferRequestId}`,
+			},
+			idempotencyKey: normalizedIdempotencyKey,
+			linkedRecordIds: {
+				collectionAttemptId: `${attemptId}`,
+				mortgageId: `${planEntry.mortgageId}`,
+				planEntryId: `${planEntry._id}`,
+				transferRequestId: `${transferRequestId}`,
+			},
+			afterState: {
+				_id: `${attemptId}`,
+				amount: planEntry.amount,
+				executionIdempotencyKey: normalizedIdempotencyKey,
+				executionReason: args.reason,
+				executionRequestedAt: args.requestedAt,
+				initiatedAt: executionRecordedAt,
+				method: planEntry.method,
+				machineContext: {
+					attemptId: `${attemptId}`,
+					maxRetries: 3,
+					retryCount: 0,
+				},
+				mortgageId: `${planEntry.mortgageId}`,
+				obligationIds: planEntry.obligationIds.map(
+					(obligationId) => `${obligationId}`
+				),
+				planEntryId: `${planEntry._id}`,
+				requestedByActorId: args.requestedByActorId,
+				requestedByActorType: args.requestedByActorType,
+				status: "initiated",
+				transferRequestId: `${transferRequestId}`,
+				triggerSource: args.triggerSource,
+			},
+			timestamp: executionRecordedAt,
 		});
 
 		await ctx.db.patch(planEntry._id, {

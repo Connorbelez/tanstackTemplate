@@ -42,6 +42,9 @@ export const collectionAttemptMachine = setup({
 		emitPaymentReversed: () => {
 			/* resolved by GT effect registry */
 		},
+		recordSettlementObserved: () => {
+			/* resolved by GT effect registry */
+		},
 	},
 }).createMachine({
 	id: "collectionAttempt",
@@ -105,6 +108,9 @@ export const collectionAttemptMachine = setup({
 		},
 		confirmed: {
 			on: {
+				FUNDS_SETTLED: {
+					actions: ["recordSettlementObserved"],
+				},
 				PAYMENT_REVERSED: {
 					target: "reversed",
 					actions: ["emitPaymentReversed"],

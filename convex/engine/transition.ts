@@ -8,6 +8,13 @@ import { auditLog } from "../auditLog";
 import { auditOrganizationIdFromEntityDocument } from "../lib/orgScope";
 import { appendAuditJournalEntry } from "./auditJournal";
 import { effectRegistry } from "./effects/registry";
+import {
+	publishTransferCancelled,
+	publishTransferConfirmed,
+	publishTransferFailed,
+	publishTransferReversed,
+	recordTransferProviderRef,
+} from "./effects/transfer";
 import { getMachineVersion, machineRegistry } from "./machines/registry";
 import { deserializeState, serializeState } from "./serialization";
 import type {
@@ -31,6 +38,37 @@ interface ScheduledEffectDescriptor {
 	actionType: string;
 	params?: Record<string, unknown>;
 }
+
+interface InlineMutationEffectHandler {
+	_handler: (
+		ctx: MutationCtx,
+		args: {
+			effectName: string;
+			entityId: string;
+			entityType: EntityType;
+			eventType: string;
+			journalEntryId: string;
+			payload?: Record<string, unknown>;
+			source: CommandSource;
+		}
+	) => Promise<void>;
+}
+
+const inlineCriticalEffectHandlers: Record<
+	string,
+	InlineMutationEffectHandler
+> = {
+	publishTransferCancelled:
+		publishTransferCancelled as unknown as InlineMutationEffectHandler,
+	publishTransferConfirmed:
+		publishTransferConfirmed as unknown as InlineMutationEffectHandler,
+	publishTransferFailed:
+		publishTransferFailed as unknown as InlineMutationEffectHandler,
+	publishTransferReversed:
+		publishTransferReversed as unknown as InlineMutationEffectHandler,
+	recordTransferProviderRef:
+		recordTransferProviderRef as unknown as InlineMutationEffectHandler,
+};
 
 function normalizeActionDescriptors(
 	actions: unknown
@@ -122,7 +160,7 @@ async function scheduleEffects(
 		}
 		const handler = effectRegistry[actionDescriptor.actionType];
 		if (handler) {
-			await ctx.scheduler.runAfter(0, handler, {
+			const effectPayload = {
 				entityId,
 				entityType,
 				eventType,
@@ -130,7 +168,14 @@ async function scheduleEffects(
 				effectName: actionDescriptor.actionType,
 				payload: actionDescriptor.params ?? payload,
 				source,
-			});
+			};
+			const inlineHandler =
+				inlineCriticalEffectHandlers[actionDescriptor.actionType];
+			if (entityType === "transfer" && inlineHandler) {
+				await inlineHandler._handler(ctx, effectPayload);
+			} else {
+				await ctx.scheduler.runAfter(0, handler, effectPayload);
+			}
 			effectNames.push(actionDescriptor.actionType);
 		} else {
 			console.warn(
@@ -224,6 +269,10 @@ export async function executeTransition(
 
 	const resourceType = tableName;
 	let journalEntryId = `${entityType}:${entityId}:${eventType}:${Date.now()}-${randomJournalIdSuffix()}`;
+	const currentEntitySnapshot = {
+		...(entity as Record<string, unknown>),
+		_id: entityId,
+	};
 
 	// ── 5. DETECT ────────────────────────────────────────────────────────
 	const scheduledEffects = normalizeActionDescriptors(transitionActions);
@@ -236,9 +285,12 @@ export async function executeTransition(
 				actorId: source.actorId ?? "system",
 				actorType: source.actorType,
 				channel: source.channel,
+				beforeState: currentEntitySnapshot,
+				afterState: currentEntitySnapshot,
 				organizationId,
 				entityId,
 				entityType,
+				eventCategory: "governed_transition",
 				eventType,
 				ip: source.ip,
 				sessionId: source.sessionId,
@@ -284,9 +336,16 @@ export async function executeTransition(
 			actorId: source.actorId ?? "system",
 			actorType: source.actorType,
 			channel: source.channel,
+			beforeState: currentEntitySnapshot,
+			afterState: {
+				...currentEntitySnapshot,
+				machineContext: nextSnapshot.context,
+				status: newStateSerialized,
+			},
 			organizationId,
 			entityId,
 			entityType,
+			eventCategory: "governed_transition",
 			eventType,
 			ip: source.ip,
 			sessionId: source.sessionId,
@@ -338,18 +397,27 @@ export async function executeTransition(
 	}
 
 	// ── 6. PERSIST ───────────────────────────────────────────────────────
+	const persistedAt = Date.now();
 	await ctx.db.patch(entityId as GenericId<typeof tableName & TableNames>, {
 		status: newStateSerialized,
 		machineContext: nextSnapshot.context,
-		lastTransitionAt: Date.now(),
+		lastTransitionAt: persistedAt,
 	});
 	journalEntryId = await appendAuditJournalEntry(ctx, {
 		actorId: source.actorId ?? "system",
 		actorType: source.actorType,
 		channel: source.channel,
+		beforeState: currentEntitySnapshot,
+		afterState: {
+			...currentEntitySnapshot,
+			lastTransitionAt: persistedAt,
+			machineContext: nextSnapshot.context,
+			status: newStateSerialized,
+		},
 		organizationId,
 		entityId,
 		entityType,
+		eventCategory: "governed_transition",
 		eventType,
 		ip: source.ip,
 		sessionId: source.sessionId,
@@ -358,7 +426,7 @@ export async function executeTransition(
 		newState: newStateSerialized,
 		outcome: "transitioned",
 		machineVersion,
-		timestamp: Date.now(),
+		timestamp: persistedAt,
 	});
 
 	// ── 7. AUDIT (Layer 2 — handled inside appendAuditJournalEntry) ────

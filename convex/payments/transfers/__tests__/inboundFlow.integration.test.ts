@@ -5,11 +5,11 @@
  * - T-012: Manual inbound transfer (non-bridged) -> cash ledger CASH_RECEIVED
  *   posting with correct accounts
  *
- * Compatibility-only transfer-linkage coverage in this file:
- * - T-013: Bridge transfer D4 conditional — bridged transfer skips cash posting,
- *   non-bridged posts
- * - T-014: Re-running emitPaymentReceived remains idempotent and does not
- *   resurrect the removed legacy bridge transfer path
+ * Compatibility-only bridge coverage in this file:
+ * - T-013: Bridge transfer settlement — bridged and non-bridged inbound transfers
+ *   both post transfer-owned CASH_RECEIVED entries
+ * - T-014: Bridge idempotency — re-running emitPaymentReceived does not
+ *   over-apply settlement or recreate the removed legacy bridge transfer path
  */
 
 import { convexTest } from "convex-test";
@@ -430,11 +430,11 @@ describe("T-012: manual inbound transfer (non-bridged) posts CASH_RECEIVED", () 
 });
 
 // ══════════════════════════════════════════════════════════════════════
-// T-013: Compatibility bridge D4 conditional
+// T-013: Attempt-linked inbound settlement
 // ══════════════════════════════════════════════════════════════════════
 
-describe("T-013: compatibility bridge D4 conditional — bridged skips cash posting, non-bridged posts", () => {
-	it("bridged transfer (with collectionAttemptId) skips cash posting", async () => {
+describe("T-013: transfer-owned inbound settlement posts CASH_RECEIVED for bridged and non-bridged transfers", () => {
+	it("bridged transfer (with collectionAttemptId) posts CASH_RECEIVED exactly once", async () => {
 		const t = createFullHarness();
 		const seeded = await seedCoreEntities(t);
 
@@ -485,7 +485,9 @@ describe("T-013: compatibility bridge D4 conditional — bridged skips cash post
 				)
 				.collect();
 
-			expect(entries).toHaveLength(0);
+			expect(entries).toHaveLength(1);
+			expect(entries[0]?.entryType).toBe("CASH_RECEIVED");
+			expect(entries[0]?.transferRequestId).toBe(bridgedTransferId);
 		});
 	});
 
@@ -539,17 +541,16 @@ describe("T-013: compatibility bridge D4 conditional — bridged skips cash post
 });
 
 // ══════════════════════════════════════════════════════════════════════
-// T-014: Legacy bridge removal / idempotency
-// Calls emitPaymentReceived twice in the same mutation to verify that the
-// handler remains idempotent and does not create the removed compatibility
-// bridge transfer. The key checks run inline inside the handler (not as a
-// scheduled effect), so finishAllScheduledFunctions is not required.
+// T-014: Transfer-owned settlement idempotency
+// Calls emitPaymentReceived twice in the same mutation to verify that
+// repeated attempt-side settlement observations do not recreate legacy
+// bridge transfers and do not over-apply the obligation settlement.
 // Must run BEFORE T-011 (which uses finishAllScheduledFunctions and
 // corrupts global crypto/process references in convex-test).
 // ══════════════════════════════════════════════════════════════════════
 
-describe("T-014: emitPaymentReceived idempotency — no legacy bridge transfer is created", () => {
-	it("second invocation of emitPaymentReceived for the same attempt does not recreate the removed bridge transfer path", async () => {
+describe("T-014: transfer-owned settlement idempotency — re-running emitPaymentReceived does not create bridge transfers", () => {
+	it("second invocation of emitPaymentReceived settles once and does not create a legacy bridge transfer", async () => {
 		const t = createFullHarness();
 		const seeded = await seedCoreEntities(t);
 
@@ -565,10 +566,10 @@ describe("T-014: emitPaymentReceived idempotency — no legacy bridge transfer i
 		});
 
 		// Call emitPaymentReceived TWICE within the same mutation context.
-		// The second call should find the existing bridge transfer by
-		// idempotency key and skip creation.
+		// The second call should observe the already-settled obligation and
+		// remain a no-op from the cash-transfer perspective.
 		await t.run(async (ctx) => {
-			// First invocation — settles via obligation transitions only
+			// First invocation — forwards settlement to the obligation
 			await emitPaymentReceivedMutation._handler(ctx, {
 				entityId: attemptId,
 				entityType: "collectionAttempt",
@@ -578,7 +579,7 @@ describe("T-014: emitPaymentReceived idempotency — no legacy bridge transfer i
 				source: SYSTEM_SOURCE,
 			});
 
-			// Second invocation — should remain a no-op for transfer linkage
+			// Second invocation — should not over-apply or create a bridge
 			await emitPaymentReceivedMutation._handler(ctx, {
 				entityId: attemptId,
 				entityType: "collectionAttempt",
@@ -588,13 +589,17 @@ describe("T-014: emitPaymentReceived idempotency — no legacy bridge transfer i
 				source: SYSTEM_SOURCE,
 			});
 
-			// Verify: the legacy compatibility bridge transfer path stays removed.
+			const refreshedAttempt = await ctx.db.get(attemptId);
+			const refreshedObligation = await ctx.db.get(obligationId);
 			const bridgeKey = `transfer:bridge:${attemptId}`;
 			const bridgeTransfers = await ctx.db
 				.query("transferRequests")
 				.withIndex("by_idempotency", (q) => q.eq("idempotencyKey", bridgeKey))
 				.collect();
 
+			expect(refreshedAttempt?.confirmedAt).toBeTypeOf("number");
+			expect(refreshedAttempt?.settledAt).toBeTypeOf("number");
+			expect(refreshedObligation?.status).toBe("settled");
 			expect(bridgeTransfers).toHaveLength(0);
 		});
 	});

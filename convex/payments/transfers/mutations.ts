@@ -10,6 +10,7 @@ import { internal } from "../../_generated/api";
 import type { Doc, Id } from "../../_generated/dataModel";
 import type { ActionCtx, MutationCtx } from "../../_generated/server";
 import { internalAction, internalMutation } from "../../_generated/server";
+import { appendAuditJournalEntry } from "../../engine/auditJournal";
 import { buildSource } from "../../engine/commands";
 import { executeTransition } from "../../engine/transition";
 import type { CommandSource, TransitionResult } from "../../engine/types";
@@ -26,7 +27,10 @@ import {
 	buildCommitmentDepositIdempotencyKey,
 	getCommitmentDepositValidationError,
 } from "./depositCollection.logic";
-import type { TransferRequestInput } from "./interface";
+import type {
+	ManualSettlementDetails,
+	TransferRequestInput,
+} from "./interface";
 import { buildPipelineIdempotencyKey } from "./pipeline";
 import { validatePipelineFields } from "./pipeline.types";
 import { buildPrincipalReturnIdempotencyKey } from "./principalReturn.logic";
@@ -41,6 +45,7 @@ import {
 	counterpartyTypeValidator,
 	directionValidator,
 	legNumberValidator,
+	manualSettlementValidator,
 	providerCodeValidator,
 	transferTypeValidator,
 } from "./validators";
@@ -113,6 +118,132 @@ export function canManuallyConfirmTransferStatus(
 	);
 }
 
+async function appendTransferCreationAuditEntry(
+	ctx: MutationCtx,
+	args: {
+		createdAt: number;
+		idempotencyKey: string;
+		organizationId?: string;
+		source: CommandSource;
+		transferId: Id<"transferRequests">;
+		transferSnapshot: Record<string, unknown>;
+	}
+) {
+	const linkedRecordIds = Object.fromEntries(
+		Object.entries({
+			collectionAttemptId:
+				typeof args.transferSnapshot.collectionAttemptId === "string"
+					? args.transferSnapshot.collectionAttemptId
+					: undefined,
+			dealId:
+				typeof args.transferSnapshot.dealId === "string"
+					? args.transferSnapshot.dealId
+					: undefined,
+			dispersalEntryId:
+				typeof args.transferSnapshot.dispersalEntryId === "string"
+					? args.transferSnapshot.dispersalEntryId
+					: undefined,
+			mortgageId:
+				typeof args.transferSnapshot.mortgageId === "string"
+					? args.transferSnapshot.mortgageId
+					: undefined,
+			obligationId:
+				typeof args.transferSnapshot.obligationId === "string"
+					? args.transferSnapshot.obligationId
+					: undefined,
+			transferId: `${args.transferId}`,
+		}).filter(([, value]) => value != null)
+	);
+
+	await appendAuditJournalEntry(ctx, {
+		entityType: "transfer",
+		entityId: `${args.transferId}`,
+		eventType: "CREATED",
+		eventCategory: "domain_write",
+		organizationId: args.organizationId,
+		previousState: "none",
+		newState: "initiated",
+		outcome: "transitioned",
+		actorId: args.source.actorId ?? "system",
+		actorType: args.source.actorType,
+		channel: args.source.channel,
+		payload: {
+			idempotencyKey: args.idempotencyKey,
+			transferType: args.transferSnapshot.transferType,
+		},
+		idempotencyKey: args.idempotencyKey,
+		linkedRecordIds,
+		afterState: args.transferSnapshot,
+		timestamp: args.createdAt,
+	});
+}
+
+async function runManualTransferConfirmation(
+	ctx: MutationCtx,
+	args: {
+		manualSettlement?: ManualSettlementDetails;
+		providerRef?: string;
+		source: CommandSource;
+		transferId: Id<"transferRequests">;
+	}
+): Promise<TransitionResult> {
+	const transfer = await ctx.db.get(args.transferId);
+	if (!transfer) {
+		throw new ConvexError("Transfer request not found");
+	}
+
+	if (
+		transfer.providerCode !== "manual" &&
+		transfer.providerCode !== "manual_review"
+	) {
+		throw new ConvexError(
+			`Only manual and manual_review transfers can be confirmed manually, got "${transfer.providerCode}"`
+		);
+	}
+
+	if (!canManuallyConfirmTransferStatus(transfer.status, transfer.direction)) {
+		const allowedStates =
+			transfer.direction === "outbound"
+				? `"pending" or "processing"`
+				: `"initiated", "pending", or "processing"`;
+		throw new ConvexError(
+			`Transfer must be in ${allowedStates} status to confirm manually, currently: "${transfer.status}"`
+		);
+	}
+
+	const now = Date.now();
+	const manualSettlement =
+		args.manualSettlement ??
+		(transfer.manualSettlement as ManualSettlementDetails | undefined);
+	const providerRef =
+		args.providerRef ?? transfer.providerRef ?? `manual_${now}`;
+
+	if (
+		transfer.providerRef !== providerRef ||
+		manualSettlement !== transfer.manualSettlement
+	) {
+		await ctx.db.patch(args.transferId, {
+			providerRef,
+			manualSettlement,
+		});
+	}
+
+	return executeTransition(ctx, {
+		entityType: "transfer",
+		entityId: args.transferId,
+		eventType: "FUNDS_SETTLED",
+		payload: {
+			settledAt: manualSettlement?.settlementOccurredAt ?? now,
+			providerData: {
+				providerRef,
+				method: transfer.providerCode,
+				manualSettlement,
+			},
+		},
+		source: args.source,
+	});
+}
+
 export interface CreateTransferRequestRecordArgs {
 	amount: number;
 	bankAccountRef?: string;
@@ -127,6 +258,7 @@ export interface CreateTransferRequestRecordArgs {
 	idempotencyKey: string;
 	legNumber?: 1 | 2;
 	lenderId?: Id<"lenders">;
+	manualSettlement?: ManualSettlementDetails;
 	metadata?: Record<string, unknown>;
 	mortgageId?: Id<"mortgages">;
 	obligationId?: Id<"obligations">;
@@ -165,10 +297,9 @@ export async function createTransferRequestRecord(
 		planEntryId: args.planEntryId,
 		collectionAttemptId: args.collectionAttemptId,
 	});
-
-	return ctx.db.insert("transferRequests", {
+	const transferSnapshot = {
 		orgId,
-		status: "initiated",
+		status: "initiated" as const,
 		direction: args.direction,
 		transferType: args.transferType,
 		amount: args.amount,
@@ -185,6 +316,7 @@ export async function createTransferRequestRecord(
 		lenderId: args.lenderId,
 		borrowerId: args.borrowerId,
 		providerCode: args.providerCode,
+		manualSettlement: args.manualSettlement,
 		idempotencyKey: args.idempotencyKey,
 		source: args.source,
 		pipelineId: args.pipelineId,
@@ -192,7 +324,32 @@ export async function createTransferRequestRecord(
 		metadata: args.metadata,
 		createdAt: now,
 		lastTransitionAt: now,
+	};
+
+	const transferId = await ctx.db.insert("transferRequests", transferSnapshot);
+	await appendTransferCreationAuditEntry(ctx, {
+		createdAt: now,
+		idempotencyKey: args.idempotencyKey,
+		organizationId: orgId,
+		source: args.source,
+		transferId,
+		transferSnapshot: {
+			...transferSnapshot,
+			collectionAttemptId: args.collectionAttemptId
+				? `${args.collectionAttemptId}`
+				: undefined,
+			dealId: args.dealId ? `${args.dealId}` : undefined,
+			dispersalEntryId: args.dispersalEntryId
+				? `${args.dispersalEntryId}`
+				: undefined,
+			lenderId: args.lenderId ? `${args.lenderId}` : undefined,
+			mortgageId: args.mortgageId ? `${args.mortgageId}` : undefined,
+			obligationId: args.obligationId ? `${args.obligationId}` : undefined,
+			planEntryId: args.planEntryId ? `${args.planEntryId}` : undefined,
+			transferId: `${transferId}`,
+		},
 	});
+	return transferId;
 }
 
 const createTransferRequestInput = {
@@ -212,6 +369,7 @@ const createTransferRequestInput = {
 	lenderId: v.optional(v.id("lenders")),
 	borrowerId: v.optional(v.id("borrowers")),
 	providerCode: providerCodeValidator,
+	manualSettlement: v.optional(manualSettlementValidator),
 	idempotencyKey: v.string(),
 	metadata: v.optional(v.record(v.string(), v.any())),
 	pipelineId: v.optional(v.string()),
@@ -250,6 +408,9 @@ function buildTransferInitiationInput(
 		direction: transfer.direction,
 		idempotencyKey: transfer.idempotencyKey,
 		legNumber: transfer.legNumber,
+		manualSettlement: transfer.manualSettlement as
+			| ManualSettlementDetails
+			| undefined,
 		metadata: transfer.metadata as Record<string, unknown> | undefined,
 		pipelineId: transfer.pipelineId,
 		providerCode: transfer.providerCode,
@@ -329,8 +490,8 @@ async function runTransferInitiation(args: {
 				transferId: args.transferId,
 				eventType: "FUNDS_SETTLED",
 				payload: {
-					settledAt: Date.now(),
-					providerData: {},
+					settledAt: result.settledAt ?? Date.now(),
+					providerData: result.providerData ?? {},
 					providerRef: result.providerRef,
 				},
 				source: args.source,
@@ -372,6 +533,7 @@ export const createTransferRequest = paymentMutation
 			idempotencyKey: args.idempotencyKey,
 			legNumber: args.legNumber,
 			lenderId: args.lenderId,
+			manualSettlement: args.manualSettlement,
 			metadata: args.metadata,
 			mortgageId: args.mortgageId,
 			obligationId: args.obligationId,
@@ -479,6 +641,7 @@ export const createTransferRequestInternal = internalMutation({
 			idempotencyKey: args.idempotencyKey,
 			legNumber: args.legNumber,
 			lenderId: args.lenderId,
+			manualSettlement: args.manualSettlement,
 			metadata: args.metadata,
 			mortgageId: args.mortgageId,
 			obligationId: args.obligationId,
@@ -732,9 +895,9 @@ export const retryTransfer = paymentRetryMutation
 			retriedAt: now,
 		};
 
-		return ctx.db.insert("transferRequests", {
+		const transferSnapshot = {
 			orgId: resolvedOrgId,
-			status: "initiated",
+			status: "initiated" as const,
 			direction: transfer.direction,
 			transferType: transfer.transferType,
 			amount: transfer.amount,
@@ -751,6 +914,7 @@ export const retryTransfer = paymentRetryMutation
 			lenderId: transfer.lenderId,
 			borrowerId: transfer.borrowerId,
 			providerCode: transfer.providerCode,
+			manualSettlement: transfer.manualSettlement,
 			idempotencyKey: retryIdempotencyKey,
 			source,
 			pipelineId: transfer.pipelineId,
@@ -758,7 +922,39 @@ export const retryTransfer = paymentRetryMutation
 			metadata,
 			createdAt: now,
 			lastTransitionAt: now,
+		};
+		const transferId = await ctx.db.insert(
+			"transferRequests",
+			transferSnapshot
+		);
+		await appendTransferCreationAuditEntry(ctx, {
+			createdAt: now,
+			idempotencyKey: retryIdempotencyKey,
+			organizationId: resolvedOrgId,
+			source,
+			transferId,
+			transferSnapshot: {
+				...transferSnapshot,
+				collectionAttemptId: transfer.collectionAttemptId
+					? `${transfer.collectionAttemptId}`
+					: undefined,
+				dealId: transfer.dealId ? `${transfer.dealId}` : undefined,
+				dispersalEntryId: transfer.dispersalEntryId
+					? `${transfer.dispersalEntryId}`
+					: undefined,
+				lenderId: transfer.lenderId ? `${transfer.lenderId}` : undefined,
+				mortgageId: transfer.mortgageId ? `${transfer.mortgageId}` : undefined,
+				obligationId: transfer.obligationId
+					? `${transfer.obligationId}`
+					: undefined,
+				planEntryId: transfer.planEntryId
+					? `${transfer.planEntryId}`
+					: undefined,
+				retryOfTransferId: `${args.transferId}`,
+				transferId: `${transferId}`,
+			},
 		});
+		return transferId;
 	})
 	.public();
 
@@ -770,58 +966,30 @@ export const retryTransfer = paymentRetryMutation
 export const confirmManualTransfer = paymentMutation
 	.input({
 		transferId: v.id("transferRequests"),
+		manualSettlement: v.optional(manualSettlementValidator),
 		providerRef: v.optional(v.string()),
 	})
 	.handler(async (ctx, args) => {
-		const transfer = await ctx.db.get(args.transferId);
-		if (!transfer) {
-			throw new ConvexError("Transfer request not found");
-		}
-
-		if (
-			transfer.providerCode !== "manual" &&
-			transfer.providerCode !== "manual_review"
-		) {
-			throw new ConvexError(
-				`Only manual and manual_review transfers can be confirmed manually, got "${transfer.providerCode}"`
-			);
-		}
-
-		if (
-			!canManuallyConfirmTransferStatus(transfer.status, transfer.direction)
-		) {
-			const allowedStates =
-				transfer.direction === "outbound"
-					? `"pending" or "processing"`
-					: `"initiated", "pending", or "processing"`;
-			throw new ConvexError(
-				`Transfer must be in ${allowedStates} status to confirm manually, currently: "${transfer.status}"`
-			);
-		}
-
-		const now = Date.now();
-		const providerRef =
-			args.providerRef ?? transfer.providerRef ?? `manual_${now}`;
-		if (transfer.providerRef !== providerRef) {
-			await ctx.db.patch(args.transferId, { providerRef });
-		}
-
-		const source = buildSource(ctx.viewer, "admin_dashboard");
-		return executeTransition(ctx, {
-			entityType: "transfer",
-			entityId: args.transferId,
-			eventType: "FUNDS_SETTLED",
-			payload: {
-				settledAt: now,
-				providerData: {
-					providerRef,
-					method: transfer.providerCode,
-				},
-			},
-			source,
+		return runManualTransferConfirmation(ctx, {
+			manualSettlement: args.manualSettlement,
+			providerRef: args.providerRef,
+			source: buildSource(ctx.viewer, "admin_dashboard"),
+			transferId: args.transferId,
 		});
 	})
 	.public();
+
+export const confirmManualTransferInternal = internalMutation({
+	args: {
+		transferId: v.id("transferRequests"),
+		manualSettlement: v.optional(manualSettlementValidator),
+		providerRef: v.optional(v.string()),
+		source: sourceValidator,
+	},
+	handler: async (ctx, args) => {
+		return runManualTransferConfirmation(ctx, args);
+	},
+});
 
 // ── collectCommitmentDepositAdmin ───────────────────────────────────
 /**

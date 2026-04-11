@@ -307,6 +307,7 @@ describe("ManualTransferProvider", () => {
 	it("initiate returns confirmed status (immediate settlement)", async () => {
 		const result = await provider.initiate(sampleInput);
 		expect(result.status).toBe("confirmed");
+		expect(result.settledAt).toBeTypeOf("number");
 	});
 
 	it("initiate returns pending for outbound manual transfers", async () => {
@@ -318,6 +319,7 @@ describe("ManualTransferProvider", () => {
 			transferType: "lender_dispersal_payout",
 		});
 		expect(result.status).toBe("pending");
+		expect(result.settledAt).toBeUndefined();
 	});
 
 	it("initiate returns a providerRef containing the transfer type", async () => {

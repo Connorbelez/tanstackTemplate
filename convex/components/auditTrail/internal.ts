@@ -1,4 +1,5 @@
 import { internalMutation } from "./_generated/server";
+import { emitAuditEvidence } from "./sink";
 
 // ── Outbox Processor (cron-driven, at-least-once) ────────────────
 export const processOutbox = internalMutation({
@@ -14,17 +15,38 @@ export const processOutbox = internalMutation({
 
 		for (const entry of pending) {
 			try {
-				// Production: push to SIEM/S3/compliance store using entry.idempotencyKey
-				// Demo: simulate successful emission
-				// Patch event first — if this fails, outbox remains pending (safe retry)
+				const event = await ctx.db.get(entry.eventId);
+				if (!event) {
+					throw new Error(`Audit event not found for outbox entry ${entry._id}`);
+				}
+
+				const sinkResult = await emitAuditEvidence(ctx, {
+					contentType: "application/json",
+					eventId: entry.eventId,
+					idempotencyKey: entry.idempotencyKey,
+					payload: JSON.stringify({
+						canonicalEnvelope: event.canonicalEnvelope
+							? JSON.parse(event.canonicalEnvelope)
+							: null,
+						entityId: event.entityId,
+						entityType: event.entityType,
+						eventType: event.eventType,
+						hash: event.hash,
+						prevHash: event.prevHash,
+						timestamp: event.timestamp,
+					}),
+				});
+
 				const emittedAt = Date.now();
 				await ctx.db.patch(entry.eventId, {
 					emitted: true,
 					emittedAt,
+					sinkReference: sinkResult.sinkReference,
 				});
 				await ctx.db.patch(entry._id, {
 					status: "emitted" as const,
 					emittedAt,
+					sinkReference: sinkResult.sinkReference,
 				});
 				emittedCount++;
 			} catch (error) {
@@ -36,9 +58,12 @@ export const processOutbox = internalMutation({
 						error instanceof Error ? error.message : String(error),
 					status: newFailures >= 5 ? ("failed" as const) : ("pending" as const),
 				});
-				await ctx.db.patch(entry.eventId, {
-					emitFailures: newFailures,
-				});
+				const event = await ctx.db.get(entry.eventId);
+				if (event) {
+					await ctx.db.patch(entry.eventId, {
+						emitFailures: newFailures,
+					});
+				}
 				failedCount++;
 			}
 		}
@@ -51,27 +76,45 @@ export const processOutbox = internalMutation({
 export const processRetention = internalMutation({
 	args: {},
 	handler: async (ctx) => {
-		// Demo: 30 days. Production: 7 * 365.25 * 24 * 60 * 60 * 1000
-		const RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
-		const cutoff = Date.now() - RETENTION_MS;
+		const now = Date.now();
 
 		const expired = await ctx.db
 			.query("audit_events")
-			.withIndex("by_timestamp", (q) => q.lt("timestamp", cutoff))
+			.withIndex("by_retention", (q) => q.lte("retentionUntilAt", now))
+			.filter((q) => q.eq(q.field("archivedAt"), undefined))
 			.take(100);
 
-		let deletedCount = 0;
+		let archivedCount = 0;
 		for (const event of expired) {
+			if (!event.archivedAt) {
+				await ctx.db.patch(event._id, {
+					archivedAt: now,
+				});
+				archivedCount++;
+			}
+
 			const outboxEntry = await ctx.db
 				.query("audit_outbox")
 				.withIndex("by_event", (q) => q.eq("eventId", event._id))
+				.filter((q) => q.eq(q.field("archivedAt"), undefined))
 				.first();
-			if (outboxEntry) {
-				await ctx.db.delete(outboxEntry._id);
+			if (outboxEntry && !outboxEntry.archivedAt) {
+				await ctx.db.patch(outboxEntry._id, {
+					archivedAt: now,
+				});
 			}
-			await ctx.db.delete(event._id);
-			deletedCount++;
+
+			const evidenceObjects = await ctx.db
+				.query("audit_evidence_objects")
+				.withIndex("by_event", (q) => q.eq("eventId", event._id))
+				.filter((q) => q.eq(q.field("archivedAt"), undefined))
+				.collect();
+			for (const evidenceObject of evidenceObjects) {
+				await ctx.db.patch(evidenceObject._id, {
+					archivedAt: now,
+				});
+			}
 		}
-		return { deletedCount };
+		return { archivedCount };
 	},
 });

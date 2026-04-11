@@ -18,6 +18,7 @@ import type * as accrual_queryHelpers from "../accrual/queryHelpers.js";
 import type * as accrual_types from "../accrual/types.js";
 import type * as admin_queries from "../admin/queries.js";
 import type * as audit_queries from "../audit/queries.js";
+import type * as auditEvidence_services from "../auditEvidence/services.js";
 import type * as auditLog from "../auditLog.js";
 import type * as auditTrailClient from "../auditTrailClient.js";
 import type * as auth from "../auth.js";
@@ -235,6 +236,7 @@ import type * as payments_payout_config from "../payments/payout/config.js";
 import type * as payments_payout_mutations from "../payments/payout/mutations.js";
 import type * as payments_payout_queries from "../payments/payout/queries.js";
 import type * as payments_payout_refs from "../payments/payout/refs.js";
+import type * as payments_payout_transferOwnedFlow from "../payments/payout/transferOwnedFlow.js";
 import type * as payments_payout_validators from "../payments/payout/validators.js";
 import type * as payments_transfers_collectionAttemptReconciliation from "../payments/transfers/collectionAttemptReconciliation.js";
 import type * as payments_transfers_depositCollection from "../payments/transfers/depositCollection.js";
@@ -299,6 +301,7 @@ declare const fullApi: ApiFromModules<{
   "accrual/types": typeof accrual_types;
   "admin/queries": typeof admin_queries;
   "audit/queries": typeof audit_queries;
+  "auditEvidence/services": typeof auditEvidence_services;
   auditLog: typeof auditLog;
   auditTrailClient: typeof auditTrailClient;
   auth: typeof auth;
@@ -516,6 +519,7 @@ declare const fullApi: ApiFromModules<{
   "payments/payout/mutations": typeof payments_payout_mutations;
   "payments/payout/queries": typeof payments_payout_queries;
   "payments/payout/refs": typeof payments_payout_refs;
+  "payments/payout/transferOwnedFlow": typeof payments_payout_transferOwnedFlow;
   "payments/payout/validators": typeof payments_payout_validators;
   "payments/transfers/collectionAttemptReconciliation": typeof payments_transfers_collectionAttemptReconciliation;
   "payments/transfers/depositCollection": typeof payments_transfers_depositCollection;
@@ -4230,6 +4234,7 @@ export declare const components: {
           actorId: string;
           afterState?: string;
           beforeState?: string;
+          canonicalEnvelope?: string;
           entityId: string;
           entityType: string;
           eventType: string;
@@ -4247,7 +4252,9 @@ export declare const components: {
           _id: string;
           actorId: string;
           afterState?: string;
+          archivedAt?: number;
           beforeState?: string;
+          canonicalEnvelope?: string;
           emitFailures?: number;
           emitted: boolean;
           emittedAt?: number;
@@ -4257,6 +4264,8 @@ export declare const components: {
           hash: string;
           metadata?: string;
           prevHash: string;
+          retentionUntilAt: number;
+          sinkReference?: string;
           timestamp: number;
         }>
       >;

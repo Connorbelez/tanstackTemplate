@@ -163,14 +163,14 @@ async function transitionAttempt(
 		return false;
 	}
 
-	await executeTransition(ctx, {
+	const result = await executeTransition(ctx, {
 		entityType: "collectionAttempt",
 		entityId: args.transfer.collectionAttemptId,
 		eventType: args.eventType,
 		payload: args.payload,
 		source: args.source,
 	});
-	return true;
+	return result.success;
 }
 
 export async function reconcileAttemptLinkedInboundSettlement(

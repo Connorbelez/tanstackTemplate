@@ -3,6 +3,7 @@ import { v } from "convex/values";
 
 export default defineSchema({
 	audit_events: defineTable({
+		canonicalEnvelope: v.optional(v.string()),
 		entityId: v.string(),
 		entityType: v.string(),
 		eventType: v.string(),
@@ -14,11 +15,15 @@ export default defineSchema({
 		hash: v.string(),
 		emitted: v.boolean(),
 		emittedAt: v.optional(v.number()),
+		sinkReference: v.optional(v.string()),
 		emitFailures: v.optional(v.number()),
+		archivedAt: v.optional(v.number()),
+		retentionUntilAt: v.number(),
 		timestamp: v.number(),
 	})
 		.index("by_entity", ["entityId", "timestamp"])
 		.index("by_emitted", ["emitted"])
+		.index("by_retention", ["retentionUntilAt"])
 		.index("by_timestamp", ["timestamp"]),
 
 	audit_outbox: defineTable({
@@ -32,10 +37,28 @@ export default defineSchema({
 		emitFailures: v.number(),
 		createdAt: v.number(),
 		emittedAt: v.optional(v.number()),
+		sinkReference: v.optional(v.string()),
+		archivedAt: v.optional(v.number()),
+		retentionUntilAt: v.number(),
 		lastFailureAt: v.optional(v.number()),
 		lastFailureReason: v.optional(v.string()),
 	})
 		.index("by_status", ["status"])
 		.index("by_idempotency_key", ["idempotencyKey"])
-		.index("by_event", ["eventId"]),
+		.index("by_event", ["eventId"])
+		.index("by_retention", ["retentionUntilAt"]),
+
+	audit_evidence_objects: defineTable({
+		eventId: v.id("audit_events"),
+		idempotencyKey: v.string(),
+		sinkReference: v.string(),
+		contentType: v.string(),
+		payload: v.string(),
+		archivedAt: v.optional(v.number()),
+		retentionUntilAt: v.number(),
+		createdAt: v.number(),
+	})
+		.index("by_event", ["eventId"])
+		.index("by_idempotency_key", ["idempotencyKey"])
+		.index("by_retention", ["retentionUntilAt"]),
 });
