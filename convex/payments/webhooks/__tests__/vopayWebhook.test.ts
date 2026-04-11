@@ -218,7 +218,23 @@ async function seedProviderOwnedTransfer(
 	},
 	t = createTrackedHarness()
 ) {
+	const { borrowerId, mortgageId } = await seedMinimalEntities(t);
 	const seeded = await t.run(async (ctx) => {
+		const obligationId = await ctx.db.insert("obligations", {
+			status: "due",
+			machineContext: {},
+			lastTransitionAt: Date.now(),
+			mortgageId,
+			borrowerId,
+			paymentNumber: 1,
+			type: "regular_interest",
+			amount: 50_000,
+			amountSettled: 0,
+			dueDate: Date.parse("2026-03-01T00:00:00Z"),
+			gracePeriodEnd: Date.parse("2026-03-16T00:00:00Z"),
+			createdAt: Date.now(),
+		});
+
 		const transferId = await ctx.db.insert("transferRequests", {
 			status: "pending",
 			direction: opts.providerCode === "eft_vopay" ? "outbound" : "inbound",
@@ -231,6 +247,8 @@ async function seedProviderOwnedTransfer(
 			counterpartyType:
 				opts.providerCode === "eft_vopay" ? "lender" : "borrower",
 			counterpartyId: "test-counterparty",
+			mortgageId,
+			obligationId,
 			providerCode: opts.providerCode,
 			providerRef: opts.providerRef,
 			idempotencyKey: `${opts.providerCode}-${opts.providerRef}`,

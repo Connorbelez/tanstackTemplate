@@ -1,19 +1,29 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
+import { listingDetailMocks } from "#/components/demo/listings/listing-detail-mock-data";
 
-const KNOWN_LISTING_URL = "/demo/listings/first-mortgage-north-york";
 const UNKNOWN_LISTING_URL = "/demo/listings/unknown-listing";
+const FEATURED_LISTING_ID = "first-mortgage-condo-scarborough";
+const featuredListing = listingDetailMocks[FEATURED_LISTING_ID];
+
+if (!featuredListing) {
+	throw new Error(`Missing demo listing fixture: ${FEATURED_LISTING_ID}`);
+}
+
+async function openFeaturedListing(page: Page) {
+	await page.goto(`/demo/listings/${FEATURED_LISTING_ID}`);
+
+	await expect(
+		page.getByRole("heading", {
+			name: featuredListing.title,
+		})
+	).toBeVisible();
+}
 
 test.describe("Demo listing detail page", () => {
 	test("renders a known listing and supports desktop interactions", async ({
 		page,
 	}) => {
-		await page.goto(KNOWN_LISTING_URL);
-
-		await expect(
-			page.getByRole("heading", {
-				name: "First Mortgage — Detached Home, North York",
-			})
-		).toBeVisible();
+		await openFeaturedListing(page);
 		await expect(page.getByText("1 of 12 photos")).toBeVisible();
 
 		await page.getByRole("button", { name: "Next photo" }).click();
@@ -47,9 +57,11 @@ test.describe("Demo listing detail page", () => {
 
 	test("renders the mobile composition", async ({ page }) => {
 		await page.setViewportSize({ width: 390, height: 844 });
-		await page.goto(KNOWN_LISTING_URL);
+		await openFeaturedListing(page);
 
-		await expect(page.getByText("Show Map — North York, ON")).toBeVisible();
+		await expect(
+			page.getByText(`Show Map — ${featuredListing.map.locationText}`)
+		).toBeVisible();
 		await expect(page.getByText("You May Also Like")).toBeVisible();
 		await expect(
 			page.getByRole("button", {

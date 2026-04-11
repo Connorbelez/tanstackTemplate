@@ -1,13 +1,48 @@
+import { randomUUID } from "node:crypto";
+import { mkdir, rm } from "node:fs/promises";
+import { join } from "node:path";
 import { expect, test, type Browser, type Page } from "@playwright/test";
+import {
+	createAuthStorageState,
+	TEST_ADMIN_ORG_ID,
+	TEST_MEMBER_ORG_ID,
+} from "../helpers/auth-storage";
 
 test.describe.configure({ mode: "serial" });
 
-const adminStorageState = ".auth/admin.json";
-const memberStorageState = ".auth/member.json";
+const testAccountEmail = process.env.TEST_ACCOUNT_EMAIL;
+if (!testAccountEmail) {
+	throw new Error("TEST_ACCOUNT_EMAIL environment variable is required for e2e tests");
+}
 
-async function openOnboardingPage(browser: Browser, storageState: string) {
+const onboardingAuthStateDir = join(process.cwd(), ".tmp", "auth", "onboarding");
+
+async function createFreshStorageState(browser: Browser, orgId: string) {
+	await mkdir(onboardingAuthStateDir, { recursive: true });
+
+	const bootstrapContext = await browser.newContext();
+	const bootstrapPage = await bootstrapContext.newPage();
+	const storageStatePath = join(
+		onboardingAuthStateDir,
+		`storage-${orgId}-${randomUUID()}.json`
+	);
+
+	await createAuthStorageState({
+		orgId,
+		page: bootstrapPage,
+		path: storageStatePath,
+	});
+
+	await bootstrapContext.close();
+
+	return storageStatePath;
+}
+
+async function openOnboardingPage(browser: Browser, orgId: string) {
+	const storageState = await createFreshStorageState(browser, orgId);
 	const context = await browser.newContext({ storageState });
 	const page = await context.newPage();
+	await rm(storageState, { force: true });
 	await page.goto("/demo/rbac-auth/onboarding");
 	await expect(page.getByText("Onboarding State Machine")).toBeVisible({
 		timeout: 15_000,
@@ -16,7 +51,7 @@ async function openOnboardingPage(browser: Browser, storageState: string) {
 }
 
 async function clearPendingRequests(browser: Browser) {
-	const { context, page } = await openOnboardingPage(browser, adminStorageState);
+	const { context, page } = await openOnboardingPage(browser, TEST_ADMIN_ORG_ID);
 	const pendingCards = page.locator('[data-testid^="pending-request-"]');
 	while ((await pendingCards.count()) > 0) {
 		const card = pendingCards.first();
@@ -40,7 +75,7 @@ test.beforeEach(async ({ browser }) => {
 test("member submits a valid role request and sees the pending state", async ({
 	browser,
 }) => {
-	const { context, page } = await openOnboardingPage(browser, memberStorageState);
+	const { context, page } = await openOnboardingPage(browser, TEST_MEMBER_ORG_ID);
 
 	await expect(page.getByText("Request a Role")).toBeVisible();
 	await expect(page.getByText("Pending Requests (Admin)")).toHaveCount(0);
@@ -56,7 +91,7 @@ test("member submits a valid role request and sees the pending state", async ({
 test("admin sees a pending request and can reject it with a visible UI update", async ({
 	browser,
 }) => {
-	const memberSession = await openOnboardingPage(browser, memberStorageState);
+	const memberSession = await openOnboardingPage(browser, TEST_MEMBER_ORG_ID);
 	await submitRoleRequest(memberSession.page, "Lawyer");
 	await expect(
 		memberSession.page.getByText(
@@ -65,9 +100,9 @@ test("admin sees a pending request and can reject it with a visible UI update", 
 	).toBeVisible({ timeout: 15_000 });
 	await memberSession.context.close();
 
-	const adminSession = await openOnboardingPage(browser, adminStorageState);
+	const adminSession = await openOnboardingPage(browser, TEST_ADMIN_ORG_ID);
 	const pendingCard = adminSession.page.locator('[data-testid^="pending-request-"]').first();
-	await expect(pendingCard).toContainText("member@test.fairlend.ca");
+	await expect(pendingCard).toContainText(testAccountEmail);
 	await pendingCard.getByRole("button", { name: /^Reject / }).click();
 	await adminSession.page.getByLabel("Rejection reason").fill("Rejected from E2E");
 	await adminSession.page
@@ -82,7 +117,7 @@ test("admin sees a pending request and can reject it with a visible UI update", 
 test("admin can approve a pending request without surfacing an unhandled error", async ({
 	browser,
 }) => {
-	const memberSession = await openOnboardingPage(browser, memberStorageState);
+	const memberSession = await openOnboardingPage(browser, TEST_MEMBER_ORG_ID);
 	await submitRoleRequest(memberSession.page, "Lender");
 	await expect(
 		memberSession.page.getByText(
@@ -91,9 +126,9 @@ test("admin can approve a pending request without surfacing an unhandled error",
 	).toBeVisible({ timeout: 15_000 });
 	await memberSession.context.close();
 
-	const adminSession = await openOnboardingPage(browser, adminStorageState);
+	const adminSession = await openOnboardingPage(browser, TEST_ADMIN_ORG_ID);
 	const pendingCard = adminSession.page.locator('[data-testid^="pending-request-"]').first();
-	await expect(pendingCard).toContainText("member@test.fairlend.ca");
+	await expect(pendingCard).toContainText(testAccountEmail);
 	await pendingCard.getByRole("button", { name: /^Approve / }).click();
 
 	await expect(pendingCard).toBeHidden({ timeout: 15_000 });
@@ -102,7 +137,7 @@ test("admin can approve a pending request without surfacing an unhandled error",
 });
 
 test("non-review users do not see admin review behavior", async ({ browser }) => {
-	const { context, page } = await openOnboardingPage(browser, memberStorageState);
+	const { context, page } = await openOnboardingPage(browser, TEST_MEMBER_ORG_ID);
 
 	await expect(page.getByText("Request a Role")).toBeVisible();
 	await expect(page.getByText("Pending Requests (Admin)")).toHaveCount(0);
@@ -115,7 +150,7 @@ test("non-review users do not see admin review behavior", async ({ browser }) =>
 test("admin mutation failures surface visible feedback in the UI", async ({
 	browser,
 }) => {
-	const memberSession = await openOnboardingPage(browser, memberStorageState);
+	const memberSession = await openOnboardingPage(browser, TEST_MEMBER_ORG_ID);
 	await submitRoleRequest(memberSession.page, "Lawyer");
 	await expect(
 		memberSession.page.getByText(
@@ -124,9 +159,9 @@ test("admin mutation failures surface visible feedback in the UI", async ({
 	).toBeVisible({ timeout: 15_000 });
 	await memberSession.context.close();
 
-	const adminSession = await openOnboardingPage(browser, adminStorageState);
+	const adminSession = await openOnboardingPage(browser, TEST_ADMIN_ORG_ID);
 	const pendingCard = adminSession.page.locator('[data-testid^="pending-request-"]').first();
-	await expect(pendingCard).toContainText("member@test.fairlend.ca");
+	await expect(pendingCard).toContainText(testAccountEmail);
 
 	await adminSession.context.setOffline(true);
 	await pendingCard.getByRole("button", { name: /^Approve / }).click();

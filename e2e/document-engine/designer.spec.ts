@@ -1,9 +1,11 @@
 import { expect, test } from "@playwright/test";
 import {
+	ADMIN_STORAGE_STATE,
 	addFieldInDesigner,
 	BASE_URL,
 	createTemplate,
 	expectDesignerRendered,
+	openAdminPage,
 	navigateToDesigner,
 	uniqueName,
 	uploadTestPdf,
@@ -12,6 +14,8 @@ import {
 // Matches any non-zero field count like "1 field", "2 fields", etc.
 const HAS_FIELDS_PATTERN = /[1-9]\d* fields?/;
 
+test.use({ storageState: ADMIN_STORAGE_STATE });
+
 test.describe("Document Engine - Template Designer", () => {
 	test.describe.configure({ mode: "serial" });
 
@@ -19,10 +23,10 @@ test.describe("Document Engine - Template Designer", () => {
 	const templateName = uniqueName("DesignerTpl");
 
 	test.beforeAll(async ({ browser }) => {
-		const page = await browser.newPage();
+		const { context, page } = await openAdminPage(browser);
 		await uploadTestPdf(page, pdfName);
 		await createTemplate(page, templateName, pdfName);
-		await page.close();
+		await context.close();
 	});
 
 	test("designer page loads with template info and toolbar", async ({
@@ -102,7 +106,7 @@ test.describe("Document Engine - Template Designer", () => {
 	});
 
 	test.afterAll(async ({ browser }) => {
-		const page = await browser.newPage();
+		const { context, page } = await openAdminPage(browser);
 
 		// Delete template
 		await page.goto(`${BASE_URL}/templates`);
@@ -142,6 +146,6 @@ test.describe("Document Engine - Template Designer", () => {
 				.click();
 		}
 
-		await page.close();
+		await context.close();
 	});
 });

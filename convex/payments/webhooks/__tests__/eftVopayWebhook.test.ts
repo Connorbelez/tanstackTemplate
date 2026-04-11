@@ -2,7 +2,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createWebhookTestHarness } from "../../../../src/test/convex/payments/webhooks/convexTestHarness";
 import { internal } from "../../../_generated/api";
 import type { Id } from "../../../_generated/dataModel";
-import { seedMinimalEntities } from "../../cashLedger/__tests__/testUtils";
+import {
+	createTestAccount,
+	seedMinimalEntities,
+} from "../../cashLedger/__tests__/testUtils";
 
 const TEST_SOURCE = {
 	channel: "api_webhook" as const,
@@ -31,7 +34,22 @@ async function seedBridgedTransfer(
 		status?: "pending" | "confirmed";
 	}
 ) {
-	const { mortgageId } = await seedMinimalEntities(t);
+	const { lenderAId, mortgageId } = await seedMinimalEntities(t);
+
+	if (args.providerCode === "eft_vopay") {
+		await createTestAccount(t, {
+			family: "LENDER_PAYABLE",
+			mortgageId,
+			lenderId: lenderAId,
+			initialCreditBalance: 50_000n,
+		});
+
+		await createTestAccount(t, {
+			family: "TRUST_CASH",
+			mortgageId,
+			initialDebitBalance: 50_000n,
+		});
+	}
 
 	return t.run(async (ctx) => {
 		const planEntryId = await ctx.db.insert("collectionPlanEntries", {
@@ -77,6 +95,7 @@ async function seedBridgedTransfer(
 			createdAt: Date.now(),
 			lastTransitionAt: Date.now(),
 			collectionAttemptId: attemptId,
+			...(args.providerCode === "eft_vopay" ? { lenderId: lenderAId } : {}),
 		});
 
 		const webhookEventId = await ctx.db.insert("webhookEvents", {

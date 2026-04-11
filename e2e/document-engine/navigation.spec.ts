@@ -1,8 +1,19 @@
 import { expect, test } from "@playwright/test";
+import {
+	ADMIN_STORAGE_STATE,
+	openAdminPage,
+} from "../helpers/document-engine";
 
 const BASE = "/demo/document-engine";
 
+test.use({ storageState: ADMIN_STORAGE_STATE });
+
 test.describe("Document Engine - Navigation & Layout", () => {
+	test.beforeAll(async ({ browser }) => {
+		const { context } = await openAdminPage(browser);
+		await context.close();
+	});
+
 	test("layout renders with page title and navigation", async ({ page }) => {
 		await page.goto(BASE);
 

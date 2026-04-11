@@ -1,9 +1,21 @@
 import { expect, test } from "@playwright/test";
-import { BASE_URL, uniqueKey } from "../helpers/document-engine";
+import {
+	ADMIN_STORAGE_STATE,
+	BASE_URL,
+	openAdminPage,
+	uniqueKey,
+} from "../helpers/document-engine";
 
 const SNAKE_CASE_ERROR_PATTERN = /snake_case/i;
 
+test.use({ storageState: ADMIN_STORAGE_STATE });
+
 test.describe("Document Engine - System Variables", () => {
+	test.beforeAll(async ({ browser }) => {
+		const { context } = await openAdminPage(browser);
+		await context.close();
+	});
+
 	test("variables page renders with heading and add button", async ({
 		page,
 	}) => {

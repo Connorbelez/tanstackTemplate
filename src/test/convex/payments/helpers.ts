@@ -194,6 +194,7 @@ interface SeedPlanEntryOptions {
 		| "member"
 		| "system";
 	rescheduledFromId?: Id<"collectionPlanEntries">;
+	allowMixedMortgageObligations?: boolean;
 }
 
 /**
@@ -218,7 +219,10 @@ export async function seedPlanEntry(
 			if (!obligation) {
 				throw new Error("seedPlanEntry could not load an obligation");
 			}
-			if (obligation.mortgageId !== firstObligation.mortgageId) {
+			if (
+				!opts.allowMixedMortgageObligations &&
+				obligation.mortgageId !== firstObligation.mortgageId
+			) {
 				throw new Error(
 					"seedPlanEntry expects all obligations to belong to the same mortgage"
 				);

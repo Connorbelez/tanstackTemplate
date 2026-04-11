@@ -65,6 +65,29 @@ function currencyTextToCents(value: string): number {
 	return Math.round(parsed * 100);
 }
 
+async function waitForSettlementOutcome(page: import("@playwright/test").Page) {
+	const successMessage = page.getByText("Payment applied. Dispersal scheduled.");
+	const balanceError = page.getByText(/exceeds remaining balance/);
+	const outcome = await Promise.race([
+		successMessage
+			.waitFor({ state: "visible", timeout: DATA_LOAD_TIMEOUT })
+			.then(() => "success" as const)
+			.catch(() => null),
+		balanceError
+			.waitFor({ state: "visible", timeout: DATA_LOAD_TIMEOUT })
+			.then(() => "error" as const)
+			.catch(() => null),
+	]);
+
+	if (outcome) {
+		return outcome;
+	}
+
+	throw new Error(
+		"Timed out waiting for settlement success or the remaining-balance validation error."
+	);
+}
+
 test.describe("Marketplace Simulation — Full Flow", () => {
 	test.describe.configure({ mode: "serial" });
 
@@ -166,30 +189,29 @@ test.describe("Marketplace Simulation — Full Flow", () => {
 			await expect(settledAmount).toBeVisible({ timeout: DATA_LOAD_TIMEOUT });
 			await settledAmount.fill(String(remainingPaymentAmount));
 			await page.getByRole("button", { name: "Apply Payment" }).click();
-			const successMessage = page.getByText(
-				"Payment applied. Dispersal scheduled."
-			);
-			const settledOnFirstTry = await successMessage
-				.isVisible({ timeout: 3_000 })
-				.catch(() => false);
-			if (!settledOnFirstTry) {
-				const overpayError = page.getByText(/remaining balance \d+/);
-				await expect(overpayError).toBeVisible({ timeout: DATA_LOAD_TIMEOUT });
-				const match = (await overpayError.innerText()).match(
-					/remaining balance (\d+)/
+			const settlementOutcome = await waitForSettlementOutcome(page);
+			if (settlementOutcome === "error") {
+				await expect(page.getByText(/exceeds remaining balance/)).toBeVisible({
+					timeout: DATA_LOAD_TIMEOUT,
+				});
+				const retryAmount = currencyTextToCents(
+					await obligationAmountCell(page).innerText()
 				);
-				if (!match) {
-					throw new Error("Could not parse remaining balance from payment error");
-				}
+				expect(retryAmount).toBeGreaterThan(0);
 				await obligationRow(page).getByRole("button", { name: "Pay" }).click();
 				const retryAmountInput = page.getByLabel("Settled amount (¢):");
 				await expect(retryAmountInput).toBeVisible({
 					timeout: DATA_LOAD_TIMEOUT,
 				});
-				await retryAmountInput.fill(match[1]);
+				await retryAmountInput.fill(String(retryAmount));
 				await page.getByRole("button", { name: "Apply Payment" }).click();
+				await expect(
+					page.getByText("Payment applied. Dispersal scheduled.")
+				).toBeVisible({ timeout: DATA_LOAD_TIMEOUT });
 			}
-			await expect(successMessage).toBeVisible({ timeout: DATA_LOAD_TIMEOUT });
+			await expect(
+				page.getByText("Payment applied. Dispersal scheduled.")
+			).toBeVisible({ timeout: DATA_LOAD_TIMEOUT });
 			await expect(obligationRow(page)).toHaveCount(0, {
 				timeout: DATA_LOAD_TIMEOUT,
 			});

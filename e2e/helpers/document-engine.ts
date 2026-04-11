@@ -1,7 +1,17 @@
-import { expect, type Page } from "@playwright/test";
+import {
+	expect,
+	type Browser,
+	type BrowserContext,
+	type Page,
+} from "@playwright/test";
 import { PDFDocument } from "pdf-lib";
+import {
+	TEST_ADMIN_ORG_ID,
+	createAuthStorageState,
+} from "./auth-storage";
 
 export const BASE_URL = "/demo/document-engine";
+export const ADMIN_STORAGE_STATE = ".auth/admin.json";
 
 /**
  * Generate a unique name for test resources to avoid collisions
@@ -16,6 +26,24 @@ export function uniqueName(prefix: string): string {
  */
 export function uniqueKey(prefix: string): string {
 	return `${prefix}_${Date.now().toString(36).slice(-4)}_${Math.random().toString(36).slice(2, 5)}`;
+}
+
+/**
+ * Open a browser context/page pair authenticated as the admin test user.
+ * Use this for setup and teardown flows that create their own browser context.
+ */
+export async function openAdminPage(browser: Browser): Promise<{
+	context: BrowserContext;
+	page: Page;
+}> {
+	const context = await browser.newContext();
+	const page = await context.newPage();
+	await createAuthStorageState({
+		orgId: TEST_ADMIN_ORG_ID,
+		page,
+		path: ADMIN_STORAGE_STATE,
+	});
+	return { context, page };
 }
 
 /**

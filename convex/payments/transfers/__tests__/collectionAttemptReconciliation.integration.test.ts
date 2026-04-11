@@ -300,7 +300,7 @@ afterAll(() => {
  * - REQ-5: Settlement-layer modules must not require plan-entry awareness to post money
  */
 describe("collection attempt reconciliation for attempt-linked inbound transfers", () => {
-	it("publishTransferConfirmed settles the linked collection attempt and leaves inbound cash posting on the obligation path", async () => {
+	it("publishTransferConfirmed settles the linked collection attempt and posts the authoritative cash receipt on the transfer", async () => {
 		const t = createHarness();
 		const seeded = await seedCoreEntities(t);
 
@@ -387,7 +387,10 @@ describe("collection attempt reconciliation for attempt-linked inbound transfers
 					q.eq("transferRequestId", transferId)
 				)
 				.collect();
-			expect(transferEntries).toHaveLength(0);
+			expect(transferEntries).toHaveLength(1);
+			expect(transferEntries[0]?.entryType).toBe("CASH_RECEIVED");
+			expect(transferEntries[0]?.transferRequestId).toBe(transferId);
+			expect(transferEntries[0]?.attemptId).toBeUndefined();
 
 			const obligationEntries = await ctx.db
 				.query("cash_ledger_journal_entries")
@@ -399,9 +402,21 @@ describe("collection attempt reconciliation for attempt-linked inbound transfers
 				(entry) => entry.entryType === "CASH_RECEIVED"
 			);
 
-			expect(cashReceipts).toHaveLength(1);
-			expect(cashReceipts[0]?.attemptId).toBe(attemptId);
-			expect(cashReceipts[0]?.transferRequestId).toBeUndefined();
+			expect(cashReceipts).toHaveLength(2);
+
+			const transferReceipt = cashReceipts.find(
+				(entry) => entry.transferRequestId === transferId
+			);
+			expect(transferReceipt).toBeTruthy();
+			expect(transferReceipt?.attemptId).toBeUndefined();
+			expect(transferReceipt?.transferRequestId).toBe(transferId);
+
+			const obligationReceipt = cashReceipts.find(
+				(entry) => entry.attemptId === attemptId
+			);
+			expect(obligationReceipt).toBeTruthy();
+			expect(obligationReceipt?.attemptId).toBe(attemptId);
+			expect(obligationReceipt?.transferRequestId).toBeUndefined();
 		});
 	});
 

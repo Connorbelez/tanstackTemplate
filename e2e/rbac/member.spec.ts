@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { expectResolvedRole } from "./helpers";
 
 const ORGS_TAB_PATTERN = /organizations/i;
 const memberOrgId = process.env.TEST_MEMBER_ORG as string;
@@ -23,7 +24,6 @@ test("member session shows member role", async ({ page }) => {
 	await page.goto("/demo/workos");
 	await page.getByRole("tab", { name: ORGS_TAB_PATTERN }).click();
 
-	// The role badge should show "member"
-	const roleRow = page.locator("text=Role").locator("..").first();
-	await expect(roleRow.getByText("member")).toBeVisible({ timeout: 10_000 });
+	// The role badge should show the resolved member role.
+	await expectResolvedRole(page, "member");
 });

@@ -9,7 +9,7 @@
 
 import { makeFunctionReference } from "convex/server";
 import { convexTest } from "convex-test";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import workflowSchema from "../../../node_modules/@convex-dev/workflow/dist/component/schema.js";
 import workpoolSchema from "../../../node_modules/@convex-dev/workpool/dist/component/schema.js";
 import { registerAuditLogComponent } from "../../../src/test/convex/registerAuditLogComponent";
@@ -39,6 +39,17 @@ const ADMIN_SOURCE = {
 
 // ── Types ───────────────────────────────────────────────────────────
 type TestHarness = ReturnType<typeof convexTest>;
+
+beforeEach(() => {
+	vi.useFakeTimers({
+		toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval"],
+	});
+});
+
+afterEach(() => {
+	vi.clearAllTimers();
+	vi.useRealTimers();
+});
 
 interface TransitionResult {
 	effectsScheduled?: string[];
