@@ -42,10 +42,20 @@ export default defineConfig({
 				"auth/**",
 				"rbac/**",
 				"deal-closing/**",
+				"document-engine/**",
 				"auth.setup.ts",
 				"simulation.spec.ts",
 			],
 			use: { ...devices["Desktop Chrome"] },
+		},
+		{
+			name: "document-engine",
+			testDir: "./e2e/document-engine",
+			dependencies: ["setup"],
+			use: {
+				...devices["Desktop Chrome"],
+				storageState: ".auth/admin.json",
+			},
 		},
 		{
 			name: "simulation",

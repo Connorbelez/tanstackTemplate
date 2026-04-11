@@ -1,4 +1,4 @@
-import { expect, type Page } from "@playwright/test";
+import type { Page } from "@playwright/test";
 import { loginViaWorkOS } from "./workos-login";
 
 function requireEnv(name: string): string {
@@ -30,14 +30,32 @@ export async function createAuthStorageState(args: {
 			args.orgId === TEST_MEMBER_ORG_ID ? "member" : "admin";
 
 		// Force the auth client to settle on the switched organization before
-		// persisting the browser state. Without this extra readback the saved
-		// token can remain pinned to the pre-switch org.
-		await args.page.goto("/demo/workos");
-		await args.page.getByRole("tab", { name: /organizations/i }).click();
+		// persisting the browser state. Use a dedicated e2e route so setup does
+		// not depend on demo page tabs or layout structure.
+		await args.page.goto("/e2e/session");
+		await args.page.waitForFunction(
+			([expectedOrgId, expectedSessionRole]) => {
+				const el = document.querySelector('[data-testid="session-json"]');
+				if (!el?.textContent) {
+					return false;
+				}
 
-		const sessionCard = args.page.locator("text=Session Context").locator("..");
-		await expect(sessionCard).toContainText(args.orgId, { timeout: 15_000 });
-		await expect(sessionCard).toContainText(expectedRole, { timeout: 15_000 });
+				try {
+					const session = JSON.parse(el.textContent) as {
+						tokenOrganizationId?: string | null;
+						tokenRole?: string | null;
+					};
+					return (
+						session.tokenOrganizationId === expectedOrgId &&
+						session.tokenRole === expectedSessionRole
+					);
+				} catch {
+					return false;
+				}
+			},
+			[args.orgId, expectedRole],
+			{ timeout: 15_000 }
+		);
 	}
 
 	await args.page.context().storageState({ path: args.path });

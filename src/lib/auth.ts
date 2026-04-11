@@ -16,11 +16,16 @@ export const ISLAND_PERMISSIONS = {
 export type IslandPermission =
 	(typeof ISLAND_PERMISSIONS)[keyof typeof ISLAND_PERMISSIONS];
 
+const ADMIN_ACCESS_PERMISSION = ISLAND_PERMISSIONS.admin;
+
 export function hasPermission(
 	permissions: readonly string[],
 	permission: string
 ): boolean {
-	return permissions.includes(permission);
+	return (
+		permissions.includes(permission) ||
+		permissions.includes(ADMIN_ACCESS_PERMISSION)
+	);
 }
 
 export function hasAnyPermission(
@@ -99,7 +104,7 @@ export function guardPermission(permission: string) {
 		if (!context.userId) {
 			throw redirect(buildSignInRedirect(location.href));
 		}
-		if (!context.permissions.includes(permission)) {
+		if (!hasPermission(context.permissions, permission)) {
 			throw redirect({ to: "/unauthorized" });
 		}
 	};
@@ -136,7 +141,7 @@ export function guardFairLendAdminWithPermission(permission: string) {
 		if (!isFairLendStaffAdmin(context)) {
 			throw redirect({ to: "/unauthorized" });
 		}
-		if (!context.permissions.includes(permission)) {
+		if (!hasPermission(context.permissions, permission)) {
 			throw redirect({ to: "/unauthorized" });
 		}
 	};

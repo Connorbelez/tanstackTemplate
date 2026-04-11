@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import {
 	expect,
 	type Browser,
@@ -12,6 +13,25 @@ import {
 
 export const BASE_URL = "/demo/document-engine";
 export const ADMIN_STORAGE_STATE = ".auth/admin.json";
+
+async function ensureAdminStorageState(browser: Browser): Promise<void> {
+	if (existsSync(ADMIN_STORAGE_STATE)) {
+		return;
+	}
+
+	const bootstrapContext = await browser.newContext();
+	const bootstrapPage = await bootstrapContext.newPage();
+
+	try {
+		await createAuthStorageState({
+			orgId: TEST_ADMIN_ORG_ID,
+			page: bootstrapPage,
+			path: ADMIN_STORAGE_STATE,
+		});
+	} finally {
+		await bootstrapContext.close();
+	}
+}
 
 /**
  * Generate a unique name for test resources to avoid collisions
@@ -36,13 +56,12 @@ export async function openAdminPage(browser: Browser): Promise<{
 	context: BrowserContext;
 	page: Page;
 }> {
-	const context = await browser.newContext();
-	const page = await context.newPage();
-	await createAuthStorageState({
-		orgId: TEST_ADMIN_ORG_ID,
-		page,
-		path: ADMIN_STORAGE_STATE,
+	await ensureAdminStorageState(browser);
+
+	const context = await browser.newContext({
+		storageState: ADMIN_STORAGE_STATE,
 	});
+	const page = await context.newPage();
 	return { context, page };
 }
 
