@@ -3,6 +3,7 @@ import { ManualTransferProvider } from "../manual";
 import { ManualReviewTransferProvider } from "../manualReview";
 import { MockTransferProvider } from "../mock";
 import { getTransferProvider } from "../registry";
+import { RotessaTransferProvider } from "../rotessa";
 
 const NOT_YET_IMPLEMENTED_RE = /not yet implemented/;
 const MOCK_PROVIDERS_DISABLED_RE = /Mock transfer providers are disabled/;
@@ -36,10 +37,15 @@ describe("Provider registry — resolution", () => {
 		expect(provider).toBeInstanceOf(MockTransferProvider);
 	});
 
+	it('resolves "pad_rotessa" to RotessaTransferProvider when configured', () => {
+		vi.stubEnv("ROTESSA_API_KEY", "test_rotessa_api_key");
+		const provider = getTransferProvider("pad_rotessa");
+		expect(provider).toBeInstanceOf(RotessaTransferProvider);
+	});
+
 	it("throws for unknown/unimplemented provider codes", () => {
 		const unimplementedCodes = [
 			"pad_vopay",
-			"pad_rotessa",
 			"eft_vopay",
 			"e_transfer",
 			"wire",

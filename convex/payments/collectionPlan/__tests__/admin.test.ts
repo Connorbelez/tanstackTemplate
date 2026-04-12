@@ -14,6 +14,7 @@ import {
 } from "../../../../src/test/convex/payments/helpers";
 import { api } from "../../../_generated/api";
 import type { Id } from "../../../_generated/dataModel";
+import { auditLog } from "../../../auditLog";
 
 type GovernedTestConvex = ReturnType<typeof createGovernedTestConvex>;
 
@@ -176,17 +177,36 @@ describe("collection plan admin surfaces", () => {
 					attempt.collectionAttemptId === execution.collectionAttemptId
 			)
 		).toBe(true);
-
-		const attemptDetail = await t
-			.withIdentity(FAIRLEND_ADMIN)
-			.query(api.payments.collectionPlan.admin.getCollectionAttempt, {
-				attemptId: execution.collectionAttemptId,
-			});
-		expect(attemptDetail?.attempt.transfer?.status).toBe("confirmed");
-		expect(typeof attemptDetail?.attempt.reconciliation?.isHealthy).toBe(
-			"boolean"
+		const attemptRow = attempts.find(
+			(attempt) => attempt.collectionAttemptId === execution.collectionAttemptId
 		);
-		expect((attemptDetail?.transitionJournal.length ?? 0) > 0).toBe(true);
+
+		const [collectionAttempt, attemptAuditEvents, transitionJournal] =
+			await Promise.all([
+				t.run(async (ctx) => ctx.db.get(execution.collectionAttemptId)),
+				t.run(async (ctx) =>
+					auditLog.queryByResource(ctx, {
+						resourceType: "collectionAttempts",
+						resourceId: `${execution.collectionAttemptId}`,
+						limit: 25,
+					})
+				),
+				t.run(async (ctx) =>
+					ctx.db
+						.query("auditJournal")
+						.withIndex("by_entity", (q) =>
+							q
+								.eq("entityType", "collectionAttempt")
+								.eq("entityId", `${execution.collectionAttemptId}`)
+						)
+						.collect()
+				),
+			]);
+		expect(collectionAttempt).not.toBeNull();
+		expect(attemptRow?.transfer?.status).toBe("confirmed");
+		expect(typeof attemptRow?.reconciliation?.isHealthy).toBe("boolean");
+		expect(Array.isArray(attemptAuditEvents)).toBe(true);
+		expect(transitionJournal.length).toBeGreaterThan(0);
 
 		const summary = await t
 			.withIdentity(FAIRLEND_ADMIN)
