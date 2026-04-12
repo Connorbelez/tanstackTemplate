@@ -1384,22 +1384,20 @@ export async function postPaymentReversalCascade(
 		)
 		.collect();
 
-	let linkedAttemptId: Id<"collectionAttempts"> | undefined;
-	if (args.transferRequestId) {
-		const transfer = await ctx.db.get(args.transferRequestId);
-		linkedAttemptId = transfer?.collectionAttemptId;
-	}
+	const cashReceivedMatches = allObligationEntries.filter((entry) => {
+		if (entry.entryType !== "CASH_RECEIVED") {
+			return false;
+		}
+		if (args.transferRequestId) {
+			return entry.transferRequestId === args.transferRequestId;
+		}
+		return (
+			entry.attemptId === args.attemptId &&
+			entry.transferRequestId === undefined
+		);
+	});
 
-	const cashReceivedEntry = allObligationEntries.find(
-		(e) =>
-			e.entryType === "CASH_RECEIVED" &&
-			(args.attemptId
-				? e.attemptId === args.attemptId
-				: e.transferRequestId === args.transferRequestId ||
-					e.attemptId === linkedAttemptId)
-	);
-
-	if (!cashReceivedEntry) {
+	if (cashReceivedMatches.length === 0) {
 		throw new ConvexError({
 			code: "ORIGINAL_ENTRY_NOT_FOUND" as const,
 			message: "No CASH_RECEIVED entry found for the given identifiers",
@@ -1408,6 +1406,20 @@ export async function postPaymentReversalCascade(
 			obligationId: args.obligationId,
 		});
 	}
+
+	if (cashReceivedMatches.length > 1) {
+		throw new ConvexError({
+			code: "AMBIGUOUS_ORIGINAL_ENTRY" as const,
+			message:
+				"Expected exactly one CASH_RECEIVED entry for the given identifiers",
+			attemptId: args.attemptId ?? null,
+			transferRequestId: args.transferRequestId ?? null,
+			obligationId: args.obligationId,
+			matchingEntryIds: cashReceivedMatches.map((entry) => `${entry._id}`),
+		});
+	}
+
+	const [cashReceivedEntry] = cashReceivedMatches;
 
 	// 5. Validate dimension consistency — args dimensions must match the
 	// original entry to prevent mis-attributed reversals in queries/indexes.
@@ -1759,11 +1771,15 @@ export async function postCashReceiptForTransfer(
 		),
 		mortgageId: transfer.mortgageId,
 		obligationId: transfer.obligationId,
+		attemptId: transfer.collectionAttemptId,
 		transferRequestId: args.transferRequestId,
 		borrowerId: transfer.borrowerId,
 		lenderId: transfer.lenderId,
 		dealId: transfer.dealId,
 		dispersalEntryId: transfer.dispersalEntryId,
+		postingGroupId: transfer.collectionAttemptId
+			? `cash-receipt:${transfer.collectionAttemptId}`
+			: undefined,
 		source: normalizeSource(args.source),
 		metadata: {
 			transferType: transfer.transferType,

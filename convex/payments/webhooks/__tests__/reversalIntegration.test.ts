@@ -4,7 +4,10 @@ import { registerAuditLogComponent } from "../../../../src/test/convex/registerA
 import { internal } from "../../../_generated/api";
 import type { Id } from "../../../_generated/dataModel";
 import type { MutationCtx } from "../../../_generated/server";
-import { publishTransferReversed } from "../../../engine/effects/transfer";
+import {
+	publishTransferConfirmed,
+	publishTransferReversed,
+} from "../../../engine/effects/transfer";
 import { convexModules } from "../../../test/moduleMaps";
 import {
 	createHarness,
@@ -17,7 +20,6 @@ import {
 	getCashAccountBalance,
 } from "../../cashLedger/accounts";
 import {
-	postCashReceiptForObligation,
 	postObligationAccrued,
 	postSettlementAllocation,
 } from "../../cashLedger/integrations";
@@ -81,8 +83,33 @@ interface TransferEffectHandler {
 	) => Promise<void>;
 }
 
+const publishTransferConfirmedMutation =
+	publishTransferConfirmed as unknown as TransferEffectHandler;
 const publishTransferReversedMutation =
 	publishTransferReversed as unknown as TransferEffectHandler;
+
+async function applyTransferConfirmedEffect(
+	t: TestHarness,
+	args: {
+		transferId: Id<"transferRequests">;
+		settledAt?: number;
+	}
+) {
+	await t.run(async (ctx) => {
+		await publishTransferConfirmedMutation._handler(ctx, {
+			entityId: args.transferId,
+			entityType: "transfer",
+			eventType: "FUNDS_SETTLED",
+			journalEntryId: `test-transfer-confirmed:${args.transferId}`,
+			effectName: "publishTransferConfirmed",
+			payload:
+				typeof args.settledAt === "number"
+					? { settledAt: args.settledAt }
+					: undefined,
+			source: SYSTEM_SOURCE,
+		});
+	});
+}
 
 async function applyTransferReversalEffect(
 	t: TestHarness,
@@ -280,14 +307,8 @@ async function seedConfirmedAttemptPipeline(
 	});
 
 	// Post cash receipt
-	await t.run(async (ctx) => {
-		return postCashReceiptForObligation(ctx, {
-			obligationId,
-			amount: TOTAL_AMOUNT,
-			idempotencyKey: `cash-ledger:cash-receipt-reversal-int-${attemptId}`,
-			attemptId,
-			source: SYSTEM_SOURCE,
-		});
+	await applyTransferConfirmedEffect(t, {
+		transferId,
 	});
 
 	// Post settlement allocation

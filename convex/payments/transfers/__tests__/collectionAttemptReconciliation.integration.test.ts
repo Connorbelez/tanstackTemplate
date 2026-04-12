@@ -367,6 +367,7 @@ describe("collection attempt reconciliation for attempt-linked inbound transfers
 				payload: {
 					amount: 50_000,
 					attemptId,
+					transferRequestId: transferId,
 					postingGroupId: `cash-receipt:${attemptId}`,
 				},
 				source: ADMIN_SOURCE,
@@ -390,7 +391,10 @@ describe("collection attempt reconciliation for attempt-linked inbound transfers
 			expect(transferEntries).toHaveLength(1);
 			expect(transferEntries[0]?.entryType).toBe("CASH_RECEIVED");
 			expect(transferEntries[0]?.transferRequestId).toBe(transferId);
-			expect(transferEntries[0]?.attemptId).toBeUndefined();
+			expect(transferEntries[0]?.attemptId).toBe(attemptId);
+			expect(transferEntries[0]?.postingGroupId).toBe(
+				`cash-receipt:${attemptId}`
+			);
 
 			const obligationEntries = await ctx.db
 				.query("cash_ledger_journal_entries")
@@ -402,21 +406,14 @@ describe("collection attempt reconciliation for attempt-linked inbound transfers
 				(entry) => entry.entryType === "CASH_RECEIVED"
 			);
 
-			expect(cashReceipts).toHaveLength(2);
+			expect(cashReceipts).toHaveLength(1);
 
 			const transferReceipt = cashReceipts.find(
 				(entry) => entry.transferRequestId === transferId
 			);
 			expect(transferReceipt).toBeTruthy();
-			expect(transferReceipt?.attemptId).toBeUndefined();
+			expect(transferReceipt?.attemptId).toBe(attemptId);
 			expect(transferReceipt?.transferRequestId).toBe(transferId);
-
-			const obligationReceipt = cashReceipts.find(
-				(entry) => entry.attemptId === attemptId
-			);
-			expect(obligationReceipt).toBeTruthy();
-			expect(obligationReceipt?.attemptId).toBe(attemptId);
-			expect(obligationReceipt?.transferRequestId).toBeUndefined();
 		});
 	});
 
@@ -574,8 +571,17 @@ describe("collection attempt reconciliation for attempt-linked inbound transfers
 
 		await t.run(async (ctx) => {
 			await ctx.db.patch(attemptId, {
-				status: "confirmed",
 				transferRequestId: transferId,
+			});
+
+			await publishTransferConfirmedMutation._handler(ctx, {
+				entityId: transferId,
+				entityType: "transfer",
+				eventType: "FUNDS_SETTLED",
+				journalEntryId: "audit-transfer-settled-for-reversal",
+				effectName: "publishTransferConfirmed",
+				payload: { settledAt: Date.now() },
+				source: ADMIN_SOURCE,
 			});
 
 			await emitPaymentReceivedMutation._handler(ctx, {
@@ -597,6 +603,7 @@ describe("collection attempt reconciliation for attempt-linked inbound transfers
 				payload: {
 					amount: 50_000,
 					attemptId,
+					transferRequestId: transferId,
 					postingGroupId: `cash-receipt:${attemptId}`,
 				},
 				source: ADMIN_SOURCE,
@@ -634,11 +641,13 @@ describe("collection attempt reconciliation for attempt-linked inbound transfers
 					q.eq("transferRequestId", transferId)
 				)
 				.collect();
-			expect(reversalEntries.length).toBeGreaterThanOrEqual(1);
+			const transferReversals = reversalEntries.filter(
+				(entry) => entry.entryType === "REVERSAL"
+			);
+			expect(transferReversals.length).toBeGreaterThanOrEqual(1);
 			expect(
-				reversalEntries.every(
+				transferReversals.every(
 					(entry) =>
-						entry.entryType === "REVERSAL" &&
 						entry.postingGroupId === `reversal-group:transfer:${transferId}`
 				)
 			).toBe(true);

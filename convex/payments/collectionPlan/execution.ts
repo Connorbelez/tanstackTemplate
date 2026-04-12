@@ -310,6 +310,7 @@ const stagePlanEntryExecution = convex
 						collectionAttemptId: transferHandoffRequest.collectionAttemptId,
 						borrowerId: transferHandoffRequest.borrowerId,
 						providerCode: transferHandoffRequest.providerCode,
+						manualSettlement: args.manualSettlement,
 						idempotencyKey: buildTransferHandoffIdempotencyKey(
 							transferHandoffRequest.planEntryId
 						),
@@ -477,6 +478,7 @@ const stagePlanEntryExecution = convex
 			collectionAttemptId: transferHandoffRequest.collectionAttemptId,
 			borrowerId: transferHandoffRequest.borrowerId,
 			providerCode: transferHandoffRequest.providerCode,
+			manualSettlement: args.manualSettlement,
 			idempotencyKey: buildTransferHandoffIdempotencyKey(
 				transferHandoffRequest.planEntryId
 			),

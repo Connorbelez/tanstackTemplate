@@ -1,15 +1,16 @@
 import { ConvexError, v } from "convex/values";
-import { internal } from "../_generated/api";
+import { api, internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import { FAIRLEND_BROKERAGE_ORG_ID } from "../constants";
 import type { CommandSource, TransitionResult } from "../engine/types";
 import { attachDefaultFeeSetToMortgage } from "../fees/resolver";
-import { adminMutation, authedQuery } from "../fluent";
+import { adminAction, adminMutation, authedQuery } from "../fluent";
 import { getAccountLenderId } from "../ledger/accountOwnership";
 import { getAvailableBalance, getPostedBalance } from "../ledger/accounts";
 import { TOTAL_SUPPLY } from "../ledger/constants";
 import { requireOrgIdFromBroker } from "../lib/orgScope";
+import { runManualInboundCollectionForObligation } from "../payments/collectionPlan/manualCollection";
 import {
 	DEMO_LEDGER_MORTGAGES,
 	ensureDemoLedgerSeeded,
@@ -57,11 +58,6 @@ const UNRESOLVED_OBLIGATION_STATUSES = new Set([
 	"overdue",
 	"partially_settled",
 ]);
-const SETTLEABLE_OBLIGATION_STATUSES = new Set([
-	"due",
-	"overdue",
-	"partially_settled",
-]);
 const DEMO_LEDGER_MORTGAGE_IDS: ReadonlySet<string> = new Set(
 	DEMO_LEDGER_MORTGAGES.map((mortgage) => mortgage.ledgerMortgageId)
 );
@@ -82,10 +78,6 @@ function todayISO(): string {
 	return new Date().toISOString().split("T")[0];
 }
 
-function genIdempotencyKey(prefix: string): string {
-	return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-}
-
 function parseDate(dateStr: string): Date {
 	return new Date(`${dateStr}T00:00:00Z`);
 }
@@ -94,6 +86,10 @@ function addDays(dateStr: string, days: number): string {
 	const date = parseDate(dateStr);
 	date.setUTCDate(date.getUTCDate() + days);
 	return date.toISOString().split("T")[0];
+}
+
+function simulationSettlementTimestamp(dateStr: string): number {
+	return Date.parse(`${dateStr}T12:00:00Z`);
 }
 
 function daysBetween(dateA: string, dateB: string): number {
@@ -384,6 +380,32 @@ async function deleteSimulationMortgageArtifacts(
 	allMortgageIds: ReadonlySet<Id<"mortgages">>,
 	propertyIds: ReadonlySet<Id<"properties">>
 ) {
+	let deletedPlanEntries = 0;
+	for (const entry of await ctx.db.query("collectionPlanEntries").collect()) {
+		if (allMortgageIds.has(entry.mortgageId)) {
+			await ctx.db.delete(entry._id);
+			deletedPlanEntries++;
+		}
+	}
+
+	let deletedAttempts = 0;
+	for (const attempt of await ctx.db.query("collectionAttempts").collect()) {
+		if (allMortgageIds.has(attempt.mortgageId)) {
+			await ctx.db.delete(attempt._id);
+			deletedAttempts++;
+		}
+	}
+
+	const deletedTransferIds = new Set<Id<"transferRequests">>();
+	let deletedTransfers = 0;
+	for (const transfer of await ctx.db.query("transferRequests").collect()) {
+		if (transfer.mortgageId && allMortgageIds.has(transfer.mortgageId)) {
+			deletedTransferIds.add(transfer._id);
+			await ctx.db.delete(transfer._id);
+			deletedTransfers++;
+		}
+	}
+
 	let deletedObligations = 0;
 	for (const obligation of await ctx.db.query("obligations").collect()) {
 		if (allMortgageIds.has(obligation.mortgageId)) {
@@ -408,6 +430,43 @@ async function deleteSimulationMortgageArtifacts(
 		}
 	}
 
+	let deletedCashEntries = 0;
+	for (const entry of await ctx.db
+		.query("cash_ledger_journal_entries")
+		.collect()) {
+		if (
+			(entry.mortgageId && allMortgageIds.has(entry.mortgageId)) ||
+			(entry.transferRequestId &&
+				deletedTransferIds.has(entry.transferRequestId))
+		) {
+			await ctx.db.delete(entry._id);
+			deletedCashEntries++;
+		}
+	}
+
+	let deletedCashAccounts = 0;
+	for (const account of await ctx.db.query("cash_ledger_accounts").collect()) {
+		if (account.mortgageId && allMortgageIds.has(account.mortgageId)) {
+			await ctx.db.delete(account._id);
+			deletedCashAccounts++;
+		}
+	}
+
+	let deletedAuditJournalEntries = 0;
+	for (const entry of await ctx.db.query("auditJournal").collect()) {
+		if (
+			(entry.mortgageId &&
+				allMortgageIds.has(entry.mortgageId as Id<"mortgages">)) ||
+			(entry.transferRequestId &&
+				deletedTransferIds.has(
+					entry.transferRequestId as Id<"transferRequests">
+				))
+		) {
+			await ctx.db.delete(entry._id);
+			deletedAuditJournalEntries++;
+		}
+	}
+
 	for (const link of await ctx.db.query("mortgageBorrowers").collect()) {
 		if (allMortgageIds.has(link.mortgageId)) {
 			await ctx.db.delete(link._id);
@@ -421,7 +480,17 @@ async function deleteSimulationMortgageArtifacts(
 		await ctx.db.delete(propertyId);
 	}
 
-	return { deletedObligations, deletedDispersals, deletedFees };
+	return {
+		deletedAttempts,
+		deletedAuditJournalEntries,
+		deletedCashAccounts,
+		deletedCashEntries,
+		deletedDispersals,
+		deletedFees,
+		deletedObligations,
+		deletedPlanEntries,
+		deletedTransfers,
+	};
 }
 
 async function cleanupLegacySimulationLedgerArtifacts(ctx: MutationCtx) {
@@ -895,99 +964,56 @@ export const advanceTime = adminMutation
 	})
 	.public();
 
-export const triggerDispersal = adminMutation
+export const triggerDispersal = adminAction
 	.input({
 		obligationId: v.id("obligations"),
 		settledAmount: v.number(),
 	})
 	.handler(async (ctx, args) => {
-		const clock = await ctx.db
-			.query("simulation_clock")
-			.withIndex("by_clockId", (q) => q.eq("clockId", SIM_CLOCK_ID))
-			.first();
-		if (!clock) {
+		const simState = (await ctx.runQuery(
+			api.demo.simulation.getSimulationState,
+			{}
+		)) as { clockDate: string | null; running: boolean } | undefined;
+		if (!(simState?.running && simState.clockDate)) {
 			throw new ConvexError("Simulation not initialized.");
 		}
 
-		const obligation = await ctx.db.get(args.obligationId);
-		if (!obligation) {
-			throw new ConvexError(`Obligation not found: ${args.obligationId}`);
-		}
-
-		const simMtgIdSet = await getSimulationMortgageIdSet(ctx);
-		if (!simMtgIdSet.has(obligation.mortgageId)) {
+		const upcoming = (await ctx.runQuery(
+			api.demo.simulation.getUpcomingDispersals,
+			{}
+		)) as Array<{
+			_id: Id<"obligations">;
+			amount: number;
+		}>;
+		const selectedObligation = upcoming.find(
+			(entry) => entry._id === args.obligationId
+		);
+		if (!selectedObligation) {
 			throw new ConvexError("Not a simulation obligation.");
 		}
 
-		if (!SETTLEABLE_OBLIGATION_STATUSES.has(obligation.status)) {
-			throw new ConvexError(
-				`Obligation ${args.obligationId} is ${obligation.status}. Only due, overdue, or partially settled obligations can be paid.`
-			);
-		}
-		if (!Number.isSafeInteger(args.settledAmount) || args.settledAmount <= 0) {
-			throw new ConvexError("settledAmount must be a positive integer amount.");
-		}
-
-		const remainingAmount = obligation.amount - obligation.amountSettled;
-		if (args.settledAmount > remainingAmount) {
-			throw new ConvexError(
-				`settledAmount ${args.settledAmount} exceeds remaining balance ${remainingAmount}.`
-			);
-		}
-
-		const result: TransitionResult = await ctx.runMutation(
-			internal.engine.commands.transitionObligation,
-			{
-				entityId: args.obligationId,
-				eventType: "PAYMENT_APPLIED",
-				payload: {
-					amount: args.settledAmount,
-					attemptId: genIdempotencyKey("sim-payment"),
-					currentAmountSettled: obligation.amountSettled,
-					totalAmount: obligation.amount,
-				},
-				source: SIM_COMMAND_SOURCE,
-			}
-		);
-
-		if (!result.success) {
-			throw new ConvexError(
-				result.reason ?? "Simulation payment could not be applied."
-			);
-		}
-
-		if (result.newState === "settled") {
-			const updatedObligation = await ctx.db.get(args.obligationId);
-			if (!updatedObligation) {
-				throw new ConvexError(
-					`Obligation disappeared after settlement: ${args.obligationId}`
-				);
-			}
-
-			const settledDate = updatedObligation.settledAt
-				? new Date(updatedObligation.settledAt).toISOString().slice(0, 10)
-				: clock.currentDate;
-
-			await ctx.runMutation(
-				internal.dispersal.createDispersalEntries.createDispersalEntries,
-				{
-					mortgageId: updatedObligation.mortgageId,
-					obligationId: updatedObligation._id,
-					settledAmount: updatedObligation.amountSettled,
-					settledDate,
-					idempotencyKey: `dispersal:${args.obligationId}`,
-					source: SIM_COMMAND_SOURCE,
-				}
-			);
-		}
+		const result = await runManualInboundCollectionForObligation(ctx, {
+			amount: args.settledAmount,
+			manualSettlement: {
+				instrumentType: "journal",
+				settlementOccurredAt: simulationSettlementTimestamp(simState.clockDate),
+				enteredBy: "simulation",
+			},
+			obligationId: args.obligationId,
+			reason: "simulation_manual_collection",
+			requestedAt: Date.now(),
+			requestedByActorId: "simulation",
+			requestedByActorType: "system",
+			triggerSource: "workflow_replay",
+		});
 
 		return {
-			newState: result.newState,
-			effectsScheduled: result.effectsScheduled ?? [],
-			message:
-				result.newState === "settled"
-					? "Payment applied. Dispersal scheduled."
-					: "Partial payment applied. Obligation remains open.",
+			message: result.message,
+			newState: result.obligationStatusAfter,
+			effectsScheduled:
+				result.obligationStatusAfter === "settled"
+					? ["emitObligationSettled"]
+					: ["applyPayment"],
 		};
 	})
 	.public();
@@ -996,8 +1022,21 @@ export const cleanupSimulation = adminMutation
 	.handler(async (ctx) => {
 		const { allMortgageIds, propertyIds } =
 			await buildSimulationCleanupTargets(ctx);
-		const { deletedObligations, deletedDispersals, deletedFees } =
-			await deleteSimulationMortgageArtifacts(ctx, allMortgageIds, propertyIds);
+		const {
+			deletedAttempts,
+			deletedAuditJournalEntries,
+			deletedCashAccounts,
+			deletedCashEntries,
+			deletedDispersals,
+			deletedFees,
+			deletedObligations,
+			deletedPlanEntries,
+			deletedTransfers,
+		} = await deleteSimulationMortgageArtifacts(
+			ctx,
+			allMortgageIds,
+			propertyIds
+		);
 		const legacyCleanup = await cleanupLegacySimulationLedgerArtifacts(ctx);
 
 		const borrowerCleanup = await deleteSimulationProfileByAuthId(
@@ -1030,9 +1069,15 @@ export const cleanupSimulation = adminMutation
 		}
 
 		return {
+			deletedAttempts,
+			deletedAuditJournalEntries,
+			deletedCashAccounts,
+			deletedCashEntries,
 			deletedObligations,
 			deletedDispersals,
 			deletedFees,
+			deletedPlanEntries,
+			deletedTransfers,
 			deletedEntries: legacyCleanup.deletedEntries,
 			deletedAccounts: legacyCleanup.deletedAccounts,
 			deletedMortgages: allMortgageIds.size,

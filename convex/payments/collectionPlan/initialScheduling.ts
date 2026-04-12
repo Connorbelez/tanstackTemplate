@@ -33,6 +33,7 @@ export type CollectionPlanEntrySource =
 export interface CreateCollectionPlanEntryArgs {
 	amount: number;
 	createdByRuleId?: Id<"collectionRules">;
+	executionIdempotencyKey?: string;
 	executionMode?: "app_owned" | "provider_managed";
 	externalCollectionScheduleId?: Id<"externalCollectionSchedules">;
 	externalOccurrenceOrdinal?: number;
@@ -161,6 +162,7 @@ export async function createEntryImpl(
 		rescheduleRequestedAt: args.rescheduleRequestedAt,
 		rescheduleRequestedByActorId: args.rescheduleRequestedByActorId,
 		rescheduleRequestedByActorType: args.rescheduleRequestedByActorType,
+		executionIdempotencyKey: args.executionIdempotencyKey,
 		createdAt: Date.now(),
 	});
 }

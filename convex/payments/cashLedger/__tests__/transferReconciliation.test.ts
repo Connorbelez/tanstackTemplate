@@ -194,6 +194,7 @@ describe("checkOrphanedConfirmedTransfers", () => {
 			mortgageId: seeded.mortgageId,
 			obligationId,
 			attemptId,
+			transferRequestId: transferId,
 			postingGroupId: `cash-receipt:${attemptId}`,
 			source: SYSTEM_SOURCE,
 		});
