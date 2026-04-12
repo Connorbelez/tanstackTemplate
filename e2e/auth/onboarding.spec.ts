@@ -17,10 +17,18 @@ if (!testAccountEmail) {
 
 const onboardingAuthStateDir = join(process.cwd(), ".tmp", "auth", "onboarding");
 
+function getBaseURL(): string {
+	const baseURL = test.info().project.use.baseURL;
+	if (!baseURL) {
+		throw new Error("Playwright baseURL is required for onboarding auth setup");
+	}
+	return baseURL;
+}
+
 async function createFreshStorageState(browser: Browser, orgId: string) {
 	await mkdir(onboardingAuthStateDir, { recursive: true });
 
-	const bootstrapContext = await browser.newContext();
+	const bootstrapContext = await browser.newContext({ baseURL: getBaseURL() });
 	const bootstrapPage = await bootstrapContext.newPage();
 	const storageStatePath = join(
 		onboardingAuthStateDir,
@@ -40,7 +48,10 @@ async function createFreshStorageState(browser: Browser, orgId: string) {
 
 async function openOnboardingPage(browser: Browser, orgId: string) {
 	const storageState = await createFreshStorageState(browser, orgId);
-	const context = await browser.newContext({ storageState });
+	const context = await browser.newContext({
+		baseURL: getBaseURL(),
+		storageState,
+	});
 	const page = await context.newPage();
 	await rm(storageState, { force: true });
 	await page.goto("/demo/rbac-auth/onboarding");
