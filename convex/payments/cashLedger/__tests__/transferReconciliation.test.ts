@@ -81,6 +81,21 @@ async function createConfirmedAttempt(
 	});
 }
 
+async function getSuspenseEscalatedEntryForTransfer(
+	t: TestHarness,
+	transferId: Id<"transferRequests">
+) {
+	return t.run(async (ctx) =>
+		ctx.db
+			.query("cash_ledger_journal_entries")
+			.withIndex("by_transfer_request", (q) =>
+				q.eq("transferRequestId", transferId)
+			)
+			.filter((q) => q.eq(q.field("entryType"), "SUSPENSE_ESCALATED"))
+			.first()
+	);
+}
+
 // ── T-017: checkOrphanedConfirmedTransfers ─────────────────────
 
 describe("checkOrphanedConfirmedTransfers", () => {
@@ -614,11 +629,9 @@ describe("retriggerTransferConfirmation escalation", () => {
 		expect(healingRecord?.status).toBe("escalated");
 		expect(healingRecord?.attemptCount).toBe(1);
 
-		const suspenseEntry = await t.run(async (ctx) =>
-			ctx.db
-				.query("cash_ledger_journal_entries")
-				.filter((q) => q.eq(q.field("entryType"), "SUSPENSE_ESCALATED"))
-				.first()
+		const suspenseEntry = await getSuspenseEscalatedEntryForTransfer(
+			t,
+			transferId
 		);
 		expect(suspenseEntry).toBeNull();
 		vi.useRealTimers();
@@ -675,12 +688,10 @@ describe("retriggerTransferConfirmation escalation", () => {
 		expect(healingRecord?.status).toBe("escalated");
 
 		// Escalation is recorded in transferHealingAttempts, not as a suspense journal entry.
-		const suspenseEntry = await t.run(async (ctx) => {
-			return ctx.db
-				.query("cash_ledger_journal_entries")
-				.filter((q) => q.eq(q.field("entryType"), "SUSPENSE_ESCALATED"))
-				.first();
-		});
+		const suspenseEntry = await getSuspenseEscalatedEntryForTransfer(
+			t,
+			transferId
+		);
 		expect(suspenseEntry).toBeNull();
 	});
 
@@ -816,12 +827,10 @@ describe("retriggerTransferConfirmation escalation", () => {
 		expect(result.action).toBe("escalated");
 
 		// Escalation is recorded in transferHealingAttempts, not as a suspense journal entry.
-		const suspenseEntry = await t.run(async (ctx) => {
-			return ctx.db
-				.query("cash_ledger_journal_entries")
-				.filter((q) => q.eq(q.field("entryType"), "SUSPENSE_ESCALATED"))
-				.first();
-		});
+		const suspenseEntry = await getSuspenseEscalatedEntryForTransfer(
+			t,
+			transferId
+		);
 		expect(suspenseEntry).toBeNull();
 	});
 });
