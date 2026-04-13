@@ -9,7 +9,7 @@ import {
 	CardHeader,
 	CardTitle,
 } from "#/components/ui/card";
-import { ISLAND_PERMISSIONS } from "#/lib/auth";
+import { hasPermission, ISLAND_PERMISSIONS } from "#/lib/auth";
 import {
 	DOMAIN_COLORS,
 	DOMAIN_LABELS,
@@ -78,7 +78,6 @@ const MIDDLEWARE_STEPS = [
 
 function AccessControlPage() {
 	const viewer = useQuery(api.fluent.whoAmI);
-	const viewerPermissions = new Set(viewer?.permissions ?? []);
 
 	const roleMeta = viewer?.role
 		? ROLE_DISPLAY_METADATA[viewer.role]
@@ -171,7 +170,10 @@ function AccessControlPage() {
 					<div className="space-y-3">
 						{ISLANDS.map((island) => {
 							const requiredPerm = ISLAND_PERMISSIONS[island.key];
-							const hasAccess = viewerPermissions.has(requiredPerm);
+							const hasAccess = hasPermission(
+								viewer?.permissions ?? [],
+								requiredPerm
+							);
 
 							return (
 								<div

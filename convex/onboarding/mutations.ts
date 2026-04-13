@@ -38,8 +38,9 @@ function computeTargetOrg(
 	}
 }
 
-/** Request a role — any authenticated user (no permission required for first role request). */
+/** Request a role — authenticated users with onboarding access only. */
 export const requestRole = authedMutation
+	.use(requirePermission("onboarding:access"))
 	.input({
 		requestedRole: requestedRoleValidator,
 		referralSource: referralSourceValidator,

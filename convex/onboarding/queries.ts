@@ -4,7 +4,7 @@ import { adminQuery, authedQuery, requirePermission } from "../fluent";
 
 /** List onboarding requests by status. Defaults to pending_review. Admin only. */
 export const listPendingRequests = adminQuery
-	.use(requirePermission("onboarding:review"))
+	.use(requirePermission("onboarding:manage"))
 	.input({ status: v.optional(v.string()) })
 	.handler(async (ctx, args) => {
 		const status = args.status ?? "pending_review";
@@ -26,6 +26,7 @@ export const listPendingRequests = adminQuery
 
 /** Get the authenticated user's onboarding request(s). */
 export const getMyOnboardingRequest = authedQuery
+	.use(requirePermission("onboarding:access"))
 	.handler(async (ctx) => {
 		const user = await ctx.db
 			.query("users")
@@ -46,7 +47,7 @@ export const getMyOnboardingRequest = authedQuery
 
 /** Get the full audit journal history for a request. Admin only. */
 export const getRequestHistory = adminQuery
-	.use(requirePermission("onboarding:review"))
+	.use(requirePermission("onboarding:manage"))
 	.input({ requestId: v.id("onboardingRequests") })
 	.handler(async (ctx, args) => {
 		return auditLog.queryByResource(ctx, {

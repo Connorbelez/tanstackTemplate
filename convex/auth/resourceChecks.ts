@@ -3,6 +3,7 @@ import type { QueryCtx } from "../_generated/server";
 import type { Viewer } from "../fluent";
 import { getAccountLenderId } from "../ledger/accountOwnership";
 import { getPostedBalance } from "../ledger/accounts";
+import { hasPermissionGrant } from "./permissionCatalog";
 
 /** The 4 entity types that generatedDocuments can be linked to. */
 type DocumentEntityType = Doc<"generatedDocuments">["entityType"];
@@ -670,7 +671,7 @@ export async function canAccessDocument(
 
 	// Step 4: sensitive — additionally require permission
 	if (doc.sensitivityTier === "sensitive") {
-		return viewer.permissions.has("documents:sensitive_access");
+		return hasPermissionGrant(viewer.permissions, "document:review");
 	}
 
 	// private tier satisfied
@@ -715,7 +716,7 @@ export async function canAccessApplicationPackage(
 
 	// underwriting:review_decisions permission sees decision_pending_review
 	if (
-		viewer.permissions.has("underwriting:review_decisions") &&
+		hasPermissionGrant(viewer.permissions, "underwriting:review_decisions") &&
 		pkg.status === "decision_pending_review"
 	) {
 		return true;

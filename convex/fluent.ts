@@ -15,6 +15,7 @@ import type {
 import { ConvexBuilderWithFunctionKind, createBuilder } from "fluent-convex";
 import type { DataModel } from "./_generated/dataModel";
 import { auditAuthFailure } from "./auth/auditAuth";
+import { hasPermissionGrant } from "./auth/permissionCatalog";
 import { FAIRLEND_STAFF_ORG_ID } from "./constants";
 
 // ── Builder ─────────────────────────────────────────────────────────
@@ -33,8 +34,6 @@ export interface Viewer {
 	roles: Set<string>;
 }
 // ── Helpers ──────────────────────────────────────────────────────────
-const ADMIN_ACCESS_PERMISSION = "admin:access";
-
 // Identity claims like `permissions` / `roles` may arrive as a JSON string,
 // an already-parsed array, undefined, or empty string — normalise to string[].
 function parseClaimArray(value: unknown): string[] {
@@ -52,13 +51,6 @@ function parseClaimArray(value: unknown): string[] {
 		}
 	}
 	return [];
-}
-
-function viewerHasPermission(viewer: Viewer, permission: string) {
-	return (
-		viewer.permissions.has(permission) ||
-		viewer.permissions.has(ADMIN_ACCESS_PERMISSION)
-	);
 }
 
 // ── Auth Middleware (context enrichment) ─────────────────────────────
@@ -189,7 +181,7 @@ export function requirePermission(permission: string) {
 	return convex
 		.$context<{ db: GenericDatabaseReader<DataModel>; viewer: Viewer }>()
 		.createMiddleware(async (context, next) => {
-			if (!viewerHasPermission(context.viewer, permission)) {
+			if (!hasPermissionGrant(context.viewer.permissions, permission)) {
 				await auditAuthFailure(context, context.viewer, {
 					middleware: "requirePermission",
 					required: permission,
@@ -210,7 +202,7 @@ export function requirePermissionAction(permission: string) {
 	return convex
 		.$context<{ viewer: Viewer }>()
 		.createMiddleware(async (context, next) => {
-			if (!viewerHasPermission(context.viewer, permission)) {
+			if (!hasPermissionGrant(context.viewer.permissions, permission)) {
 				await auditAuthFailure(context, context.viewer, {
 					middleware: "requirePermissionAction",
 					required: permission,
@@ -428,29 +420,29 @@ export const ledgerMutation = authedMutation.use(
 export const cashLedgerQuery = adminQuery.use(
 	requirePermission("cash_ledger:view")
 );
-export const cashLedgerMutation = authedMutation.use(
+export const cashLedgerMutation = adminMutation.use(
 	requirePermission("cash_ledger:correct")
 );
 export const paymentQuery = adminQuery.use(requirePermission("payment:view"));
-export const paymentMutation = authedMutation.use(
+export const paymentMutation = adminMutation.use(
 	requirePermission("payment:manage")
 );
-export const paymentRetryMutation = authedMutation.use(
+export const paymentRetryMutation = adminMutation.use(
 	requirePermission("payment:retry")
 );
-export const paymentCancelMutation = authedMutation.use(
+export const paymentCancelMutation = adminMutation.use(
 	requirePermission("payment:cancel")
 );
-export const paymentAction = authedAction.use(
+export const paymentAction = adminAction.use(
 	requirePermissionAction("payment:manage")
 );
 export const paymentOwnQuery = authedQuery.use(
 	requirePermission("payment:view_own")
 );
-export const paymentWebhookMutation = authedMutation.use(
+export const paymentWebhookMutation = adminMutation.use(
 	requirePermission("payment:webhook_process")
 );
-export const paymentWebhookAction = authedAction.use(
+export const paymentWebhookAction = adminAction.use(
 	requirePermissionAction("payment:webhook_process")
 );
 

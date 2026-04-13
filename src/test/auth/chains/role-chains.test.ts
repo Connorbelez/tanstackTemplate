@@ -225,6 +225,30 @@ const CHAIN_TESTS: ChainTest[] = [
 		allowed: ["FAIRLEND_ADMIN"],
 	},
 	{
+		name: "paymentManageMutation (FairLend admin + payment:manage)",
+		mutationEndpoint: api.test.authTestEndpoints.testPaymentManageMutation,
+		type: "mutation",
+		allowed: ["FAIRLEND_ADMIN"],
+	},
+	{
+		name: "paymentRetryMutation (FairLend admin + payment:retry)",
+		mutationEndpoint: api.test.authTestEndpoints.testPaymentRetryMutation,
+		type: "mutation",
+		allowed: ["FAIRLEND_ADMIN"],
+	},
+	{
+		name: "paymentCancelMutation (FairLend admin + payment:cancel)",
+		mutationEndpoint: api.test.authTestEndpoints.testPaymentCancelMutation,
+		type: "mutation",
+		allowed: ["FAIRLEND_ADMIN"],
+	},
+	{
+		name: "paymentWebhookMutation (FairLend admin + payment:webhook_process)",
+		mutationEndpoint: api.test.authTestEndpoints.testPaymentWebhookMutation,
+		type: "mutation",
+		allowed: ["FAIRLEND_ADMIN"],
+	},
+	{
 		name: "ledgerQuery (ledger:view)",
 		queryEndpoint: api.test.authTestEndpoints.testLedgerQuery,
 		type: "query",
@@ -241,6 +265,12 @@ const CHAIN_TESTS: ChainTest[] = [
 		mutationEndpoint: api.test.authTestEndpoints.testCashLedgerMutation,
 		type: "mutation",
 		allowed: ["FAIRLEND_ADMIN", "EXTERNAL_ORG_ADMIN"],
+	},
+	{
+		name: "onboardingManageQuery (FairLend admin + onboarding:manage)",
+		queryEndpoint: api.test.authTestEndpoints.testOnboardingManageQuery,
+		type: "query",
+		allowed: ["FAIRLEND_ADMIN"],
 	},
 	{
 		name: "crmAdminQuery (org-scoped admin only)",

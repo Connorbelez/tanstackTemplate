@@ -4,7 +4,8 @@
  * Verifies that onboarding mutations enforce the correct auth chains
  * using the shared identity fixtures instead of inline identities.
  *
- * - requestRole: authedMutation (any authenticated user)
+ * - requestRole: authedMutation + requirePermission("onboarding:access")
+ * - getMyOnboardingRequest: authedQuery + requirePermission("onboarding:access")
  * - approveRequest: adminMutation + requirePermission("onboarding:review")
  * - rejectRequest: adminMutation + requirePermission("onboarding:review")
  */
@@ -19,6 +20,7 @@ import {
 	EXTERNAL_ORG_ADMIN,
 	FAIRLEND_ADMIN,
 	MEMBER,
+	UNDERWRITER,
 } from "../identities";
 
 function createProvisioningSuccessMock() {
@@ -66,6 +68,48 @@ describe("onboarding auth integration", () => {
 					referralSource: "self_signup",
 				})
 			).rejects.toThrow("Unauthorized: sign in required");
+		});
+
+		it("rejects authenticated users without onboarding:access", async () => {
+			const t = createTestConvex();
+			await seedFromIdentity(t, UNDERWRITER);
+
+			await expect(
+				t.withIdentity(UNDERWRITER).mutation(api.onboarding.mutations.requestRole, {
+					requestedRole: "broker",
+					referralSource: "self_signup",
+				})
+			).rejects.toThrow('Forbidden: permission "onboarding:access" required');
+		});
+	});
+
+	describe("getMyOnboardingRequest", () => {
+		it("returns the member's own onboarding requests", async () => {
+			const t = createTestConvex();
+			await seedFromIdentity(t, MEMBER);
+
+			await t.withIdentity(MEMBER).mutation(api.onboarding.mutations.requestRole, {
+				requestedRole: "broker",
+				referralSource: "self_signup",
+			});
+
+			const requests = await t
+				.withIdentity(MEMBER)
+				.query(api.onboarding.queries.getMyOnboardingRequest);
+
+			expect(requests).toHaveLength(1);
+			expect(requests?.[0]?.requestedRole).toBe("broker");
+		});
+
+		it("rejects authenticated users without onboarding:access", async () => {
+			const t = createTestConvex();
+			await seedFromIdentity(t, UNDERWRITER);
+
+			await expect(
+				t
+					.withIdentity(UNDERWRITER)
+					.query(api.onboarding.queries.getMyOnboardingRequest)
+			).rejects.toThrow('Forbidden: permission "onboarding:access" required');
 		});
 	});
 

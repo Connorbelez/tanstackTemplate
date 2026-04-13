@@ -1,4 +1,5 @@
 import { useAuth } from "@workos/authkit-tanstack-react-start/client";
+import { hasPermission } from "#/lib/auth";
 
 /**
  * Returns true if the current user has the given permission.
@@ -6,5 +7,5 @@ import { useAuth } from "@workos/authkit-tanstack-react-start/client";
  */
 export function useCanDo(permission: string): boolean {
 	const { permissions } = useAuth();
-	return permissions?.includes(permission) ?? false;
+	return permissions ? hasPermission(permissions, permission) : false;
 }
