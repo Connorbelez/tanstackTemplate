@@ -282,6 +282,14 @@ export interface GetRecordResult {
 	record: UnifiedRecord;
 }
 
+/** Result shape for detail surfaces backed by normalized adapter contracts. */
+export interface GetRecordDetailSurfaceResult {
+	adapterContract: EntityViewAdapterContract;
+	fields: NormalizedFieldDefinition[];
+	objectDef: Doc<"objectDefs">;
+	record: UnifiedRecord;
+}
+
 /** A linked record reference (lightweight, for display in relation sections). */
 export interface LinkedRecord {
 	labelValue?: string;

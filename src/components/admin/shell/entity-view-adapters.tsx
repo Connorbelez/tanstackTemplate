@@ -2,31 +2,39 @@
 
 import type { ReactNode } from "react";
 import type { Doc } from "../../../../convex/_generated/dataModel";
-import type { UnifiedRecord } from "../../../../convex/crm/types";
+import type {
+	EntityViewAdapterContract,
+	NormalizedFieldDefinition,
+	UnifiedRecord,
+} from "../../../../convex/crm/types";
+import {
+	type DetailSectionDefinition,
+	SectionedRecordDetails,
+} from "./detail-sections";
 import {
 	type getAdminEntityByType,
 	getAdminEntityForObjectDef,
 } from "./entity-registry";
-import { FieldRenderer } from "./FieldRenderer";
 import type { SidebarRecordRef } from "./RecordSidebarProvider";
 
-type FieldDef = Doc<"fieldDefs">;
 type ObjectDef = Doc<"objectDefs">;
 type RecordDetailRecord = UnifiedRecord;
-
+type DetailField = NormalizedFieldDefinition;
 type AdminEntity = ReturnType<typeof getAdminEntityByType>;
 
 export interface RecordTabRenderArgs {
+	readonly adapterContract: EntityViewAdapterContract | undefined;
 	readonly entity: AdminEntity | undefined;
-	readonly fieldDefs: readonly FieldDef[];
+	readonly fields: readonly DetailField[];
 	readonly objectDef: ObjectDef | undefined;
 	readonly record: RecordDetailRecord | undefined;
 	readonly reference: SidebarRecordRef;
 }
 
 export interface RecordDetailsRenderArgs {
+	readonly adapterContract: EntityViewAdapterContract | undefined;
 	readonly entity: AdminEntity | undefined;
-	readonly fieldDefs: readonly FieldDef[];
+	readonly fields: readonly DetailField[];
 	readonly objectDef: ObjectDef;
 	readonly record: RecordDetailRecord;
 	readonly recordId: string;
@@ -34,11 +42,13 @@ export interface RecordDetailsRenderArgs {
 
 export interface RecordSidebarEntityAdapter {
 	readonly getRecordStatus?: (args: {
+		adapterContract: EntityViewAdapterContract | undefined;
 		entity: AdminEntity | undefined;
 		objectDef: ObjectDef | undefined;
 		record: RecordDetailRecord | undefined;
 	}) => string | undefined;
 	readonly getRecordTitle?: (args: {
+		adapterContract: EntityViewAdapterContract | undefined;
 		entity: AdminEntity | undefined;
 		objectDef: ObjectDef | undefined;
 		record: RecordDetailRecord | undefined;
@@ -49,98 +59,109 @@ export interface RecordSidebarEntityAdapter {
 	readonly renderNotesTab?: (args: RecordTabRenderArgs) => ReactNode;
 }
 
-const DEDICATED_DETAIL_FIELD_ORDER = {
-	mortgages: [
-		"principal",
-		"paymentAmount",
-		"interestRate",
-		"paymentFrequency",
-		"loanType",
-		"maturityDate",
-		"status",
-	],
-	obligations: ["amount", "dueDate", "type", "status"],
-	deals: ["closingDate", "fractionalShare", "lockingFeeAmount", "status"],
-	borrowers: ["status", "idvStatus"],
-	lenders: ["status", "accreditationStatus", "payoutFrequency"],
-	brokers: ["status", "brokerageName", "licenseId"],
-} as const satisfies Record<string, readonly string[]>;
-
-function hasRenderableFieldValue(value: unknown): boolean {
-	return value !== undefined && value !== null && value !== "";
+interface DedicatedDetailLayoutDefinition {
+	readonly highlightFieldNames?: readonly string[];
+	readonly sections: readonly DetailSectionDefinition[];
 }
 
-function renderPrioritizedFieldGrid(args: {
-	fieldDefs: readonly FieldDef[];
-	priorityFieldNames: readonly string[];
-	record: RecordDetailRecord;
-}): ReactNode {
-	const fieldDefsByName = new Map(
-		args.fieldDefs.map((fieldDef) => [fieldDef.name, fieldDef] as const)
-	);
-	const prioritizedNames = new Set(args.priorityFieldNames);
-	const prioritizedFields = args.priorityFieldNames.flatMap((fieldName) => {
-		const fieldDef = fieldDefsByName.get(fieldName);
-		if (!fieldDef) {
-			return [];
-		}
-
-		const value = args.record.fields[fieldDef.name];
-		return hasRenderableFieldValue(value) ? [fieldDef] : [];
-	});
-	const remainingFields = args.fieldDefs.filter((fieldDef) => {
-		if (prioritizedNames.has(fieldDef.name)) {
-			return false;
-		}
-
-		return hasRenderableFieldValue(args.record.fields[fieldDef.name]);
-	});
-	const orderedFields = [...prioritizedFields, ...remainingFields];
-
-	if (orderedFields.length === 0) {
-		return null;
-	}
-
-	return (
-		<div className="grid gap-3">
-			{orderedFields.map((fieldDef) => (
-				<FieldRenderer
-					fieldType={fieldDef.fieldType}
-					key={fieldDef._id}
-					label={fieldDef.label}
-					value={args.record.fields[fieldDef.name]}
-				/>
-			))}
-		</div>
-	);
-}
+const DEDICATED_DETAIL_LAYOUTS = {
+	mortgages: {
+		highlightFieldNames: ["principal", "paymentAmount", "maturityDate"],
+		sections: [
+			{
+				title: "Loan Terms",
+				description: "Primary mortgage economics and pricing terms.",
+				fieldNames: ["interestRate", "loanType", "termMonths", "status"],
+			},
+			{
+				title: "Servicing",
+				description: "Payment cadence and downstream servicing status.",
+				fieldNames: ["paymentFrequency"],
+			},
+		],
+	},
+	obligations: {
+		highlightFieldNames: ["amount", "dueDate", "status"],
+		sections: [
+			{
+				title: "Obligation",
+				description: "Core obligation attributes and repayment state.",
+				fieldNames: ["type"],
+			},
+		],
+	},
+	deals: {
+		highlightFieldNames: ["closingDate", "fractionalShare", "status"],
+		sections: [
+			{
+				title: "Economics",
+				description: "Commercial terms for the closing package.",
+				fieldNames: ["lockingFeeAmount"],
+			},
+		],
+	},
+	borrowers: {
+		highlightFieldNames: ["status", "idvStatus", "verificationSummary"],
+		sections: [
+			{
+				title: "Verification",
+				description: "Identity status and the computed verification summary.",
+				fieldNames: ["verificationSummary"],
+			},
+		],
+	},
+	lenders: {
+		highlightFieldNames: ["status", "accreditationStatus", "payoutFrequency"],
+		sections: [
+			{
+				title: "Payout Preferences",
+				description: "Operational status and payout cadence.",
+				fieldNames: ["payoutFrequency"],
+			},
+		],
+	},
+	brokers: {
+		highlightFieldNames: ["status", "brokerageName", "licenseId"],
+		sections: [
+			{
+				title: "Brokerage",
+				description: "Broker identity and licensing details.",
+				fieldNames: ["brokerageName", "licenseId"],
+			},
+		],
+	},
+} as const satisfies Record<string, DedicatedDetailLayoutDefinition>;
 
 function buildDedicatedDetailsAdapter(
-	priorityFieldNames: readonly string[]
+	layout: DedicatedDetailLayoutDefinition
 ): RecordSidebarEntityAdapter {
 	return {
-		renderDetailsTab: ({ fieldDefs, record }) =>
-			renderPrioritizedFieldGrid({
-				fieldDefs,
-				priorityFieldNames,
-				record,
-			}),
+		renderDetailsTab: ({ fields, record }) => (
+			<SectionedRecordDetails
+				fields={fields}
+				highlightFieldNames={layout.highlightFieldNames}
+				record={record}
+				sections={layout.sections}
+			/>
+		),
 	};
 }
 
 const DEDICATED_RECORD_SIDEBAR_ADAPTERS = Object.fromEntries(
-	Object.entries(DEDICATED_DETAIL_FIELD_ORDER).map(
-		([entityType, priorityFieldNames]) =>
-			[entityType, buildDedicatedDetailsAdapter(priorityFieldNames)] as const
-	)
+	Object.entries(DEDICATED_DETAIL_LAYOUTS).map(([entityType, layout]) => [
+		entityType,
+		buildDedicatedDetailsAdapter(layout),
+	])
 ) satisfies Partial<Record<string, RecordSidebarEntityAdapter>>;
 
 export function resolveRecordSidebarEntityAdapter(args: {
+	detailSurfaceKey?: string;
 	entityType: string | undefined;
 	objectDef: ObjectDef | undefined;
 	overrides?: Partial<Record<string, RecordSidebarEntityAdapter>>;
 }): RecordSidebarEntityAdapter | undefined {
 	const resolvedEntityType =
+		args.detailSurfaceKey ??
 		args.entityType ??
 		(args.objectDef
 			? getAdminEntityForObjectDef(args.objectDef)?.entityType

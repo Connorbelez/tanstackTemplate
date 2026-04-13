@@ -2,11 +2,11 @@ import { ConvexError } from "convex/values";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import type { Viewer } from "../fluent";
-import { resolveEntityViewAdapterContract } from "./entityAdapterRegistry";
 import {
-	materializeFieldDef,
-	materializeFieldDefinition,
-} from "./metadataCompiler";
+	buildEntityViewAdapter,
+	buildNormalizedFieldDefinitions,
+} from "./entityViewFields";
+import { materializeFieldDef } from "./metadataCompiler";
 import { loadActiveFieldDefs } from "./recordQueries";
 import type {
 	AggregatePreset,
@@ -78,12 +78,6 @@ export interface ResolvedViewState {
 	systemView: SystemViewDefinition;
 	view: SystemViewDefinition;
 	viewDef: ViewDefDoc;
-}
-
-function toNormalizedFieldDefinition(
-	fieldDef: FieldDef
-): NormalizedFieldDefinition {
-	return materializeFieldDefinition(fieldDef);
 }
 
 function parseStoredFilterValue(value: string | undefined): unknown {
@@ -173,19 +167,6 @@ function deriveDisabledLayoutMessages(
 	return Object.keys(messages).length > 0 ? messages : undefined;
 }
 
-function buildAdapterContract(args: {
-	fieldDefs: FieldDef[];
-	objectDef: Doc<"objectDefs">;
-	viewDef: ViewDefDoc;
-}): EntityViewAdapterContract {
-	return resolveEntityViewAdapterContract({
-		currentLayout: args.viewDef.viewType,
-		fieldDefs: args.fieldDefs,
-		objectDef: args.objectDef,
-		objectDefId: args.objectDef._id,
-	});
-}
-
 function buildSchemaOrderHints(args: {
 	adapterContract: EntityViewAdapterContract;
 	viewIsDefault: boolean;
@@ -235,78 +216,6 @@ function applyFieldOverridesToColumn(args: {
 
 function toSyntheticFieldDefId(fieldName: string): Id<"fieldDefs"> {
 	return `computed:${fieldName}` as Id<"fieldDefs">;
-}
-
-function applyFieldOverridesToDefinition(args: {
-	currentLayout: SystemViewDefinition["layout"];
-	field: NormalizedFieldDefinition;
-	override?: EntityViewAdapterContract["fieldOverrides"][number];
-}): NormalizedFieldDefinition {
-	const hiddenInCurrentLayout =
-		args.override?.hiddenInLayouts?.includes(args.currentLayout) ?? false;
-
-	return {
-		...args.field,
-		displayOrder: args.field.displayOrder,
-		isVisibleByDefault: hiddenInCurrentLayout
-			? false
-			: (args.override?.isVisibleByDefault ?? args.field.isVisibleByDefault),
-		label: args.override?.label ?? args.field.label,
-	};
-}
-
-function toComputedNormalizedFieldDefinition(args: {
-	computedField: EntityViewAdapterContract["computedFields"][number];
-	displayOrder: number;
-	objectDefId: Id<"objectDefs">;
-}): NormalizedFieldDefinition {
-	return {
-		aggregation: {
-			enabled: false,
-			reason: "Computed adapter fields do not support aggregation.",
-			supportedFunctions: [],
-		},
-		computed: {
-			expressionKey: args.computedField.expressionKey,
-			sourceFieldNames: args.computedField.sourceFieldNames,
-		},
-		description: args.computedField.description,
-		displayOrder: args.displayOrder,
-		editability: {
-			mode: "computed",
-			reason: "Computed adapter fields are read-only projections.",
-		},
-		fieldDefId: toSyntheticFieldDefId(args.computedField.fieldName),
-		fieldSource: "adapter_computed",
-		fieldType: args.computedField.fieldType,
-		isActive: true,
-		isRequired: false,
-		isUnique: false,
-		isVisibleByDefault: args.computedField.isVisibleByDefault,
-		label: args.computedField.label,
-		layoutEligibility: {
-			table: { enabled: true },
-			kanban: {
-				enabled: false,
-				reason: "Computed adapter fields cannot drive kanban grouping.",
-			},
-			calendar: {
-				enabled: false,
-				reason: "Computed adapter fields cannot drive calendar layouts.",
-			},
-			groupBy: {
-				enabled: false,
-				reason: "Computed adapter fields cannot drive grouping.",
-			},
-		},
-		name: args.computedField.fieldName,
-		nativeReadOnly: true,
-		normalizedFieldKind: "computed",
-		objectDefId: args.objectDefId,
-		options: undefined,
-		relation: undefined,
-		rendererHint: args.computedField.rendererHint,
-	};
 }
 
 function compareSchemaOrderedEntries(args: {
@@ -956,49 +865,20 @@ export async function resolveViewState(
 		activeFieldDefs.map((fieldDef) => [fieldDef._id.toString(), fieldDef])
 	);
 	const view = toResolvedSystemView(effectiveState);
-	const adapterContract = buildAdapterContract({
+	const adapterContract = buildEntityViewAdapter({
 		fieldDefs: activeFieldDefs,
 		objectDef,
-		viewDef: effectiveState.viewDef,
+		currentLayout: effectiveState.viewDef.viewType,
+		objectDefId: objectDef._id,
 	});
-	const fieldOverridesByName = buildFieldOverridesByName(adapterContract);
-	const schemaOrderHints = buildSchemaOrderHints({
+	const fields = buildNormalizedFieldDefinitions({
 		adapterContract,
+		currentLayout: view.layout,
+		fieldDefs: activeFieldDefs,
+		objectDefId: objectDef._id,
 		viewIsDefault:
 			effectiveState.viewDef.isDefault && !effectiveState.savedView,
 	});
-	const persistedFields = activeFieldDefs.map((fieldDef) =>
-		applyFieldOverridesToDefinition({
-			field: toNormalizedFieldDefinition(fieldDef),
-			currentLayout: view.layout,
-			override: fieldOverridesByName.get(fieldDef.name),
-		})
-	);
-	const computedFields = adapterContract.computedFields
-		.filter(
-			(computedField) =>
-				!persistedFields.some((field) => field.name === computedField.fieldName)
-		)
-		.map((computedField, index) =>
-			toComputedNormalizedFieldDefinition({
-				computedField,
-				displayOrder: persistedFields.length + index,
-				objectDefId: objectDef._id,
-			})
-		);
-	const fields = [...persistedFields, ...computedFields]
-		.sort((left, right) =>
-			compareSchemaOrderedEntries({
-				left,
-				right,
-				orderHints: schemaOrderHints,
-				overrideByName: fieldOverridesByName,
-			})
-		)
-		.map((field, index) => ({
-			...field,
-			displayOrder: index,
-		}));
 
 	return {
 		viewDef: effectiveState.viewDef,

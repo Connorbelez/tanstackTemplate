@@ -798,3 +798,138 @@ describe("getRecordReference", () => {
 		).rejects.toThrow();
 	});
 });
+
+describe("getRecordDetailSurface", () => {
+	let t: CrmTestHarness;
+
+	beforeEach(() => {
+		t = createCrmTestHarness();
+	});
+
+	it("returns normalized detail fields for CRM records", async () => {
+		const fixture = await seedObjectWithFields(t, {
+			name: "detail_surface",
+			fields: [
+				{ name: "title", fieldType: "text" },
+				{
+					name: "status",
+					fieldType: "select",
+					options: [
+						{ color: "#2563eb", label: "New", order: 0, value: "new" },
+						{ color: "#16a34a", label: "Active", order: 1, value: "active" },
+					],
+				},
+			],
+		});
+
+		const recordId = await seedRecord(t, fixture.objectDefId, {
+			title: "Detail Surface Record",
+			status: "active",
+		});
+
+		const result = await asAdmin(t).query(
+			api.crm.recordQueries.getRecordDetailSurface,
+			{
+				objectDefId: fixture.objectDefId,
+				recordId: recordId as string,
+				recordKind: "record",
+			}
+		);
+
+		expect(result.objectDef._id).toBe(fixture.objectDefId);
+		expect(result.adapterContract).toMatchObject({
+			entityType: "detail_surface",
+			variant: "fallback",
+			detail: {
+				mode: "generated",
+				surfaceKey: "detail_surface",
+			},
+		});
+		expect(result.fields.map((field) => field.name)).toEqual([
+			"title",
+			"status",
+		]);
+		expect(result.fields[1]).toMatchObject({
+			editability: { mode: "editable" },
+			label: "Status",
+			name: "status",
+			rendererHint: "select",
+		});
+		expect(result.record.fields).toMatchObject({
+			status: "active",
+			title: "Detail Surface Record",
+		});
+	});
+
+	it("applies dedicated labels and computed values for native detail surfaces", async () => {
+		await t.mutation(
+			internal.crm.systemAdapters.bootstrap.bootstrapSystemObjects,
+			{ orgId: CRM_ADMIN_IDENTITY.org_id }
+		);
+
+		const borrowerObjDef = await t.run(async (ctx) => {
+			return ctx.db
+				.query("objectDefs")
+				.withIndex("by_org_name", (q) =>
+					q.eq("orgId", CRM_ADMIN_IDENTITY.org_id).eq("name", "borrower")
+				)
+				.first();
+		});
+		expect(borrowerObjDef).not.toBeNull();
+		if (!borrowerObjDef) {
+			throw new Error("Borrower system object not found");
+		}
+
+		const borrowerId = await t.run(async (ctx) => {
+			const userId = await ctx.db.insert("users", {
+				authId: "crm-native-borrower-detail",
+				email: "crm-native-borrower-detail@test.fairlend.ca",
+				firstName: "CRM",
+				lastName: "Borrower Detail",
+			});
+			return ctx.db.insert("borrowers", {
+				createdAt: Date.now(),
+				idvStatus: "pending_review",
+				orgId: CRM_ADMIN_IDENTITY.org_id,
+				status: "active",
+				userId,
+			});
+		});
+
+		const result = await asAdmin(t).query(
+			api.crm.recordQueries.getRecordDetailSurface,
+			{
+				objectDefId: borrowerObjDef._id,
+				recordId: borrowerId as string,
+				recordKind: "native",
+			}
+		);
+
+		expect(result.adapterContract).toMatchObject({
+			detailSurfaceKey: "borrowers",
+			entityType: "borrowers",
+			variant: "dedicated",
+		});
+		expect(
+			result.fields.find((field) => field.name === "status")
+		).toMatchObject({
+			displayOrder: 0,
+			label: "Borrower Status",
+		});
+		expect(
+			result.fields.find((field) => field.name === "idvStatus")
+		).toMatchObject({
+			displayOrder: 1,
+			label: "Identity Verification",
+		});
+		expect(
+			result.fields.find((field) => field.name === "verificationSummary")
+		).toMatchObject({
+			fieldSource: "adapter_computed",
+			label: "Verification Summary",
+		});
+		expect(result.record.fields.verificationSummary).toBe(
+			"Active borrower • IDV pending review"
+		);
+	});
+});
