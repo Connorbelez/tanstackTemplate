@@ -1,12 +1,12 @@
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import {
-	ALL_PERMISSION_SLUGS,
-	WORKOS_PERMISSION_SLUGS,
-} from "../../../../convex/auth/permissionCatalog";
+import { ALL_PERMISSION_SLUGS } from "../../../../convex/auth/permissionCatalog";
 
-const REPO_ROOT = path.resolve(import.meta.dirname, "../../../../");
+const TEST_DIR = path.dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = path.resolve(TEST_DIR, "../../../../");
+const WORKOS_SNAPSHOT_PATH = path.join(TEST_DIR, "workos-permissions.snapshot.json");
 const RUNTIME_DIRECTORIES = [
 	path.join(REPO_ROOT, "convex"),
 	path.join(REPO_ROOT, "src"),
@@ -89,6 +89,22 @@ async function collectRuntimePermissions() {
 	return runtimePermissions;
 }
 
+async function readWorkosPermissionSnapshot(): Promise<string[]> {
+	const source = await readFile(WORKOS_SNAPSHOT_PATH, "utf8");
+	const parsed = JSON.parse(source) as unknown;
+
+	if (
+		!Array.isArray(parsed) ||
+		parsed.some((permission) => typeof permission !== "string")
+	) {
+		throw new Error(
+			`Invalid WorkOS permission snapshot: ${WORKOS_SNAPSHOT_PATH}`
+		);
+	}
+
+	return parsed;
+}
+
 describe("permission catalog drift checks", () => {
 	const catalogPermissions = new Set(ALL_PERMISSION_SLUGS);
 
@@ -113,13 +129,15 @@ describe("permission catalog drift checks", () => {
 	});
 
 	it("every WorkOS-exported permission exists in the canonical catalog", () => {
-		const missing = WORKOS_PERMISSION_SLUGS.filter(
-			(permission) => !catalogPermissions.has(permission)
-		);
+		return readWorkosPermissionSnapshot().then((workosPermissions) => {
+			const missing = workosPermissions.filter(
+				(permission) => !catalogPermissions.has(permission)
+			);
 
-		expect(
-			missing,
-			`WorkOS-exported permissions missing from canonical catalog:\n  ${missing.join("\n  ")}`
-		).toEqual([]);
+			expect(
+				missing,
+				`WorkOS-exported permissions missing from canonical catalog:\n  ${missing.join("\n  ")}`
+			).toEqual([]);
+		});
 	});
 });
