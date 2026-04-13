@@ -27,7 +27,6 @@ import type * as auth_internal from "../auth/internal.js";
 import type * as auth_resourceChecks from "../auth/resourceChecks.js";
 import type * as brokers_migrations from "../brokers/migrations.js";
 import type * as constants from "../constants.js";
-import type * as crm___tests___helpers from "../crm/__tests__/helpers.js";
 import type * as crm_activityQueries from "../crm/activityQueries.js";
 import type * as crm_calendarQuery from "../crm/calendarQuery.js";
 import type * as crm_entityAdapterRegistry from "../crm/entityAdapterRegistry.js";
@@ -179,7 +178,6 @@ import type * as payments_bankAccounts_mutations from "../payments/bankAccounts/
 import type * as payments_bankAccounts_queries from "../payments/bankAccounts/queries.js";
 import type * as payments_bankAccounts_types from "../payments/bankAccounts/types.js";
 import type * as payments_bankAccounts_validation from "../payments/bankAccounts/validation.js";
-import type * as payments_cashLedger___tests___testUtils from "../payments/cashLedger/__tests__/testUtils.js";
 import type * as payments_cashLedger_accounts from "../payments/cashLedger/accounts.js";
 import type * as payments_cashLedger_disbursementGate from "../payments/cashLedger/disbursementGate.js";
 import type * as payments_cashLedger_hashChain from "../payments/cashLedger/hashChain.js";
@@ -209,6 +207,7 @@ import type * as payments_collectionPlan_execution from "../payments/collectionP
 import type * as payments_collectionPlan_executionContract from "../payments/collectionPlan/executionContract.js";
 import type * as payments_collectionPlan_executionGuards from "../payments/collectionPlan/executionGuards.js";
 import type * as payments_collectionPlan_initialScheduling from "../payments/collectionPlan/initialScheduling.js";
+import type * as payments_collectionPlan_manualCollection from "../payments/collectionPlan/manualCollection.js";
 import type * as payments_collectionPlan_mutations from "../payments/collectionPlan/mutations.js";
 import type * as payments_collectionPlan_planEntrySafety from "../payments/collectionPlan/planEntrySafety.js";
 import type * as payments_collectionPlan_queries from "../payments/collectionPlan/queries.js";
@@ -294,7 +293,6 @@ import type * as seed_seedPaymentData from "../seed/seedPaymentData.js";
 import type * as test_authTestEndpoints from "../test/authTestEndpoints.js";
 import type * as test_moduleMaps from "../test/moduleMaps.js";
 import type * as test_packageSchemas from "../test/packageSchemas.js";
-import type * as test_registerAuditLogComponent from "../test/registerAuditLogComponent.js";
 import type * as todos from "../todos.js";
 
 import type {
@@ -323,7 +321,6 @@ declare const fullApi: ApiFromModules<{
   "auth/resourceChecks": typeof auth_resourceChecks;
   "brokers/migrations": typeof brokers_migrations;
   constants: typeof constants;
-  "crm/__tests__/helpers": typeof crm___tests___helpers;
   "crm/activityQueries": typeof crm_activityQueries;
   "crm/calendarQuery": typeof crm_calendarQuery;
   "crm/entityAdapterRegistry": typeof crm_entityAdapterRegistry;
@@ -475,7 +472,6 @@ declare const fullApi: ApiFromModules<{
   "payments/bankAccounts/queries": typeof payments_bankAccounts_queries;
   "payments/bankAccounts/types": typeof payments_bankAccounts_types;
   "payments/bankAccounts/validation": typeof payments_bankAccounts_validation;
-  "payments/cashLedger/__tests__/testUtils": typeof payments_cashLedger___tests___testUtils;
   "payments/cashLedger/accounts": typeof payments_cashLedger_accounts;
   "payments/cashLedger/disbursementGate": typeof payments_cashLedger_disbursementGate;
   "payments/cashLedger/hashChain": typeof payments_cashLedger_hashChain;
@@ -505,6 +501,7 @@ declare const fullApi: ApiFromModules<{
   "payments/collectionPlan/executionContract": typeof payments_collectionPlan_executionContract;
   "payments/collectionPlan/executionGuards": typeof payments_collectionPlan_executionGuards;
   "payments/collectionPlan/initialScheduling": typeof payments_collectionPlan_initialScheduling;
+  "payments/collectionPlan/manualCollection": typeof payments_collectionPlan_manualCollection;
   "payments/collectionPlan/mutations": typeof payments_collectionPlan_mutations;
   "payments/collectionPlan/planEntrySafety": typeof payments_collectionPlan_planEntrySafety;
   "payments/collectionPlan/queries": typeof payments_collectionPlan_queries;
@@ -590,7 +587,6 @@ declare const fullApi: ApiFromModules<{
   "test/authTestEndpoints": typeof test_authTestEndpoints;
   "test/moduleMaps": typeof test_moduleMaps;
   "test/packageSchemas": typeof test_packageSchemas;
-  "test/registerAuditLogComponent": typeof test_registerAuditLogComponent;
   todos: typeof todos;
 }>;
 

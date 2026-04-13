@@ -12,7 +12,6 @@
  */
 import { ConvexError } from "convex/values";
 import { beforeEach, describe, expect, it } from "vitest";
-import { api, components, internal } from "../../_generated/api";
 import {
 	asAdmin,
 	asDifferentOrg,
@@ -21,7 +20,8 @@ import {
 	createCrmTestHarness,
 	seedObjectWithFields,
 	seedRecord,
-} from "./helpers";
+} from "../../../src/test/convex/crm/helpers";
+import { api, components, internal } from "../../_generated/api";
 
 // ═══════════════════════════════════════════════════════════════════════
 // createRecord

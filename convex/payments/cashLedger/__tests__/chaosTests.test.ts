@@ -1,4 +1,15 @@
 import { describe, expect, it } from "vitest";
+import {
+	assertAccountIntegrity,
+	assertSettlementReconciles,
+} from "../../../../src/test/convex/payments/cashLedger/e2eHelpers";
+import {
+	createDueObligation,
+	createHarness,
+	postTestEntry,
+	SYSTEM_SOURCE,
+	seedMinimalEntities,
+} from "../../../../src/test/convex/payments/cashLedger/testUtils";
 import type { QueryCtx } from "../../../_generated/server";
 import { convexModules } from "../../../test/moduleMaps";
 import { findCashAccount, getCashAccountBalance } from "../accounts";
@@ -11,17 +22,6 @@ import {
 	reconcileObligationSettlementProjectionInternal,
 } from "../reconciliation";
 import { buildIdempotencyKey } from "../types";
-import {
-	assertAccountIntegrity,
-	assertSettlementReconciles,
-} from "./e2eHelpers.test-utils";
-import {
-	createDueObligation,
-	createHarness,
-	postTestEntry,
-	SYSTEM_SOURCE,
-	seedMinimalEntities,
-} from "./testUtils";
 
 const modules = convexModules;
 

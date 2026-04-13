@@ -39,15 +39,9 @@ import {
 	type ViewColumnDefinition,
 } from "./viewState";
 
-// ── OQ-1: Multi-select kanban grouping ────────────────────────────────
-// Decision: Client-side grouping for v1.
-// multi_select fields have "kanban" capability (per metadataCompiler),
-// but the recordValuesMultiSelect table stores arrays which aren't
-// indexable by individual values in Convex.
-// For v1: load all records, group client-side by iterating values array.
-// A record with values: ["new", "hot"] appears in both "new" and "hot" columns.
-// For v2: consider materializing individual select values into a
-// dedicated index table for server-side grouping if perf requires it.
+// Kanban queries load records first, then distribute them into persisted groups
+// based on the current bound field value. The admin surface keeps kanban read-only
+// in this release, but the query contract is shared with future interactive boards.
 
 type FieldDef = Doc<"fieldDefs">;
 interface NativeTablePage {

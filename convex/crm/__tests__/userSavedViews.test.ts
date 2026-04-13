@@ -1,13 +1,5 @@
 import { makeFunctionReference } from "convex/server";
 import { beforeEach, describe, expect, it } from "vitest";
-import { api } from "../../_generated/api";
-import type { Id } from "../../_generated/dataModel";
-import type {
-	RecordFilter,
-	SavedViewFilterDefinition,
-	UserSavedViewDefinition,
-	ViewLayout,
-} from "../types";
 import {
 	asAdmin,
 	asUser,
@@ -16,7 +8,15 @@ import {
 	createCrmTestHarness,
 	seedObjectWithFields,
 	seedRecord,
-} from "./helpers";
+} from "../../../src/test/convex/crm/helpers";
+import { api } from "../../_generated/api";
+import type { Id } from "../../_generated/dataModel";
+import type {
+	RecordFilter,
+	SavedViewFilterDefinition,
+	UserSavedViewDefinition,
+	ViewLayout,
+} from "../types";
 
 interface CreateUserSavedViewArgs {
 	fieldOrder?: Id<"fieldDefs">[];

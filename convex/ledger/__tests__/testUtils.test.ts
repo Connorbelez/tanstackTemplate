@@ -23,7 +23,7 @@ import type { Doc, Id } from "../../_generated/dataModel";
 import type { MutationCtx } from "../../_generated/server";
 import { FAIRLEND_STAFF_ORG_ID } from "../../constants";
 import schema from "../../schema";
-import { registerAuditLogComponent } from "../../test/registerAuditLogComponent";
+import { registerAuditLogComponent } from "../../../src/test/convex/registerAuditLogComponent";
 import {
 	commitReservation,
 	reserveShares,

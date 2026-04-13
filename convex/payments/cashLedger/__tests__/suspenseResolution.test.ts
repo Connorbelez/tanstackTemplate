@@ -5,11 +5,6 @@ import {
 	ensureSeededIdentity,
 } from "../../../../src/test/auth/helpers";
 import { FAIRLEND_ADMIN } from "../../../../src/test/auth/identities";
-import type { Id } from "../../../_generated/dataModel";
-import { convexModules } from "../../../test/moduleMaps";
-import { getCashAccountBalance } from "../accounts";
-import { postSuspenseResolution } from "../integrations";
-import { buildIdempotencyKey } from "../types";
 import {
 	ADMIN_SOURCE,
 	createHarness,
@@ -18,7 +13,12 @@ import {
 	SYSTEM_SOURCE,
 	seedMinimalEntities,
 	type TestHarness,
-} from "./testUtils";
+} from "../../../../src/test/convex/payments/cashLedger/testUtils";
+import type { Id } from "../../../_generated/dataModel";
+import { convexModules } from "../../../test/moduleMaps";
+import { getCashAccountBalance } from "../accounts";
+import { postSuspenseResolution } from "../integrations";
+import { buildIdempotencyKey } from "../types";
 
 const modules = convexModules;
 

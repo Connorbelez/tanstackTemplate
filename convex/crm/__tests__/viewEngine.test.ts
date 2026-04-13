@@ -1,6 +1,4 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { api, components, internal } from "../../_generated/api";
-import { KANBAN_NO_VALUE_SENTINEL } from "../viewDefs";
 import {
 	asAdmin,
 	CRM_ADMIN_IDENTITY,
@@ -9,7 +7,9 @@ import {
 	createCrmTestHarness,
 	seedObjectWithFields,
 	seedRecord,
-} from "./helpers";
+} from "../../../src/test/convex/crm/helpers";
+import { api, components, internal } from "../../_generated/api";
+import { KANBAN_NO_VALUE_SENTINEL } from "../viewDefs";
 
 // ── Shared fixture builder ───────────────────────────────────────────
 
@@ -1253,11 +1253,11 @@ describe("View Engine", () => {
 
 			expect(schema.systemView.disabledLayoutMessages).toMatchObject({
 				calendar: "Add a date or datetime field to unlock calendar layouts.",
-				kanban: "Add a select or multi-select field to unlock kanban layouts.",
+				kanban: "Add a single-select field to unlock kanban layouts.",
 			});
 			expect(schema.view.disabledLayoutMessages).toMatchObject({
 				calendar: "Add a date or datetime field to unlock calendar layouts.",
-				kanban: "Add a select or multi-select field to unlock kanban layouts.",
+				kanban: "Add a single-select field to unlock kanban layouts.",
 			});
 		});
 	});

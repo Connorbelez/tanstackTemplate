@@ -3,11 +3,14 @@ import { listingDetailMocks } from "#/components/demo/listings/listing-detail-mo
 
 const UNKNOWN_LISTING_URL = "/demo/listings/unknown-listing";
 const FEATURED_LISTING_ID = "first-mortgage-condo-scarborough";
-const featuredListing = listingDetailMocks[FEATURED_LISTING_ID];
+const featuredListing = (() => {
+	const listing = listingDetailMocks[FEATURED_LISTING_ID];
+	if (!listing) {
+		throw new Error(`Missing demo listing fixture: ${FEATURED_LISTING_ID}`);
+	}
 
-if (!featuredListing) {
-	throw new Error(`Missing demo listing fixture: ${FEATURED_LISTING_ID}`);
-}
+	return listing;
+})();
 
 async function openFeaturedListing(page: Page) {
 	await page.goto(`/demo/listings/${FEATURED_LISTING_ID}`);

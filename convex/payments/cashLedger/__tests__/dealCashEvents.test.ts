@@ -1,4 +1,9 @@
 import { describe, expect, it } from "vitest";
+import {
+	createHarness,
+	SYSTEM_SOURCE,
+	seedMinimalEntities,
+} from "../../../../src/test/convex/payments/cashLedger/testUtils";
 import type { Id } from "../../../_generated/dataModel";
 import { convexModules } from "../../../test/moduleMaps";
 import { getOrCreateCashAccount } from "../accounts";
@@ -10,7 +15,6 @@ import {
 } from "../integrations";
 import { postCashEntryInternal } from "../postEntry";
 import { buildIdempotencyKey } from "../types";
-import { createHarness, SYSTEM_SOURCE, seedMinimalEntities } from "./testUtils";
 
 const modules = convexModules;
 

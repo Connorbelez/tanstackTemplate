@@ -1,7 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { convexModules } from "../../../test/moduleMaps";
-import { getOrCreateCashAccount } from "../accounts";
-import { type PostCashEntryInput, postCashEntryInternal } from "../postEntry";
 import {
 	ADMIN_SOURCE,
 	createHarness,
@@ -9,7 +6,10 @@ import {
 	postTestEntry,
 	SYSTEM_SOURCE,
 	type TestHarness,
-} from "./testUtils";
+} from "../../../../src/test/convex/payments/cashLedger/testUtils";
+import { convexModules } from "../../../test/moduleMaps";
+import { getOrCreateCashAccount } from "../accounts";
+import { type PostCashEntryInput, postCashEntryInternal } from "../postEntry";
 
 const modules = convexModules;
 

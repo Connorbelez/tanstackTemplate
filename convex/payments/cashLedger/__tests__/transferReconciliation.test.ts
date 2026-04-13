@@ -1,6 +1,17 @@
 import auditLogTest from "convex-audit-log/test";
 import { convexTest } from "convex-test";
 import { describe, expect, it, vi } from "vitest";
+import {
+	createConfirmedTransfer,
+	createDueObligation,
+	createHarness,
+	createReversedTransfer,
+	createTestAccount,
+	postTestEntry,
+	SYSTEM_SOURCE,
+	seedMinimalEntities,
+	type TestHarness,
+} from "../../../../src/test/convex/payments/cashLedger/testUtils";
 import { internal } from "../../../_generated/api";
 import type { Id } from "../../../_generated/dataModel";
 import auditTrailSchema from "../../../components/auditTrail/schema";
@@ -17,17 +28,6 @@ import {
 	findOrphanedConfirmedTransferCandidates,
 } from "../transferReconciliation";
 import { buildIdempotencyKey } from "../types";
-import {
-	createConfirmedTransfer,
-	createDueObligation,
-	createHarness,
-	createReversedTransfer,
-	createTestAccount,
-	postTestEntry,
-	SYSTEM_SOURCE,
-	seedMinimalEntities,
-	type TestHarness,
-} from "./testUtils";
 
 const modules = convexModules;
 const auditTrailModules = sharedAuditTrailModules;

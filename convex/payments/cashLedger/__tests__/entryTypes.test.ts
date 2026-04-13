@@ -1,8 +1,12 @@
 import { describe, expect, it } from "vitest";
+import {
+	ADMIN_SOURCE,
+	createHarness,
+	SYSTEM_SOURCE,
+} from "../../../../src/test/convex/payments/cashLedger/testUtils";
 import { convexModules } from "../../../test/moduleMaps";
 import { getOrCreateCashAccount } from "../accounts";
 import { postCashEntryInternal } from "../postEntry";
-import { ADMIN_SOURCE, createHarness, SYSTEM_SOURCE } from "./testUtils";
 
 const modules = convexModules;
 

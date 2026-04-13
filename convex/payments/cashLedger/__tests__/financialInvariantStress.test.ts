@@ -1,4 +1,13 @@
 import { describe, expect, it } from "vitest";
+import {
+	createDueObligation,
+	createHarness,
+	createTestAccount,
+	postTestEntry,
+	SYSTEM_SOURCE,
+	seedMinimalEntities,
+	type TestHarness,
+} from "../../../../src/test/convex/payments/cashLedger/testUtils";
 import type { Doc } from "../../../_generated/dataModel";
 import type { QueryCtx } from "../../../_generated/server";
 import { convexModules } from "../../../test/moduleMaps";
@@ -9,15 +18,6 @@ import {
 } from "../integrations";
 import { getJournalSettledAmountForObligation } from "../reconciliation";
 import { buildIdempotencyKey } from "../types";
-import {
-	createDueObligation,
-	createHarness,
-	createTestAccount,
-	postTestEntry,
-	SYSTEM_SOURCE,
-	seedMinimalEntities,
-	type TestHarness,
-} from "./testUtils";
 
 const modules = convexModules;
 

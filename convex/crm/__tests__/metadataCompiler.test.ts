@@ -9,18 +9,18 @@
  * - Capabilities queryable via fieldCapabilities.by_object_capability index
  */
 import { beforeEach, describe, expect, it } from "vitest";
-import { api } from "../../_generated/api";
-import {
-	deriveCapabilities,
-	deriveFieldContractMetadata,
-} from "../metadataCompiler";
 import {
 	asAdmin,
 	type CrmTestFixture,
 	type CrmTestHarness,
 	createCrmTestHarness,
 	seedObjectWithFields,
-} from "./helpers";
+} from "../../../src/test/convex/crm/helpers";
+import { api } from "../../_generated/api";
+import {
+	deriveCapabilities,
+	deriveFieldContractMetadata,
+} from "../metadataCompiler";
 
 // ═══════════════════════════════════════════════════════════════════════
 // PURE FUNCTION TESTS
@@ -99,8 +99,8 @@ describe("deriveCapabilities (pure)", () => {
 		]);
 	});
 
-	it('multi_select → ["table", "kanban"]', () => {
-		expect(deriveCapabilities("multi_select")).toEqual(["table", "kanban"]);
+	it('multi_select → ["table"]', () => {
+		expect(deriveCapabilities("multi_select")).toEqual(["table"]);
 	});
 });
 

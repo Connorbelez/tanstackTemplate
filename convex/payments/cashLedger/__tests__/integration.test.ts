@@ -1,4 +1,9 @@
 import { describe, expect, it } from "vitest";
+import {
+	createHarness,
+	SYSTEM_SOURCE,
+	type TestHarness,
+} from "../../../../src/test/convex/payments/cashLedger/testUtils";
 import type { Id } from "../../../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../../../_generated/server";
 import { createDispersalEntries } from "../../../dispersal/createDispersalEntries";
@@ -10,7 +15,6 @@ import { postLenderPayout } from "../mutations";
 import { postCashEntryInternal } from "../postEntry";
 import { reconcileObligationSettlementProjectionInternal } from "../reconciliation";
 import { buildIdempotencyKey } from "../types";
-import { createHarness, SYSTEM_SOURCE, type TestHarness } from "./testUtils";
 
 const modules = convexModules;
 
