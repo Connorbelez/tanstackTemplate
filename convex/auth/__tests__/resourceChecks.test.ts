@@ -1508,7 +1508,7 @@ describe("canAccessDocument", () => {
 			const viewer = makeViewer({
 				authId: "sr-uw-auth",
 				roles: new Set(["sr_underwriter"]),
-				permissions: new Set(["documents:sensitive_access"]),
+				permissions: new Set(["document:review"]),
 			});
 			const result = await canAccessDocument(ctx, viewer, docId);
 			expect(result).toBe(false);
@@ -1547,7 +1547,7 @@ describe("canAccessDocument", () => {
 				"sensitive"
 			);
 
-			// sr_underwriter has entity access but no documents:sensitive_access
+			// sr_underwriter has entity access but no document:review
 			const viewer = makeViewer({
 				authId: "sr-uw-auth",
 				roles: new Set(["sr_underwriter"]),
@@ -1585,10 +1585,43 @@ describe("canAccessDocument", () => {
 
 			const viewer = makeViewer({
 				authId: "lawyer-auth",
-				permissions: new Set(["documents:sensitive_access"]),
+				permissions: new Set(["document:review"]),
 			});
 			const result = await canAccessDocument(ctx, viewer, docId);
 			expect(result).toBe(true);
+		});
+	});
+
+	it("sensitive + deal — dealAccess + admin:access only — false", async () => {
+		const t = convexTest(schema, modules);
+		await t.run(async (ctx) => {
+			const { templateId, storageId } = await insertDocumentPrereqs(ctx);
+			const brokerUserId = await insertUser(ctx, { authId: "broker-auth" });
+			const brokerId = await insertBroker(ctx, brokerUserId);
+			const propId = await insertProperty(ctx);
+			const mortgageId = await insertMortgage(ctx, propId, brokerId);
+			const dealId = await insertDeal(
+				ctx,
+				mortgageId,
+				"buyer-auth",
+				"seller-auth"
+			);
+			await insertDealAccess(ctx, "lawyer-auth", dealId, "platform_lawyer");
+			const docId = await insertGeneratedDocument(
+				ctx,
+				templateId,
+				storageId,
+				"deal",
+				dealId,
+				"sensitive"
+			);
+
+			const viewer = makeViewer({
+				authId: "lawyer-auth",
+				permissions: new Set(["admin:access"]),
+			});
+			const result = await canAccessDocument(ctx, viewer, docId);
+			expect(result).toBe(false);
 		});
 	});
 
@@ -1616,7 +1649,7 @@ describe("canAccessDocument", () => {
 				"sensitive"
 			);
 
-			// Has dealAccess but no documents:sensitive_access permission
+			// Has dealAccess but no document:review permission
 			const viewer = makeViewer({ authId: "lawyer-auth" });
 			const result = await canAccessDocument(ctx, viewer, docId);
 			expect(result).toBe(false);
@@ -1655,7 +1688,7 @@ describe("canAccessDocument", () => {
 
 			const viewer = makeViewer({
 				authId: "lawyer-auth",
-				permissions: new Set(["documents:sensitive_access"]),
+				permissions: new Set(["document:review"]),
 			});
 			const result = await canAccessDocument(ctx, viewer, docId);
 			expect(result).toBe(false);
@@ -1690,7 +1723,7 @@ describe("canAccessDocument", () => {
 
 			const viewer = makeViewer({
 				authId: "lawyer-auth",
-				permissions: new Set(["documents:sensitive_access"]),
+				permissions: new Set(["document:review"]),
 			});
 			const result = await canAccessDocument(ctx, viewer, docId);
 			expect(result).toBe(true);
@@ -1723,7 +1756,7 @@ describe("canAccessDocument", () => {
 				"sensitive"
 			);
 
-			// Has entity access and dealAccess but no documents:sensitive_access permission
+			// Has entity access and dealAccess but no document:review permission
 			const viewer = makeViewer({ authId: "lawyer-auth" });
 			const result = await canAccessDocument(ctx, viewer, docId);
 			expect(result).toBe(false);
@@ -1752,7 +1785,7 @@ describe("canAccessDocument", () => {
 
 			const viewer = makeViewer({
 				authId: "lawyer-auth",
-				permissions: new Set(["documents:sensitive_access"]),
+				permissions: new Set(["document:review"]),
 			});
 			const result = await canAccessDocument(ctx, viewer, docId);
 			expect(result).toBe(false);

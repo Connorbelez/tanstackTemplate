@@ -545,7 +545,10 @@ export async function canAccessWorkoutPlan(
 // model from ENG-144:
 //   public    → entity-level access is sufficient
 //   private   → entity access + dealAccess record required
-//   sensitive → entity access + dealAccess + documents:sensitive_access permission
+//   sensitive → entity access + dealAccess + explicit `document:review`
+//               permission. This boundary intentionally ignores the
+//               `admin:access` wildcard so external org admins do not inherit
+//               access to sensitive documents.
 
 async function hasActiveDealAccess(
 	ctx: { db: QueryCtx["db"] },
@@ -671,7 +674,7 @@ export async function canAccessDocument(
 
 	// Step 4: sensitive — additionally require permission
 	if (doc.sensitivityTier === "sensitive") {
-		return hasPermissionGrant(viewer.permissions, "document:review");
+		return viewer.permissions.has("document:review");
 	}
 
 	// private tier satisfied
