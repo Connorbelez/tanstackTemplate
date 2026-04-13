@@ -26,6 +26,10 @@ function findDuplicatePlanEntryIds(planEntryIds: readonly string[]) {
 	return [...duplicates];
 }
 
+function normalizeIntegerLimit(limit?: number) {
+	return Math.max(1, Math.min(Math.floor(limit ?? 25), 100));
+}
+
 /**
  * Builds the activation snapshot for provider-managed recurring schedules.
  *
@@ -43,6 +47,8 @@ export const loadActivationSnapshot = convex
 		providerCode: v.literal("pad_rotessa"),
 	})
 	.handler(async (ctx, args) => {
+		const asOf = args.asOf ?? Date.now();
+
 		const mortgage = await ctx.db.get(args.mortgageId);
 		if (!mortgage) {
 			throw new ConvexError(`Mortgage not found: ${args.mortgageId}`);
@@ -66,7 +72,6 @@ export const loadActivationSnapshot = convex
 			);
 		}
 
-		const asOf = args.asOf ?? Date.now();
 		if (args.planEntryIds !== undefined && args.planEntryIds.length === 0) {
 			throw new ConvexError(
 				"At least one collection plan entry is required for schedule activation."
@@ -201,7 +206,7 @@ export const listSchedulesEligibleForPolling = convex
 		limit: v.optional(v.number()),
 	})
 	.handler(async (ctx, args) => {
-		const limit = Math.max(1, Math.min(args.limit ?? 25, 100));
+		const limit = normalizeIntegerLimit(args.limit);
 		const syncErrorBudget = Math.max(1, Math.ceil(limit / 4));
 
 		const collectEligibleSchedules = async (
@@ -303,6 +308,6 @@ export const listExternalCollectionScheduleSyncIssues = convex
 		return ctx.db
 			.query("externalCollectionSchedules")
 			.withIndex("by_status", (q) => q.eq("status", "sync_error"))
-			.take(Math.max(1, Math.min(args.limit ?? 25, 100)));
+			.take(normalizeIntegerLimit(args.limit));
 	})
 	.internal();
