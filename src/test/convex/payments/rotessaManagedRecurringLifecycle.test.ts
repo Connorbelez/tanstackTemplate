@@ -451,6 +451,23 @@ describe("Rotessa managed recurring lifecycle contracts", () => {
 				})
 			).toThrow('Rotessa invalid provider amount: "NaN"');
 		});
+
+		it("uses the raw Rotessa row id as providerRef when transaction_number is absent", () => {
+			const event = buildNormalizedOccurrenceFromRotessaRow({
+				externalScheduleRef: "987",
+				receivedVia: "poller",
+				row: makeTransactionReportRow({
+					id: 198099,
+					status: "Pending",
+					transaction_number: null,
+				}),
+			});
+
+			expect(event.providerRef).toBe("198099");
+			expect(event.externalOccurrenceRef).toBe(
+				"rotessa_financial_transaction:198099"
+			);
+		});
 	});
 
 	describe("webhook-driven recurring occurrences", () => {

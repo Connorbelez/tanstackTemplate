@@ -65,6 +65,16 @@ function shouldApplyProviderMirrorUpdate(args: {
 	);
 }
 
+function canReplaceTransferProviderRef(args: {
+	providerRef?: string;
+	transferId: Id<"transferRequests">;
+}) {
+	return (
+		args.providerRef === undefined ||
+		args.providerRef === `provider-managed:${args.transferId}`
+	);
+}
+
 function buildCollectionAttemptProviderMirrorPatch(args: {
 	currentReportedAt?: number;
 	event: IngestOccurrenceEvent;
@@ -744,6 +754,17 @@ export const ingestExternalOccurrenceEvent = convex
 			args.event.providerRef &&
 			transfer.providerRef !== args.event.providerRef
 		) {
+			if (
+				!canReplaceTransferProviderRef({
+					providerRef: transfer.providerRef,
+					transferId: transfer._id,
+				})
+			) {
+				throw new ConvexError(
+					`Provider-managed occurrence attempted to overwrite transfer ${transfer._id} providerRef from "${transfer.providerRef}" to "${args.event.providerRef}".`
+				);
+			}
+
 			await ctx.db.patch(transfer._id, {
 				providerRef: args.event.providerRef,
 			});

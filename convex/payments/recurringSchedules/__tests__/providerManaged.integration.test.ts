@@ -1689,6 +1689,94 @@ describe("provider-managed recurring schedules", () => {
 		);
 	});
 
+	it("fails when a later provider-managed update tries to overwrite an established transfer providerRef", async () => {
+		const rotessa = installRotessaFetchHarness();
+		const fixture = await seedProviderManagedFixture();
+		const activationAsOf = fullScheduleActivationAsOf(fixture.planEntries);
+		await activateRotessaSchedule(fixture.t, {
+			asOf: activationAsOf,
+			bankAccountId: fixture.bankAccountId,
+			mortgageId: fixture.mortgageId,
+			planEntryIds: fixture.planEntries.map((entry) => entry._id),
+		});
+		const firstPlanEntry = fixture.planEntries[0];
+		if (!firstPlanEntry) {
+			throw new Error("expected first plan entry");
+		}
+		const processDate = new Date(firstPlanEntry.scheduledDate)
+			.toISOString()
+			.slice(0, 10);
+
+		const firstWebhookEventId = await createWebhookEvent(
+			fixture.t,
+			"txn-stable"
+		);
+		rotessa.setTransactionRows([
+			createRotessaTransactionRow({
+				amountCents: firstPlanEntry.amount,
+				processDate,
+				scheduleId: 987,
+				status: "Future",
+				transactionId: "1001",
+				transactionNumber: "txn-stable",
+				updatedAt: "2026-02-01T12:00:00.000Z",
+			}),
+		]);
+		await fixture.t.action(processRotessaPadWebhookRef, {
+			eventType: "Future",
+			transactionId: "txn-stable",
+			webhookEventId: firstWebhookEventId,
+		});
+		await drainScheduledWork(fixture.t);
+
+		const hydratedPlanEntry = await fixture.t.run((ctx) =>
+			ctx.db.get(firstPlanEntry._id)
+		);
+		const attempt = hydratedPlanEntry?.collectionAttemptId
+			? await fixture.t.run((ctx) =>
+					ctx.db.get(hydratedPlanEntry.collectionAttemptId)
+				)
+			: null;
+		if (!attempt?.transferRequestId) {
+			throw new Error("expected transfer request after first occurrence event");
+		}
+
+		const conflictingWebhookEventId = await createWebhookEvent(
+			fixture.t,
+			"txn-conflict"
+		);
+		rotessa.setTransactionRows([
+			createRotessaTransactionRow({
+				amountCents: firstPlanEntry.amount,
+				processDate,
+				scheduleId: 987,
+				status: "Pending",
+				transactionId: "1001",
+				transactionNumber: "txn-conflict",
+				updatedAt: "2026-02-02T12:00:00.000Z",
+			}),
+		]);
+
+		await expect(
+			fixture.t.action(processRotessaPadWebhookRef, {
+				eventType: "Pending",
+				transactionId: "txn-conflict",
+				webhookEventId: conflictingWebhookEventId,
+			})
+		).rejects.toThrow("attempted to overwrite transfer");
+
+		const transfer = await fixture.t.run((ctx) =>
+			ctx.db.get(attempt.transferRequestId)
+		);
+		const webhookEvent = await fixture.t.run((ctx) =>
+			ctx.db.get(conflictingWebhookEventId)
+		);
+
+		expect(transfer?.providerRef).toBe("txn-stable");
+		expect(webhookEvent?.status).toBe("failed");
+		expect(webhookEvent?.error).toContain("attempted to overwrite transfer");
+	});
+
 	it("fails provider-managed lifecycle webhooks when the occurrence cannot be matched locally", async () => {
 		const rotessa = installRotessaFetchHarness();
 		const fixture = await seedProviderManagedFixture();

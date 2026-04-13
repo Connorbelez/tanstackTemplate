@@ -70,7 +70,7 @@ Mortgage obligations and monthly `collectionPlanEntries` remain the canonical lo
 
 ### UC-2: Operator activates a Rotessa recurring schedule for future entries
 - **Actor**: Admin operator
-- **Precondition**: Mortgage is eligible for provider-managed PAD collection and future plan entries exist
+- **Precondition**: Mortgage is eligible for provider-managed PAD collection, has exactly one linked borrower with `role === "primary"`, and future plan entries exist
 - **Flow**:
   1. Operator selects a mortgage and a group of future plan entries
   2. System validates bank-account / mandate prerequisites

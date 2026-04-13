@@ -40,6 +40,9 @@ export interface RecurringCollectionScheduleProvider {
   }>;
   pollOccurrenceUpdates(args: {
     externalScheduleRef: string;
+    startDate: string;
+    endDate?: string;
+    maxEvents?: number;
     sinceCursor?: string;
   }): Promise<{
     events: NormalizedExternalCollectionOccurrenceEvent[];
@@ -435,7 +438,7 @@ For each cron run:
 1. claim up to `SCHEDULE_BATCH_SIZE` schedules with an expiring lease
 2. for each claimed schedule:
    - set `lastSyncAttemptAt = now`
-   - call `pollOccurrenceUpdates({ externalScheduleRef, sinceCursor })`
+   - call `pollOccurrenceUpdates({ externalScheduleRef, startDate, endDate, maxEvents, sinceCursor })`
    - normalize and sort occurrence events deterministically by scheduled date, occurred-at timestamp, then provider reference
    - feed each event through the shared occurrence-ingestion action
    - update `lastSyncedAt`, `lastSyncCursor`, `nextPollAt`, `lastProviderScheduleStatus`

@@ -120,9 +120,7 @@ export function buildNormalizedOccurrenceFromRotessaRow(args: {
 			settlementDate: args.row.settlement_date,
 			earliestApprovalDate: args.row.earliest_approval_date,
 		},
-		providerRef:
-			args.row.transaction_number ??
-			`rotessa_financial_transaction:${args.row.id}`,
+		providerRef: args.row.transaction_number ?? String(args.row.id),
 		rawProviderReason: args.row.status_reason ?? undefined,
 		rawProviderStatus: args.row.status,
 		receivedVia: args.receivedVia,
