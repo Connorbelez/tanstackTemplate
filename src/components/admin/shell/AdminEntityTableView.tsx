@@ -48,6 +48,21 @@ export function AdminEntityTableView({
 	const fieldsByName = new Map(
 		fields.map((field) => [field.name, field] as const)
 	);
+	const handleSelectableRowKeyDown = (
+		event: React.KeyboardEvent<HTMLTableRowElement>,
+		recordId: string
+	) => {
+		if (!onSelectRecord) {
+			return;
+		}
+
+		if (event.key !== "Enter" && event.key !== " ") {
+			return;
+		}
+
+		event.preventDefault();
+		onSelectRecord(recordId);
+	};
 
 	return (
 		<div className="overflow-hidden rounded-xl border border-border/70 bg-background">
@@ -64,10 +79,16 @@ export function AdminEntityTableView({
 					{rows.map((record) => (
 						<TableRow
 							className={cn(
-								onSelectRecord && "cursor-pointer hover:bg-muted/40"
+								onSelectRecord &&
+									"cursor-pointer hover:bg-muted/40 focus-visible:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
 							)}
 							key={record._id}
 							onClick={() => onSelectRecord?.(record._id)}
+							onKeyDown={(event) =>
+								handleSelectableRowKeyDown(event, record._id)
+							}
+							role={onSelectRecord ? "button" : undefined}
+							tabIndex={onSelectRecord ? 0 : undefined}
 						>
 							<TableCell>
 								<div className="space-y-1">
