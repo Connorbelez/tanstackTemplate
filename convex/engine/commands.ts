@@ -2,11 +2,10 @@ import { v } from "convex/values";
 import { internalMutation } from "../_generated/server";
 import type { Viewer } from "../fluent";
 import {
+	adminAction,
 	adminMutation,
-	authedAction,
 	authedMutation,
 	requirePermission,
-	requirePermissionAction,
 } from "../fluent";
 import { runManualInboundCollectionForObligation } from "../payments/collectionPlan/manualCollection";
 import { executeTransition } from "./transition";
@@ -131,12 +130,10 @@ export const transitionMortgageInternal = internalMutation({
 });
 
 /**
- * Authed action for confirming obligation payments.
- * Requires authentication + `obligation:manage` permission.
+ * FairLend admin action for confirming obligation payments.
  * Routes manual collection through the unified transfer-backed rails.
  */
-export const confirmObligationPayment = authedAction
-	.use(requirePermissionAction("obligation:manage"))
+export const confirmObligationPayment = adminAction
 	.input({
 		entityId: v.id("obligations"),
 		amount: v.number(),
