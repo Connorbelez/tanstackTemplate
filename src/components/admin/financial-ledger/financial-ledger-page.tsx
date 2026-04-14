@@ -14,6 +14,7 @@ import {
 	rowsToCsv,
 } from "./csv";
 import {
+	formatAccountBalanceCents,
 	formatCurrencyCents,
 	formatDateTime,
 	formatInteger,
@@ -1166,7 +1167,11 @@ export function FinancialLedgerPage({
 				align: "right",
 				header: "Running balance",
 				id: "runningBalance",
-				render: (row) => formatCurrencyCents(row.runningBalanceCents),
+				render: (row) =>
+					formatAccountBalanceCents({
+						balanceCents: row.runningBalanceCents,
+						normalBalance: selectedAccount?.normalBalance ?? "debit",
+					}),
 			},
 			{
 				header: "Posting group",
@@ -1223,7 +1228,10 @@ export function FinancialLedgerPage({
 											: "No activity yet"}
 									</div>
 									<div className="font-semibold text-sm">
-										{formatCurrencyCents(account.balanceCents)}
+										{formatAccountBalanceCents({
+											balanceCents: account.balanceCents,
+											normalBalance: account.normalBalance,
+										})}
 									</div>
 								</div>
 							</button>
@@ -1247,7 +1255,10 @@ export function FinancialLedgerPage({
 										Opening balance
 									</div>
 									<div className="mt-2 font-semibold text-lg">
-										{formatCurrencyCents(register.openingBalanceCents)}
+										{formatAccountBalanceCents({
+											balanceCents: register.openingBalanceCents,
+											normalBalance: selectedAccount.normalBalance,
+										})}
 									</div>
 								</div>
 								<div className="rounded-lg border p-3">
@@ -1255,7 +1266,10 @@ export function FinancialLedgerPage({
 										Closing balance
 									</div>
 									<div className="mt-2 font-semibold text-lg">
-										{formatCurrencyCents(accountSummary.closingBalanceCents)}
+										{formatAccountBalanceCents({
+											balanceCents: accountSummary.closingBalanceCents,
+											normalBalance: selectedAccount.normalBalance,
+										})}
 									</div>
 								</div>
 								<div className="rounded-lg border p-3">

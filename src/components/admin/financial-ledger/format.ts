@@ -24,6 +24,25 @@ export function formatCurrencyCents(cents: number) {
 	return currencyFormatter.format(centsToAmount(cents));
 }
 
+export function formatAccountBalanceCents(args: {
+	balanceCents: number;
+	normalBalance: string;
+}) {
+	if (args.balanceCents === 0) {
+		return formatCurrencyCents(0);
+	}
+
+	const absoluteValue = formatCurrencyCents(Math.abs(args.balanceCents));
+	let side: "CR" | "DR";
+	if (args.normalBalance === "credit") {
+		side = args.balanceCents > 0 ? "CR" : "DR";
+	} else {
+		side = args.balanceCents > 0 ? "DR" : "CR";
+	}
+
+	return `${absoluteValue} ${side}`;
+}
+
 export function formatDecimalCurrencyCents(cents: number) {
 	return centsToAmount(cents).toFixed(2);
 }

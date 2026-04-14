@@ -36,6 +36,17 @@ const NAV_ITEMS = [
 function DocumentEngineLayout() {
 	const matches = useMatches();
 	const currentPath = matches.at(-1)?.fullPath ?? "";
+	const isDesignerRoute = currentPath.startsWith(
+		"/demo/document-engine/designer/"
+	);
+
+	if (isDesignerRoute) {
+		return (
+			<div className="w-full px-4 py-4 lg:px-6">
+				<Outlet />
+			</div>
+		);
+	}
 
 	return (
 		<div className="mx-auto max-w-7xl p-4 py-8">

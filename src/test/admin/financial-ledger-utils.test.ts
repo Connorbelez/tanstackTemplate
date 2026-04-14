@@ -5,6 +5,7 @@ import {
 	buildTrialBalanceCsv,
 	parseCsv,
 } from "#/components/admin/financial-ledger/csv";
+import { formatAccountBalanceCents } from "#/components/admin/financial-ledger/format";
 import {
 	parseFinancialLedgerSearch,
 	parsePaymentOperationsSearch,
@@ -363,6 +364,35 @@ describe("admin financial ledger CSV exports", () => {
 				opening_balance: "876.55",
 			}),
 		]);
+	});
+});
+
+describe("admin financial ledger balance formatting", () => {
+	it("renders account balances using DR and CR semantics instead of signed currency", () => {
+		expect(
+			formatAccountBalanceCents({
+				balanceCents: -448,
+				normalBalance: "debit",
+			})
+		).toBe("$4.48 CR");
+		expect(
+			formatAccountBalanceCents({
+				balanceCents: 100_000,
+				normalBalance: "debit",
+			})
+		).toBe("$1,000.00 DR");
+		expect(
+			formatAccountBalanceCents({
+				balanceCents: 100_000,
+				normalBalance: "credit",
+			})
+		).toBe("$1,000.00 CR");
+		expect(
+			formatAccountBalanceCents({
+				balanceCents: 0,
+				normalBalance: "credit",
+			})
+		).toBe("$0.00");
 	});
 });
 
