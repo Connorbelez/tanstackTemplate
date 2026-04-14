@@ -1,0 +1,96 @@
+function centsToAmount(cents: number) {
+	return cents / 100;
+}
+
+const currencyFormatter = new Intl.NumberFormat("en-CA", {
+	style: "currency",
+	currency: "CAD",
+	minimumFractionDigits: 2,
+	maximumFractionDigits: 2,
+});
+
+const numberFormatter = new Intl.NumberFormat("en-CA");
+
+const dateTimeFormatter = new Intl.DateTimeFormat("en-CA", {
+	dateStyle: "medium",
+	timeStyle: "short",
+});
+
+const dateFormatter = new Intl.DateTimeFormat("en-CA", {
+	dateStyle: "medium",
+});
+
+const dateOnlyPattern = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+function parseDateOnly(value: string) {
+	const match = dateOnlyPattern.exec(value);
+	if (!match) {
+		return new Date(value);
+	}
+
+	const year = Number(match[1]);
+	const month = Number(match[2]) - 1;
+	const day = Number(match[3]);
+	return new Date(year, month, day);
+}
+
+export function formatCurrencyCents(cents: number) {
+	return currencyFormatter.format(centsToAmount(cents));
+}
+
+export function formatAccountBalanceCents(args: {
+	balanceCents: number;
+	normalBalance: string;
+}) {
+	if (args.balanceCents === 0) {
+		return formatCurrencyCents(0);
+	}
+
+	const absoluteValue = formatCurrencyCents(Math.abs(args.balanceCents));
+	let side: "CR" | "DR";
+	if (args.normalBalance === "credit") {
+		side = args.balanceCents > 0 ? "CR" : "DR";
+	} else {
+		side = args.balanceCents > 0 ? "DR" : "CR";
+	}
+
+	return `${absoluteValue} ${side}`;
+}
+
+export function formatDecimalCurrencyCents(cents: number) {
+	return centsToAmount(cents).toFixed(2);
+}
+
+export function formatInteger(value: number) {
+	return numberFormatter.format(value);
+}
+
+export function formatDateTime(value: number | string | null | undefined) {
+	if (value === null || value === undefined) {
+		return "—";
+	}
+
+	const date = typeof value === "string" ? new Date(value) : new Date(value);
+	return Number.isNaN(date.getTime()) ? "—" : dateTimeFormatter.format(date);
+}
+
+export function formatDateOnly(value: number | string | null | undefined) {
+	if (value === null || value === undefined) {
+		return "—";
+	}
+
+	const date =
+		typeof value === "string" ? parseDateOnly(value) : new Date(value);
+	return Number.isNaN(date.getTime()) ? "—" : dateFormatter.format(date);
+}
+
+export function formatCompactDate(value: string) {
+	return value;
+}
+
+export function humanizeLabel(value: string) {
+	return value
+		.replace(/([a-z])([A-Z])/g, "$1 $2")
+		.replaceAll("_", " ")
+		.replace(/\b\w/g, (character) => character.toUpperCase());
+}

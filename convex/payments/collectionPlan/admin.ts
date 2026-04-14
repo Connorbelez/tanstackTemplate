@@ -416,22 +416,21 @@ export const getCollectionAttempt = adminQuery
 			return null;
 		}
 
-		const [planEntry, auditEvents, transitionJournal] = await Promise.all([
-			ctx.db.get(attempt.planEntryId),
-			auditLog.queryByResource(ctx, {
-				resourceType: "collectionAttempts",
-				resourceId: `${args.attemptId}`,
-				limit: 25,
-			}),
-			ctx.db
-				.query("auditJournal")
-				.withIndex("by_entity", (q) =>
-					q
-						.eq("entityType", "collectionAttempt")
-						.eq("entityId", `${args.attemptId}`)
-				)
-				.collect(),
-		]);
+		const planEntryPromise = ctx.db.get(attempt.planEntryId);
+		const auditEvents = await auditLog.queryByResource(ctx, {
+			resourceType: "collectionAttempts",
+			resourceId: `${args.attemptId}`,
+			limit: 25,
+		});
+		const transitionJournal = await ctx.db
+			.query("auditJournal")
+			.withIndex("by_entity", (q) =>
+				q
+					.eq("entityType", "collectionAttempt")
+					.eq("entityId", `${args.attemptId}`)
+			)
+			.collect();
+		const planEntry = await planEntryPromise;
 
 		return {
 			attempt: await buildCollectionAttemptRow(ctx, attempt),

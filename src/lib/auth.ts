@@ -3,7 +3,7 @@ import {
 	hasAnyPermissionGrant,
 	hasPermissionGrant,
 } from "../../convex/auth/permissionCatalog";
-import { FAIRLEND_STAFF_ORG_ID } from "../../convex/constants";
+import { isFairLendStaffAdmin as policyIsFairLendStaffAdmin } from "#/lib/auth-policy";
 import { buildSignInRedirect } from "./auth-redirect";
 
 /** Permissions that control island-level route access. */
@@ -48,17 +48,16 @@ export function hasAnyPermission(
 }
 
 export function isFairLendStaffAdmin(context: {
+	role?: string | null;
 	orgId: string | null;
 	roles: readonly string[];
 }): boolean {
-	return (
-		context.orgId === FAIRLEND_STAFF_ORG_ID && context.roles.includes("admin")
-	);
+	return policyIsFairLendStaffAdmin(context);
 }
 
 export function canAccessAdminPath(
 	pathname: string,
-	context: Pick<RouteAuthContext, "orgId" | "permissions" | "roles">
+	context: Pick<RouteAuthContext, "orgId" | "permissions" | "role" | "roles">
 ): boolean {
 	if (isFairLendStaffAdmin(context)) {
 		return true;
@@ -81,6 +80,7 @@ export function canAccessAdminPath(
 export interface RouteAuthContext {
 	orgId: string | null;
 	permissions: string[];
+	role: string | null;
 	roles: string[];
 	token: string | null;
 	userId: string | null;

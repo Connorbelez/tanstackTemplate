@@ -159,6 +159,6 @@ These permissions are referenced in repo analysis, but they are not yet approved
 
 ## Canonical References
 
-- Runtime role matrix today: [src/test/auth/permissions.ts](/Users/connor/Dev/tanstackFairLend/fairlendapp/src/test/auth/permissions.ts)
-- Frontend route auth helpers: [src/lib/auth.ts](/Users/connor/Dev/tanstackFairLend/fairlendapp/src/lib/auth.ts)
-- Backend auth chains: [convex/fluent.ts](/Users/connor/Dev/tanstackFairLend/fairlendapp/convex/fluent.ts)
+- Runtime role matrix today: [src/test/auth/permissions.ts](../../src/test/auth/permissions.ts)
+- Frontend route auth helpers: [src/lib/auth.ts](../../src/lib/auth.ts)
+- Backend auth chains: [convex/fluent.ts](../../convex/fluent.ts)

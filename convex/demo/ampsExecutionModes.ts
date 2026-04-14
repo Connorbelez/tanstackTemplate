@@ -711,6 +711,266 @@ export const getCollectionExecutionWorkspace = adminQuery
 	})
 	.public();
 
+function getRequiredPlanEntryBounds(
+	planEntries: Doc<"collectionPlanEntries">[]
+) {
+	const firstPlanEntry = planEntries[0];
+	const lastPlanEntry = planEntries.at(-1);
+	if (!(firstPlanEntry && lastPlanEntry)) {
+		throw new ConvexError("No plan entries available for demo activation.");
+	}
+	return { firstPlanEntry, lastPlanEntry };
+}
+
+function buildWorkspaceRecord(args: {
+	bankAccountId: Id<"bankAccounts">;
+	borrowerId: Id<"borrowers">;
+	brokerId: Id<"brokers">;
+	executionMode: DemoExecutionMode;
+	externalCollectionScheduleId?: Id<"externalCollectionSchedules">;
+	mortgageId: Id<"mortgages">;
+	now: number;
+	paymentRail: DemoPaymentRail;
+	propertyId: Id<"properties">;
+	startDate: string;
+	workspaceKey: string;
+	ownerAuthId: string;
+}) {
+	return {
+		ownerAuthId: args.ownerAuthId,
+		workspaceKey: args.workspaceKey,
+		executionMode: args.executionMode,
+		paymentRail: args.paymentRail,
+		mortgageId: args.mortgageId,
+		borrowerId: args.borrowerId,
+		brokerId: args.brokerId,
+		propertyId: args.propertyId,
+		bankAccountId: args.bankAccountId,
+		externalCollectionScheduleId: args.externalCollectionScheduleId,
+		currentMonthIndex: 0,
+		currentDate: args.startDate,
+		startDate: args.startDate,
+		createdAt: args.now,
+		updatedAt: args.now,
+	};
+}
+
+async function upsertDemoWorkspace(args: {
+	bankAccountId: Id<"bankAccounts">;
+	borrowerId: Id<"borrowers">;
+	brokerId: Id<"brokers">;
+	ctx: MutationCtx;
+	executionMode: DemoExecutionMode;
+	existingWorkspace: DemoWorkspaceDoc | null;
+	externalCollectionScheduleId?: Id<"externalCollectionSchedules">;
+	mortgageId: Id<"mortgages">;
+	now: number;
+	ownerAuthId: string;
+	paymentRail: DemoPaymentRail;
+	propertyId: Id<"properties">;
+	startDate: string;
+	workspaceKey: string;
+}) {
+	if (args.existingWorkspace) {
+		const { createdAt, ...workspacePatch } = buildWorkspaceRecord({
+			bankAccountId: args.bankAccountId,
+			borrowerId: args.borrowerId,
+			brokerId: args.brokerId,
+			executionMode: args.executionMode,
+			externalCollectionScheduleId: args.externalCollectionScheduleId,
+			mortgageId: args.mortgageId,
+			now: args.now,
+			ownerAuthId: args.ownerAuthId,
+			paymentRail: args.paymentRail,
+			propertyId: args.propertyId,
+			startDate: args.startDate,
+			workspaceKey: args.workspaceKey,
+		});
+		await args.ctx.db.patch(args.existingWorkspace._id, {
+			...workspacePatch,
+			lastAdvancedAt: undefined,
+		});
+		return args.existingWorkspace._id;
+	}
+
+	return args.ctx.db.insert(
+		"demo_collection_execution_workspaces",
+		buildWorkspaceRecord({
+			bankAccountId: args.bankAccountId,
+			borrowerId: args.borrowerId,
+			brokerId: args.brokerId,
+			executionMode: args.executionMode,
+			externalCollectionScheduleId: args.externalCollectionScheduleId,
+			mortgageId: args.mortgageId,
+			now: args.now,
+			ownerAuthId: args.ownerAuthId,
+			paymentRail: args.paymentRail,
+			propertyId: args.propertyId,
+			startDate: args.startDate,
+			workspaceKey: args.workspaceKey,
+		})
+	);
+}
+
+async function seedProviderManagedWorkspace(args: {
+	bankAccountId: Id<"bankAccounts">;
+	borrowerId: Id<"borrowers">;
+	brokerId: Id<"brokers">;
+	ctx: MutationCtx;
+	executionMode: DemoExecutionMode;
+	existingWorkspace: DemoWorkspaceDoc | null;
+	mortgageId: Id<"mortgages">;
+	now: number;
+	ownerAuthId: string;
+	paymentRail: DemoPaymentRail;
+	planEntries: Doc<"collectionPlanEntries">[];
+	propertyId: Id<"properties">;
+	startDate: string;
+	workspaceKey: string;
+}): Promise<DemoSeedMutationResult> {
+	const bankAccount = await args.ctx.db.get(args.bankAccountId);
+	if (!bankAccount) {
+		throw new ConvexError("Expected demo bank account to exist after insert.");
+	}
+	const bankValidation = validateBankAccountRecord(bankAccount, "pad_rotessa");
+	if (!bankValidation.valid) {
+		throw new ConvexError(bankValidation.errorMessage);
+	}
+
+	const { firstPlanEntry, lastPlanEntry } = getRequiredPlanEntryBounds(
+		args.planEntries
+	);
+
+	const externalCollectionScheduleId = await args.ctx.db.insert(
+		"externalCollectionSchedules",
+		{
+			status: "active",
+			mortgageId: args.mortgageId,
+			borrowerId: args.borrowerId,
+			providerCode: "pad_rotessa",
+			bankAccountId: args.bankAccountId,
+			externalScheduleRef: `demo-rotessa-schedule-${args.now}`,
+			activationIdempotencyKey: `demo:${args.workspaceKey}:${args.mortgageId}:${args.now}`,
+			startDate: firstPlanEntry.scheduledDate,
+			endDate: lastPlanEntry.scheduledDate,
+			cadence: "Monthly",
+			coveredFromPlanEntryId: firstPlanEntry._id,
+			coveredToPlanEntryId: lastPlanEntry._id,
+			activatedAt: args.now,
+			lastSyncedAt: args.now,
+			nextPollAt: args.now + 15 * 60 * 1000,
+			consecutiveSyncFailures: 0,
+			lastProviderScheduleStatus: "active",
+			providerData: {
+				demoMode: true,
+				note: "Created by the AMPS execution-mode demo.",
+			},
+			source: "demo_execution_modes",
+			createdAt: args.now,
+			lastTransitionAt: args.now,
+		}
+	);
+
+	for (const [index, planEntry] of args.planEntries.entries()) {
+		await args.ctx.db.patch(planEntry._id, {
+			status: "provider_scheduled",
+			method: "pad_rotessa",
+			executionMode: "provider_managed",
+			externalCollectionScheduleId,
+			externalOccurrenceOrdinal: index + 1,
+			externallyManagedAt: args.now,
+		});
+	}
+
+	await args.ctx.db.patch(args.mortgageId, {
+		collectionExecutionMode: "provider_managed",
+		collectionExecutionProviderCode: "pad_rotessa",
+		activeExternalCollectionScheduleId: externalCollectionScheduleId,
+		collectionExecutionUpdatedAt: args.now,
+	});
+
+	const workspaceId = await upsertDemoWorkspace({
+		bankAccountId: args.bankAccountId,
+		borrowerId: args.borrowerId,
+		brokerId: args.brokerId,
+		ctx: args.ctx,
+		executionMode: args.executionMode,
+		existingWorkspace: args.existingWorkspace,
+		externalCollectionScheduleId,
+		mortgageId: args.mortgageId,
+		now: args.now,
+		ownerAuthId: args.ownerAuthId,
+		paymentRail: args.paymentRail,
+		propertyId: args.propertyId,
+		startDate: args.startDate,
+		workspaceKey: args.workspaceKey,
+	});
+
+	const scheduleDoc = await args.ctx.db.get(externalCollectionScheduleId);
+	const externalScheduleRef = scheduleDoc?.externalScheduleRef;
+	if (!externalScheduleRef) {
+		throw new ConvexError(
+			"Expected external schedule ref for provider-managed demo activation."
+		);
+	}
+
+	const futureEvents: DemoSeedMutationResult["futureEvents"] = [];
+	for (const [index, planEntry] of args.planEntries.entries()) {
+		const row = buildRotessaDemoRow({
+			amountCents: planEntry.amount,
+			externalScheduleRef,
+			monthIndex: index + 1,
+			processDate: toBusinessDate(planEntry.scheduledDate),
+			status: "Future",
+		});
+		const occurrenceId = await args.ctx.db.insert(
+			"demo_collection_external_occurrences",
+			{
+				workspaceId,
+				planEntryId: planEntry._id,
+				externalCollectionScheduleId,
+				monthIndex: index + 1,
+				externalScheduleRef,
+				externalOccurrenceRef: `rotessa_financial_transaction:${row.id}`,
+				providerRef:
+					row.transaction_number ?? `rotessa_financial_transaction:${row.id}`,
+				scheduledDate: row.process_date,
+				status: "Future",
+				history: [
+					{
+						status: "Future",
+						deliveredVia: "poller",
+						occurredAt: Date.parse(row.created_at),
+					},
+				],
+				createdAt: args.now,
+				updatedAt: args.now,
+			}
+		);
+
+		const normalizedEvent = buildNormalizedOccurrenceFromRotessaRow({
+			externalScheduleRef,
+			receivedVia: "poller",
+			row,
+		});
+		if (!normalizedEvent) {
+			throw new ConvexError("Expected a normalized Rotessa Future event.");
+		}
+		futureEvents.push({
+			occurrenceId,
+			event: normalizedEvent,
+		});
+	}
+
+	return {
+		workspaceId,
+		mortgageId: args.mortgageId,
+		executionMode: args.executionMode,
+		paymentRail: args.paymentRail,
+		futureEvents,
+	};
+}
+
 export const seedCollectionExecutionWorkspaceInternal = convex
 	.mutation()
 	.input({
@@ -838,201 +1098,23 @@ export const seedCollectionExecutionWorkspaceInternal = convex
 			});
 		}
 
-		let externalCollectionScheduleId:
-			| Id<"externalCollectionSchedules">
-			| undefined;
-		const futureEvents: Array<{
-			occurrenceId: Id<"demo_collection_external_occurrences">;
-			event: NormalizedExternalCollectionOccurrenceEvent;
-		}> = [];
-
 		if (args.executionMode === "provider_managed") {
-			const bankAccount = await ctx.db.get(bankAccountId);
-			if (!bankAccount) {
-				throw new ConvexError(
-					"Expected demo bank account to exist after insert."
-				);
-			}
-			const bankValidation = validateBankAccountRecord(
-				bankAccount,
-				"pad_rotessa"
-			);
-			if (!bankValidation.valid) {
-				throw new ConvexError(bankValidation.errorMessage);
-			}
-
-			// DEMO-ONLY: production provider-managed setup creates the external schedule
-			// through the recurring-schedule activation flow and a live provider adapter.
-			// The demo persists a local schedule mirror directly so admins can exercise
-			// the servicing lifecycle without provisioning a real Rotessa schedule.
-			externalCollectionScheduleId = await ctx.db.insert(
-				"externalCollectionSchedules",
-				{
-					status: "active",
-					mortgageId,
-					borrowerId,
-					providerCode: "pad_rotessa",
-					bankAccountId,
-					externalScheduleRef: `demo-rotessa-schedule-${now}`,
-					activationIdempotencyKey: `demo:${workspaceKey}:${mortgageId}:${now}`,
-					startDate: planEntries[0]?.scheduledDate ?? now,
-					endDate: planEntries.at(-1)?.scheduledDate ?? now,
-					cadence: "Monthly",
-					coveredFromPlanEntryId: (() => {
-						const firstPlanEntry = planEntries[0];
-						if (!firstPlanEntry) {
-							throw new ConvexError(
-								"No plan entries available for demo activation."
-							);
-						}
-						return firstPlanEntry._id;
-					})(),
-					coveredToPlanEntryId: (() => {
-						const lastPlanEntry = planEntries.at(-1);
-						if (!lastPlanEntry) {
-							throw new ConvexError(
-								"No plan entries available for demo activation."
-							);
-						}
-						return lastPlanEntry._id;
-					})(),
-					activatedAt: now,
-					lastSyncedAt: now,
-					nextPollAt: now + 15 * 60 * 1000,
-					consecutiveSyncFailures: 0,
-					lastProviderScheduleStatus: "active",
-					providerData: {
-						demoMode: true,
-						note: "Created by the AMPS execution-mode demo.",
-					},
-					source: "demo_execution_modes",
-					createdAt: now,
-					lastTransitionAt: now,
-				}
-			);
-
-			for (const [index, planEntry] of planEntries.entries()) {
-				await ctx.db.patch(planEntry._id, {
-					status: "provider_scheduled",
-					method: "pad_rotessa",
-					executionMode: "provider_managed",
-					externalCollectionScheduleId,
-					externalOccurrenceOrdinal: index + 1,
-					externallyManagedAt: now,
-				});
-			}
-
-			await ctx.db.patch(mortgageId, {
-				collectionExecutionMode: "provider_managed",
-				collectionExecutionProviderCode: "pad_rotessa",
-				activeExternalCollectionScheduleId: externalCollectionScheduleId,
-				collectionExecutionUpdatedAt: now,
-			});
-
-			const workspaceId =
-				existingWorkspace?._id ??
-				(await ctx.db.insert("demo_collection_execution_workspaces", {
-					ownerAuthId: args.ownerAuthId,
-					workspaceKey,
-					executionMode: args.executionMode,
-					paymentRail,
-					mortgageId,
-					borrowerId,
-					brokerId,
-					propertyId,
-					bankAccountId,
-					externalCollectionScheduleId,
-					currentMonthIndex: 0,
-					currentDate: startDate,
-					startDate,
-					createdAt: now,
-					updatedAt: now,
-				}));
-
-			if (existingWorkspace) {
-				await ctx.db.patch(existingWorkspace._id, {
-					executionMode: args.executionMode,
-					paymentRail,
-					mortgageId,
-					borrowerId,
-					brokerId,
-					propertyId,
-					bankAccountId,
-					externalCollectionScheduleId,
-					currentMonthIndex: 0,
-					currentDate: startDate,
-					startDate,
-					updatedAt: now,
-					lastAdvancedAt: undefined,
-				});
-			}
-
-			const scheduleDoc = await ctx.db.get(externalCollectionScheduleId);
-			const externalScheduleRef = scheduleDoc?.externalScheduleRef;
-			if (!externalScheduleRef) {
-				throw new ConvexError(
-					"Expected external schedule ref for provider-managed demo activation."
-				);
-			}
-
-			for (const [index, planEntry] of planEntries.entries()) {
-				const row = buildRotessaDemoRow({
-					amountCents: planEntry.amount,
-					externalScheduleRef,
-					monthIndex: index + 1,
-					processDate: toBusinessDate(planEntry.scheduledDate),
-					status: "Future",
-				});
-				const occurrenceId = await ctx.db.insert(
-					"demo_collection_external_occurrences",
-					{
-						// DEMO-ONLY: this table mirrors the provider occurrence lifecycle so
-						// the UI can show Future -> Pending -> Approved / Declined transitions
-						// before or alongside the canonical local attempt and transfer rows.
-						workspaceId,
-						planEntryId: planEntry._id,
-						externalCollectionScheduleId,
-						monthIndex: index + 1,
-						externalScheduleRef,
-						externalOccurrenceRef: `rotessa_financial_transaction:${row.id}`,
-						providerRef:
-							row.transaction_number ??
-							`rotessa_financial_transaction:${row.id}`,
-						scheduledDate: row.process_date,
-						status: "Future",
-						history: [
-							{
-								status: "Future",
-								deliveredVia: "poller",
-								occurredAt: Date.parse(row.created_at),
-							},
-						],
-						createdAt: now,
-						updatedAt: now,
-					}
-				);
-
-				const normalizedEvent = buildNormalizedOccurrenceFromRotessaRow({
-					externalScheduleRef,
-					receivedVia: "poller",
-					row,
-				});
-				if (!normalizedEvent) {
-					throw new ConvexError("Expected a normalized Rotessa Future event.");
-				}
-				futureEvents.push({
-					occurrenceId,
-					event: normalizedEvent,
-				});
-			}
-
-			return {
-				workspaceId,
-				mortgageId,
+			return seedProviderManagedWorkspace({
+				bankAccountId,
+				borrowerId,
+				brokerId,
+				ctx,
 				executionMode: args.executionMode,
+				existingWorkspace,
+				mortgageId,
+				now,
+				ownerAuthId: args.ownerAuthId,
 				paymentRail,
-				futureEvents,
-			};
+				planEntries,
+				propertyId,
+				startDate,
+				workspaceKey,
+			});
 		}
 
 		await ctx.db.patch(mortgageId, {
@@ -1041,50 +1123,28 @@ export const seedCollectionExecutionWorkspaceInternal = convex
 			collectionExecutionUpdatedAt: now,
 		});
 
-		const workspaceId =
-			existingWorkspace?._id ??
-			(await ctx.db.insert("demo_collection_execution_workspaces", {
-				ownerAuthId: args.ownerAuthId,
-				workspaceKey,
-				executionMode: args.executionMode,
-				paymentRail,
-				mortgageId,
-				borrowerId,
-				brokerId,
-				propertyId,
-				bankAccountId,
-				externalCollectionScheduleId: undefined,
-				currentMonthIndex: 0,
-				currentDate: startDate,
-				startDate,
-				createdAt: now,
-				updatedAt: now,
-			}));
-
-		if (existingWorkspace) {
-			await ctx.db.patch(existingWorkspace._id, {
-				executionMode: args.executionMode,
-				paymentRail,
-				mortgageId,
-				borrowerId,
-				brokerId,
-				propertyId,
-				bankAccountId,
-				externalCollectionScheduleId: undefined,
-				currentMonthIndex: 0,
-				currentDate: startDate,
-				startDate,
-				updatedAt: now,
-				lastAdvancedAt: undefined,
-			});
-		}
+		const workspaceId = await upsertDemoWorkspace({
+			bankAccountId,
+			borrowerId,
+			brokerId,
+			ctx,
+			executionMode: args.executionMode,
+			existingWorkspace,
+			mortgageId,
+			now,
+			ownerAuthId: args.ownerAuthId,
+			paymentRail,
+			propertyId,
+			startDate,
+			workspaceKey,
+		});
 
 		return {
 			workspaceId,
 			mortgageId,
 			executionMode: args.executionMode,
 			paymentRail,
-			futureEvents,
+			futureEvents: [],
 		};
 	})
 	.internal();
@@ -1544,8 +1604,8 @@ export const confirmPendingManualReviewTransfer = adminAction
 				{
 					transferId,
 					source: {
-						actorId: "demo:amps:execution-modes",
-						actorType: "system",
+						actorId: ctx.viewer.authId,
+						actorType: "admin",
 						channel: "simulation",
 					},
 				}

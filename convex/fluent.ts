@@ -13,10 +13,15 @@ import type {
 	FunctionType,
 } from "fluent-convex";
 import { ConvexBuilderWithFunctionKind, createBuilder } from "fluent-convex";
+import {
+	hasEffectivePermission,
+	isFairLendStaffAdmin,
+	normalizePermissions,
+	normalizeRoles,
+	resolvePrimaryRole,
+} from "../src/lib/auth-policy";
 import type { DataModel } from "./_generated/dataModel";
 import { auditAuthFailure } from "./auth/auditAuth";
-import { hasPermissionGrant } from "./auth/permissionCatalog";
-import { FAIRLEND_STAFF_ORG_ID } from "./constants";
 
 // ── Builder ─────────────────────────────────────────────────────────
 export const convex = createBuilder<DataModel>();
@@ -33,26 +38,10 @@ export interface Viewer {
 	role: string | undefined;
 	roles: Set<string>;
 }
-// ── Helpers ──────────────────────────────────────────────────────────
-// Identity claims like `permissions` / `roles` may arrive as a JSON string,
-// an already-parsed array, undefined, or empty string — normalise to string[].
-function parseClaimArray(value: unknown): string[] {
-	if (Array.isArray(value)) {
-		return value.filter((entry): entry is string => typeof entry === "string");
-	}
-	if (typeof value === "string" && value.length > 0) {
-		try {
-			const parsed: unknown = JSON.parse(value);
-			return Array.isArray(parsed)
-				? parsed.filter((entry): entry is string => typeof entry === "string")
-				: [];
-		} catch {
-			return [];
-		}
-	}
-	return [];
-}
 
+function stringClaim(value: unknown): string | undefined {
+	return typeof value === "string" ? value : undefined;
+}
 // ── Auth Middleware (context enrichment) ─────────────────────────────
 // Uses $context so it works with queries AND mutations (both have auth + db).
 // Extracts JWT identity claims and builds a `Viewer` with roles, permissions,
@@ -80,22 +69,35 @@ export const authMiddleware = convex
 			user_first_name,
 			user_last_name,
 		} = identity;
-		const permissionsSet = new Set(parseClaimArray(permissions));
-		const roleSet = new Set(parseClaimArray(roles));
+		const viewerRole = stringClaim(role);
+		const viewerOrgId = stringClaim(org_id);
+		const viewerOrgName = stringClaim(organization_name);
+		const viewerEmail = stringClaim(user_email);
+		const viewerFirstName = stringClaim(user_first_name);
+		const viewerLastName = stringClaim(user_last_name);
+		const normalizedRoles = normalizeRoles({ role: viewerRole, roles });
+		const normalizedPermissions = normalizePermissions(permissions);
+		const permissionsSet = new Set(normalizedPermissions);
+		const roleSet = new Set(normalizedRoles);
 		return next({
 			...context,
 			viewer: {
 				authId: subject,
-				email: user_email,
-				orgId: org_id,
-				orgName: organization_name,
-				firstName: user_first_name,
-				lastName: user_last_name,
-				role,
+				email: viewerEmail,
+				orgId: viewerOrgId,
+				orgName: viewerOrgName,
+				firstName: viewerFirstName,
+				lastName: viewerLastName,
+				role:
+					resolvePrimaryRole({ role: viewerRole, roles: normalizedRoles }) ??
+					undefined,
 				roles: roleSet,
 				permissions: permissionsSet,
-				isFairLendAdmin:
-					org_id === FAIRLEND_STAFF_ORG_ID && roleSet.has("admin"),
+				isFairLendAdmin: isFairLendStaffAdmin({
+					orgId: viewerOrgId ?? null,
+					role: viewerRole,
+					roles: normalizedRoles,
+				}),
 			} as Viewer,
 		});
 	});
@@ -181,7 +183,17 @@ export function requirePermission(permission: string) {
 	return convex
 		.$context<{ db: GenericDatabaseReader<DataModel>; viewer: Viewer }>()
 		.createMiddleware(async (context, next) => {
-			if (!hasPermissionGrant(context.viewer.permissions, permission)) {
+			if (
+				!hasEffectivePermission(
+					{
+						orgId: context.viewer.orgId,
+						permissions: context.viewer.permissions,
+						role: context.viewer.role,
+						roles: context.viewer.roles,
+					},
+					permission
+				)
+			) {
 				await auditAuthFailure(context, context.viewer, {
 					middleware: "requirePermission",
 					required: permission,
@@ -202,7 +214,17 @@ export function requirePermissionAction(permission: string) {
 	return convex
 		.$context<{ viewer: Viewer }>()
 		.createMiddleware(async (context, next) => {
-			if (!hasPermissionGrant(context.viewer.permissions, permission)) {
+			if (
+				!hasEffectivePermission(
+					{
+						orgId: context.viewer.orgId,
+						permissions: context.viewer.permissions,
+						role: context.viewer.role,
+						roles: context.viewer.roles,
+					},
+					permission
+				)
+			) {
 				await auditAuthFailure(context, context.viewer, {
 					middleware: "requirePermissionAction",
 					required: permission,
@@ -323,22 +345,35 @@ export const actionAuthMiddleware = convex
 			user_first_name,
 			user_last_name,
 		} = identity;
-		const permissionsSet = new Set(parseClaimArray(permissions));
-		const roleSet = new Set(parseClaimArray(roles));
+		const viewerRole = stringClaim(role);
+		const viewerOrgId = stringClaim(org_id);
+		const viewerOrgName = stringClaim(organization_name);
+		const viewerEmail = stringClaim(user_email);
+		const viewerFirstName = stringClaim(user_first_name);
+		const viewerLastName = stringClaim(user_last_name);
+		const normalizedRoles = normalizeRoles({ role: viewerRole, roles });
+		const normalizedPermissions = normalizePermissions(permissions);
+		const permissionsSet = new Set(normalizedPermissions);
+		const roleSet = new Set(normalizedRoles);
 		return next({
 			...context,
 			viewer: {
 				authId: subject,
-				email: user_email,
-				orgId: org_id,
-				orgName: organization_name,
-				firstName: user_first_name,
-				lastName: user_last_name,
-				role,
+				email: viewerEmail,
+				orgId: viewerOrgId,
+				orgName: viewerOrgName,
+				firstName: viewerFirstName,
+				lastName: viewerLastName,
+				role:
+					resolvePrimaryRole({ role: viewerRole, roles: normalizedRoles }) ??
+					undefined,
 				roles: roleSet,
 				permissions: permissionsSet,
-				isFairLendAdmin:
-					org_id === FAIRLEND_STAFF_ORG_ID && roleSet.has("admin"),
+				isFairLendAdmin: isFairLendStaffAdmin({
+					orgId: viewerOrgId ?? null,
+					role: viewerRole,
+					roles: normalizedRoles,
+				}),
 			} as Viewer,
 		});
 	});

@@ -151,6 +151,57 @@ function isTerminalExternalCollectionScheduleStatus(status: string) {
 	);
 }
 
+async function resolveLiveScheduleConflict(args: {
+	activationIdempotencyKey: string;
+	ctx: MutationCtx;
+	mortgageId: Id<"mortgages">;
+}) {
+	const mortgage = await args.ctx.db.get(args.mortgageId);
+	if (!mortgage) {
+		throw new ConvexError(`Mortgage not found: ${args.mortgageId}`);
+	}
+	if (mortgage.activeExternalCollectionScheduleId) {
+		const activeSchedule = await args.ctx.db.get(
+			mortgage.activeExternalCollectionScheduleId
+		);
+		if (!activeSchedule) {
+			throw new ConvexError(
+				`Mortgage ${args.mortgageId} references missing external collection schedule ${mortgage.activeExternalCollectionScheduleId}.`
+			);
+		}
+		if (
+			activeSchedule.activationIdempotencyKey === args.activationIdempotencyKey
+		) {
+			return activeSchedule;
+		}
+		if (!isTerminalExternalCollectionScheduleStatus(activeSchedule.status)) {
+			throw new ConvexError(
+				`Mortgage ${args.mortgageId} already has live external collection schedule ${activeSchedule._id} in status ${activeSchedule.status}. Cancel or complete it before activating another provider-managed schedule.`
+			);
+		}
+	}
+
+	const mortgageSchedules = await args.ctx.db
+		.query("externalCollectionSchedules")
+		.withIndex("by_mortgage", (q) => q.eq("mortgageId", args.mortgageId))
+		.collect();
+	const concurrentLiveSchedule = mortgageSchedules.find(
+		(schedule) => !isTerminalExternalCollectionScheduleStatus(schedule.status)
+	);
+	if (!concurrentLiveSchedule) {
+		return null;
+	}
+	if (
+		concurrentLiveSchedule.activationIdempotencyKey ===
+		args.activationIdempotencyKey
+	) {
+		return concurrentLiveSchedule;
+	}
+	throw new ConvexError(
+		`Mortgage ${args.mortgageId} already has live external collection schedule ${concurrentLiveSchedule._id} in status ${concurrentLiveSchedule.status}. Cancel or complete it before activating another provider-managed schedule.`
+	);
+}
+
 export const beginRecurringScheduleActivation = convex
 	.mutation()
 	.input({
@@ -176,6 +227,17 @@ export const beginRecurringScheduleActivation = convex
 
 		if (existing) {
 			if (existing.status === "activation_failed") {
+				const liveSchedule = await resolveLiveScheduleConflict({
+					activationIdempotencyKey: args.activationIdempotencyKey,
+					ctx,
+					mortgageId: args.mortgageId,
+				});
+				if (liveSchedule) {
+					return {
+						needsProviderCreate: liveSchedule.externalScheduleRef === undefined,
+						scheduleId: liveSchedule._id,
+					};
+				}
 				const retriedAt = Date.now();
 				await ctx.db.patch(existing._id, {
 					status: "activating",
@@ -199,53 +261,13 @@ export const beginRecurringScheduleActivation = convex
 			);
 		}
 
-		const mortgage = await ctx.db.get(args.mortgageId);
-		if (!mortgage) {
-			throw new ConvexError(`Mortgage not found: ${args.mortgageId}`);
-		}
-		if (mortgage.activeExternalCollectionScheduleId) {
-			const activeSchedule = await ctx.db.get(
-				mortgage.activeExternalCollectionScheduleId
-			);
-			if (!activeSchedule) {
-				throw new ConvexError(
-					`Mortgage ${args.mortgageId} references missing external collection schedule ${mortgage.activeExternalCollectionScheduleId}.`
-				);
-			}
-			if (
-				activeSchedule.activationIdempotencyKey ===
-				args.activationIdempotencyKey
-			) {
-				return { created: false as const, scheduleId: activeSchedule._id };
-			}
-			if (!isTerminalExternalCollectionScheduleStatus(activeSchedule.status)) {
-				throw new ConvexError(
-					`Mortgage ${args.mortgageId} already has live external collection schedule ${activeSchedule._id} in status ${activeSchedule.status}. Cancel or complete it before activating another provider-managed schedule.`
-				);
-			}
-		}
-
-		const mortgageSchedules = await ctx.db
-			.query("externalCollectionSchedules")
-			.withIndex("by_mortgage", (q) => q.eq("mortgageId", args.mortgageId))
-			.collect();
-		const concurrentLiveSchedule = mortgageSchedules.find(
-			(schedule) => !isTerminalExternalCollectionScheduleStatus(schedule.status)
-		);
-		if (concurrentLiveSchedule) {
-			if (
-				concurrentLiveSchedule.activationIdempotencyKey ===
-				args.activationIdempotencyKey
-			) {
-				return {
-					needsProviderCreate:
-						concurrentLiveSchedule.externalScheduleRef === undefined,
-					scheduleId: concurrentLiveSchedule._id,
-				};
-			}
-			throw new ConvexError(
-				`Mortgage ${args.mortgageId} already has live external collection schedule ${concurrentLiveSchedule._id} in status ${concurrentLiveSchedule.status}. Cancel or complete it before activating another provider-managed schedule.`
-			);
+		const liveSchedule = await resolveLiveScheduleConflict({
+			activationIdempotencyKey: args.activationIdempotencyKey,
+			ctx,
+			mortgageId: args.mortgageId,
+		});
+		if (liveSchedule) {
+			return { created: false as const, scheduleId: liveSchedule._id };
 		}
 
 		const scheduleId = await ctx.db.insert("externalCollectionSchedules", {

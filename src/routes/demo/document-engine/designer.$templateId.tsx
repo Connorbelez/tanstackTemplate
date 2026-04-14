@@ -3,6 +3,7 @@ import { useMutation, useQuery } from "convex/react";
 import {
 	ArrowLeft,
 	ChevronDown,
+	ChevronLeft,
 	ChevronRight,
 	History,
 	Loader2,
@@ -56,6 +57,7 @@ function DesignerPage() {
 
 	const [fields, setFields] = useState<FieldConfig[]>([]);
 	const [showHistory, setShowHistory] = useState(false);
+	const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 	const [signatories, setSignatories] = useState<SignatoryConfig[]>([]);
 	const [selectedFieldId, setSelectedFieldId] = useState<string | null>(null);
 	const [saving, setSaving] = useState(false);
@@ -335,12 +337,13 @@ function DesignerPage() {
 				</div>
 			)}
 
-			{/* Main layout: designer + sidebar */}
-			<div className="flex gap-4">
+			{/* Main layout: designer + collapsible inspector */}
+			<div className="flex flex-col gap-3 xl:flex-row xl:items-start">
 				{/* Designer canvas */}
 				<div className="min-w-0 flex-1">
 					{pdfUrl && template.basePdf && (
 						<PdfDesigner
+							className="h-[calc(100vh-8.5rem)] min-h-[720px] rounded-xl border-border/70 shadow-[0_24px_80px_rgba(8,12,20,0.22)]"
 							fields={fields}
 							onFieldSelect={setSelectedFieldId}
 							onFieldsChange={handleFieldsChange}
@@ -350,120 +353,168 @@ function DesignerPage() {
 					)}
 				</div>
 
-				{/* Right sidebar */}
-				<div className="w-80 shrink-0 space-y-4">
-					{/* Field selector + properties */}
-					<Card>
-						<CardHeader className="pb-2">
-							<CardTitle className="text-sm">Field Properties</CardTitle>
-						</CardHeader>
-						<CardContent className="p-0">
-							{fields.length > 0 && !selectedField && (
-								<div className="space-y-1 border-b px-4 pb-3">
-									<span className="text-muted-foreground text-xs">
-										Click a field to edit:
-									</span>
-									{fields.map((f) => (
-										<button
-											className="flex w-full items-center gap-2 rounded px-2 py-1 text-left text-sm hover:bg-muted"
-											key={f.id}
-											onClick={() => setSelectedFieldId(f.id)}
-											type="button"
-										>
-											<Badge className="text-[10px]" variant="outline">
-												{f.type === "interpolable" ? "var" : "sig"}
-											</Badge>
-											<span className="truncate">{f.label || f.id}</span>
-										</button>
-									))}
+				{/* Right inspector rail */}
+				<div
+					className={`shrink-0 transition-[width] duration-200 ease-out xl:sticky xl:top-4 ${
+						sidebarCollapsed ? "w-full xl:w-14" : "w-full xl:w-[22rem] 2xl:w-96"
+					}`}
+				>
+					<div className="flex h-full flex-col rounded-2xl border border-border/70 bg-background/65 p-2 shadow-[0_18px_40px_rgba(8,12,20,0.18)] backdrop-blur xl:max-h-[calc(100vh-8.5rem)]">
+						<div className="flex items-center justify-between gap-2 px-1 pb-2">
+							{sidebarCollapsed ? (
+								<span className="sr-only">Inspector collapsed</span>
+							) : (
+								<div className="min-w-0">
+									<p className="font-medium text-sm">Inspector</p>
+									<p className="text-muted-foreground text-xs">
+										Fields, signatories, and version history
+									</p>
 								</div>
 							)}
-							{selectedField && (
-								<div className="border-b px-4 pb-2">
-									<button
-										className="text-muted-foreground text-xs hover:underline"
-										onClick={() => setSelectedFieldId(null)}
-										type="button"
-									>
-										&larr; Back to field list
-									</button>
-								</div>
-							)}
-							<FieldConfigPanel
-								availableRoles={availableRoles}
-								field={selectedField}
-								onDelete={handleFieldDelete}
-								onUpdate={handleFieldUpdate}
-							/>
-						</CardContent>
-					</Card>
-
-					{/* Signatories — no duplicate heading */}
-					<Card>
-						<CardHeader className="pb-2">
-							<CardTitle className="text-sm">Signatories</CardTitle>
-						</CardHeader>
-						<CardContent>
-							<SignatoryPanel
-								onChange={handleSignatoriesChange}
-								signatories={signatories}
-							/>
-						</CardContent>
-					</Card>
-
-					<Card>
-						<CardHeader className="pb-2">
-							<div
-								className="flex cursor-pointer items-center gap-2"
-								onClick={() => setShowHistory(!showHistory)}
-								onKeyDown={(e) => {
-									if (e.key === "Enter" || e.key === " ") {
-										e.preventDefault();
-										setShowHistory(!showHistory);
-									}
-								}}
-								role="button"
-								tabIndex={0}
+							<Button
+								aria-expanded={!sidebarCollapsed}
+								className="shrink-0"
+								onClick={() => setSidebarCollapsed((current) => !current)}
+								size="icon"
+								title={
+									sidebarCollapsed ? "Expand inspector" : "Collapse inspector"
+								}
+								variant="outline"
 							>
-								{showHistory ? (
-									<ChevronDown className="size-4" />
+								{sidebarCollapsed ? (
+									<ChevronLeft className="size-4 rotate-180" />
 								) : (
 									<ChevronRight className="size-4" />
 								)}
-								<History className="size-4" />
-								<CardTitle className="text-sm">Version History</CardTitle>
-							</div>
-						</CardHeader>
-						{showHistory && (
-							<CardContent>
-								{versions && versions.length === 0 && (
-									<p className="text-muted-foreground text-xs">
-										No versions published yet.
-									</p>
-								)}
-								<div className="space-y-2">
-									{versions?.map((ver) => (
-										<div
-											className="flex items-center justify-between rounded border p-2 text-xs"
-											key={ver._id}
-										>
-											<div>
-												<span className="font-medium">v{ver.version}</span>
-												{ver.publishedBy && (
-													<span className="ml-1 text-muted-foreground">
-														by {ver.publishedBy}
-													</span>
-												)}
-											</div>
-											<span className="text-muted-foreground">
-												{new Date(ver.publishedAt).toLocaleDateString()}
-											</span>
-										</div>
-									))}
+							</Button>
+						</div>
+
+						{sidebarCollapsed ? (
+							<div className="flex flex-1 items-center justify-center xl:pt-2">
+								<div className="flex flex-col items-center gap-3 text-muted-foreground">
+									<Badge className="px-2 py-1 text-[10px]" variant="outline">
+										{fields.length}
+									</Badge>
+									<History className="size-4" />
 								</div>
-							</CardContent>
+							</div>
+						) : (
+							<div className="flex-1 space-y-4 overflow-y-auto pr-1">
+								<Card>
+									<CardHeader className="pb-2">
+										<CardTitle className="text-sm">Field Properties</CardTitle>
+									</CardHeader>
+									<CardContent className="p-0">
+										{fields.length > 0 && !selectedField && (
+											<div className="space-y-1 border-b px-4 pb-3">
+												<span className="text-muted-foreground text-xs">
+													Click a field to edit:
+												</span>
+												{fields.map((f) => (
+													<button
+														className="flex w-full items-center gap-2 rounded px-2 py-1 text-left text-sm hover:bg-muted"
+														key={f.id}
+														onClick={() => setSelectedFieldId(f.id)}
+														type="button"
+													>
+														<Badge className="text-[10px]" variant="outline">
+															{f.type === "interpolable" ? "var" : "sig"}
+														</Badge>
+														<span className="truncate">{f.label || f.id}</span>
+													</button>
+												))}
+											</div>
+										)}
+										{selectedField && (
+											<div className="border-b px-4 pb-2">
+												<button
+													className="text-muted-foreground text-xs hover:underline"
+													onClick={() => setSelectedFieldId(null)}
+													type="button"
+												>
+													&larr; Back to field list
+												</button>
+											</div>
+										)}
+										<FieldConfigPanel
+											availableRoles={availableRoles}
+											field={selectedField}
+											onDelete={handleFieldDelete}
+											onUpdate={handleFieldUpdate}
+										/>
+									</CardContent>
+								</Card>
+
+								<Card>
+									<CardHeader className="pb-2">
+										<CardTitle className="text-sm">Signatories</CardTitle>
+									</CardHeader>
+									<CardContent>
+										<SignatoryPanel
+											onChange={handleSignatoriesChange}
+											signatories={signatories}
+										/>
+									</CardContent>
+								</Card>
+
+								<Card>
+									<CardHeader className="pb-2">
+										<div
+											className="flex cursor-pointer items-center gap-2"
+											onClick={() => setShowHistory(!showHistory)}
+											onKeyDown={(e) => {
+												if (e.key === "Enter" || e.key === " ") {
+													e.preventDefault();
+													setShowHistory(!showHistory);
+												}
+											}}
+											role="button"
+											tabIndex={0}
+										>
+											{showHistory ? (
+												<ChevronDown className="size-4" />
+											) : (
+												<ChevronRight className="size-4" />
+											)}
+											<History className="size-4" />
+											<CardTitle className="text-sm">Version History</CardTitle>
+										</div>
+									</CardHeader>
+									{showHistory && (
+										<CardContent>
+											{versions && versions.length === 0 && (
+												<p className="text-muted-foreground text-xs">
+													No versions published yet.
+												</p>
+											)}
+											<div className="space-y-2">
+												{versions?.map((ver) => (
+													<div
+														className="flex items-center justify-between rounded border p-2 text-xs"
+														key={ver._id}
+													>
+														<div>
+															<span className="font-medium">
+																v{ver.version}
+															</span>
+															{ver.publishedBy && (
+																<span className="ml-1 text-muted-foreground">
+																	by {ver.publishedBy}
+																</span>
+															)}
+														</div>
+														<span className="text-muted-foreground">
+															{new Date(ver.publishedAt).toLocaleDateString()}
+														</span>
+													</div>
+												))}
+											</div>
+										</CardContent>
+									)}
+								</Card>
+							</div>
 						)}
-					</Card>
+					</div>
 				</div>
 			</div>
 		</div>

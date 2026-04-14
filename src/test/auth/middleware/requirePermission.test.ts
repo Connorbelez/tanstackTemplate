@@ -1,12 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { api } from "../../../../convex/_generated/api";
-import { createTestConvex, seedFromIdentity } from "../helpers";
-import {
-	BORROWER,
-	BROKER,
-	EXTERNAL_ORG_ADMIN,
-	FAIRLEND_ADMIN,
-} from "../identities";
+import { FAIRLEND_STAFF_ORG_ID } from "../../../../convex/constants";
+import { createMockViewer, createTestConvex, seedFromIdentity } from "../helpers";
+import { BORROWER, BROKER, FAIRLEND_ADMIN } from "../identities";
 
 describe("requirePermission middleware", () => {
 	it("allows user with matching permission", async () => {
@@ -40,13 +36,34 @@ describe("requirePermission middleware", () => {
 		expect(result).toEqual({ ok: true });
 	});
 
-	it("allows admin:access to satisfy unrelated permission checks", async () => {
+	it("allows a staff admin with only admin:access through staff-gated permission chains", async () => {
+		const identity = createMockViewer({
+			orgId: FAIRLEND_STAFF_ORG_ID,
+			permissions: ["admin:access"],
+			roles: ["admin"],
+		});
 		const t = createTestConvex();
-		await seedFromIdentity(t, EXTERNAL_ORG_ADMIN);
+		await seedFromIdentity(t, identity);
 
 		const result = await t
-			.withIdentity(EXTERNAL_ORG_ADMIN)
-			.query(api.test.authTestEndpoints.testBrokerQuery);
+			.withIdentity(identity)
+			.query(api.test.authTestEndpoints.testPaymentQuery);
+
+		expect(result).toEqual({ ok: true });
+	});
+
+	it("allows an external org admin with admin:access through generic permission middleware", async () => {
+		const identity = createMockViewer({
+			orgId: "org_external_admin",
+			permissions: ["admin:access"],
+			roles: ["admin"],
+		});
+		const t = createTestConvex();
+		await seedFromIdentity(t, identity);
+
+		const result = await t
+			.withIdentity(identity)
+			.query(api.test.authTestEndpoints.testAccrualQuery);
 
 		expect(result).toEqual({ ok: true });
 	});

@@ -8,6 +8,7 @@ import {
 import type { FieldConfig } from "#/lib/document-engine/types";
 
 interface PdfDesignerProps {
+	className?: string;
 	fields: FieldConfig[];
 	onFieldSelect: (fieldId: string | null) => void;
 	onFieldsChange: (fields: FieldConfig[]) => void;
@@ -23,6 +24,7 @@ interface PdfDesignerProps {
  * server-fn Babel transform choking on pdfme's bundled fontkit code.
  */
 export function PdfDesigner({
+	className,
 	pdfUrl,
 	fields,
 	onFieldsChange,
@@ -133,7 +135,7 @@ export function PdfDesigner({
 
 	return (
 		<div
-			className="h-[700px] overflow-hidden rounded-md border"
+			className={`h-[700px] overflow-hidden rounded-md border ${className ?? ""}`}
 			data-testid="pdfme-designer"
 			ref={containerRef}
 		/>

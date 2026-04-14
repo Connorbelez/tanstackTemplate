@@ -958,6 +958,84 @@ describe("provider-managed recurring schedules", () => {
 		expect(planEntries).toHaveLength(12);
 	});
 
+	it("does not reopen activation_failed when another live schedule already exists", async () => {
+		installRotessaFetchHarness();
+		const fixture = await seedProviderManagedFixture();
+		const activationAsOf = fullScheduleActivationAsOf(fixture.planEntries);
+		const activationIdempotencyKey = buildActivationIdempotencyKey({
+			bankAccountId: fixture.bankAccountId,
+			planEntryIds: fixture.planEntries.map((entry) => entry._id),
+		});
+		const coveredFromPlanEntryId = fixture.planEntries[0]?._id;
+		const coveredToPlanEntryId =
+			fixture.planEntries.at(-1)?._id ?? coveredFromPlanEntryId;
+		if (!(coveredFromPlanEntryId && coveredToPlanEntryId)) {
+			throw new Error("expected plan entries for activation retry test");
+		}
+
+		const failedScheduleId = await fixture.t.run(async (ctx) =>
+			ctx.db.insert("externalCollectionSchedules", {
+				status: "activation_failed",
+				mortgageId: fixture.mortgageId,
+				borrowerId: fixture.borrowerId,
+				providerCode: "pad_rotessa",
+				bankAccountId: fixture.bankAccountId,
+				activationIdempotencyKey,
+				startDate: fixture.planEntries[0]?.scheduledDate ?? activationAsOf,
+				endDate:
+					fixture.planEntries.at(-1)?.scheduledDate ?? activationAsOf + 1,
+				cadence: "Monthly",
+				coveredFromPlanEntryId,
+				coveredToPlanEntryId,
+				consecutiveSyncFailures: 1,
+				source: "test",
+				createdAt: activationAsOf,
+				lastTransitionAt: activationAsOf,
+			})
+		);
+
+		const liveScheduleId = await fixture.t.run(async (ctx) =>
+			ctx.db.insert("externalCollectionSchedules", {
+				status: "active",
+				mortgageId: fixture.mortgageId,
+				borrowerId: fixture.borrowerId,
+				providerCode: "pad_rotessa",
+				bankAccountId: fixture.bankAccountId,
+				externalScheduleRef: "rotessa-live-002",
+				activationIdempotencyKey: "activation-live-conflict-002",
+				startDate: fixture.planEntries[0]?.scheduledDate ?? activationAsOf,
+				endDate:
+					fixture.planEntries.at(-1)?.scheduledDate ?? activationAsOf + 1,
+				cadence: "Monthly",
+				coveredFromPlanEntryId,
+				coveredToPlanEntryId,
+				activatedAt: activationAsOf,
+				nextPollAt: activationAsOf,
+				lastProviderScheduleStatus: "active",
+				consecutiveSyncFailures: 0,
+				source: "test",
+				createdAt: activationAsOf,
+				lastTransitionAt: activationAsOf,
+			})
+		);
+
+		await expect(
+			activateRotessaSchedule(fixture.t, {
+				asOf: activationAsOf,
+				bankAccountId: fixture.bankAccountId,
+				mortgageId: fixture.mortgageId,
+				planEntryIds: fixture.planEntries.map((entry) => entry._id),
+			})
+		).rejects.toThrow(
+			`Mortgage ${fixture.mortgageId} already has live external collection schedule ${liveScheduleId}`
+		);
+
+		const failedSchedule = await fixture.t.run((ctx) =>
+			ctx.db.get(failedScheduleId)
+		);
+		expect(failedSchedule?.status).toBe("activation_failed");
+	});
+
 	it("rejects activating a second live external schedule for the same mortgage", async () => {
 		installRotessaFetchHarness();
 		const fixture = await seedProviderManagedFixture();

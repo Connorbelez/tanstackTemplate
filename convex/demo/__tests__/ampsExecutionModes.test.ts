@@ -101,11 +101,25 @@ describe("demo.ampsExecutionModes", () => {
 				"pending"
 			);
 
-			await admin.action(
+			const { transferId } = await admin.action(
 				api.demo.ampsExecutionModes.confirmPendingManualReviewTransfer,
 				{}
 			);
 			await t.finishAllScheduledFunctions(vi.runAllTimers);
+
+			const confirmationAudit = await t.run(async (ctx) => {
+				const auditEntries = await ctx.db
+					.query("auditJournal")
+					.filter((q) =>
+						q.and(
+							q.eq(q.field("entityType"), "transfer"),
+							q.eq(q.field("entityId"), `${transferId}`),
+							q.eq(q.field("eventType"), "FUNDS_SETTLED")
+						)
+					)
+					.collect();
+				return auditEntries.at(-1);
+			});
 
 			workspace = await admin.query(
 				api.demo.ampsExecutionModes.getCollectionExecutionWorkspace,
@@ -117,6 +131,9 @@ describe("demo.ampsExecutionModes", () => {
 			expect(workspace?.installments[0]?.attempt?.transfer?.status).toBe(
 				"confirmed"
 			);
+			expect(confirmationAudit?.actorId).toBe(ADMIN_IDENTITY.subject);
+			expect(confirmationAudit?.actorType).toBe("admin");
+			expect(confirmationAudit?.channel).toBe("simulation");
 		} finally {
 			vi.useRealTimers();
 			restoreEnv();
