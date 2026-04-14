@@ -1,4 +1,4 @@
-import type { Doc } from "../../_generated/dataModel";
+import type { Doc, Id, TableNames } from "../../_generated/dataModel";
 import type { QueryCtx } from "../../_generated/server";
 import { cashLedgerQuery, paymentQuery } from "../../fluent";
 import { getPostedBalance } from "../../ledger/accounts";
@@ -20,6 +20,22 @@ type CashAccount = Doc<"cash_ledger_accounts">;
 type CashJournalEntry = Doc<"cash_ledger_journal_entries">;
 type Obligation = Doc<"obligations">;
 type TransferRequest = Doc<"transferRequests">;
+interface ReferenceData {
+	borrowerLabels: Map<string, string>;
+	lenderLabels: Map<string, string>;
+	mortgageLabels: Map<string, string>;
+	mortgagesById: Map<string, Doc<"mortgages">>;
+	obligationsById: Map<string, Obligation>;
+	propertiesById: Map<string, Doc<"properties">>;
+	usersById: Map<string, Doc<"users">>;
+}
+
+interface ReferenceIdSets {
+	borrowerIds: Id<"borrowers">[];
+	lenderIds: Id<"lenders">[];
+	mortgageIds: Id<"mortgages">[];
+	obligationIds: Id<"obligations">[];
+}
 
 type PrimitiveCell = boolean | null | number | string;
 
@@ -128,30 +144,68 @@ function buildPreview(rows: readonly Record<string, PrimitiveCell>[]) {
 	});
 }
 
-async function loadReferenceData(ctx: QueryCtx) {
-	const [users, borrowers, lenders, mortgages, properties, obligations] =
-		await Promise.all([
-			ctx.db.query("users").collect(),
-			ctx.db.query("borrowers").collect(),
-			ctx.db.query("lenders").collect(),
-			ctx.db.query("mortgages").collect(),
-			ctx.db.query("properties").collect(),
-			ctx.db.query("obligations").collect(),
-		]);
+function collectUniqueIds<TableName extends TableNames>(
+	values: Array<Id<TableName> | null | undefined>
+) {
+	const uniqueIds = new Map<string, Id<TableName>>();
+	for (const value of values) {
+		if (value) {
+			uniqueIds.set(String(value), value);
+		}
+	}
+	return [...uniqueIds.values()];
+}
 
-	const usersById = new Map(users.map((user) => [String(user._id), user]));
-	const propertiesById = new Map(
-		properties.map((property) => [String(property._id), property])
+async function fetchDocsByIds<
+	TableName extends TableNames,
+	TDoc extends { _id: Id<TableName> },
+>(
+	ids: readonly Id<TableName>[],
+	loadDoc: (id: Id<TableName>) => Promise<TDoc | null>
+) {
+	const docsById = new Map<string, TDoc>();
+	for (const id of ids) {
+		const doc = await loadDoc(id);
+		if (doc) {
+			docsById.set(String(doc._id), doc);
+		}
+	}
+	return docsById;
+}
+
+async function loadReferenceData(
+	ctx: QueryCtx,
+	referenceIds: ReferenceIdSets
+): Promise<ReferenceData> {
+	const borrowersById = await fetchDocsByIds(referenceIds.borrowerIds, (id) =>
+		ctx.db.get(id)
 	);
-	const mortgagesById = new Map(
-		mortgages.map((mortgage) => [String(mortgage._id), mortgage])
+	const lendersById = await fetchDocsByIds(referenceIds.lenderIds, (id) =>
+		ctx.db.get(id)
 	);
-	const obligationsById = new Map(
-		obligations.map((obligation) => [String(obligation._id), obligation])
+	const mortgagesById = await fetchDocsByIds(referenceIds.mortgageIds, (id) =>
+		ctx.db.get(id)
+	);
+	const obligationsById = await fetchDocsByIds(
+		referenceIds.obligationIds,
+		(id) => ctx.db.get(id)
+	);
+
+	const userIds = collectUniqueIds([
+		...[...borrowersById.values()].map((borrower) => borrower.userId),
+		...[...lendersById.values()].map((lender) => lender.userId),
+	]);
+	const propertyIds = collectUniqueIds(
+		[...mortgagesById.values()].map((mortgage) => mortgage.propertyId)
+	);
+
+	const usersById = await fetchDocsByIds(userIds, (id) => ctx.db.get(id));
+	const propertiesById = await fetchDocsByIds(propertyIds, (id) =>
+		ctx.db.get(id)
 	);
 
 	const borrowerLabels = new Map<string, string>();
-	for (const borrower of borrowers) {
+	for (const borrower of borrowersById.values()) {
 		borrowerLabels.set(
 			String(borrower._id),
 			buildUserLabel(
@@ -162,7 +216,7 @@ async function loadReferenceData(ctx: QueryCtx) {
 	}
 
 	const lenderLabels = new Map<string, string>();
-	for (const lender of lenders) {
+	for (const lender of lendersById.values()) {
 		lenderLabels.set(
 			String(lender._id),
 			buildUserLabel(
@@ -173,7 +227,7 @@ async function loadReferenceData(ctx: QueryCtx) {
 	}
 
 	const mortgageLabels = new Map<string, string>();
-	for (const mortgage of mortgages) {
+	for (const mortgage of mortgagesById.values()) {
 		mortgageLabels.set(
 			String(mortgage._id),
 			buildPropertyLabel(propertiesById.get(String(mortgage.propertyId)))
@@ -213,10 +267,7 @@ function buildAccountCode(account: CashAccount) {
 	return segments.join(".");
 }
 
-function buildAccountName(
-	account: CashAccount,
-	references: Awaited<ReturnType<typeof loadReferenceData>>
-) {
+function buildAccountName(account: CashAccount, references: ReferenceData) {
 	const parts = [familyLabel(account.family)];
 	if (account.subaccount) {
 		parts.push(humanize(account.subaccount.toLowerCase()));
@@ -252,10 +303,51 @@ function buildAccountName(
 	return parts.join(" • ");
 }
 
+function buildChartOfAccountsRow(args: {
+	account: CashAccount;
+	lastActivityByAccountId: ReadonlyMap<string, number>;
+	references: ReferenceData;
+}) {
+	const { account, lastActivityByAccountId, references } = args;
+	const balance = safeBigintToNumber(getCashAccountBalance(account));
+	const borrowerId = account.borrowerId ? String(account.borrowerId) : null;
+	const lenderId = account.lenderId ? String(account.lenderId) : null;
+	const mortgageId = account.mortgageId ? String(account.mortgageId) : null;
+	const obligationId = account.obligationId
+		? String(account.obligationId)
+		: null;
+
+	return {
+		accountId: String(account._id),
+		accountCode: buildAccountCode(account),
+		accountFamily: account.family,
+		accountName: buildAccountName(account, references),
+		balanceCents: balance,
+		borrowerId,
+		borrowerLabel: borrowerId
+			? (references.borrowerLabels.get(borrowerId) ?? null)
+			: null,
+		controlSubaccount: account.subaccount ?? null,
+		createdAt: account.createdAt,
+		lenderId,
+		lenderLabel: lenderId
+			? (references.lenderLabels.get(lenderId) ?? null)
+			: null,
+		lastActivityAt: lastActivityByAccountId.get(String(account._id)) ?? null,
+		mortgageId,
+		mortgageLabel: mortgageId
+			? (references.mortgageLabels.get(mortgageId) ?? null)
+			: null,
+		normalBalance: normalBalanceLabel(account.family),
+		obligationId,
+		status: balance !== 0 ? "active" : "open",
+	};
+}
+
 function buildChartOfAccountsRows(
 	accounts: readonly CashAccount[],
 	journalEntries: readonly CashJournalEntry[],
-	references: Awaited<ReturnType<typeof loadReferenceData>>
+	references: ReferenceData
 ) {
 	const lastActivityByAccountId = new Map<string, number>();
 
@@ -271,163 +363,211 @@ function buildChartOfAccountsRows(
 	}
 
 	return accounts
-		.map((account) => {
-			const balance = safeBigintToNumber(getCashAccountBalance(account));
-			return {
-				accountId: String(account._id),
-				accountCode: buildAccountCode(account),
-				accountFamily: account.family,
-				accountName: buildAccountName(account, references),
-				balanceCents: balance,
-				borrowerId: account.borrowerId ? String(account.borrowerId) : null,
-				borrowerLabel: account.borrowerId
-					? (references.borrowerLabels.get(String(account.borrowerId)) ?? null)
-					: null,
-				controlSubaccount: account.subaccount ?? null,
-				createdAt: account.createdAt,
-				lenderId: account.lenderId ? String(account.lenderId) : null,
-				lenderLabel: account.lenderId
-					? (references.lenderLabels.get(String(account.lenderId)) ?? null)
-					: null,
-				lastActivityAt:
-					lastActivityByAccountId.get(String(account._id)) ?? null,
-				mortgageId: account.mortgageId ? String(account.mortgageId) : null,
-				mortgageLabel: account.mortgageId
-					? (references.mortgageLabels.get(String(account.mortgageId)) ?? null)
-					: null,
-				normalBalance: normalBalanceLabel(account.family),
-				obligationId: account.obligationId
-					? String(account.obligationId)
-					: null,
-				status: balance !== 0 ? "active" : "open",
-			};
-		})
+		.map((account) =>
+			buildChartOfAccountsRow({
+				account,
+				lastActivityByAccountId,
+				references,
+			})
+		)
 		.sort((left, right) =>
 			left.accountCode.localeCompare(right.accountCode, "en")
 		);
 }
 
+interface JournalLineRow {
+	accountCode: string;
+	accountFamily: string;
+	accountId: string;
+	accountName: string;
+	borrowerId: string | null;
+	borrowerLabel: string | null;
+	causedByJournalEntryId: string | null;
+	controlSubaccount: string | null;
+	creditCents: number;
+	currencyCode: "CAD";
+	debitCents: number;
+	description: string;
+	dispersalEntryId: string | null;
+	effectiveDate: string;
+	entryType: string;
+	idempotencyKey: string;
+	journalEntryId: string;
+	lenderId: string | null;
+	lenderLabel: string | null;
+	lineNumber: 1 | 2;
+	lineRole: "credit" | "debit";
+	mortgageId: string | null;
+	mortgageLabel: string | null;
+	normalBalance: string;
+	obligationId: string | null;
+	postingGroupId: string | null;
+	reference: string;
+	sequenceNumber: number;
+	sourceActorId: string | null;
+	sourceActorType: string | null;
+	sourceChannel: string;
+	timestampUtc: string;
+	transferRequestId: string | null;
+}
+
+function buildJournalLineReference(entry: CashJournalEntry) {
+	return (
+		entry.postingGroupId ??
+		entry.reason ??
+		`${entry.entryType.toLowerCase()}-${idTail(String(entry._id))}`
+	);
+}
+
+function buildJournalLineSide(args: {
+	account: CashAccount | undefined;
+	accountId: string;
+	amountCents: number;
+	lineNumber: 1 | 2;
+	lineRole: "credit" | "debit";
+}) {
+	return {
+		account: args.account,
+		accountId: args.accountId,
+		creditCents: args.lineRole === "credit" ? args.amountCents : 0,
+		debitCents: args.lineRole === "debit" ? args.amountCents : 0,
+		lineNumber: args.lineNumber,
+		lineRole: args.lineRole,
+	};
+}
+
+function buildJournalEntryParties(
+	entry: CashJournalEntry,
+	references: ReferenceData
+) {
+	const borrowerId = entry.borrowerId ? String(entry.borrowerId) : null;
+	const lenderId = entry.lenderId ? String(entry.lenderId) : null;
+	const mortgageId = entry.mortgageId ? String(entry.mortgageId) : null;
+
+	return {
+		borrowerId,
+		borrowerLabel: borrowerId
+			? (references.borrowerLabels.get(borrowerId) ?? null)
+			: null,
+		lenderId,
+		lenderLabel: lenderId
+			? (references.lenderLabels.get(lenderId) ?? null)
+			: null,
+		mortgageId,
+		mortgageLabel: mortgageId
+			? (references.mortgageLabels.get(mortgageId) ?? null)
+			: null,
+	};
+}
+
+function buildJournalLineAccountDetails(
+	side: ReturnType<typeof buildJournalLineSide>,
+	references: ReferenceData
+) {
+	return {
+		accountCode: side.account ? buildAccountCode(side.account) : side.accountId,
+		accountFamily: side.account?.family ?? "UNKNOWN",
+		accountId: side.accountId,
+		accountName: side.account
+			? buildAccountName(side.account, references)
+			: side.accountId,
+		controlSubaccount: side.account?.subaccount ?? null,
+		normalBalance: side.account
+			? normalBalanceLabel(side.account.family)
+			: "debit",
+	};
+}
+
+function buildJournalLineRow(args: {
+	entry: CashJournalEntry;
+	reference: string;
+	references: ReferenceData;
+	sequenceNumber: number;
+	side: ReturnType<typeof buildJournalLineSide>;
+	timestampUtc: string;
+}): JournalLineRow {
+	const { entry, reference, references, sequenceNumber, side, timestampUtc } =
+		args;
+	const parties = buildJournalEntryParties(entry, references);
+	const accountDetails = buildJournalLineAccountDetails(side, references);
+
+	return {
+		...accountDetails,
+		borrowerId: parties.borrowerId,
+		borrowerLabel: parties.borrowerLabel,
+		causedByJournalEntryId: entry.causedBy ? String(entry.causedBy) : null,
+		creditCents: side.creditCents,
+		currencyCode: "CAD",
+		debitCents: side.debitCents,
+		description: entry.reason ?? humanize(entry.entryType.toLowerCase()),
+		dispersalEntryId: entry.dispersalEntryId
+			? String(entry.dispersalEntryId)
+			: null,
+		effectiveDate: entry.effectiveDate,
+		entryType: entry.entryType,
+		idempotencyKey: entry.idempotencyKey,
+		journalEntryId: String(entry._id),
+		lenderId: parties.lenderId,
+		lenderLabel: parties.lenderLabel,
+		lineNumber: side.lineNumber,
+		lineRole: side.lineRole,
+		mortgageId: parties.mortgageId,
+		mortgageLabel: parties.mortgageLabel,
+		obligationId: entry.obligationId ? String(entry.obligationId) : null,
+		postingGroupId: entry.postingGroupId ?? null,
+		reference,
+		sequenceNumber,
+		sourceActorId: entry.source.actorId ?? null,
+		sourceActorType: entry.source.actorType ?? null,
+		sourceChannel: entry.source.channel,
+		timestampUtc,
+		transferRequestId: entry.transferRequestId
+			? String(entry.transferRequestId)
+			: null,
+	};
+}
+
 function buildJournalLineRows(
 	journalEntries: readonly CashJournalEntry[],
 	accountsById: ReadonlyMap<string, CashAccount>,
-	references: Awaited<ReturnType<typeof loadReferenceData>>
+	references: ReferenceData
 ) {
-	const rows: Array<{
-		accountCode: string;
-		accountFamily: string;
-		accountId: string;
-		accountName: string;
-		borrowerId: string | null;
-		borrowerLabel: string | null;
-		causedByJournalEntryId: string | null;
-		controlSubaccount: string | null;
-		creditCents: number;
-		currencyCode: "CAD";
-		debitCents: number;
-		description: string;
-		dispersalEntryId: string | null;
-		effectiveDate: string;
-		entryType: string;
-		idempotencyKey: string;
-		journalEntryId: string;
-		lenderId: string | null;
-		lenderLabel: string | null;
-		lineNumber: 1 | 2;
-		lineRole: "credit" | "debit";
-		mortgageId: string | null;
-		mortgageLabel: string | null;
-		normalBalance: string;
-		obligationId: string | null;
-		postingGroupId: string | null;
-		reference: string;
-		sequenceNumber: number;
-		sourceActorId: string | null;
-		sourceActorType: string | null;
-		sourceChannel: string;
-		timestampUtc: string;
-		transferRequestId: string | null;
-	}> = [];
+	const rows: JournalLineRow[] = [];
 
 	for (const entry of [...journalEntries].sort(compareSequence)) {
 		const amountCents = safeBigintToNumber(entry.amount);
 		const sequenceNumber = safeBigintToNumber(entry.sequenceNumber);
 		const timestampUtc = new Date(entry.timestamp).toISOString();
-		const reference =
-			entry.postingGroupId ??
-			entry.reason ??
-			`${entry.entryType.toLowerCase()}-${idTail(String(entry._id))}`;
+		const reference = buildJournalLineReference(entry);
 
 		const sides = [
-			{
+			buildJournalLineSide({
 				account: accountsById.get(String(entry.debitAccountId)),
 				accountId: String(entry.debitAccountId),
-				creditCents: 0,
-				debitCents: amountCents,
-				lineNumber: 1 as const,
-				lineRole: "debit" as const,
-			},
-			{
+				amountCents,
+				lineNumber: 1,
+				lineRole: "debit",
+			}),
+			buildJournalLineSide({
 				account: accountsById.get(String(entry.creditAccountId)),
 				accountId: String(entry.creditAccountId),
-				creditCents: amountCents,
-				debitCents: 0,
-				lineNumber: 2 as const,
-				lineRole: "credit" as const,
-			},
+				amountCents,
+				lineNumber: 2,
+				lineRole: "credit",
+			}),
 		];
 
 		for (const side of sides) {
-			rows.push({
-				accountCode: side.account
-					? buildAccountCode(side.account)
-					: side.accountId,
-				accountFamily: side.account?.family ?? "UNKNOWN",
-				accountId: side.accountId,
-				accountName: side.account
-					? buildAccountName(side.account, references)
-					: side.accountId,
-				borrowerId: entry.borrowerId ? String(entry.borrowerId) : null,
-				borrowerLabel: entry.borrowerId
-					? (references.borrowerLabels.get(String(entry.borrowerId)) ?? null)
-					: null,
-				causedByJournalEntryId: entry.causedBy ? String(entry.causedBy) : null,
-				controlSubaccount: side.account?.subaccount ?? null,
-				creditCents: side.creditCents,
-				currencyCode: "CAD",
-				debitCents: side.debitCents,
-				description: entry.reason ?? humanize(entry.entryType.toLowerCase()),
-				dispersalEntryId: entry.dispersalEntryId
-					? String(entry.dispersalEntryId)
-					: null,
-				effectiveDate: entry.effectiveDate,
-				entryType: entry.entryType,
-				idempotencyKey: entry.idempotencyKey,
-				journalEntryId: String(entry._id),
-				lenderId: entry.lenderId ? String(entry.lenderId) : null,
-				lenderLabel: entry.lenderId
-					? (references.lenderLabels.get(String(entry.lenderId)) ?? null)
-					: null,
-				lineNumber: side.lineNumber,
-				lineRole: side.lineRole,
-				mortgageId: entry.mortgageId ? String(entry.mortgageId) : null,
-				mortgageLabel: entry.mortgageId
-					? (references.mortgageLabels.get(String(entry.mortgageId)) ?? null)
-					: null,
-				normalBalance: side.account
-					? normalBalanceLabel(side.account.family)
-					: "debit",
-				obligationId: entry.obligationId ? String(entry.obligationId) : null,
-				postingGroupId: entry.postingGroupId ?? null,
-				reference,
-				sequenceNumber,
-				sourceActorId: entry.source.actorId ?? null,
-				sourceActorType: entry.source.actorType ?? null,
-				sourceChannel: entry.source.channel,
-				timestampUtc,
-				transferRequestId: entry.transferRequestId
-					? String(entry.transferRequestId)
-					: null,
-			});
+			rows.push(
+				buildJournalLineRow({
+					entry,
+					reference,
+					references,
+					sequenceNumber,
+					side,
+					timestampUtc,
+				})
+			);
 		}
 	}
 
@@ -500,23 +640,21 @@ function buildReconciliationCards(result: FullReconciliationResult) {
 
 function buildTransferRow(
 	transfer: TransferRequest,
-	references: Awaited<ReturnType<typeof loadReferenceData>>,
+	references: ReferenceData,
 	hasLedgerLink: boolean
 ) {
 	const mortgageLabel = transfer.mortgageId
 		? (references.mortgageLabels.get(String(transfer.mortgageId)) ?? null)
 		: null;
 
-	let counterpartyLabel = transfer.counterpartyId;
-	if (transfer.counterpartyType === "borrower") {
-		counterpartyLabel =
-			references.borrowerLabels.get(transfer.counterpartyId) ??
-			transfer.counterpartyId;
-	} else if (transfer.counterpartyType === "lender") {
-		counterpartyLabel =
-			references.lenderLabels.get(transfer.counterpartyId) ??
-			transfer.counterpartyId;
-	}
+	const counterpartyLabel = buildTransferCounterpartyLabel(
+		transfer,
+		references
+	);
+	const journalIntegrity = buildTransferJournalIntegrity(
+		transfer,
+		hasLedgerLink
+	);
 
 	return {
 		amount: transfer.amount,
@@ -535,14 +673,7 @@ function buildTransferRow(
 		failureReason: transfer.failureReason ?? null,
 		hasLedgerLink,
 		idempotencyKey: transfer.idempotencyKey,
-		journalIntegrity:
-			hasLedgerLink ||
-			transfer.status === "initiated" ||
-			transfer.status === "pending"
-				? "linked"
-				: transfer.status === "confirmed" || transfer.status === "reversed"
-					? "missing"
-					: "pending",
+		journalIntegrity,
 		lenderId: transfer.lenderId ? String(transfer.lenderId) : null,
 		mortgageId: transfer.mortgageId ? String(transfer.mortgageId) : null,
 		mortgageLabel,
@@ -557,15 +688,51 @@ function buildTransferRow(
 	};
 }
 
-function buildObligationRows(args: {
-	attempts: readonly Doc<"collectionAttempts">[];
-	cashAccounts: readonly CashAccount[];
-	obligations: readonly Obligation[];
-	references: Awaited<ReturnType<typeof loadReferenceData>>;
-	transfers: readonly TransferRequest[];
-}) {
+function buildTransferCounterpartyLabel(
+	transfer: TransferRequest,
+	references: ReferenceData
+) {
+	if (transfer.counterpartyType === "borrower") {
+		return (
+			references.borrowerLabels.get(transfer.counterpartyId) ??
+			transfer.counterpartyId
+		);
+	}
+
+	if (transfer.counterpartyType === "lender") {
+		return (
+			references.lenderLabels.get(transfer.counterpartyId) ??
+			transfer.counterpartyId
+		);
+	}
+
+	return transfer.counterpartyId;
+}
+
+function buildTransferJournalIntegrity(
+	transfer: TransferRequest,
+	hasLedgerLink: boolean
+) {
+	if (
+		hasLedgerLink ||
+		transfer.status === "initiated" ||
+		transfer.status === "pending"
+	) {
+		return "linked";
+	}
+
+	if (transfer.status === "confirmed" || transfer.status === "reversed") {
+		return "missing";
+	}
+
+	return "pending";
+}
+
+function buildReceivableBalancesByObligationId(
+	cashAccounts: readonly CashAccount[]
+) {
 	const receivablesByObligationId = new Map<string, number>();
-	for (const account of args.cashAccounts) {
+	for (const account of cashAccounts) {
 		if (account.family !== "BORROWER_RECEIVABLE" || !account.obligationId) {
 			continue;
 		}
@@ -574,12 +741,17 @@ function buildObligationRows(args: {
 			safeBigintToNumber(getCashAccountBalance(account))
 		);
 	}
+	return receivablesByObligationId;
+}
 
+function buildLatestAttemptByObligationId(
+	attempts: readonly Doc<"collectionAttempts">[]
+) {
 	const latestAttemptByObligationId = new Map<
 		string,
 		Doc<"collectionAttempts">
 	>();
-	for (const attempt of args.attempts) {
+	for (const attempt of attempts) {
 		for (const obligationId of attempt.obligationIds) {
 			const key = String(obligationId);
 			const current = latestAttemptByObligationId.get(key);
@@ -588,9 +760,14 @@ function buildObligationRows(args: {
 			}
 		}
 	}
+	return latestAttemptByObligationId;
+}
 
+function buildLatestTransferByObligationId(
+	transfers: readonly TransferRequest[]
+) {
 	const latestTransferByObligationId = new Map<string, TransferRequest>();
-	for (const transfer of args.transfers) {
+	for (const transfer of transfers) {
 		if (!transfer.obligationId) {
 			continue;
 		}
@@ -600,9 +777,12 @@ function buildObligationRows(args: {
 			latestTransferByObligationId.set(key, transfer);
 		}
 	}
+	return latestTransferByObligationId;
+}
 
+function buildCorrectiveChildrenBySourceId(obligations: readonly Obligation[]) {
 	const correctiveChildrenBySourceId = new Map<string, number>();
-	for (const obligation of args.obligations) {
+	for (const obligation of obligations) {
 		if (!obligation.sourceObligationId || obligation.type === "late_fee") {
 			continue;
 		}
@@ -612,6 +792,28 @@ function buildObligationRows(args: {
 			(correctiveChildrenBySourceId.get(key) ?? 0) + 1
 		);
 	}
+	return correctiveChildrenBySourceId;
+}
+
+function buildObligationRows(args: {
+	attempts: readonly Doc<"collectionAttempts">[];
+	cashAccounts: readonly CashAccount[];
+	obligations: readonly Obligation[];
+	references: ReferenceData;
+	transfers: readonly TransferRequest[];
+}) {
+	const receivablesByObligationId = buildReceivableBalancesByObligationId(
+		args.cashAccounts
+	);
+	const latestAttemptByObligationId = buildLatestAttemptByObligationId(
+		args.attempts
+	);
+	const latestTransferByObligationId = buildLatestTransferByObligationId(
+		args.transfers
+	);
+	const correctiveChildrenBySourceId = buildCorrectiveChildrenBySourceId(
+		args.obligations
+	);
 
 	return args.obligations
 		.map((obligation) => {
@@ -669,10 +871,124 @@ function buildObligationRows(args: {
 		.sort((left, right) => compareDescending(left.dueDate, right.dueDate));
 }
 
+function buildFinancialLedgerSupportObligationRows(args: {
+	cashAccounts: readonly CashAccount[];
+	obligations: readonly Obligation[];
+}) {
+	const receivablesByObligationId = buildReceivableBalancesByObligationId(
+		args.cashAccounts
+	);
+
+	return args.obligations
+		.map((obligation) => {
+			const obligationId = String(obligation._id);
+			const projectedOutstandingBalance =
+				obligation.amount - obligation.amountSettled;
+			const journalOutstandingBalance =
+				receivablesByObligationId.get(obligationId) ?? 0;
+
+			return {
+				amount: obligation.amount,
+				journalOutstandingBalance,
+				obligationId,
+				projectedOutstandingBalance,
+			};
+		})
+		.sort((left, right) =>
+			compareDescending(
+				left.projectedOutstandingBalance,
+				right.projectedOutstandingBalance
+			)
+		);
+}
+
+function buildFinancialLedgerSupportTransferRows(
+	transfers: readonly TransferRequest[]
+) {
+	return [...transfers]
+		.sort((left, right) => compareDescending(left.createdAt, right.createdAt))
+		.map((transfer) => ({
+			amount: transfer.amount,
+			direction: transfer.direction,
+			lenderId: transfer.lenderId ? String(transfer.lenderId) : null,
+			status: transfer.status,
+		}));
+}
+
+function collectPaymentOperationsReferenceIds(args: {
+	obligations: readonly Obligation[];
+	transfers: readonly TransferRequest[];
+}): ReferenceIdSets {
+	return {
+		borrowerIds: collectUniqueIds([
+			...args.obligations.map((obligation) => obligation.borrowerId),
+			...args.transfers.map((transfer) => transfer.borrowerId),
+		]),
+		lenderIds: collectUniqueIds(
+			args.transfers.map((transfer) => transfer.lenderId)
+		),
+		mortgageIds: collectUniqueIds([
+			...args.obligations.map((obligation) => obligation.mortgageId),
+			...args.transfers.map((transfer) => transfer.mortgageId),
+		]),
+		obligationIds: collectUniqueIds(
+			args.obligations.map((obligation) => obligation._id)
+		),
+	};
+}
+
+function collectFinancialLedgerReferenceIds(args: {
+	accounts: readonly CashAccount[];
+	journalEntries: readonly CashJournalEntry[];
+}): ReferenceIdSets {
+	return {
+		borrowerIds: collectUniqueIds([
+			...args.accounts.map((account) => account.borrowerId),
+			...args.journalEntries.map((entry) => entry.borrowerId),
+		]),
+		lenderIds: collectUniqueIds([
+			...args.accounts.map((account) => account.lenderId),
+			...args.journalEntries.map((entry) => entry.lenderId),
+		]),
+		mortgageIds: collectUniqueIds([
+			...args.accounts.map((account) => account.mortgageId),
+			...args.journalEntries.map((entry) => entry.mortgageId),
+		]),
+		obligationIds: collectUniqueIds([
+			...args.accounts.map((account) => account.obligationId),
+			...args.journalEntries.map((entry) => entry.obligationId),
+		]),
+	};
+}
+
+function buildHealingEventTitle(args: {
+	resolvedTitle: string;
+	retryingTitle: string;
+	status: string;
+	escalatedTitle: string;
+}) {
+	if (args.status === "escalated") {
+		return args.escalatedTitle;
+	}
+	if (args.status === "resolved") {
+		return args.resolvedTitle;
+	}
+	return args.retryingTitle;
+}
+
+function buildJobStatus(args: { hasEscalated: boolean; hasRetrying: boolean }) {
+	if (args.hasEscalated) {
+		return "error";
+	}
+	if (args.hasRetrying) {
+		return "warning";
+	}
+	return "healthy";
+}
+
 export const getPaymentOperationsDashboardSnapshot = paymentQuery
 	.handler(async (ctx) => {
 		const [
-			references,
 			obligations,
 			collectionAttempts,
 			collectionPlanEntries,
@@ -680,7 +996,6 @@ export const getPaymentOperationsDashboardSnapshot = paymentQuery
 			cashAccounts,
 			reconciliationSuite,
 		] = await Promise.all([
-			loadReferenceData(ctx),
 			ctx.db.query("obligations").collect(),
 			ctx.db.query("collectionAttempts").collect(),
 			ctx.db.query("collectionPlanEntries").collect(),
@@ -688,6 +1003,10 @@ export const getPaymentOperationsDashboardSnapshot = paymentQuery
 			ctx.db.query("cash_ledger_accounts").collect(),
 			runFullReconciliationSuite(ctx),
 		]);
+		const references = await loadReferenceData(
+			ctx,
+			collectPaymentOperationsReferenceIds({ obligations, transfers })
+		);
 
 		const obligationRows = buildObligationRows({
 			attempts: collectionAttempts,
@@ -764,10 +1083,28 @@ export const getPaymentOperationsDashboardSnapshot = paymentQuery
 	})
 	.public();
 
+export const getFinancialLedgerSupportSnapshot = cashLedgerQuery
+	.handler(async (ctx) => {
+		const [obligations, transfers, cashAccounts] = await Promise.all([
+			ctx.db.query("obligations").collect(),
+			ctx.db.query("transferRequests").collect(),
+			ctx.db.query("cash_ledger_accounts").collect(),
+		]);
+
+		return {
+			generatedAt: Date.now(),
+			obligations: buildFinancialLedgerSupportObligationRows({
+				cashAccounts,
+				obligations,
+			}),
+			transfers: buildFinancialLedgerSupportTransferRows(transfers),
+		};
+	})
+	.public();
+
 export const getFinancialLedgerDashboardSnapshot = cashLedgerQuery
 	.handler(async (ctx) => {
 		const [
-			references,
 			accounts,
 			journalEntries,
 			fullSuite,
@@ -776,7 +1113,6 @@ export const getFinancialLedgerDashboardSnapshot = cashLedgerQuery
 			ownershipAccounts,
 			deals,
 		] = await Promise.all([
-			loadReferenceData(ctx),
 			ctx.db.query("cash_ledger_accounts").collect(),
 			ctx.db.query("cash_ledger_journal_entries").collect(),
 			runFullReconciliationSuite(ctx),
@@ -788,6 +1124,10 @@ export const getFinancialLedgerDashboardSnapshot = cashLedgerQuery
 			ctx.db.query("ledger_accounts").collect(),
 			ctx.db.query("deals").collect(),
 		]);
+		const references = await loadReferenceData(
+			ctx,
+			collectFinancialLedgerReferenceIds({ accounts, journalEntries })
+		);
 
 		const accountsById = new Map(
 			accounts.map((account) => [String(account._id), account] as const)
@@ -826,12 +1166,12 @@ export const getFinancialLedgerDashboardSnapshot = cashLedgerQuery
 				sourceJob: "dispersal-self-healing",
 				status: attempt.status,
 				summary: `Attempt count ${attempt.attemptCount}`,
-				title:
-					attempt.status === "escalated"
-						? "Dispersal healing escalated"
-						: attempt.status === "resolved"
-							? "Dispersal healing resolved"
-							: "Dispersal healing retrying",
+				title: buildHealingEventTitle({
+					escalatedTitle: "Dispersal healing escalated",
+					resolvedTitle: "Dispersal healing resolved",
+					retryingTitle: "Dispersal healing retrying",
+					status: attempt.status,
+				}),
 			})),
 			...transferHealingAttempts.map((attempt) => ({
 				eventId: `transfer:${String(attempt._id)}`,
@@ -843,12 +1183,12 @@ export const getFinancialLedgerDashboardSnapshot = cashLedgerQuery
 				sourceJob: "transfer-reconciliation",
 				status: attempt.status,
 				summary: `Attempt count ${attempt.attemptCount}`,
-				title:
-					attempt.status === "escalated"
-						? "Transfer integrity defect escalated"
-						: attempt.status === "resolved"
-							? "Transfer healing resolved"
-							: "Transfer healing retrying",
+				title: buildHealingEventTitle({
+					escalatedTitle: "Transfer integrity defect escalated",
+					resolvedTitle: "Transfer healing resolved",
+					retryingTitle: "Transfer healing retrying",
+					status: attempt.status,
+				}),
 			})),
 			...schedules.map((schedule) => ({
 				eventId: `schedule:${String(schedule._id)}`,
@@ -881,15 +1221,14 @@ export const getFinancialLedgerDashboardSnapshot = cashLedgerQuery
 				openItemCount: dispersalHealingAttempts.filter(
 					(attempt) => attempt.status !== "resolved"
 				).length,
-				status: dispersalHealingAttempts.some(
-					(attempt) => attempt.status === "escalated"
-				)
-					? "error"
-					: dispersalHealingAttempts.some(
-								(attempt) => attempt.status === "retrying"
-							)
-						? "warning"
-						: "healthy",
+				status: buildJobStatus({
+					hasEscalated: dispersalHealingAttempts.some(
+						(attempt) => attempt.status === "escalated"
+					),
+					hasRetrying: dispersalHealingAttempts.some(
+						(attempt) => attempt.status === "retrying"
+					),
+				}),
 			},
 			{
 				jobKey: "transfer-reconciliation",
@@ -901,15 +1240,14 @@ export const getFinancialLedgerDashboardSnapshot = cashLedgerQuery
 				openItemCount: transferHealingAttempts.filter(
 					(attempt) => attempt.status !== "resolved"
 				).length,
-				status: transferHealingAttempts.some(
-					(attempt) => attempt.status === "escalated"
-				)
-					? "error"
-					: transferHealingAttempts.some(
-								(attempt) => attempt.status === "retrying"
-							)
-						? "warning"
-						: "healthy",
+				status: buildJobStatus({
+					hasEscalated: transferHealingAttempts.some(
+						(attempt) => attempt.status === "escalated"
+					),
+					hasRetrying: transferHealingAttempts.some(
+						(attempt) => attempt.status === "retrying"
+					),
+				}),
 			},
 			{
 				jobKey: "recurring-schedule-poller",

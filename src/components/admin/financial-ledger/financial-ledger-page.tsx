@@ -23,12 +23,12 @@ import {
 import type {
 	FinancialLedgerSearchState,
 	FinancialLedgerSnapshot,
+	FinancialLedgerSupportSnapshot,
 	FinancialLedgerTab,
 	LedgerChartOfAccountsRow,
 	LedgerJournalLine,
 	MetricItem,
 	PaymentOperationsSearchState,
-	PaymentOperationsSnapshot,
 	ValidationComparisonRow,
 	ValidationExpectedRow,
 } from "./types";
@@ -58,8 +58,8 @@ import {
 } from "./validation";
 
 interface FinancialLedgerPageProps {
+	financialLedgerSupportSnapshot?: FinancialLedgerSupportSnapshot;
 	onRefresh: () => Promise<unknown>;
-	paymentOperationsSnapshot?: PaymentOperationsSnapshot;
 	search: FinancialLedgerSearchState;
 	setSearch: (
 		updater: (current: FinancialLedgerSearchState) => FinancialLedgerSearchState
@@ -289,7 +289,7 @@ function renderTabButton(args: {
 
 function computeCashFamilyTotals(args: {
 	chartOfAccounts: LedgerChartOfAccountsRow[];
-	paymentOperations?: PaymentOperationsSnapshot;
+	paymentOperations?: FinancialLedgerSupportSnapshot;
 	snapshot: FinancialLedgerSnapshot;
 }) {
 	const familyTotals = new Map<string, number>();
@@ -442,8 +442,8 @@ function buildAccountRegisterRows(args: {
 }
 
 export function FinancialLedgerPage({
+	financialLedgerSupportSnapshot,
 	onRefresh,
-	paymentOperationsSnapshot,
 	search,
 	setSearch,
 	snapshot,
@@ -476,10 +476,10 @@ export function FinancialLedgerPage({
 		() =>
 			computeCashFamilyTotals({
 				chartOfAccounts: snapshot.chartOfAccounts,
-				paymentOperations: paymentOperationsSnapshot,
+				paymentOperations: financialLedgerSupportSnapshot,
 				snapshot,
 			}),
-		[paymentOperationsSnapshot, snapshot]
+		[financialLedgerSupportSnapshot, snapshot]
 	);
 
 	const reconciliationMetricItems: MetricItem[] = [
@@ -750,9 +750,9 @@ export function FinancialLedgerPage({
 			compareValidationRows({
 				expectedRows: activeValidationRows,
 				financialLedger: snapshot,
-				paymentOperations: paymentOperationsSnapshot,
+				paymentOperations: financialLedgerSupportSnapshot,
 			}),
-		[activeValidationRows, paymentOperationsSnapshot, snapshot]
+		[activeValidationRows, financialLedgerSupportSnapshot, snapshot]
 	);
 	const filteredComparisonRows = useMemo(
 		() =>

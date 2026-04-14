@@ -218,6 +218,25 @@ export interface PaymentOperationsSnapshot {
 	transfers: PaymentOperationsTransferRow[];
 }
 
+export type FinancialLedgerSupportObligationRow = Pick<
+	PaymentOperationsObligationRow,
+	| "amount"
+	| "journalOutstandingBalance"
+	| "obligationId"
+	| "projectedOutstandingBalance"
+>;
+
+export type FinancialLedgerSupportTransferRow = Pick<
+	PaymentOperationsTransferRow,
+	"amount" | "direction" | "lenderId" | "status"
+>;
+
+export interface FinancialLedgerSupportSnapshot {
+	generatedAt: number;
+	obligations: FinancialLedgerSupportObligationRow[];
+	transfers: FinancialLedgerSupportTransferRow[];
+}
+
 export interface LedgerChartOfAccountsRow {
 	accountCode: string;
 	accountFamily: string;

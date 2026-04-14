@@ -204,6 +204,159 @@ async function logPlanEntryExecutionAudit(
 	});
 }
 
+async function buildRejectedStageExecutionResponse(args: {
+	ctx: MutationCtx;
+	executionRecordedAt: number;
+	idempotencyKey: string;
+	planEntryId: Id<"collectionPlanEntries">;
+	planEntryStatusAfter: Doc<"collectionPlanEntries">["status"];
+	reasonCode: ExecutePlanEntryReasonCode;
+	reasonDetail: string;
+	request: ExecutePlanEntryArgs;
+}) {
+	const result = buildRejectedResult({
+		executionRecordedAt: args.executionRecordedAt,
+		idempotencyKey: args.idempotencyKey,
+		planEntryId: args.planEntryId,
+		planEntryStatusAfter: args.planEntryStatusAfter,
+		reasonCode: args.reasonCode,
+		reasonDetail: args.reasonDetail,
+	});
+	await logPlanEntryExecutionAudit(args.ctx, args.request, result);
+	return {
+		result,
+	};
+}
+
+type LoadedExecutionPlanEntry = NonNullable<
+	Awaited<ReturnType<typeof loadExecutionPlanEntry>>
+>;
+
+async function handleExistingPlanEntryExecution(args: {
+	ctx: MutationCtx;
+	executionRecordedAt: number;
+	loaded: LoadedExecutionPlanEntry;
+	normalizedIdempotencyKey: string;
+	request: ExecutePlanEntryArgs;
+}): Promise<StagePlanEntryExecutionResult | null> {
+	const { existingAttempt, obligations, planEntry } = args.loaded;
+	if (!existingAttempt) {
+		return null;
+	}
+
+	const reconciledExecutionIdempotencyKey =
+		existingAttempt.executionIdempotencyKey ?? args.normalizedIdempotencyKey;
+	const reconciledExecutedAt =
+		existingAttempt.executionRequestedAt ?? existingAttempt.initiatedAt;
+	let recoveredTransferRequestId = existingAttempt.transferRequestId;
+
+	if (!recoveredTransferRequestId) {
+		const existingTransfer = await args.ctx.db
+			.query("transferRequests")
+			.withIndex("by_idempotency", (q) =>
+				q.eq(
+					"idempotencyKey",
+					buildTransferHandoffIdempotencyKey(planEntry._id)
+				)
+			)
+			.first();
+
+		if (existingTransfer) {
+			recoveredTransferRequestId = existingTransfer._id;
+			await args.ctx.db.patch(existingAttempt._id, {
+				transferRequestId: existingTransfer._id,
+			});
+		} else {
+			const handoffContext = prepareTransferHandoffContext({
+				obligations,
+				planEntry,
+				triggerSource: args.request.triggerSource,
+				requestedByActorId: args.request.requestedByActorId,
+			});
+			if ("reasonCode" in handoffContext) {
+				return buildRejectedStageExecutionResponse({
+					ctx: args.ctx,
+					executionRecordedAt: args.executionRecordedAt,
+					idempotencyKey: args.normalizedIdempotencyKey,
+					planEntryId: planEntry._id,
+					planEntryStatusAfter: "executing",
+					reasonCode: handoffContext.reasonCode,
+					reasonDetail: handoffContext.reasonDetail,
+					request: args.request,
+				});
+			}
+
+			const transferHandoffRequest = buildTransferHandoffRequest({
+				context: handoffContext,
+				collectionAttemptId: existingAttempt._id,
+				idempotencyKey: reconciledExecutionIdempotencyKey,
+				planEntry,
+			});
+
+			recoveredTransferRequestId = await createTransferRequestRecord(args.ctx, {
+				direction: "inbound",
+				transferType: obligationTypeToTransferType(
+					transferHandoffRequest.primaryObligationType
+				),
+				amount: transferHandoffRequest.amount,
+				counterpartyType: "borrower",
+				counterpartyId: transferHandoffRequest.counterpartyId,
+				mortgageId: transferHandoffRequest.mortgageId,
+				obligationId: transferHandoffRequest.obligationIds[0],
+				planEntryId: transferHandoffRequest.planEntryId,
+				collectionAttemptId: transferHandoffRequest.collectionAttemptId,
+				borrowerId: transferHandoffRequest.borrowerId,
+				providerCode: transferHandoffRequest.providerCode,
+				manualSettlement: args.request.manualSettlement,
+				idempotencyKey: buildTransferHandoffIdempotencyKey(
+					transferHandoffRequest.planEntryId
+				),
+				metadata: buildTransferHandoffMetadata(
+					transferHandoffRequest,
+					transferHandoffRequest.primaryObligationType
+				),
+				source: transferHandoffRequest.source,
+			});
+
+			await args.ctx.db.patch(existingAttempt._id, {
+				transferRequestId: recoveredTransferRequestId,
+			});
+		}
+	}
+
+	if (
+		planEntry.collectionAttemptId !== existingAttempt._id ||
+		planEntry.executedAt !== reconciledExecutedAt ||
+		planEntry.executionIdempotencyKey !== reconciledExecutionIdempotencyKey ||
+		planEntry.status !== "executing"
+	) {
+		await args.ctx.db.patch(planEntry._id, {
+			collectionAttemptId: existingAttempt._id,
+			executedAt: reconciledExecutedAt,
+			executionIdempotencyKey: reconciledExecutionIdempotencyKey,
+			status: "executing",
+		});
+	}
+
+	const result = buildAlreadyExecutedResult({
+		executionRecordedAt: args.executionRecordedAt,
+		idempotencyKey: args.normalizedIdempotencyKey,
+		planEntryId: planEntry._id,
+		planEntryStatusAfter: "executing",
+		collectionAttemptId: existingAttempt._id,
+		attemptStatusAfter: existingAttempt.status,
+		transferRequestId: recoveredTransferRequestId,
+		reasonCode: "plan_entry_already_executed",
+		reasonDetail:
+			"Collection plan entry already has a business collection attempt.",
+	});
+	await logPlanEntryExecutionAudit(args.ctx, args.request, result);
+	return {
+		existingTransferRequestId: recoveredTransferRequestId,
+		result,
+	};
+}
+
 const stagePlanEntryExecution = convex
 	.mutation()
 	.input(executePlanEntryInputValidator)
@@ -214,153 +367,43 @@ const stagePlanEntryExecution = convex
 		);
 
 		if (!normalizedIdempotencyKey) {
-			const result = buildRejectedResult({
+			return buildRejectedStageExecutionResponse({
+				ctx,
 				executionRecordedAt,
 				idempotencyKey: args.idempotencyKey,
 				planEntryId: args.planEntryId,
 				planEntryStatusAfter: "planned",
 				reasonCode: "invalid_idempotency_key",
 				reasonDetail: "Execution idempotency key must be a non-empty string.",
+				request: args,
 			});
-			await logPlanEntryExecutionAudit(ctx, args, result);
-			return {
-				result,
-			};
 		}
 
 		const loaded = await loadExecutionPlanEntry(ctx, args.planEntryId);
 		if (!loaded) {
-			const result = buildRejectedResult({
+			return buildRejectedStageExecutionResponse({
+				ctx,
 				executionRecordedAt,
 				idempotencyKey: normalizedIdempotencyKey,
 				planEntryId: args.planEntryId,
 				planEntryStatusAfter: "planned",
 				reasonCode: "plan_entry_not_found",
 				reasonDetail: `Collection plan entry ${args.planEntryId} was not found.`,
+				request: args,
 			});
-			await logPlanEntryExecutionAudit(ctx, args, result);
-			return {
-				result,
-			};
+		}
+		const existingExecution = await handleExistingPlanEntryExecution({
+			ctx,
+			executionRecordedAt,
+			loaded,
+			normalizedIdempotencyKey,
+			request: args,
+		});
+		if (existingExecution) {
+			return existingExecution;
 		}
 
-		const { existingAttempt, obligations, planEntry } = loaded;
-		if (existingAttempt) {
-			const reconciledExecutionIdempotencyKey =
-				existingAttempt.executionIdempotencyKey ?? normalizedIdempotencyKey;
-			const reconciledExecutedAt =
-				existingAttempt.executionRequestedAt ?? existingAttempt.initiatedAt;
-			let recoveredTransferRequestId = existingAttempt.transferRequestId;
-			if (!recoveredTransferRequestId) {
-				const existingTransfer = await ctx.db
-					.query("transferRequests")
-					.withIndex("by_idempotency", (q) =>
-						q.eq(
-							"idempotencyKey",
-							buildTransferHandoffIdempotencyKey(planEntry._id)
-						)
-					)
-					.first();
-
-				if (existingTransfer) {
-					recoveredTransferRequestId = existingTransfer._id;
-					await ctx.db.patch(existingAttempt._id, {
-						transferRequestId: existingTransfer._id,
-					});
-				} else {
-					const handoffContext = prepareTransferHandoffContext({
-						obligations,
-						planEntry,
-						triggerSource: args.triggerSource,
-						requestedByActorId: args.requestedByActorId,
-					});
-					if ("reasonCode" in handoffContext) {
-						const rejected = buildRejectedResult({
-							executionRecordedAt,
-							idempotencyKey: normalizedIdempotencyKey,
-							planEntryId: planEntry._id,
-							planEntryStatusAfter: "executing",
-							reasonCode: handoffContext.reasonCode,
-							reasonDetail: handoffContext.reasonDetail,
-						});
-						await logPlanEntryExecutionAudit(ctx, args, rejected);
-						return {
-							result: rejected,
-						};
-					}
-
-					const transferHandoffRequest = buildTransferHandoffRequest({
-						context: handoffContext,
-						collectionAttemptId: existingAttempt._id,
-						idempotencyKey: reconciledExecutionIdempotencyKey,
-						planEntry,
-					});
-
-					recoveredTransferRequestId = await createTransferRequestRecord(ctx, {
-						direction: "inbound",
-						transferType: obligationTypeToTransferType(
-							transferHandoffRequest.primaryObligationType
-						),
-						amount: transferHandoffRequest.amount,
-						counterpartyType: "borrower",
-						counterpartyId: transferHandoffRequest.counterpartyId,
-						mortgageId: transferHandoffRequest.mortgageId,
-						obligationId: transferHandoffRequest.obligationIds[0],
-						planEntryId: transferHandoffRequest.planEntryId,
-						collectionAttemptId: transferHandoffRequest.collectionAttemptId,
-						borrowerId: transferHandoffRequest.borrowerId,
-						providerCode: transferHandoffRequest.providerCode,
-						manualSettlement: args.manualSettlement,
-						idempotencyKey: buildTransferHandoffIdempotencyKey(
-							transferHandoffRequest.planEntryId
-						),
-						metadata: buildTransferHandoffMetadata(
-							transferHandoffRequest,
-							transferHandoffRequest.primaryObligationType
-						),
-						source: transferHandoffRequest.source,
-					});
-
-					await ctx.db.patch(existingAttempt._id, {
-						transferRequestId: recoveredTransferRequestId,
-					});
-				}
-			}
-
-			if (
-				planEntry.collectionAttemptId !== existingAttempt._id ||
-				planEntry.executedAt !== reconciledExecutedAt ||
-				planEntry.executionIdempotencyKey !==
-					reconciledExecutionIdempotencyKey ||
-				planEntry.status !== "executing"
-			) {
-				await ctx.db.patch(planEntry._id, {
-					collectionAttemptId: existingAttempt._id,
-					executedAt: reconciledExecutedAt,
-					executionIdempotencyKey: reconciledExecutionIdempotencyKey,
-					status: "executing",
-				});
-			}
-
-			const result = buildAlreadyExecutedResult({
-				executionRecordedAt,
-				idempotencyKey: normalizedIdempotencyKey,
-				planEntryId: planEntry._id,
-				planEntryStatusAfter: "executing",
-				collectionAttemptId: existingAttempt._id,
-				attemptStatusAfter: existingAttempt.status,
-				transferRequestId: recoveredTransferRequestId,
-				reasonCode: "plan_entry_already_executed",
-				reasonDetail:
-					"Collection plan entry already has a business collection attempt.",
-			});
-			await logPlanEntryExecutionAudit(ctx, args, result);
-			return {
-				existingTransferRequestId: recoveredTransferRequestId,
-				result,
-			};
-		}
-
+		const { obligations, planEntry } = loaded;
 		const ineligibleResult = classifyExecutionEligibility({
 			executionRecordedAt,
 			idempotencyKey: normalizedIdempotencyKey,

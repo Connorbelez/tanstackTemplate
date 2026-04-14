@@ -368,6 +368,8 @@ export const convexModules: ModuleMap = withModuleAliases({
 		await import("./../payments/bankAccounts/types.ts"),
 	"/convex/payments/bankAccounts/validation.ts": async () =>
 		await import("./../payments/bankAccounts/validation.ts"),
+	"/convex/payments/adminDashboard/queries.ts": async () =>
+		await import("./../payments/adminDashboard/queries.ts"),
 	"/convex/payments/cashLedger/accounts.ts": async () =>
 		await import("./../payments/cashLedger/accounts.ts"),
 	"/convex/payments/cashLedger/disbursementGate.ts": async () =>

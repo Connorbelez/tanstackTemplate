@@ -1,7 +1,7 @@
 import { parseCsv, rowsToCsv } from "./csv";
 import type {
 	FinancialLedgerSnapshot,
-	PaymentOperationsSnapshot,
+	FinancialLedgerSupportSnapshot,
 	ValidationComparisonRow,
 	ValidationExpectedRow,
 } from "./types";
@@ -114,7 +114,7 @@ export function parseValidationCsv(text: string) {
 
 export function buildValidationActualMap(args: {
 	financialLedger: FinancialLedgerSnapshot;
-	paymentOperations?: PaymentOperationsSnapshot;
+	paymentOperations?: FinancialLedgerSupportSnapshot;
 }) {
 	const map = new Map<string, number>();
 
@@ -290,7 +290,7 @@ export function buildValidationActualMap(args: {
 export function compareValidationRows(args: {
 	expectedRows: ValidationExpectedRow[];
 	financialLedger: FinancialLedgerSnapshot;
-	paymentOperations?: PaymentOperationsSnapshot;
+	paymentOperations?: FinancialLedgerSupportSnapshot;
 	toleranceCents?: number;
 }) {
 	const toleranceCents = args.toleranceCents ?? 1;

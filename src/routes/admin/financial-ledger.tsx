@@ -11,8 +11,8 @@ const financialLedgerQueryOptions = convexQuery(
 	{}
 );
 
-const paymentOperationsQueryOptions = convexQuery(
-	api.payments.adminDashboard.queries.getPaymentOperationsDashboardSnapshot,
+const financialLedgerSupportQueryOptions = convexQuery(
+	api.payments.adminDashboard.queries.getFinancialLedgerSupportSnapshot,
 	{}
 );
 
@@ -21,7 +21,7 @@ export const Route = createFileRoute("/admin/financial-ledger")({
 	loader: async ({ context }) => {
 		await Promise.all([
 			context.queryClient.ensureQueryData(financialLedgerQueryOptions),
-			context.queryClient.ensureQueryData(paymentOperationsQueryOptions),
+			context.queryClient.ensureQueryData(financialLedgerSupportQueryOptions),
 		]);
 	},
 	validateSearch: (search: Record<string, unknown>) =>
@@ -33,15 +33,20 @@ function FinancialLedgerRoutePage() {
 	const navigate = useNavigate();
 	const { data: financialSnapshot, refetch: refetchFinancialSnapshot } =
 		useSuspenseQuery(financialLedgerQueryOptions);
-	const { data: paymentOperationsSnapshot, refetch: refetchPaymentOperations } =
-		useSuspenseQuery(paymentOperationsQueryOptions);
+	const {
+		data: financialLedgerSupportSnapshot,
+		refetch: refetchFinancialLedgerSupport,
+	} = useSuspenseQuery(financialLedgerSupportQueryOptions);
 
 	return (
 		<FinancialLedgerPage
+			financialLedgerSupportSnapshot={financialLedgerSupportSnapshot}
 			onRefresh={async () =>
-				Promise.all([refetchFinancialSnapshot(), refetchPaymentOperations()])
+				Promise.all([
+					refetchFinancialSnapshot(),
+					refetchFinancialLedgerSupport(),
+				])
 			}
-			paymentOperationsSnapshot={paymentOperationsSnapshot}
 			search={search}
 			setSearch={(updater) =>
 				void navigate({
