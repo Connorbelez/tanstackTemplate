@@ -6,7 +6,9 @@ import {
 import { guardAnyPermission } from "#/lib/auth";
 
 export const Route = createFileRoute("/admin/underwriting")({
-	beforeLoad: guardAnyPermission(["admin:access", "underwriter:access"]),
+	beforeLoad: guardAnyPermission(["admin:access", "underwriter:access"], {
+		allowAdminOverride: false,
+	}),
 	component: () => <Outlet />,
 	errorComponent: AdminRouteErrorBoundary,
 	pendingComponent: UnderwritingPendingPage,

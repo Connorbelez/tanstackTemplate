@@ -12,6 +12,23 @@ describe("route auth permission helpers", () => {
 		).toBe(true);
 	});
 
+	it("can disable the admin wildcard for boundary-sensitive checks", () => {
+		expect(
+			hasPermission(
+				["admin:access"],
+				"document:review",
+				{ allowAdminOverride: false }
+			)
+		).toBe(false);
+		expect(
+			hasAnyPermission(
+				["admin:access"],
+				["underwriter:access", "document:review"],
+				{ allowAdminOverride: false }
+			)
+		).toBe(false);
+	});
+
 	it("still requires exact matches for non-admin permissions", () => {
 		expect(hasPermission(["broker:access"], "document:review")).toBe(false);
 		expect(

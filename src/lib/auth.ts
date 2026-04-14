@@ -18,22 +18,29 @@ export type IslandPermission =
 
 const ADMIN_ACCESS_PERMISSION = ISLAND_PERMISSIONS.admin;
 
+interface PermissionCheckOptions {
+	allowAdminOverride?: boolean;
+}
+
 export function hasPermission(
 	permissions: readonly string[],
-	permission: string
+	permission: string,
+	options: PermissionCheckOptions = {}
 ): boolean {
 	return (
 		permissions.includes(permission) ||
-		permissions.includes(ADMIN_ACCESS_PERMISSION)
+		(options.allowAdminOverride !== false &&
+			permissions.includes(ADMIN_ACCESS_PERMISSION))
 	);
 }
 
 export function hasAnyPermission(
 	permissions: readonly string[],
-	requiredPermissions: readonly string[]
+	requiredPermissions: readonly string[],
+	options: PermissionCheckOptions = {}
 ): boolean {
 	return requiredPermissions.some((permission) =>
-		hasPermission(permissions, permission)
+		hasPermission(permissions, permission, options)
 	);
 }
 
@@ -55,11 +62,15 @@ export function canAccessAdminPath(
 	}
 
 	if (pathname === "/admin/underwriting") {
-		return hasPermission(context.permissions, "underwriter:access");
+		return hasPermission(context.permissions, "underwriter:access", {
+			allowAdminOverride: false,
+		});
 	}
 
 	return pathname.startsWith("/admin/underwriting/")
-		? hasPermission(context.permissions, "underwriter:access")
+		? hasPermission(context.permissions, "underwriter:access", {
+				allowAdminOverride: false,
+			})
 		: false;
 }
 
@@ -93,7 +104,10 @@ export function guardAuthenticated() {
  * Creates a TanStack Router `beforeLoad` guard that checks for a required permission.
  * Redirects to /sign-in if not authenticated, /unauthorized if missing permission.
  */
-export function guardPermission(permission: string) {
+export function guardPermission(
+	permission: string,
+	options: PermissionCheckOptions = {}
+) {
 	return ({
 		context,
 		location,
@@ -104,7 +118,7 @@ export function guardPermission(permission: string) {
 		if (!context.userId) {
 			throw redirect(buildSignInRedirect(location.href));
 		}
-		if (!hasPermission(context.permissions, permission)) {
+		if (!hasPermission(context.permissions, permission, options)) {
 			throw redirect({ to: "/unauthorized" });
 		}
 	};
@@ -147,7 +161,10 @@ export function guardFairLendAdminWithPermission(permission: string) {
 	};
 }
 
-export function guardAnyPermission(requiredPermissions: readonly string[]) {
+export function guardAnyPermission(
+	requiredPermissions: readonly string[],
+	options: PermissionCheckOptions = {}
+) {
 	return ({
 		context,
 		location,
@@ -158,7 +175,7 @@ export function guardAnyPermission(requiredPermissions: readonly string[]) {
 		if (!context.userId) {
 			throw redirect(buildSignInRedirect(location.href));
 		}
-		if (!hasAnyPermission(context.permissions, requiredPermissions)) {
+		if (!hasAnyPermission(context.permissions, requiredPermissions, options)) {
 			throw redirect({ to: "/unauthorized" });
 		}
 	};
