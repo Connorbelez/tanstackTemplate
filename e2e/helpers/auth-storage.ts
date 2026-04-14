@@ -44,7 +44,11 @@ export async function createAuthStorageState(args: {
 					const session = JSON.parse(el.textContent) as {
 						tokenOrganizationId?: string | null;
 						tokenRole?: string | null;
+						error?: string;
 					};
+					if (session.error) {
+						return true;
+					}
 					return (
 						session.tokenOrganizationId === expectedOrgId &&
 						session.tokenRole === expectedSessionRole
@@ -56,6 +60,24 @@ export async function createAuthStorageState(args: {
 			[args.orgId, expectedRole],
 			{ timeout: 15_000 }
 		);
+
+		const sessionJson = await args.page
+			.locator('[data-testid="session-json"]')
+			.textContent();
+		if (!sessionJson) {
+			throw new Error("E2E session bootstrap did not render session JSON");
+		}
+
+		const session = JSON.parse(sessionJson) as {
+			error?: string;
+			tokenOrganizationId?: string | null;
+			tokenRole?: string | null;
+		};
+		if (session.error) {
+			throw new Error(
+				`E2E session bootstrap failed: ${session.error} for org ${args.orgId}`
+			);
+		}
 	}
 
 	await args.page.context().storageState({ path: args.path });

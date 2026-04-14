@@ -14,11 +14,19 @@ function E2eSessionRoute() {
 	const isE2E = import.meta.env.VITE_E2E;
 	const auth = useAuth();
 	const { getAccessToken, refresh } = useAccessToken();
-	const [tokenSnapshot, setTokenSnapshot] = useState<{
-		organizationId: string | null;
-		permissions: string[];
-		role: string | null;
-	} | null>(null);
+	const [tokenSnapshot, setTokenSnapshot] = useState<
+		| {
+				status: "ready";
+				organizationId: string | null;
+				permissions: string[];
+				role: string | null;
+		  }
+		| {
+				status: "error";
+				error: string;
+		  }
+		| null
+	>(null);
 
 	useEffect(() => {
 		let cancelled = false;
@@ -33,6 +41,7 @@ function E2eSessionRoute() {
 			if (!auth.user) {
 				if (!cancelled) {
 					setTokenSnapshot({
+						status: "ready",
 						organizationId: null,
 						permissions: [],
 						role: null,
@@ -41,15 +50,35 @@ function E2eSessionRoute() {
 				return;
 			}
 
-			const token = (await refresh()) ?? (await getAccessToken()) ?? null;
-			const claims = decodeAccessToken(token);
+			try {
+				const token = (await refresh()) ?? (await getAccessToken()) ?? null;
+				if (!token) {
+					if (!cancelled) {
+						setTokenSnapshot({
+							status: "error",
+							error: "token_acquisition_failed",
+						});
+					}
+					return;
+				}
 
-			if (!cancelled) {
-				setTokenSnapshot({
-					organizationId: claims.orgId,
-					permissions: claims.permissions,
-					role: claims.role,
-				});
+				const claims = decodeAccessToken(token);
+
+				if (!cancelled) {
+					setTokenSnapshot({
+						status: "ready",
+						organizationId: claims.orgId,
+						permissions: claims.permissions,
+						role: claims.role,
+					});
+				}
+			} catch {
+				if (!cancelled) {
+					setTokenSnapshot({
+						status: "error",
+						error: "token_acquisition_failed",
+					});
+				}
 			}
 		})();
 
@@ -66,6 +95,20 @@ function E2eSessionRoute() {
 
 	if (auth.loading || tokenSnapshot === null) {
 		return <p data-testid="session-loading">loading</p>;
+	}
+
+	if (tokenSnapshot.status === "error") {
+		return (
+			<pre data-testid="session-json">
+				{JSON.stringify({
+					error: tokenSnapshot.error,
+					authOrganizationId: auth.organizationId ?? null,
+					authPermissions: auth.permissions ?? [],
+					authRole: auth.role ?? null,
+					userId: auth.user?.id ?? null,
+				})}
+			</pre>
+		);
 	}
 
 	return (
