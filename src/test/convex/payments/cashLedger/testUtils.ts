@@ -1,12 +1,18 @@
 import { convexTest } from "convex-test";
-import { registerAuditLogComponent } from "../../../../src/test/convex/registerAuditLogComponent";
-import type { Doc, Id } from "../../../_generated/dataModel";
-import auditTrailSchema from "../../../components/auditTrail/schema";
-import schema from "../../../schema";
-import { auditTrailModules } from "../../../test/moduleMaps";
-import { getOrCreateCashAccount } from "../accounts";
-import { type PostCashEntryInput, postCashEntryInternal } from "../postEntry";
-import type { CashAccountFamily, ControlSubaccount } from "../types";
+import { registerAuditLogComponent } from "../../registerAuditLogComponent";
+import type { Doc, Id } from "../../../../../convex/_generated/dataModel";
+import auditTrailSchema from "../../../../../convex/components/auditTrail/schema";
+import schema from "../../../../../convex/schema";
+import { auditTrailModules } from "../../../../../convex/test/moduleMaps";
+import { getOrCreateCashAccount } from "../../../../../convex/payments/cashLedger/accounts";
+import {
+	type PostCashEntryInput,
+	postCashEntryInternal,
+} from "../../../../../convex/payments/cashLedger/postEntry";
+import type {
+	CashAccountFamily,
+	ControlSubaccount,
+} from "../../../../../convex/payments/cashLedger/types";
 
 // ── Shared Constants ─────────────────────────────────────────────────
 
@@ -363,7 +369,7 @@ export async function createConfirmedTransfer(
 			...(args.dispersalEntryId !== undefined && {
 				dispersalEntryId: args.dispersalEntryId,
 			}),
-			confirmedAt: args.confirmedAt ?? now - 10 * 60_000, // 10 min ago
+			confirmedAt: args.confirmedAt ?? now - 10 * 60_000,
 			createdAt: now,
 			lastTransitionAt: now,
 		});

@@ -110,11 +110,9 @@ export function deriveLayoutEligibility(
 	return {
 		table: enabledRule(),
 		kanban:
-			fieldType === "select" || fieldType === "multi_select"
+			fieldType === "select"
 				? enabledRule()
-				: disabledRule(
-						"Kanban layouts require a select or multi-select field."
-					),
+				: disabledRule("Kanban layouts require a single-select field."),
 		calendar:
 			fieldType === "date" || fieldType === "datetime"
 				? enabledRule()

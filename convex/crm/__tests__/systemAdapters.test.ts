@@ -8,9 +8,6 @@
  * - UnifiedRecord contract: EAV and native records share identical top-level keys
  */
 import { beforeEach, describe, expect, it } from "vitest";
-import { api, internal } from "../../_generated/api";
-import type { Doc } from "../../_generated/dataModel";
-import { resolveColumnPath } from "../systemAdapters/columnResolver";
 import {
 	asAdmin,
 	CRM_ADMIN_IDENTITY,
@@ -18,7 +15,10 @@ import {
 	createCrmTestHarness,
 	seedObjectWithFields,
 	seedRecord,
-} from "./helpers";
+} from "../../../src/test/convex/crm/helpers";
+import { api, internal } from "../../_generated/api";
+import type { Doc } from "../../_generated/dataModel";
+import { resolveColumnPath } from "../systemAdapters/columnResolver";
 
 // ── Helper: build a minimal fieldDef-like object for resolveColumnPath ──
 

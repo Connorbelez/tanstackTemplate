@@ -1,4 +1,10 @@
 import { describe, expect, it } from "vitest";
+import {
+	createHarness,
+	SYSTEM_SOURCE,
+	seedMinimalEntities,
+	type TestHarness,
+} from "../../../../src/test/convex/payments/cashLedger/testUtils";
 import { registerAuditLogComponent } from "../../../../src/test/convex/registerAuditLogComponent";
 import { components } from "../../../_generated/api";
 import type { Id } from "../../../_generated/dataModel";
@@ -9,12 +15,6 @@ import {
 	postObligationAccrued,
 	postOverpaymentToUnappliedCash,
 } from "../integrations";
-import {
-	createHarness,
-	SYSTEM_SOURCE,
-	seedMinimalEntities,
-	type TestHarness,
-} from "./testUtils";
 
 const modules = convexModules;
 

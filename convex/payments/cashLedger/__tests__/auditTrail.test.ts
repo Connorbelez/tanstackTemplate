@@ -1,5 +1,9 @@
 import { convexTest } from "convex-test";
 import { describe, expect, it } from "vitest";
+import {
+	ADMIN_SOURCE,
+	SYSTEM_SOURCE,
+} from "../../../../src/test/convex/payments/cashLedger/testUtils";
 import { components } from "../../../_generated/api";
 import type { Id } from "../../../_generated/dataModel";
 import type { MutationCtx } from "../../../_generated/server";
@@ -16,7 +20,6 @@ import type {
 	CashEntryType,
 	ControlSubaccount,
 } from "../types";
-import { ADMIN_SOURCE, SYSTEM_SOURCE } from "./testUtils";
 
 const auditTrail = new AuditTrail(components.auditTrail);
 

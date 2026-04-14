@@ -405,10 +405,7 @@ export function RecordTableSurface({
 	) as CrmDemoKanbanResult | undefined;
 
 	const firstKanbanField = useMemo(
-		() =>
-			(fields ?? []).find((field) =>
-				["select", "multi_select"].includes(field.fieldType)
-			),
+		() => (fields ?? []).find((field) => field.fieldType === "select"),
 		[fields]
 	);
 	const activeRows =

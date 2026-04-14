@@ -1,4 +1,16 @@
 import { describe, expect, it } from "vitest";
+import {
+	assertAccountIntegrity,
+	assertObligationConservation,
+	assertSettlementReconciles,
+} from "../../../../src/test/convex/payments/cashLedger/e2eHelpers";
+import {
+	ADMIN_SOURCE,
+	createDueObligation,
+	createHarness,
+	SYSTEM_SOURCE,
+	seedMinimalEntities,
+} from "../../../../src/test/convex/payments/cashLedger/testUtils";
 import type { Id } from "../../../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../../../_generated/server";
 import { calculateProRataShares } from "../../../accrual/interestMath";
@@ -21,18 +33,6 @@ import {
 	reconcileObligationSettlementProjectionInternal,
 } from "../reconciliation";
 import { buildIdempotencyKey } from "../types";
-import {
-	assertAccountIntegrity,
-	assertObligationConservation,
-	assertSettlementReconciles,
-} from "./e2eHelpers.test-utils";
-import {
-	ADMIN_SOURCE,
-	createDueObligation,
-	createHarness,
-	SYSTEM_SOURCE,
-	seedMinimalEntities,
-} from "./testUtils";
 
 const modules = convexModules;
 

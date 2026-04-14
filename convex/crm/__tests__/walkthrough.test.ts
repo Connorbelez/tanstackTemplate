@@ -4,9 +4,13 @@
  * query table view -> query kanban view -> update record -> search -> perf check.
  */
 import { beforeEach, describe, expect, it } from "vitest";
+import {
+	asAdmin,
+	type CrmTestHarness,
+	createCrmTestHarness,
+} from "../../../src/test/convex/crm/helpers";
 import { api } from "../../_generated/api";
 import type { Id } from "../../_generated/dataModel";
-import { asAdmin, type CrmTestHarness, createCrmTestHarness } from "./helpers";
 
 const SEARCH_UNSUPPORTED_RE =
 	/search (index|indexes|indices).*(not supported|unsupported)/i;

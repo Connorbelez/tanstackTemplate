@@ -4,7 +4,7 @@ import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import type { ListingCreateInput } from "../../../../convex/listings/validators";
 import schema from "../../../../convex/schema";
-import { registerAuditLogComponent } from "../../../../convex/test/registerAuditLogComponent";
+import { registerAuditLogComponent } from "../registerAuditLogComponent";
 import { BROKER, FAIRLEND_ADMIN } from "../../auth/identities";
 
 const modules = {

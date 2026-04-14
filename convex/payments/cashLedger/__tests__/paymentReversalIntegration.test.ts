@@ -3,6 +3,10 @@ import { convexTest } from "convex-test";
 import { describe, expect, it, vi } from "vitest";
 import workflowSchema from "../../../../node_modules/@convex-dev/workflow/dist/component/schema.js";
 import workpoolSchema from "../../../../node_modules/@convex-dev/workpool/dist/component/schema.js";
+import {
+	SYSTEM_SOURCE,
+	seedMinimalEntities,
+} from "../../../../src/test/convex/payments/cashLedger/testUtils";
 import { registerAuditLogComponent } from "../../../../src/test/convex/registerAuditLogComponent";
 import { internal } from "../../../_generated/api";
 import type { Id } from "../../../_generated/dataModel";
@@ -18,7 +22,6 @@ import {
 	postCashReceiptForObligation,
 	postObligationAccrued,
 } from "../integrations";
-import { SYSTEM_SOURCE, seedMinimalEntities } from "./testUtils";
 
 // ── Module globs ────────────────────────────────────────────────────
 

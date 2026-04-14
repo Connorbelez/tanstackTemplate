@@ -158,8 +158,7 @@ function deriveDisabledLayoutMessages(
 			(fieldDef) => fieldDef.layoutEligibility.kanban.enabled
 		)
 	) {
-		messages.kanban =
-			"Add a select or multi-select field to unlock kanban layouts.";
+		messages.kanban = "Add a single-select field to unlock kanban layouts.";
 	}
 
 	if (

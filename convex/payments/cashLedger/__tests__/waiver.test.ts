@@ -1,5 +1,11 @@
 import { convexTest } from "convex-test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+	ADMIN_SOURCE,
+	createHarness,
+	createSettledObligation,
+	seedMinimalEntities,
+} from "../../../../src/test/convex/payments/cashLedger/testUtils";
 import { registerAuditLogComponent } from "../../../../src/test/convex/registerAuditLogComponent";
 import { api } from "../../../_generated/api";
 import type { Id } from "../../../_generated/dataModel";
@@ -9,12 +15,6 @@ import { convexModules } from "../../../test/moduleMaps";
 import { getCashAccountBalance } from "../accounts";
 import { postObligationWaiver } from "../integrations";
 import { buildIdempotencyKey } from "../types";
-import {
-	ADMIN_SOURCE,
-	createHarness,
-	createSettledObligation,
-	seedMinimalEntities,
-} from "./testUtils";
 
 const modules = convexModules;
 

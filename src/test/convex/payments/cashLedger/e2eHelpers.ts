@@ -1,7 +1,7 @@
 import { expect } from "vitest";
-import type { Id } from "../../../_generated/dataModel";
-import { getPostingGroupSummary } from "../postingGroups";
-import { getJournalSettledAmountForObligation } from "../reconciliation";
+import type { Id } from "../../../../../convex/_generated/dataModel";
+import { getPostingGroupSummary } from "../../../../../convex/payments/cashLedger/postingGroups";
+import { getJournalSettledAmountForObligation } from "../../../../../convex/payments/cashLedger/reconciliation";
 import type { TestHarness } from "./testUtils";
 
 // ── T-001: assertObligationConservation ──────────────────────

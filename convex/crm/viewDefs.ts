@@ -107,7 +107,7 @@ export const createView = crmAdminMutation
 		if (args.viewType === "kanban") {
 			if (!args.boundFieldId) {
 				throw new ConvexError(
-					"Kanban views require a boundFieldId (select or multi_select field)"
+					"Kanban views require a boundFieldId (single-select field)"
 				);
 			}
 			await validateBoundFieldCapability(

@@ -1,5 +1,11 @@
 import { ConvexError } from "convex/values";
 import { describe, expect, it } from "vitest";
+import {
+	createHarness,
+	createTestAccount,
+	SYSTEM_SOURCE,
+	seedMinimalEntities,
+} from "../../../../src/test/convex/payments/cashLedger/testUtils";
 import type { Id } from "../../../_generated/dataModel";
 import type { MutationCtx } from "../../../_generated/server";
 import { convexModules } from "../../../test/moduleMaps";
@@ -9,12 +15,6 @@ import {
 } from "../disbursementGate";
 import { postLenderPayout } from "../mutations";
 import { postCashEntryInternal } from "../postEntry";
-import {
-	createHarness,
-	createTestAccount,
-	SYSTEM_SOURCE,
-	seedMinimalEntities,
-} from "./testUtils";
 
 const modules = convexModules;
 

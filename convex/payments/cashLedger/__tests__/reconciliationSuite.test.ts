@@ -1,6 +1,15 @@
 import { ConvexError } from "convex/values";
 import { convexTest } from "convex-test";
 import { describe, expect, it } from "vitest";
+import {
+	createHarness,
+	createSettledObligation,
+	createTestAccount,
+	postTestEntry,
+	SYSTEM_SOURCE,
+	seedMinimalEntities,
+	type TestHarness,
+} from "../../../../src/test/convex/payments/cashLedger/testUtils";
 import { registerAuditLogComponent } from "../../../../src/test/convex/registerAuditLogComponent";
 import { api, internal } from "../../../_generated/api";
 import type { Id } from "../../../_generated/dataModel";
@@ -27,15 +36,6 @@ import {
 	runFullReconciliationSuite,
 } from "../reconciliationSuite";
 import { buildIdempotencyKey } from "../types";
-import {
-	createHarness,
-	createSettledObligation,
-	createTestAccount,
-	postTestEntry,
-	SYSTEM_SOURCE,
-	seedMinimalEntities,
-	type TestHarness,
-} from "./testUtils";
 
 const modules = convexModules;
 const auditTrailModules = sharedAuditTrailModules;

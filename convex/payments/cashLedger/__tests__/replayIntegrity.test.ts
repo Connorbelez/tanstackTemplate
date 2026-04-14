@@ -1,4 +1,11 @@
 import { describe, expect, it } from "vitest";
+import {
+	createHarness,
+	createTestAccount,
+	postTestEntry,
+	SYSTEM_SOURCE,
+	type TestHarness,
+} from "../../../../src/test/convex/payments/cashLedger/testUtils";
 import type { Id } from "../../../_generated/dataModel";
 import { convexModules } from "../../../test/moduleMaps";
 import type { PostCashEntryInput } from "../postEntry";
@@ -9,13 +16,6 @@ import {
 	replayJournalIntegrity,
 } from "../replayIntegrity";
 import { buildIdempotencyKey } from "../types";
-import {
-	createHarness,
-	createTestAccount,
-	postTestEntry,
-	SYSTEM_SOURCE,
-	type TestHarness,
-} from "./testUtils";
 
 const modules = convexModules;
 

@@ -1,15 +1,15 @@
 import { describe, expect, it } from "vitest";
-import type { Id } from "../../../_generated/dataModel";
-import type { MutationCtx } from "../../../_generated/server";
-import { createDispersalEntries } from "../../../dispersal/createDispersalEntries";
-import { convexModules } from "../../../test/moduleMaps";
-import { getCashAccountBalance } from "../accounts";
 import {
 	createHarness,
 	SYSTEM_SOURCE,
 	seedMinimalEntities,
 	type TestHarness,
-} from "./testUtils";
+} from "../../../../src/test/convex/payments/cashLedger/testUtils";
+import type { Id } from "../../../_generated/dataModel";
+import type { MutationCtx } from "../../../_generated/server";
+import { createDispersalEntries } from "../../../dispersal/createDispersalEntries";
+import { convexModules } from "../../../test/moduleMaps";
+import { getCashAccountBalance } from "../accounts";
 
 const modules = convexModules;
 

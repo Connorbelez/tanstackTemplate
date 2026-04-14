@@ -1,16 +1,16 @@
 import { ConvexError } from "convex/values";
 import { describe, expect, it } from "vitest";
-import type { Id } from "../../../_generated/dataModel";
-import type { MutationCtx } from "../../../_generated/server";
-import { convexModules } from "../../../test/moduleMaps";
-import { getCashAccountBalance } from "../accounts";
-import { postLenderPayout } from "../mutations";
 import {
 	createHarness,
 	createTestAccount,
 	SYSTEM_SOURCE,
 	seedMinimalEntities,
-} from "./testUtils";
+} from "../../../../src/test/convex/payments/cashLedger/testUtils";
+import type { Id } from "../../../_generated/dataModel";
+import type { MutationCtx } from "../../../_generated/server";
+import { convexModules } from "../../../test/moduleMaps";
+import { getCashAccountBalance } from "../accounts";
+import { postLenderPayout } from "../mutations";
 
 const modules = convexModules;
 

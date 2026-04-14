@@ -1,5 +1,11 @@
 import { ConvexError } from "convex/values";
 import { describe, expect, it } from "vitest";
+import {
+	createHarness,
+	createSettledObligation,
+	SYSTEM_SOURCE,
+	seedMinimalEntities,
+} from "../../../../src/test/convex/payments/cashLedger/testUtils";
 import { convexModules } from "../../../test/moduleMaps";
 import { getOrCreateCashAccount } from "../accounts";
 import { postCashEntryInternal } from "../postEntry";
@@ -9,12 +15,6 @@ import {
 	validatePostingGroupAmounts,
 } from "../postingGroups";
 import { buildIdempotencyKey } from "../types";
-import {
-	createHarness,
-	createSettledObligation,
-	SYSTEM_SOURCE,
-	seedMinimalEntities,
-} from "./testUtils";
 
 const modules = convexModules;
 

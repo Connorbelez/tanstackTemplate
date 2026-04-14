@@ -1,8 +1,4 @@
 import { describe, expect, it } from "vitest";
-import type { Doc } from "../../../_generated/dataModel";
-import { convexModules } from "../../../test/moduleMaps";
-import { getCashAccountBalance, isCreditNormalFamily } from "../accounts";
-import { type PostCashEntryInput, postCashEntryInternal } from "../postEntry";
 import {
 	ADMIN_SOURCE,
 	createHarness,
@@ -11,7 +7,11 @@ import {
 	SYSTEM_SOURCE,
 	seedMinimalEntities,
 	type TestHarness,
-} from "./testUtils";
+} from "../../../../src/test/convex/payments/cashLedger/testUtils";
+import type { Doc } from "../../../_generated/dataModel";
+import { convexModules } from "../../../test/moduleMaps";
+import { getCashAccountBalance, isCreditNormalFamily } from "../accounts";
+import { type PostCashEntryInput, postCashEntryInternal } from "../postEntry";
 
 const modules = convexModules;
 

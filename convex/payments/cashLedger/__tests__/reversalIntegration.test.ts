@@ -1,4 +1,10 @@
 import { describe, expect, it } from "vitest";
+import {
+	createHarness,
+	SYSTEM_SOURCE,
+	seedMinimalEntities,
+	type TestHarness,
+} from "../../../../src/test/convex/payments/cashLedger/testUtils";
 import { registerAuditLogComponent } from "../../../../src/test/convex/registerAuditLogComponent";
 import type { Doc, Id } from "../../../_generated/dataModel";
 import { convexModules } from "../../../test/moduleMaps";
@@ -18,12 +24,6 @@ import {
 	findSettledObligationsWithNonZeroBalance,
 	getJournalSettledAmountForObligation,
 } from "../reconciliation";
-import {
-	createHarness,
-	SYSTEM_SOURCE,
-	seedMinimalEntities,
-	type TestHarness,
-} from "./testUtils";
 
 // ── Helper: require account + balance in one call ───────────────────
 function requireAccountBalance(

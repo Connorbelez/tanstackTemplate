@@ -1,4 +1,10 @@
 import { describe, expect, it } from "vitest";
+import {
+	createHarness,
+	createTestAccount,
+	SYSTEM_SOURCE,
+	seedMinimalEntities,
+} from "../../../../src/test/convex/payments/cashLedger/testUtils";
 import type { Id } from "../../../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../../../_generated/server";
 import { convexModules } from "../../../test/moduleMaps";
@@ -7,12 +13,6 @@ import { postLenderPayout } from "../mutations";
 import { postCashEntryInternal } from "../postEntry";
 import { internalGetLenderPayableBalance } from "../queries";
 import { buildIdempotencyKey } from "../types";
-import {
-	createHarness,
-	createTestAccount,
-	SYSTEM_SOURCE,
-	seedMinimalEntities,
-} from "./testUtils";
 
 const modules = convexModules;
 
