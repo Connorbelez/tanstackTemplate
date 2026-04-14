@@ -1190,6 +1190,7 @@ export const createWorkoutPlan = paymentMutation
 		rationale: v.string(),
 	})
 	.handler(async (ctx, args): Promise<CreateWorkoutPlanResult> => {
+		await assertMortgageAccess(ctx, args.mortgageId);
 		return createWorkoutPlanImpl(ctx, args, buildViewerWorkoutActor(ctx));
 	})
 	.public();
@@ -1221,6 +1222,7 @@ export const activateWorkoutPlan = paymentMutation
 		// Page 14 boundary lock: workout activation only rewrites future
 		// collection strategy. Obligations, mortgage lifecycle, and cash meaning
 		// still move through their own governed seams later.
+		await assertWorkoutPlanAccess(ctx, args.workoutPlanId);
 		return activateWorkoutPlanImpl(ctx, args, buildViewerWorkoutActor(ctx));
 	})
 	.public();
@@ -1243,6 +1245,7 @@ export const activateWorkoutPlanInternal = internalMutation({
 export const completeWorkoutPlan = paymentMutation
 	.input(workoutPlanIdInput)
 	.handler(async (ctx, args): Promise<CompleteWorkoutPlanResult> => {
+		await assertWorkoutPlanAccess(ctx, args.workoutPlanId);
 		const result = await runWorkoutExit({
 			action: "collection_plan.complete_workout_plan",
 			ctx,
@@ -1275,6 +1278,7 @@ export const cancelWorkoutPlan = paymentMutation
 		...workoutPlanIdInput,
 	})
 	.handler(async (ctx, args): Promise<CancelWorkoutPlanResult> => {
+		await assertWorkoutPlanAccess(ctx, args.workoutPlanId);
 		const cancelReason = trimOrEmpty(args.reason ?? "") || undefined;
 		const result = await runWorkoutExit({
 			action: "collection_plan.cancel_workout_plan",
