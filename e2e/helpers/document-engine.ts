@@ -13,6 +13,8 @@ import {
 } from "./auth-storage";
 
 export const BASE_URL = "/demo/document-engine";
+// Playwright reads `storageState` before `beforeAll`, so this path stays stable.
+// The helper in `auth-storage.ts` writes it atomically to avoid worker races.
 export const ADMIN_STORAGE_STATE = ".auth/admin.json";
 
 function getBaseURL(): string {

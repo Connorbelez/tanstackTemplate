@@ -1,3 +1,5 @@
+import { existsSync, mkdirSync, renameSync, rmSync } from "node:fs";
+import { dirname } from "node:path";
 import type { Page } from "@playwright/test";
 import { loginViaWorkOS } from "./workos-login";
 
@@ -80,5 +82,21 @@ export async function createAuthStorageState(args: {
 		}
 	}
 
-	await args.page.context().storageState({ path: args.path });
+	mkdirSync(dirname(args.path), { recursive: true });
+
+	const tempPath = `${args.path}.${process.pid}.${Math.random().toString(36).slice(2)}.tmp`;
+	await args.page.context().storageState({ path: tempPath });
+
+	try {
+		renameSync(tempPath, args.path);
+	} catch (error) {
+		const err = error as NodeJS.ErrnoException;
+		rmSync(tempPath, { force: true });
+
+		if ((err.code === "EEXIST" || err.code === "EPERM") && existsSync(args.path)) {
+			return;
+		}
+
+		throw error;
+	}
 }
