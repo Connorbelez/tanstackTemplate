@@ -241,6 +241,65 @@ describe("processDuePlanEntries", () => {
 		expect(transfers[0]?.status).toBe("confirmed");
 	});
 
+	it("skips provider-managed scheduled entries and leaves them for the external poller", async () => {
+		const t = createBackendTestConvex();
+		const borrowerId = await seedBorrowerProfile(t);
+		const mortgageId = await seedMortgage(t);
+		const obligationId = await seedObligation(t, mortgageId, borrowerId, {
+			status: "due",
+		});
+		const planEntryId = await seedPlanEntry(t, {
+			obligationIds: [obligationId],
+			amount: 300_000,
+			executionMode: "provider_managed",
+			method: "pad_rotessa",
+			scheduledDate: Date.now() - 1000,
+			status: "provider_scheduled",
+			source: "default_schedule",
+		});
+
+		const summary = await t.action(
+			internal.payments.collectionPlan.runner.processDuePlanEntries,
+			{
+				asOf: Date.now(),
+				batchSize: 10,
+			}
+		);
+		await drainScheduledWork(t);
+
+		expect(summary.selectedCount).toBe(0);
+		expect(summary.attemptCreatedCount).toBe(0);
+
+		const attempts = await getAttemptsForPlanEntry(t, planEntryId);
+		expect(attempts).toHaveLength(0);
+
+		const planEntry = await t.run((ctx) => ctx.db.get(planEntryId));
+		expect(planEntry?.status).toBe("provider_scheduled");
+		expect(planEntry?.executionMode).toBe("provider_managed");
+	});
+
+	it("rejects inconsistent provider-managed plan entry states at creation time", async () => {
+		const t = createBackendTestConvex();
+		const borrowerId = await seedBorrowerProfile(t);
+		const mortgageId = await seedMortgage(t);
+		const obligationId = await seedObligation(t, mortgageId, borrowerId, {
+			status: "due",
+		});
+
+		await expect(
+			t.mutation(internal.payments.collectionPlan.mutations.createEntry, {
+				obligationIds: [obligationId],
+				amount: 300_000,
+				method: "pad_rotessa",
+				scheduledDate: Date.now(),
+				status: "provider_scheduled",
+				source: "admin",
+			})
+		).rejects.toThrow(
+			'Provider-scheduled collection plan entries require executionMode = "provider_managed".'
+		);
+	});
+
 	it("keeps failure execution durable and feeds the retry loop", async () => {
 		setTestEnv("ENABLE_MOCK_PROVIDERS", "false");
 

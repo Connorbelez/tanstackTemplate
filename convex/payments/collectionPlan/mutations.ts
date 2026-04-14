@@ -17,11 +17,19 @@ export const createEntry = internalMutation({
 		scheduledDate: v.number(),
 		status: v.union(
 			v.literal("planned"),
+			v.literal("provider_scheduled"),
 			v.literal("executing"),
 			v.literal("completed"),
 			v.literal("cancelled"),
 			v.literal("rescheduled")
 		),
+		executionMode: v.optional(
+			v.union(v.literal("app_owned"), v.literal("provider_managed"))
+		),
+		externalCollectionScheduleId: v.optional(
+			v.id("externalCollectionSchedules")
+		),
+		externalOccurrenceOrdinal: v.optional(v.number()),
 		source: v.union(
 			v.literal("default_schedule"),
 			v.literal("retry_rule"),

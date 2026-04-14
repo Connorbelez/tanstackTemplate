@@ -412,9 +412,9 @@ const DemoRbacAuthIndexRoute = DemoRbacAuthIndexRouteImport.update({
   getParentRoute: () => DemoRbacAuthRouteRoute,
 } as any)
 const DemoListingsIndexRoute = DemoListingsIndexRouteImport.update({
-  id: '/demo/listings/',
-  path: '/demo/listings/',
-  getParentRoute: () => rootRouteImport,
+  id: '/',
+  path: '/',
+  getParentRoute: () => DemoListingsRoute,
 } as any)
 const DemoGovernedTransitionsIndexRoute =
   DemoGovernedTransitionsIndexRouteImport.update({
@@ -465,9 +465,9 @@ const DemoRbacAuthAccessControlRoute =
     getParentRoute: () => DemoRbacAuthRouteRoute,
   } as any)
 const DemoListingsListingidRoute = DemoListingsListingidRouteImport.update({
-  id: '/demo/listings/$listingid',
-  path: '/demo/listings/$listingid',
-  getParentRoute: () => rootRouteImport,
+  id: '/$listingid',
+  path: '/$listingid',
+  getParentRoute: () => DemoListingsRoute,
 } as any)
 const DemoGovernedTransitionsMachineRoute =
   DemoGovernedTransitionsMachineRouteImport.update({
@@ -717,7 +717,7 @@ export interface FileRoutesByFullPath {
   '/demo/convex-tracer': typeof DemoConvexTracerRoute
   '/demo/convex-triggers': typeof DemoConvexTriggersRoute
   '/demo/convex-workflow': typeof DemoConvexWorkflowRoute
-  '/demo/listings': typeof DemoListingsRoute
+  '/demo/listings': typeof DemoListingsRouteWithChildren
   '/demo/prod-ledger': typeof DemoProdLedgerRoute
   '/demo/simulation': typeof DemoSimulationRoute
   '/demo/storybook': typeof DemoStorybookRoute
@@ -817,7 +817,6 @@ export interface FileRoutesByTo {
   '/demo/convex-tracer': typeof DemoConvexTracerRoute
   '/demo/convex-triggers': typeof DemoConvexTriggersRoute
   '/demo/convex-workflow': typeof DemoConvexWorkflowRoute
-  '/demo/listings': typeof DemoListingsRoute
   '/demo/prod-ledger': typeof DemoProdLedgerRoute
   '/demo/simulation': typeof DemoSimulationRoute
   '/demo/storybook': typeof DemoStorybookRoute
@@ -925,7 +924,7 @@ export interface FileRoutesById {
   '/demo/convex-tracer': typeof DemoConvexTracerRoute
   '/demo/convex-triggers': typeof DemoConvexTriggersRoute
   '/demo/convex-workflow': typeof DemoConvexWorkflowRoute
-  '/demo/listings': typeof DemoListingsRoute
+  '/demo/listings': typeof DemoListingsRouteWithChildren
   '/demo/prod-ledger': typeof DemoProdLedgerRoute
   '/demo/simulation': typeof DemoSimulationRoute
   '/demo/storybook': typeof DemoStorybookRoute
@@ -1134,7 +1133,6 @@ export interface FileRouteTypes {
     | '/demo/convex-tracer'
     | '/demo/convex-triggers'
     | '/demo/convex-workflow'
-    | '/demo/listings'
     | '/demo/prod-ledger'
     | '/demo/simulation'
     | '/demo/storybook'
@@ -1341,7 +1339,7 @@ export interface RootRouteChildren {
   DemoConvexTracerRoute: typeof DemoConvexTracerRoute
   DemoConvexTriggersRoute: typeof DemoConvexTriggersRoute
   DemoConvexWorkflowRoute: typeof DemoConvexWorkflowRoute
-  DemoListingsRoute: typeof DemoListingsRoute
+  DemoListingsRoute: typeof DemoListingsRouteWithChildren
   DemoProdLedgerRoute: typeof DemoProdLedgerRoute
   DemoSimulationRoute: typeof DemoSimulationRoute
   DemoStorybookRoute: typeof DemoStorybookRoute
@@ -1351,8 +1349,6 @@ export interface RootRouteChildren {
   E2eSwitchOrgRoute: typeof E2eSwitchOrgRoute
   DemoFormAddressRoute: typeof DemoFormAddressRoute
   DemoFormSimpleRoute: typeof DemoFormSimpleRoute
-  DemoListingsListingidRoute: typeof DemoListingsListingidRoute
-  DemoListingsIndexRoute: typeof DemoListingsIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -1765,10 +1761,10 @@ declare module '@tanstack/react-router' {
     }
     '/demo/listings/': {
       id: '/demo/listings/'
-      path: '/demo/listings'
+      path: '/'
       fullPath: '/demo/listings/'
       preLoaderRoute: typeof DemoListingsIndexRouteImport
-      parentRoute: typeof rootRouteImport
+      parentRoute: typeof DemoListingsRoute
     }
     '/demo/governed-transitions/': {
       id: '/demo/governed-transitions/'
@@ -1835,10 +1831,10 @@ declare module '@tanstack/react-router' {
     }
     '/demo/listings/$listingid': {
       id: '/demo/listings/$listingid'
-      path: '/demo/listings/$listingid'
+      path: '/$listingid'
       fullPath: '/demo/listings/$listingid'
       preLoaderRoute: typeof DemoListingsListingidRouteImport
-      parentRoute: typeof rootRouteImport
+      parentRoute: typeof DemoListingsRoute
     }
     '/demo/governed-transitions/machine': {
       id: '/demo/governed-transitions/machine'
@@ -2364,6 +2360,20 @@ const DemoRbacAuthRouteRouteChildren: DemoRbacAuthRouteRouteChildren = {
 const DemoRbacAuthRouteRouteWithChildren =
   DemoRbacAuthRouteRoute._addFileChildren(DemoRbacAuthRouteRouteChildren)
 
+interface DemoListingsRouteChildren {
+  DemoListingsListingidRoute: typeof DemoListingsListingidRoute
+  DemoListingsIndexRoute: typeof DemoListingsIndexRoute
+}
+
+const DemoListingsRouteChildren: DemoListingsRouteChildren = {
+  DemoListingsListingidRoute: DemoListingsListingidRoute,
+  DemoListingsIndexRoute: DemoListingsIndexRoute,
+}
+
+const DemoListingsRouteWithChildren = DemoListingsRoute._addFileChildren(
+  DemoListingsRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AdminRouteRoute: AdminRouteRouteWithChildren,
@@ -2406,7 +2416,7 @@ const rootRouteChildren: RootRouteChildren = {
   DemoConvexTracerRoute: DemoConvexTracerRoute,
   DemoConvexTriggersRoute: DemoConvexTriggersRoute,
   DemoConvexWorkflowRoute: DemoConvexWorkflowRoute,
-  DemoListingsRoute: DemoListingsRoute,
+  DemoListingsRoute: DemoListingsRouteWithChildren,
   DemoProdLedgerRoute: DemoProdLedgerRoute,
   DemoSimulationRoute: DemoSimulationRoute,
   DemoStorybookRoute: DemoStorybookRoute,
@@ -2416,8 +2426,6 @@ const rootRouteChildren: RootRouteChildren = {
   E2eSwitchOrgRoute: E2eSwitchOrgRoute,
   DemoFormAddressRoute: DemoFormAddressRoute,
   DemoFormSimpleRoute: DemoFormSimpleRoute,
-  DemoListingsListingidRoute: DemoListingsListingidRoute,
-  DemoListingsIndexRoute: DemoListingsIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

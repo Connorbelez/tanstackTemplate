@@ -1,5 +1,7 @@
 # Security And RBAC Review
 
+> Status note (2026-04-13): this is a point-in-time review snapshot, not the canonical RBAC policy. The live target policy now lives in [docs/architecture/rbac-and-permissions.md](../architecture/rbac-and-permissions.md), including the newer rule that `admin:access` is the admin super-permission while explicit FairLend staff boundary checks remain separate.
+
 ## Worktree Context
 
 - Repository: `/Users/connor/Dev/tanstackFairLend/fairlendapp`

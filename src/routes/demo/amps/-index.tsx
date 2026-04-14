@@ -9,6 +9,7 @@ import {
 } from "#/components/demo/amps/ui";
 import { Badge } from "#/components/ui/badge";
 import { Button } from "#/components/ui/button";
+import { AmpsExecutionModesPage } from "./-execution-modes";
 
 export function AmpsOverviewPage() {
 	const { workspaceOverview } = useAmpsDemoAccess();
@@ -207,6 +208,10 @@ export function AmpsOverviewPage() {
 					</div>
 				)}
 			</SurfaceCard>
+
+			<section id="execution-modes">
+				<AmpsExecutionModesPage />
+			</section>
 		</div>
 	);
 }

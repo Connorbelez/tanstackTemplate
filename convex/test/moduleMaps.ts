@@ -150,6 +150,8 @@ export const convexModules: ModuleMap = withModuleAliases({
 		await import("./../demo/apiCredentials.ts"),
 	"/convex/demo/amps.ts": async () => await import("./../demo/amps.ts"),
 	"/convex/demo/ampsE2e.ts": async () => await import("./../demo/ampsE2e.ts"),
+	"/convex/demo/ampsExecutionModes.ts": async () =>
+		await import("./../demo/ampsExecutionModes.ts"),
 	"/convex/demo/auditLog.ts": async () => await import("./../demo/auditLog.ts"),
 	"/convex/demo/auditTraceability.ts": async () =>
 		await import("./../demo/auditTraceability.ts"),
@@ -462,6 +464,25 @@ export const convexModules: ModuleMap = withModuleAliases({
 		await import("./../payments/payout/transferOwnedFlow.ts"),
 	"/convex/payments/payout/validators.ts": async () =>
 		await import("./../payments/payout/validators.ts"),
+	"/convex/payments/recurringSchedules/activation.ts": async () =>
+		await import("./../payments/recurringSchedules/activation.ts"),
+	"/convex/payments/recurringSchedules/occurrenceIngestion.ts": async () =>
+		await import("./../payments/recurringSchedules/occurrenceIngestion.ts"),
+	"/convex/payments/recurringSchedules/poller.ts": async () =>
+		await import("./../payments/recurringSchedules/poller.ts"),
+	"/convex/payments/recurringSchedules/providers/rotessaRecurring.ts":
+		async () =>
+			await import(
+				"./../payments/recurringSchedules/providers/rotessaRecurring.ts"
+			),
+	"/convex/payments/recurringSchedules/queries.ts": async () =>
+		await import("./../payments/recurringSchedules/queries.ts"),
+	"/convex/payments/recurringSchedules/types.ts": async () =>
+		await import("./../payments/recurringSchedules/types.ts"),
+	"/convex/payments/rotessa/api.ts": async () =>
+		await import("./../payments/rotessa/api.ts"),
+	"/convex/payments/rotessa/financialTransactions.ts": async () =>
+		await import("./../payments/rotessa/financialTransactions.ts"),
 	"/convex/payments/transfers/depositCollection.logic.ts": async () =>
 		await import("./../payments/transfers/depositCollection.logic.ts"),
 	"/convex/payments/transfers/depositCollection.ts": async () =>
@@ -488,6 +509,8 @@ export const convexModules: ModuleMap = withModuleAliases({
 		await import("./../payments/collectionPlan/execution.ts"),
 	"/convex/payments/transfers/providers/mock.ts": async () =>
 		await import("./../payments/transfers/providers/mock.ts"),
+	"/convex/payments/transfers/providers/rotessa.ts": async () =>
+		await import("./../payments/transfers/providers/rotessa.ts"),
 	"/convex/payments/transfers/providers/registry.ts": async () =>
 		await import("./../payments/transfers/providers/registry.ts"),
 	"/convex/payments/transfers/queries.ts": async () =>

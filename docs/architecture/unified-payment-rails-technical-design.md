@@ -356,20 +356,23 @@ This distinction is critical. Ownership units and trust cash are not the same th
 
 Observed auth patterns:
 
-- Query RBAC is enforced with JWT-derived permissions via `requirePermission(...)` in [convex/fluent.ts](../../convex/fluent.ts:176).
+- Query RBAC is enforced with fluent-convex chains and JWT-derived permission checks in [convex/fluent.ts](../../convex/fluent.ts).
 - Dispersal queries already require `dispersal:view` in [convex/dispersal/queries.ts](../../convex/dispersal/queries.ts:5).
 - Engine command provenance already supports `sessionId` and command source metadata in [convex/engine/commands.ts](../../convex/engine/commands.ts).
+- Canonical FairLend RBAC policy now lives in [docs/architecture/rbac-and-permissions.md](./rbac-and-permissions.md).
+- `admin:access` is the target admin super-permission. Admins should pass permission checks through that one permission, while staff-only boundaries still use explicit FairLend-admin guards where needed.
 
 Target permissions:
 
-- `payment:manage`
 - `payment:view`
 - `payment:view_own`
+- `payment:manage`
 - `payment:retry`
 - `payment:cancel`
 - `payment:webhook_process`
-- `bank_account:manage`
-- `bank_account:view_own`
+- `cash_ledger:view`
+- `cash_ledger:correct`
+- `dispersal:view`
 
 Provider webhooks should not impersonate users. They should enter through internal or HTTP-action paths with `source.type = "webhook"` and provider-specific actor labels.
 

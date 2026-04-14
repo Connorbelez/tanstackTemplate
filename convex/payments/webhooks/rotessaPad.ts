@@ -8,15 +8,21 @@ import type { Id } from "../../_generated/dataModel";
 import {
 	type ActionCtx,
 	httpAction,
+	internalAction,
 	internalMutation,
 	type MutationCtx,
 } from "../../_generated/server";
 import { auditLog } from "../../auditLog";
 import { executeTransition } from "../../engine/transition";
 import type { CommandSource } from "../../engine/types";
+import type { RotessaTransactionReportRow } from "../recurringSchedules/types";
+import { RotessaApiClient } from "../rotessa/api";
+import { buildNormalizedOccurrenceFromRotessaRow } from "../rotessa/financialTransactions";
 import {
 	isTransferAlreadyInTargetState,
 	markTransferWebhookFailed,
+	markTransferWebhookProcessed,
+	patchPersistedTransferWebhookMetadata,
 	persistVerifiedTransferWebhook,
 } from "./transferCore";
 import type { NormalizedTransferWebhookEventType } from "./types";
@@ -49,12 +55,54 @@ type ProcessRotessaPadWebhookReferenceArgs = Record<string, unknown> &
 	ProcessRotessaPadWebhookArgs;
 
 const processRotessaPadWebhookReference = makeFunctionReference<
-	"mutation",
+	"action",
 	ProcessRotessaPadWebhookReferenceArgs,
 	Promise<void>
 >(
 	"payments/webhooks/rotessaPad:processRotessaPadWebhook"
 ) as unknown as SchedulableFunctionReference;
+
+const ingestExternalOccurrenceEventReference = makeFunctionReference<
+	"mutation",
+	{
+		event: {
+			amount?: number;
+			externalOccurrenceOrdinal?: number;
+			externalOccurrenceRef?: string;
+			externalScheduleRef: string;
+			mappedTransferEvent:
+				| "PROCESSING_UPDATE"
+				| "FUNDS_SETTLED"
+				| "TRANSFER_FAILED"
+				| "TRANSFER_REVERSED";
+			occurredAt?: number;
+			providerCode: "pad_rotessa";
+			providerData?: Record<string, unknown>;
+			providerRef?: string;
+			rawProviderReason?: string;
+			rawProviderStatus: string;
+			receivedVia: "webhook";
+			scheduledDate?: string;
+		};
+	},
+	Promise<{ transferRequestId?: Id<"transferRequests"> }>
+>(
+	"payments/recurringSchedules/occurrenceIngestion:ingestExternalOccurrenceEvent"
+);
+
+const getExternalCollectionScheduleByProviderRefReference =
+	makeFunctionReference<
+		"query",
+		{
+			externalScheduleRef: string;
+			providerCode: "pad_rotessa";
+		},
+		Promise<{
+			_id: Id<"externalCollectionSchedules">;
+		}>
+	>(
+		"payments/recurringSchedules/queries:getExternalCollectionScheduleByProviderRef"
+	);
 
 export function mapRotessaPadStatusToTransferEvent(
 	rotessaEventType: string
@@ -71,10 +119,40 @@ export function mapRotessaPadStatusToTransferEvent(
 			return "TRANSFER_REVERSED";
 		case "transaction.pending":
 		case "transaction.processing":
+		case "Future":
+		case "Pending":
 			return "PROCESSING_UPDATE";
+		case "Approved":
+			return "FUNDS_SETTLED";
+		case "Declined":
+			return "TRANSFER_FAILED";
+		case "Chargeback":
+			return "TRANSFER_REVERSED";
 		default:
 			return undefined;
 	}
+}
+
+function shouldAttemptProviderManagedOccurrenceIngestion(
+	eventType: string,
+	normalizedEventType: NormalizedTransferWebhookEventType
+) {
+	if (
+		eventType === "Future" ||
+		eventType === "Pending" ||
+		eventType === "Approved" ||
+		eventType === "Declined" ||
+		eventType === "Chargeback"
+	) {
+		return true;
+	}
+
+	return (
+		normalizedEventType === "PROCESSING_UPDATE" ||
+		normalizedEventType === "FUNDS_SETTLED" ||
+		normalizedEventType === "TRANSFER_FAILED" ||
+		normalizedEventType === "TRANSFER_REVERSED"
+	);
 }
 
 export function buildRotessaPadTransitionPayload(
@@ -279,6 +357,41 @@ export async function processRotessaPadTransferWebhook(
 	}
 }
 
+export const processRotessaPadTransferWebhookMutation = internalMutation({
+	args: {
+		webhookEventId: v.id("webhookEvents"),
+		transactionId: v.string(),
+		eventType: v.string(),
+		eventId: v.optional(v.string()),
+		reason: v.optional(v.string()),
+		returnCode: v.optional(v.string()),
+		date: v.optional(v.string()),
+	},
+	handler: async (ctx, args) => {
+		await processRotessaPadTransferWebhook(ctx, args);
+	},
+});
+
+async function findRotessaFinancialTransactionForWebhook(args: {
+	date?: string;
+	transactionId: string;
+}) {
+	const apiClient = new RotessaApiClient();
+	const now = Date.now();
+	const baseDate = args.date ? Date.parse(`${args.date}T12:00:00.000Z`) : now;
+	const startDate = new Date(baseDate - 45 * 86_400_000)
+		.toISOString()
+		.slice(0, 10);
+	const endDate = new Date(baseDate + 7 * 86_400_000)
+		.toISOString()
+		.slice(0, 10);
+	return apiClient.findTransactionReportRow({
+		endDate,
+		providerRef: args.transactionId,
+		startDate,
+	});
+}
+
 async function verifyRotessaPadWebhookRequest(
 	ctx: ActionCtx,
 	args: {
@@ -433,7 +546,7 @@ export const rotessaPadWebhook = httpAction(async (ctx, request) => {
 	return jsonResponse({ accepted: true });
 });
 
-export const processRotessaPadWebhook = internalMutation({
+export const processRotessaPadWebhook = internalAction({
 	args: {
 		webhookEventId: v.id("webhookEvents"),
 		transactionId: v.string(),
@@ -444,6 +557,125 @@ export const processRotessaPadWebhook = internalMutation({
 		date: v.optional(v.string()),
 	},
 	handler: async (ctx, args) => {
-		await processRotessaPadTransferWebhook(ctx, args);
+		const normalizedEventType = mapRotessaPadStatusToTransferEvent(
+			args.eventType
+		);
+		if (!normalizedEventType) {
+			await markTransferWebhookProcessed(ctx, args.webhookEventId);
+			return;
+		}
+
+		if (
+			shouldAttemptProviderManagedOccurrenceIngestion(
+				args.eventType,
+				normalizedEventType
+			)
+		) {
+			let row: RotessaTransactionReportRow | null = null;
+			try {
+				row = await findRotessaFinancialTransactionForWebhook({
+					date: args.date,
+					transactionId: args.transactionId,
+				});
+			} catch (error) {
+				console.error(
+					"[Rotessa PAD Webhook] Financial lifecycle lookup failed; falling back to direct transfer processing.",
+					error
+				);
+			}
+
+			if (row) {
+				const externalSchedule = (await ctx.runQuery(
+					getExternalCollectionScheduleByProviderRefReference,
+					{
+						externalScheduleRef: `${row.transaction_schedule_id}`,
+						providerCode: "pad_rotessa",
+					}
+				)) as { _id: Id<"externalCollectionSchedules"> } | null;
+				if (externalSchedule) {
+					try {
+						const event = buildNormalizedOccurrenceFromRotessaRow({
+							externalScheduleRef: `${row.transaction_schedule_id}`,
+							receivedVia: "webhook",
+							row,
+						});
+						if (!event) {
+							await patchPersistedTransferWebhookMetadata(ctx, {
+								webhookEventId: args.webhookEventId,
+								normalizedEventType,
+							});
+							throw new Error(
+								`Rotessa transaction report row ${row.id} for transaction ${args.transactionId} could not be normalized from provider status "${row.status}".`
+							);
+						}
+
+						const { receivedVia: _receivedVia, ...webhookEvent } = event;
+						const ingestionResult = (await ctx.runMutation(
+							ingestExternalOccurrenceEventReference,
+							{
+								event: {
+									...webhookEvent,
+									receivedVia: "webhook",
+									rawProviderReason:
+										event.rawProviderReason ?? args.reason ?? args.returnCode,
+								},
+							}
+						)) as
+							| {
+									outcome: "applied" | "already_applied" | "materialized";
+									transferRequestId?: Id<"transferRequests">;
+							  }
+							| {
+									outcome: "unresolved";
+									reason: string;
+									transferRequestId?: Id<"transferRequests">;
+							  };
+
+						await patchPersistedTransferWebhookMetadata(ctx, {
+							webhookEventId: args.webhookEventId,
+							normalizedEventType,
+							transferRequestId: ingestionResult.transferRequestId,
+						});
+
+						if (ingestionResult.outcome === "unresolved") {
+							throw new Error(ingestionResult.reason);
+						}
+
+						await markTransferWebhookProcessed(ctx, args.webhookEventId);
+						return;
+					} catch (error) {
+						const message =
+							error instanceof Error
+								? error.message
+								: "Unknown webhook ingestion error";
+						await markTransferWebhookFailed(ctx, {
+							webhookEventId: args.webhookEventId,
+							error: message,
+						});
+						throw error;
+					}
+				} else {
+					await patchPersistedTransferWebhookMetadata(ctx, {
+						webhookEventId: args.webhookEventId,
+						normalizedEventType,
+					});
+				}
+			}
+		}
+
+		try {
+			await ctx.runMutation(
+				internal.payments.webhooks.rotessaPad
+					.processRotessaPadTransferWebhookMutation,
+				args
+			);
+		} catch (error) {
+			const message = error instanceof Error ? error.message : "Unknown error";
+			await markTransferWebhookFailed(ctx, {
+				webhookEventId: args.webhookEventId,
+				error: message,
+			});
+			throw error;
+		}
 	},
 });

@@ -67,6 +67,9 @@
 ## Standards & Conventions 
 ### Auth
 - WorkOS Authkit is the canonical source of truth. 
+- Canonical FairLend RBAC policy lives in `docs/architecture/rbac-and-permissions.md`.
+- `admin` gets exactly one WorkOS permission: `admin:access`.
+- `admin:access` is the admin super-permission for permission checks. It does not replace explicit FairLend staff boundary checks like `requireFairLendAdmin`.
 - Always use `import { useAuth } from "@workos/authkit-tanstack-react-start/client"` to access auth state in React components.
 ```ts
 export interface AuthContextType {
@@ -253,7 +256,7 @@ When spawning subagents (Agent/Task tool), the routing block is automatically in
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **fairlendapp** (12686 symbols, 18867 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **fairlendapp** (13190 symbols, 20461 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
 
