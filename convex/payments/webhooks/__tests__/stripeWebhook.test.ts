@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { createWebhookTestHarness } from "../../../../src/test/convex/payments/webhooks/convexTestHarness";
+import { internal } from "../../../_generated/api";
 import type { StripeWebhookEvent } from "../stripe";
 import {
 	buildReversalCode,
@@ -24,6 +26,10 @@ function makeEvent(
 			},
 		},
 	};
+}
+
+function createHarness() {
+	return createWebhookTestHarness();
 }
 
 // ── Tests ────────────────────────────────────────────────────────────
@@ -399,5 +405,43 @@ describe("Stripe webhook handler", () => {
 			});
 			expect(buildReversalCode(event)).toBeUndefined();
 		});
+	});
+});
+
+describe("stripe webhook persistence bridge", () => {
+	it("marks persisted unsupported stripe reversal events failed", async () => {
+		const t = createHarness();
+
+		const webhookEventId = await t.run(async (ctx) => {
+			return ctx.db.insert("webhookEvents", {
+				provider: "stripe",
+				providerEventId: "evt_stripe_unsupported_001",
+				rawBody: '{"id":"evt_stripe_unsupported_001"}',
+				status: "pending",
+				receivedAt: Date.now(),
+				attempts: 0,
+				signatureVerified: true,
+				normalizedEventType: "TRANSFER_REVERSED",
+			});
+		});
+
+		const result = await t.action(
+			internal.payments.webhooks.stripe.processUnsupportedStripeWebhook,
+			{
+				providerEventId: "evt_stripe_unsupported_001",
+				webhookEventId,
+			}
+		);
+
+		const webhook = await t.run(async (ctx) => ctx.db.get(webhookEventId));
+
+		expect(result).toMatchObject({
+			success: false,
+			reason: "unsupported_provider",
+			providerEventId: "evt_stripe_unsupported_001",
+		});
+		expect(webhook?.status).toBe("failed");
+		expect(webhook?.error).toBe("unsupported_provider");
+		expect(webhook?.attempts).toBe(1);
 	});
 });

@@ -298,8 +298,9 @@ describe("permissions without dedicated endpoints", () => {
 // ── Cross-check: deal:view and ledger:view in ROLE_PERMISSIONS ───────
 
 describe("deal:view in ROLE_PERMISSIONS", () => {
-	const allowed = ["admin", "broker", "lender", "lawyer"];
+	const allowed = ["broker", "lender", "lawyer"];
 	const denied = [
+		"admin",
 		"borrower",
 		"jr_underwriter",
 		"underwriter",
@@ -321,8 +322,9 @@ describe("deal:view in ROLE_PERMISSIONS", () => {
 });
 
 describe("deal:manage in ROLE_PERMISSIONS", () => {
-	const allowed = ["admin"];
+	const allowed: string[] = [];
 	const denied = [
+		"admin",
 		"broker",
 		"lender",
 		"lawyer",
@@ -347,8 +349,9 @@ describe("deal:manage in ROLE_PERMISSIONS", () => {
 });
 
 describe("ledger:view in ROLE_PERMISSIONS", () => {
-	const allowed = ["admin", "broker", "lender"];
+	const allowed = ["broker", "lender"];
 	const denied = [
+		"admin",
 		"borrower",
 		"lawyer",
 		"jr_underwriter",

@@ -1,5 +1,11 @@
+import { v } from "convex/values";
 import { internal } from "../../_generated/api";
-import { httpAction } from "../../_generated/server";
+import type { Id } from "../../_generated/dataModel";
+import { httpAction, internalAction } from "../../_generated/server";
+import {
+	markTransferWebhookFailed,
+	persistVerifiedTransferWebhook,
+} from "./transferCore";
 import { jsonResponse } from "./utils";
 import type { VerificationResult } from "./verification";
 
@@ -34,6 +40,8 @@ interface StripeReversalPayload {
 	reversalReason: string;
 }
 
+const UNSUPPORTED_PROVIDER_ERROR = "unsupported_provider";
+
 // ── Constants ───────────────────────────────────────────────────────
 
 export const REVERSAL_EVENT_TYPES = new Set([
@@ -41,6 +49,11 @@ export const REVERSAL_EVENT_TYPES = new Set([
 	"charge.refunded",
 	"payment_intent.payment_failed",
 ]);
+
+const stripeUnsupportedWebhookArgsValidator = v.object({
+	providerEventId: v.string(),
+	webhookEventId: v.id("webhookEvents"),
+});
 
 // ── Helpers ─────────────────────────────────────────────────────────
 
@@ -107,6 +120,82 @@ export function toPayload(event: StripeWebhookEvent): StripeReversalPayload {
 	};
 }
 
+async function persistStripeWebhook(
+	ctx: Parameters<typeof persistVerifiedTransferWebhook>[0],
+	args: {
+		body: string;
+		normalizedEventType?: "TRANSFER_REVERSED";
+		providerEventId: string;
+	}
+) {
+	try {
+		return {
+			ok: true as const,
+			webhookEventId: await persistVerifiedTransferWebhook(ctx, {
+				provider: "stripe",
+				providerEventId: args.providerEventId,
+				rawBody: args.body,
+				normalizedEventType: args.normalizedEventType,
+			}),
+		};
+	} catch (error) {
+		console.error("[Stripe Webhook] Failed to persist raw event:", error);
+		return {
+			ok: false as const,
+			error:
+				error instanceof Error
+					? error.message
+					: "stripe_webhook_persist_failed",
+		};
+	}
+}
+
+async function scheduleUnsupportedStripeWebhookProcessing(
+	ctx: Parameters<typeof persistVerifiedTransferWebhook>[0],
+	args: {
+		providerEventId: string;
+		webhookEventId: Id<"webhookEvents">;
+	}
+) {
+	try {
+		await ctx.scheduler.runAfter(
+			0,
+			internal.payments.webhooks.stripe.processUnsupportedStripeWebhook,
+			args
+		);
+		return { ok: true as const };
+	} catch (error) {
+		const message =
+			error instanceof Error
+				? error.message
+				: "stripe_webhook_scheduler_failed";
+		console.error("[Stripe Webhook] Failed to schedule processing:", error);
+		await markTransferWebhookFailed(ctx, {
+			webhookEventId: args.webhookEventId,
+			error: message,
+		});
+		return { ok: false as const, error: message };
+	}
+}
+
+export const processUnsupportedStripeWebhook = internalAction({
+	args: stripeUnsupportedWebhookArgsValidator,
+	handler: async (ctx, args) => {
+		console.warn(
+			`[Stripe Webhook] Provider event ${args.providerEventId} is persisted but still unsupported for automated reversal processing.`
+		);
+		await markTransferWebhookFailed(ctx, {
+			webhookEventId: args.webhookEventId,
+			error: UNSUPPORTED_PROVIDER_ERROR,
+		});
+		return {
+			success: false,
+			reason: UNSUPPORTED_PROVIDER_ERROR,
+			providerEventId: args.providerEventId,
+		};
+	},
+});
+
 // ── HTTP Action ─────────────────────────────────────────────────────
 
 export const stripeWebhook = httpAction(async (ctx, request) => {
@@ -158,12 +247,27 @@ export const stripeWebhook = httpAction(async (ctx, request) => {
 	// 4. Build the normalized payload for logging/response metadata.
 	const payload = toPayload(event);
 
-	console.warn(
-		"[Stripe Webhook] Stripe reversals are not routed through the shared reversal handler."
-	);
+	const persisted = await persistStripeWebhook(ctx, {
+		body,
+		normalizedEventType: "TRANSFER_REVERSED",
+		providerEventId: payload.providerEventId,
+	});
+	if (!persisted.ok) {
+		return jsonResponse({ error: persisted.error }, 500);
+	}
+
+	const scheduled = await scheduleUnsupportedStripeWebhookProcessing(ctx, {
+		providerEventId: payload.providerEventId,
+		webhookEventId: persisted.webhookEventId,
+	});
+	if (!scheduled.ok) {
+		return jsonResponse({ error: scheduled.error }, 500);
+	}
+
 	return jsonResponse({
-		success: false,
-		reason: "unsupported_provider",
+		accepted: true,
+		processing: "deferred",
+		reason: UNSUPPORTED_PROVIDER_ERROR,
 		providerEventId: payload.providerEventId,
 	});
 });

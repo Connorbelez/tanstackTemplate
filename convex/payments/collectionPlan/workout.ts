@@ -1,8 +1,12 @@
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import type { Doc, Id } from "../../_generated/dataModel";
 import type { MutationCtx } from "../../_generated/server";
 import { internalMutation } from "../../_generated/server";
 import { auditLog } from "../../auditLog";
+import {
+	canAccessMortgage,
+	canAccessWorkoutPlan,
+} from "../../auth/resourceChecks";
 import { buildSource } from "../../engine/commands";
 import { paymentMutation, paymentQuery, type Viewer } from "../../fluent";
 import {
@@ -63,6 +67,34 @@ export type CreateWorkoutPlanResult =
 			reasonDetail: string;
 			requestedAt: number;
 	  };
+
+async function assertMortgageAccess(
+	ctx: Parameters<typeof canAccessMortgage>[0] & {
+		viewer: Parameters<typeof canAccessMortgage>[1];
+	},
+	mortgageId: Parameters<typeof canAccessMortgage>[2]
+) {
+	const allowed = await canAccessMortgage(ctx, ctx.viewer, mortgageId);
+	if (!allowed) {
+		throw new ConvexError(
+			`Forbidden: no mortgage access for ${String(mortgageId)}`
+		);
+	}
+}
+
+async function assertWorkoutPlanAccess(
+	ctx: Parameters<typeof canAccessWorkoutPlan>[0] & {
+		viewer: Parameters<typeof canAccessWorkoutPlan>[1];
+	},
+	workoutPlanId: Parameters<typeof canAccessWorkoutPlan>[2]
+) {
+	const allowed = await canAccessWorkoutPlan(ctx, ctx.viewer, workoutPlanId);
+	if (!allowed) {
+		throw new ConvexError(
+			`Forbidden: no workout plan access for ${String(workoutPlanId)}`
+		);
+	}
+}
 
 const activateWorkoutPlanReasonCodeValues = [
 	"active_workout_plan_exists",
@@ -1278,6 +1310,7 @@ export const getWorkoutPlan = paymentQuery
 		workoutPlanId: v.id("workoutPlans"),
 	})
 	.handler(async (ctx, args) => {
+		await assertWorkoutPlanAccess(ctx, args.workoutPlanId);
 		const workoutPlan = await ctx.db.get(args.workoutPlanId);
 		if (!workoutPlan) {
 			return null;
@@ -1311,6 +1344,7 @@ export const listWorkoutPlansByMortgage = paymentQuery
 		mortgageId: v.id("mortgages"),
 	})
 	.handler(async (ctx, args) => {
+		await assertMortgageAccess(ctx, args.mortgageId);
 		const plans = await ctx.db
 			.query("workoutPlans")
 			.withIndex("by_mortgage", (q) => q.eq("mortgageId", args.mortgageId))
