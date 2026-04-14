@@ -1,7 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
-import { expect, test, type Browser, type Page } from "@playwright/test";
+import {
+	expect,
+	test,
+	type Browser,
+	type BrowserContext,
+	type Page,
+} from "@playwright/test";
 import {
 	createAuthStorageState,
 	TEST_ADMIN_ORG_ID,
@@ -35,30 +41,42 @@ async function createFreshStorageState(browser: Browser, orgId: string) {
 		`storage-${orgId}-${randomUUID()}.json`
 	);
 
-	await createAuthStorageState({
-		orgId,
-		page: bootstrapPage,
-		path: storageStatePath,
-	});
+	try {
+		await createAuthStorageState({
+			orgId,
+			page: bootstrapPage,
+			path: storageStatePath,
+		});
 
-	await bootstrapContext.close();
-
-	return storageStatePath;
+		return storageStatePath;
+	} catch (error) {
+		await rm(storageStatePath, { force: true });
+		throw error;
+	} finally {
+		await bootstrapContext.close();
+	}
 }
 
 async function openOnboardingPage(browser: Browser, orgId: string) {
 	const storageState = await createFreshStorageState(browser, orgId);
-	const context = await browser.newContext({
-		baseURL: getBaseURL(),
-		storageState,
-	});
-	const page = await context.newPage();
-	await rm(storageState, { force: true });
-	await page.goto("/demo/rbac-auth/onboarding");
-	await expect(page.getByText("Onboarding State Machine")).toBeVisible({
-		timeout: 15_000,
-	});
-	return { context, page };
+	let context: BrowserContext | undefined;
+	try {
+		context = await browser.newContext({
+			baseURL: getBaseURL(),
+			storageState,
+		});
+		const page = await context.newPage();
+		await page.goto("/demo/rbac-auth/onboarding");
+		await expect(page.getByText("Onboarding State Machine")).toBeVisible({
+			timeout: 15_000,
+		});
+		await rm(storageState, { force: true });
+		return { context, page };
+	} catch (error) {
+		await context?.close();
+		await rm(storageState, { force: true });
+		throw error;
+	}
 }
 
 async function clearPendingRequests(browser: Browser) {
