@@ -344,7 +344,8 @@ export async function canAccessLenderEntity(
 export async function canAccessBorrowerEntity(
 	ctx: { db: QueryCtx["db"] },
 	viewer: Viewer,
-	borrowerId: Id<"borrowers">
+	borrowerId: Id<"borrowers">,
+	mortgageId?: Id<"mortgages">
 ): Promise<boolean> {
 	if (viewer.isFairLendAdmin) {
 		return true;
@@ -355,18 +356,20 @@ export async function canAccessBorrowerEntity(
 		return true;
 	}
 
-	const links = await ctx.db
-		.query("mortgageBorrowers")
-		.withIndex("by_borrower", (q) => q.eq("borrowerId", borrowerId))
-		.collect();
-
-	for (const link of links) {
-		if (await canAccessMortgage(ctx, viewer, link.mortgageId)) {
-			return true;
-		}
+	if (!mortgageId) {
+		return false;
 	}
 
-	return false;
+	const links = await ctx.db
+		.query("mortgageBorrowers")
+		.withIndex("by_mortgage", (q) => q.eq("mortgageId", mortgageId))
+		.collect();
+
+	if (!links.some((link) => link.borrowerId === borrowerId)) {
+		return false;
+	}
+
+	return canAccessMortgage(ctx, viewer, mortgageId);
 }
 
 export async function canAccessObligation(
@@ -450,7 +453,12 @@ export async function canAccessTransferRequest(
 
 	if (
 		transfer.borrowerId &&
-		(await canAccessBorrowerEntity(ctx, viewer, transfer.borrowerId))
+		(await canAccessBorrowerEntity(
+			ctx,
+			viewer,
+			transfer.borrowerId,
+			transfer.mortgageId ?? undefined
+		))
 	) {
 		return true;
 	}
@@ -500,7 +508,12 @@ export async function canAccessCashLedgerAccount(
 
 	if (
 		account.borrowerId &&
-		(await canAccessBorrowerEntity(ctx, viewer, account.borrowerId))
+		(await canAccessBorrowerEntity(
+			ctx,
+			viewer,
+			account.borrowerId,
+			account.mortgageId ?? undefined
+		))
 	) {
 		return true;
 	}

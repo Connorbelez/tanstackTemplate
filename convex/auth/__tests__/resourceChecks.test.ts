@@ -2306,6 +2306,37 @@ describe("payment resource helpers", () => {
 		});
 	});
 
+	it("canAccessBorrowerEntity scopes third-party access to the matching mortgage", async () => {
+		const t = convexTest(schema, modules);
+		await t.run(async (ctx) => {
+			const brokerAUserId = await insertUser(ctx, { authId: "broker-a" });
+			const brokerAId = await insertBroker(ctx, brokerAUserId);
+			const brokerBUserId = await insertUser(ctx, { authId: "broker-b" });
+			const brokerBId = await insertBroker(ctx, brokerBUserId);
+			const borrowerUserId = await insertUser(ctx, { authId: "borrower-auth" });
+			const borrowerId = await insertBorrower(ctx, borrowerUserId);
+
+			const propertyAId = await insertProperty(ctx);
+			const mortgageAId = await insertMortgage(ctx, propertyAId, brokerAId);
+			await insertMortgageBorrower(ctx, mortgageAId, borrowerId);
+
+			const propertyBId = await insertProperty(ctx);
+			const mortgageBId = await insertMortgage(ctx, propertyBId, brokerBId);
+			await insertMortgageBorrower(ctx, mortgageBId, borrowerId);
+
+			const viewer = makeViewer({ authId: "broker-a" });
+			expect(await canAccessBorrowerEntity(ctx, viewer, borrowerId)).toBe(
+				false
+			);
+			expect(
+				await canAccessBorrowerEntity(ctx, viewer, borrowerId, mortgageAId)
+			).toBe(true);
+			expect(
+				await canAccessBorrowerEntity(ctx, viewer, borrowerId, mortgageBId)
+			).toBe(false);
+		});
+	});
+
 	it("canAccessCounterpartyResource rejects trust for non-admin viewers", async () => {
 		const t = convexTest(schema, modules);
 		await t.run(async (ctx) => {
