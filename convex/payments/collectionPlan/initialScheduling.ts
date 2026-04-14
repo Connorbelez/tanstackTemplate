@@ -98,6 +98,19 @@ export async function createEntryImpl(
 	args: CreateCollectionPlanEntryArgs
 ): Promise<Id<"collectionPlanEntries">> {
 	const executionMode = args.executionMode ?? "app_owned";
+
+	if (args.executionIdempotencyKey) {
+		const existing = await ctx.db
+			.query("collectionPlanEntries")
+			.withIndex("by_execution_idempotency", (q) =>
+				q.eq("executionIdempotencyKey", args.executionIdempotencyKey)
+			)
+			.first();
+		if (existing) {
+			return existing._id;
+		}
+	}
+
 	const [firstObligationId] = args.obligationIds;
 	if (!firstObligationId) {
 		throw new ConvexError(

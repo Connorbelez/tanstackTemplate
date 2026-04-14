@@ -8,12 +8,6 @@ import type {
 	ExecutePlanEntryResult,
 } from "./executionContract";
 
-const MANUAL_COLLECTION_ENTRY_STATUSES = [
-	"planned",
-	"executing",
-	"completed",
-] as const;
-
 const SETTLEABLE_OBLIGATION_STATUSES = new Set<Doc<"obligations">["status"]>([
 	"due",
 	"overdue",
@@ -80,45 +74,6 @@ async function loadManualCollectionObligation(
 	return loaded.obligation;
 }
 
-async function findExistingManualPlanEntryId(
-	ctx: ManualCollectionActionCtx,
-	args: {
-		amount: number;
-		executionIdempotencyKey: string;
-		obligationId: Id<"obligations">;
-	}
-): Promise<Id<"collectionPlanEntries"> | undefined> {
-	for (const status of MANUAL_COLLECTION_ENTRY_STATUSES) {
-		const entries = (await ctx.runQuery(
-			internal.payments.collectionPlan.queries.getPlanEntriesByStatus,
-			{ status }
-		)) as Pick<
-			Doc<"collectionPlanEntries">,
-			| "_id"
-			| "amount"
-			| "executionIdempotencyKey"
-			| "method"
-			| "obligationIds"
-			| "source"
-		>[];
-
-		const match = entries.find(
-			(entry) =>
-				entry.source === "admin" &&
-				entry.method === "manual" &&
-				entry.amount === args.amount &&
-				entry.executionIdempotencyKey === args.executionIdempotencyKey &&
-				entry.obligationIds.length === 1 &&
-				entry.obligationIds[0] === args.obligationId
-		);
-		if (match) {
-			return match._id;
-		}
-	}
-
-	return undefined;
-}
-
 function getSuccessMessage(
 	obligationStatusAfter: Doc<"obligations">["status"],
 	transferStatus?: string
@@ -176,24 +131,18 @@ export async function runManualInboundCollectionForObligation(
 		settlementOccurredAt: args.manualSettlement.settlementOccurredAt,
 	});
 
-	const planEntryId =
-		(await findExistingManualPlanEntryId(ctx, {
+	const planEntryId = (await ctx.runMutation(
+		internal.payments.collectionPlan.mutations.createEntry,
+		{
 			amount: args.amount,
 			executionIdempotencyKey,
-			obligationId: args.obligationId,
-		})) ??
-		((await ctx.runMutation(
-			internal.payments.collectionPlan.mutations.createEntry,
-			{
-				amount: args.amount,
-				executionIdempotencyKey,
-				method: "manual",
-				obligationIds: [args.obligationId],
-				scheduledDate: args.manualSettlement.settlementOccurredAt,
-				source: "admin",
-				status: "planned",
-			}
-		)) as Id<"collectionPlanEntries">);
+			method: "manual",
+			obligationIds: [args.obligationId],
+			scheduledDate: args.manualSettlement.settlementOccurredAt,
+			source: "admin",
+			status: "planned",
+		}
+	)) as Id<"collectionPlanEntries">;
 
 	const executionResult = (await ctx.runAction(
 		internal.payments.collectionPlan.execution.executePlanEntry,
