@@ -52,6 +52,22 @@ describe("requirePermission middleware", () => {
 		expect(result).toEqual({ ok: true });
 	});
 
+	it("allows an external org admin with admin:access through generic permission middleware", async () => {
+		const identity = createMockViewer({
+			orgId: "org_external_admin",
+			permissions: ["admin:access"],
+			roles: ["admin"],
+		});
+		const t = createTestConvex();
+		await seedFromIdentity(t, identity);
+
+		const result = await t
+			.withIdentity(identity)
+			.query(api.test.authTestEndpoints.testAccrualQuery);
+
+		expect(result).toEqual({ ok: true });
+	});
+
 	it("rejects broker for deal:manage permission", async () => {
 		const t = createTestConvex();
 		await seedFromIdentity(t, BROKER);

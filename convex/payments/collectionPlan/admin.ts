@@ -416,7 +416,7 @@ export const getCollectionAttempt = adminQuery
 			return null;
 		}
 
-		const planEntry = await ctx.db.get(attempt.planEntryId);
+		const planEntryPromise = ctx.db.get(attempt.planEntryId);
 		const auditEvents = await auditLog.queryByResource(ctx, {
 			resourceType: "collectionAttempts",
 			resourceId: `${args.attemptId}`,
@@ -430,6 +430,7 @@ export const getCollectionAttempt = adminQuery
 					.eq("entityId", `${args.attemptId}`)
 			)
 			.collect();
+		const planEntry = await planEntryPromise;
 
 		return {
 			attempt: await buildCollectionAttemptRow(ctx, attempt),

@@ -135,7 +135,7 @@ export function PdfDesigner({
 
 	return (
 		<div
-			className={`overflow-hidden rounded-md border ${className ?? "h-[700px]"}`}
+			className={`h-[700px] overflow-hidden rounded-md border ${className ?? ""}`}
 			data-testid="pdfme-designer"
 			ref={containerRef}
 		/>

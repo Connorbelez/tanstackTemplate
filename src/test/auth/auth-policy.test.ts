@@ -54,6 +54,14 @@ describe("auth policy", () => {
 
 	it("does not grant external org admins implicit permission overrides", () => {
 		expect(
+			isFairLendStaffAdmin({
+				orgId: "org_external_test",
+				permissions: ["admin:access"],
+				role: "admin",
+				roles: JSON.stringify([]),
+			})
+		).toBe(false);
+		expect(
 			hasEffectivePermission(
 				{
 					orgId: "org_external_test",
@@ -63,6 +71,17 @@ describe("auth policy", () => {
 				},
 				"payment:view"
 			)
-		).toBe(false);
+		).toBe(true);
+		expect(
+			hasAnyEffectivePermission(
+				{
+					orgId: "org_external_test",
+					permissions: ["admin:access"],
+					role: "admin",
+					roles: JSON.stringify([]),
+				},
+				["cash_ledger:view", "payment:view"]
+			)
+		).toBe(true);
 	});
 });

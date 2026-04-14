@@ -1,6 +1,7 @@
 import { FAIRLEND_STAFF_ORG_ID } from "../../convex/constants";
 
 type ClaimCollection = Iterable<string> | readonly string[] | null | undefined;
+export const ADMIN_ACCESS_PERMISSION = "admin:access";
 
 export interface PermissionCheckContext extends FairLendAdminCheck {
 	permissions: ClaimCollection;
@@ -95,11 +96,18 @@ export function isFairLendStaffAdmin(context: FairLendAdminCheck): boolean {
 	);
 }
 
+export function hasAdminAccessPermission(
+	permissions: ClaimCollection
+): boolean {
+	return hasPermission(permissions, ADMIN_ACCESS_PERMISSION);
+}
+
 export function hasEffectivePermission(
 	context: PermissionCheckContext,
 	permission: string
 ): boolean {
 	return (
+		hasAdminAccessPermission(context.permissions) ||
 		isFairLendStaffAdmin(context) ||
 		hasPermission(context.permissions, permission)
 	);
@@ -110,6 +118,7 @@ export function hasAnyEffectivePermission(
 	requiredPermissions: readonly string[]
 ): boolean {
 	return (
+		hasAdminAccessPermission(context.permissions) ||
 		isFairLendStaffAdmin(context) ||
 		hasAnyPermission(context.permissions, requiredPermissions)
 	);
