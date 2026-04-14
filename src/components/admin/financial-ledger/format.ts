@@ -20,6 +20,20 @@ const dateFormatter = new Intl.DateTimeFormat("en-CA", {
 	dateStyle: "medium",
 });
 
+const dateOnlyPattern = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+function parseDateOnly(value: string) {
+	const match = dateOnlyPattern.exec(value);
+	if (!match) {
+		return new Date(value);
+	}
+
+	const year = Number(match[1]);
+	const month = Number(match[2]) - 1;
+	const day = Number(match[3]);
+	return new Date(year, month, day);
+}
+
 export function formatCurrencyCents(cents: number) {
 	return currencyFormatter.format(centsToAmount(cents));
 }
@@ -65,7 +79,8 @@ export function formatDateOnly(value: number | string | null | undefined) {
 		return "—";
 	}
 
-	const date = typeof value === "string" ? new Date(value) : new Date(value);
+	const date =
+		typeof value === "string" ? parseDateOnly(value) : new Date(value);
 	return Number.isNaN(date.getTime()) ? "—" : dateFormatter.format(date);
 }
 

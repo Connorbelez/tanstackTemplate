@@ -14,7 +14,7 @@ function normalizeToken(value: string) {
 	return value.trim().toLowerCase().replaceAll(NORMALIZE_TOKEN_REGEX, "_");
 }
 
-function parseDecimalToCents(value: string | number | null | undefined) {
+function parseCurrencyToCents(value: string | number | null | undefined) {
 	if (value === null || value === undefined) {
 		return null;
 	}
@@ -28,13 +28,26 @@ function parseDecimalToCents(value: string | number | null | undefined) {
 		return null;
 	}
 
-	if (INTEGER_CENTS_REGEX.test(normalized)) {
-		const parsedInteger = Number.parseInt(normalized, 10);
-		return Number.isFinite(parsedInteger) ? parsedInteger : null;
-	}
-
 	const parsedFloat = Number.parseFloat(normalized);
 	return Number.isFinite(parsedFloat) ? Math.round(parsedFloat * 100) : null;
+}
+
+function parseCentsValue(value: string | number | null | undefined) {
+	if (value === null || value === undefined) {
+		return null;
+	}
+
+	if (typeof value === "number") {
+		return Number.isFinite(value) ? Math.round(value) : null;
+	}
+
+	const normalized = value.trim().replaceAll(",", "");
+	if (normalized.length === 0 || !INTEGER_CENTS_REGEX.test(normalized)) {
+		return null;
+	}
+
+	const parsedInteger = Number.parseInt(normalized, 10);
+	return Number.isFinite(parsedInteger) ? parsedInteger : null;
 }
 
 function normalizeExpectedRow(
@@ -62,12 +75,10 @@ function normalizeExpectedRow(
 			row.effectiveDate?.trim() ||
 			row.month?.trim() ||
 			undefined,
-		expectedAmountCents: parseDecimalToCents(
-			row.expected_amount ??
-				row.expectedAmount ??
-				row.expected_amount_cents ??
-				row.amount
-		),
+		expectedAmountCents:
+			parseCurrencyToCents(
+				row.expected_amount ?? row.expectedAmount ?? row.amount
+			) ?? parseCentsValue(row.expected_amount_cents),
 		metric,
 		sourceRowReference:
 			row.source_row_reference?.trim() ||
@@ -221,7 +232,7 @@ export function buildValidationActualMap(args: {
 				row.controlAllocationBalance ??
 				row.control_balance ??
 				row.controlBalance;
-			const balanceCents = parseDecimalToCents(rawBalance as string | number);
+			const balanceCents = parseCurrencyToCents(rawBalance as string | number);
 			if (balanceCents === null) {
 				continue;
 			}

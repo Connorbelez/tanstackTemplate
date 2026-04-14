@@ -2,6 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { Download, ExternalLink, Landmark, RefreshCw } from "lucide-react";
 import { type ReactNode, useMemo } from "react";
 import { Button } from "#/components/ui/button";
+import { useCanDo } from "#/hooks/use-can-do";
 import type { AdminDetailSearch } from "#/lib/admin-detail-search";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import {
@@ -100,6 +101,14 @@ function matchesText(
 	return values.some((value) => value && normalizeText(value).includes(needle));
 }
 
+function parseLocalDateStart(date: string) {
+	return Date.parse(`${date}T00:00:00.000`);
+}
+
+function parseLocalDateEnd(date: string) {
+	return Date.parse(`${date}T23:59:59.999`);
+}
+
 function matchesDateRange(
 	value: number | string | null | undefined,
 	dateFrom?: string,
@@ -116,20 +125,104 @@ function matchesDateRange(
 	}
 
 	if (dateFrom) {
-		const fromMs = Date.parse(`${dateFrom}T00:00:00.000Z`);
+		const fromMs = parseLocalDateStart(dateFrom);
 		if (!Number.isNaN(fromMs) && timestamp < fromMs) {
 			return false;
 		}
 	}
 
 	if (dateTo) {
-		const toMs = Date.parse(`${dateTo}T23:59:59.999Z`);
+		const toMs = parseLocalDateEnd(dateTo);
 		if (!Number.isNaN(toMs) && timestamp > toMs) {
 			return false;
 		}
 	}
 
 	return true;
+}
+
+function matchesObligationFilters(
+	row: PaymentOperationsObligationRow,
+	search: PaymentOperationsSearchState
+) {
+	return (
+		(!search.status || row.status === search.status) &&
+		(!search.type || row.type === search.type) &&
+		(!search.mortgageId || row.mortgageId === search.mortgageId) &&
+		(!search.borrowerId || row.borrowerId === search.borrowerId) &&
+		(!search.showOnlyExceptions || row.hasJournalDrift || row.isCorrective) &&
+		matchesDateRange(row.dueDate, search.dateFrom, search.dateTo) &&
+		matchesText(search.search, [
+			row.obligationId,
+			row.mortgageLabel,
+			row.borrowerLabel,
+			row.type,
+			row.status,
+		])
+	);
+}
+
+function matchesCollectionFilters(
+	row: PaymentCollectionAttemptRow,
+	search: PaymentOperationsSearchState
+) {
+	return (
+		(!search.status || row.status === search.status) &&
+		(!search.type || row.method === search.type) &&
+		(!search.mortgageId || row.mortgageId === search.mortgageId) &&
+		(!search.showOnlyExceptions || row.reconciliation?.isHealthy === false) &&
+		matchesDateRange(row.initiatedAt, search.dateFrom, search.dateTo) &&
+		matchesText(search.search, [
+			row.collectionAttemptId,
+			row.executionIdempotencyKey,
+			...row.obligationIds,
+			row.transfer?.providerRef,
+			row.status,
+			row.triggerSource,
+		])
+	);
+}
+
+function matchesTransferFilters(
+	row: PaymentOperationsTransferRow,
+	search: PaymentOperationsSearchState
+) {
+	return (
+		(!search.status || row.status === search.status) &&
+		(!search.type || row.transferType === search.type) &&
+		(!search.mortgageId || row.mortgageId === search.mortgageId) &&
+		(!search.lenderId || row.lenderId === search.lenderId) &&
+		(!search.borrowerId || row.borrowerId === search.borrowerId) &&
+		(!search.showOnlyExceptions || row.journalIntegrity !== "linked") &&
+		matchesDateRange(row.createdAt, search.dateFrom, search.dateTo) &&
+		matchesText(search.search, [
+			row.transferId,
+			row.counterpartyLabel,
+			row.providerCode,
+			row.providerRef,
+			row.mortgageLabel,
+		])
+	);
+}
+
+function matchesCollectionPlanFilters(
+	row: PaymentCollectionPlanEntryRow,
+	search: PaymentOperationsSearchState
+) {
+	return (
+		(!search.status || row.status === search.status) &&
+		(!search.type || row.source === search.type) &&
+		(!search.mortgageId || row.mortgageId === search.mortgageId) &&
+		(!search.showOnlyExceptions ||
+			Boolean(row.balancePreCheck.decision || row.workoutPlan)) &&
+		matchesDateRange(row.scheduledDate, search.dateFrom, search.dateTo) &&
+		matchesText(search.search, [
+			row.planEntryId,
+			row.source,
+			row.createdByRule?.displayName,
+			row.workoutPlan?.name,
+		])
+	);
 }
 
 function buildOptions(values: Array<string | null | undefined>) {
@@ -413,139 +506,31 @@ export function PaymentOperationsPage({
 
 	const filteredObligations = useMemo(
 		() =>
-			snapshot.obligations.filter((row) => {
-				if (search.status && row.status !== search.status) {
-					return false;
-				}
-				if (search.type && row.type !== search.type) {
-					return false;
-				}
-				if (search.mortgageId && row.mortgageId !== search.mortgageId) {
-					return false;
-				}
-				if (search.borrowerId && row.borrowerId !== search.borrowerId) {
-					return false;
-				}
-				if (
-					search.showOnlyExceptions &&
-					!(row.hasJournalDrift || row.isCorrective)
-				) {
-					return false;
-				}
-				if (!matchesDateRange(row.dueDate, search.dateFrom, search.dateTo)) {
-					return false;
-				}
-				return matchesText(search.search, [
-					row.obligationId,
-					row.mortgageLabel,
-					row.borrowerLabel,
-					row.type,
-					row.status,
-				]);
-			}),
+			snapshot.obligations.filter((row) =>
+				matchesObligationFilters(row, search)
+			),
 		[search, snapshot.obligations]
 	);
 
 	const filteredCollections = useMemo(
 		() =>
-			snapshot.collectionAttempts.filter((row) => {
-				if (search.status && row.status !== search.status) {
-					return false;
-				}
-				if (search.type && row.method !== search.type) {
-					return false;
-				}
-				if (search.mortgageId && row.mortgageId !== search.mortgageId) {
-					return false;
-				}
-				if (
-					search.showOnlyExceptions &&
-					row.reconciliation?.isHealthy !== false
-				) {
-					return false;
-				}
-				if (
-					!matchesDateRange(row.initiatedAt, search.dateFrom, search.dateTo)
-				) {
-					return false;
-				}
-				return matchesText(search.search, [
-					row.collectionAttemptId,
-					row.executionIdempotencyKey,
-					row.transfer?.providerRef,
-					row.status,
-					row.triggerSource,
-				]);
-			}),
+			snapshot.collectionAttempts.filter((row) =>
+				matchesCollectionFilters(row, search)
+			),
 		[search, snapshot.collectionAttempts]
 	);
 
 	const filteredTransfers = useMemo(
 		() =>
-			snapshot.transfers.filter((row) => {
-				if (search.status && row.status !== search.status) {
-					return false;
-				}
-				if (search.type && row.transferType !== search.type) {
-					return false;
-				}
-				if (search.mortgageId && row.mortgageId !== search.mortgageId) {
-					return false;
-				}
-				if (search.lenderId && row.lenderId !== search.lenderId) {
-					return false;
-				}
-				if (search.borrowerId && row.borrowerId !== search.borrowerId) {
-					return false;
-				}
-				if (search.showOnlyExceptions && row.journalIntegrity === "linked") {
-					return false;
-				}
-				if (!matchesDateRange(row.createdAt, search.dateFrom, search.dateTo)) {
-					return false;
-				}
-				return matchesText(search.search, [
-					row.transferId,
-					row.counterpartyLabel,
-					row.providerCode,
-					row.providerRef,
-					row.mortgageLabel,
-				]);
-			}),
+			snapshot.transfers.filter((row) => matchesTransferFilters(row, search)),
 		[search, snapshot.transfers]
 	);
 
 	const filteredCollectionPlans = useMemo(
 		() =>
-			snapshot.collectionPlanEntries.filter((row) => {
-				if (search.status && row.status !== search.status) {
-					return false;
-				}
-				if (search.type && row.source !== search.type) {
-					return false;
-				}
-				if (search.mortgageId && row.mortgageId !== search.mortgageId) {
-					return false;
-				}
-				if (
-					search.showOnlyExceptions &&
-					!row.balancePreCheck.decision &&
-					!row.workoutPlan
-				) {
-					return false;
-				}
-				if (
-					!matchesDateRange(row.scheduledDate, search.dateFrom, search.dateTo)
-				) {
-					return false;
-				}
-				return matchesText(search.search, [
-					row.planEntryId,
-					row.source,
-					row.createdByRule?.displayName,
-					row.workoutPlan?.name,
-				]);
-			}),
+			snapshot.collectionPlanEntries.filter((row) =>
+				matchesCollectionPlanFilters(row, search)
+			),
 		[search, snapshot.collectionPlanEntries]
 	);
 
@@ -645,6 +630,10 @@ export function PaymentOperationsPage({
 				.map(([value, label]) => ({ label, value })),
 		[snapshot.transfers]
 	);
+
+	const canWaiveObligationBalance = useCanDo("obligation:waive");
+	const canWriteOffObligationBalance = useCanDo("cash_ledger:correct");
+	const canManagePaymentOperations = useCanDo("payment:manage");
 
 	const obligationColumns: TableColumn<PaymentOperationsObligationRow>[] = [
 		{
@@ -884,18 +873,26 @@ export function PaymentOperationsPage({
 			<DetailRail
 				actions={
 					<ActionButtonRow>
-						<WaiveBalanceDialog
-							defaultAmountCents={selectedObligation.journalOutstandingBalance}
-							obligationId={
-								selectedObligation.obligationId as Id<"obligations">
-							}
-						/>
-						<WriteOffBalanceDialog
-							defaultAmountCents={selectedObligation.journalOutstandingBalance}
-							obligationId={
-								selectedObligation.obligationId as Id<"obligations">
-							}
-						/>
+						{canWaiveObligationBalance ? (
+							<WaiveBalanceDialog
+								defaultAmountCents={
+									selectedObligation.journalOutstandingBalance
+								}
+								obligationId={
+									selectedObligation.obligationId as Id<"obligations">
+								}
+							/>
+						) : null}
+						{canWriteOffObligationBalance ? (
+							<WriteOffBalanceDialog
+								defaultAmountCents={
+									selectedObligation.journalOutstandingBalance
+								}
+								obligationId={
+									selectedObligation.obligationId as Id<"obligations">
+								}
+							/>
+						) : null}
 						<Button asChild size="sm" variant="outline">
 							<Link
 								params={{ recordid: selectedObligation.mortgageId }}
@@ -973,6 +970,8 @@ export function PaymentOperationsPage({
 									search: selectedObligation.obligationId,
 									selectedId:
 										selectedObligation.latestCollectionAttemptId ?? undefined,
+									status: undefined,
+									type: undefined,
 									tab: "collections",
 								}))
 							}
@@ -1210,20 +1209,22 @@ export function PaymentOperationsPage({
 		return (
 			<DetailRail
 				actions={
-					<ActionButtonRow>
-						<ExecutePlanEntryDialog
-							planEntryId={
-								selectedCollectionPlan.planEntryId as Id<"collectionPlanEntries">
-							}
-							triggerLabel="Execute"
-						/>
-						<ReschedulePlanEntryDialog
-							planEntryId={
-								selectedCollectionPlan.planEntryId as Id<"collectionPlanEntries">
-							}
-							scheduledDate={selectedCollectionPlan.scheduledDate}
-						/>
-					</ActionButtonRow>
+					canManagePaymentOperations ? (
+						<ActionButtonRow>
+							<ExecutePlanEntryDialog
+								planEntryId={
+									selectedCollectionPlan.planEntryId as Id<"collectionPlanEntries">
+								}
+								triggerLabel="Execute"
+							/>
+							<ReschedulePlanEntryDialog
+								planEntryId={
+									selectedCollectionPlan.planEntryId as Id<"collectionPlanEntries">
+								}
+								scheduledDate={selectedCollectionPlan.scheduledDate}
+							/>
+						</ActionButtonRow>
+					) : undefined
 				}
 				description="Collection strategy stays distinct from attempts and from cash-ledger truth."
 				title={`Plan entry ${selectedCollectionPlan.planEntryId}`}

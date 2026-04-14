@@ -138,10 +138,11 @@ export type TransferStatus = (typeof TRANSFER_STATUSES)[number];
 /**
  * Persisted transfer status at the query boundary.
  *
- * Includes the legacy `"completed"` value while historical rows are still
- * tolerated by webhook and reversal handlers.
+ * Includes legacy persisted values while historical rows are still tolerated
+ * by webhook and reversal handlers.
  */
-export type PersistedTransferStatus = TransferStatus | "completed";
+export type LegacyTransferStatus = "approved" | "completed";
+export type PersistedTransferStatus = TransferStatus | LegacyTransferStatus;
 
 // ── Transfer Type → Obligation Type Mapping ─────────────────────────
 /**

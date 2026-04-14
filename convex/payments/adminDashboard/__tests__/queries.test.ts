@@ -1,5 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { FAIRLEND_ADMIN } from "../../../../src/test/auth/identities";
+import {
+	EXTERNAL_ORG_ADMIN,
+	FAIRLEND_ADMIN,
+} from "../../../../src/test/auth/identities";
 import {
 	createGovernedTestConvex,
 	ensureBorrowerReceivableAccount,
@@ -117,6 +120,37 @@ afterEach(() => {
 });
 
 describe("admin dashboard queries", () => {
+	it("requires the FairLend admin chain for every admin dashboard snapshot", async () => {
+		const t = createBackendTestConvex();
+
+		await expect(
+			t
+				.withIdentity(EXTERNAL_ORG_ADMIN)
+				.query(
+					api.payments.adminDashboard.queries
+						.getPaymentOperationsDashboardSnapshot,
+					{}
+				)
+		).rejects.toThrow("Forbidden: fair lend admin role required");
+		await expect(
+			t
+				.withIdentity(EXTERNAL_ORG_ADMIN)
+				.query(
+					api.payments.adminDashboard.queries.getFinancialLedgerSupportSnapshot,
+					{}
+				)
+		).rejects.toThrow("Forbidden: fair lend admin role required");
+		await expect(
+			t
+				.withIdentity(EXTERNAL_ORG_ADMIN)
+				.query(
+					api.payments.adminDashboard.queries
+						.getFinancialLedgerDashboardSnapshot,
+					{}
+				)
+		).rejects.toThrow("Forbidden: fair lend admin role required");
+	});
+
 	it("marks journal drift and missing transfer ledger links in the payment operations snapshot", async () => {
 		const t = createBackendTestConvex();
 		const borrowerId = await seedBorrowerProfile(t);

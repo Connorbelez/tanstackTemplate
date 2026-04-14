@@ -1,6 +1,6 @@
 import type { Doc, Id, TableNames } from "../../_generated/dataModel";
 import type { QueryCtx } from "../../_generated/server";
-import { cashLedgerQuery, paymentQuery } from "../../fluent";
+import { adminQuery } from "../../fluent";
 import { getPostedBalance } from "../../ledger/accounts";
 import {
 	getCashAccountBalance,
@@ -986,7 +986,7 @@ function buildJobStatus(args: { hasEscalated: boolean; hasRetrying: boolean }) {
 	return "healthy";
 }
 
-export const getPaymentOperationsDashboardSnapshot = paymentQuery
+export const getPaymentOperationsDashboardSnapshot = adminQuery
 	.handler(async (ctx) => {
 		const [
 			obligations,
@@ -1083,7 +1083,7 @@ export const getPaymentOperationsDashboardSnapshot = paymentQuery
 	})
 	.public();
 
-export const getFinancialLedgerSupportSnapshot = cashLedgerQuery
+export const getFinancialLedgerSupportSnapshot = adminQuery
 	.handler(async (ctx) => {
 		const [obligations, transfers, cashAccounts] = await Promise.all([
 			ctx.db.query("obligations").collect(),
@@ -1102,7 +1102,7 @@ export const getFinancialLedgerSupportSnapshot = cashLedgerQuery
 	})
 	.public();
 
-export const getFinancialLedgerDashboardSnapshot = cashLedgerQuery
+export const getFinancialLedgerDashboardSnapshot = adminQuery
 	.handler(async (ctx) => {
 		const [
 			accounts,

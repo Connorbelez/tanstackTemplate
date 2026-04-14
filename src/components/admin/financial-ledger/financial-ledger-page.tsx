@@ -1948,7 +1948,9 @@ export function FinancialLedgerPage({
 									);
 									downloadCsv(
 										"trial-balance.csv",
-										buildTrialBalanceCsv(snapshot.trialBalance)
+										buildTrialBalanceCsv(snapshot.trialBalance, {
+											generatedAt: snapshot.generatedAt,
+										})
 									);
 									return;
 								}

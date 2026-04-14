@@ -1604,8 +1604,8 @@ export const confirmPendingManualReviewTransfer = adminAction
 				{
 					transferId,
 					source: {
-						actorId: "demo:amps:execution-modes",
-						actorType: "system",
+						actorId: ctx.viewer.authId,
+						actorType: "admin",
 						channel: "simulation",
 					},
 				}

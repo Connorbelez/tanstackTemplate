@@ -6,7 +6,6 @@ import type {
 } from "./types";
 
 type CsvCell = boolean | null | number | string;
-const CSV_LINE_SPLIT_REGEX = /\r?\n/;
 
 function csvEscape(value: CsvCell | undefined) {
 	if (value === undefined || value === null) {
@@ -159,7 +158,34 @@ export function buildJournalLinesCsv(rows: readonly LedgerJournalLine[]) {
 	);
 }
 
-export function buildTrialBalanceCsv(rows: readonly LedgerTrialBalanceRow[]) {
+interface TrialBalanceCsvContext {
+	asOfDate?: string;
+	generatedAt?: number;
+}
+
+function resolveTrialBalanceAsOfDate(
+	rows: readonly LedgerTrialBalanceRow[],
+	context?: TrialBalanceCsvContext
+) {
+	if (context?.asOfDate) {
+		return context.asOfDate;
+	}
+
+	const generatedAt =
+		context?.generatedAt ??
+		(rows as readonly LedgerTrialBalanceRow[] & { generatedAt?: number })
+			.generatedAt;
+	if (typeof generatedAt === "number") {
+		return new Date(generatedAt).toISOString().slice(0, 10);
+	}
+
+	return new Date().toISOString().slice(0, 10);
+}
+
+export function buildTrialBalanceCsv(
+	rows: readonly LedgerTrialBalanceRow[],
+	context?: TrialBalanceCsvContext
+) {
 	const headers = [
 		"account_id",
 		"account_code",
@@ -182,7 +208,7 @@ export function buildTrialBalanceCsv(rows: readonly LedgerTrialBalanceRow[]) {
 		"borrower_id",
 	] as const;
 
-	const asOfDate = new Date().toISOString().slice(0, 10);
+	const asOfDate = resolveTrialBalanceAsOfDate(rows, context);
 
 	return rowsToCsv(
 		headers,
@@ -241,10 +267,7 @@ function parseCsvLine(line: string) {
 }
 
 export function parseCsv(text: string) {
-	const lines = text
-		.split(CSV_LINE_SPLIT_REGEX)
-		.map((line) => line.trimEnd())
-		.filter((line) => line.length > 0);
+	const lines = splitCsvRecords(text).filter((line) => line.length > 0);
 
 	if (lines.length === 0) {
 		return { headers: [], rows: [] as Record<string, string>[] };
@@ -259,4 +282,43 @@ export function parseCsv(text: string) {
 	});
 
 	return { headers, rows };
+}
+
+function splitCsvRecords(text: string) {
+	const records: string[] = [];
+	let current = "";
+	let inQuotes = false;
+
+	for (let index = 0; index < text.length; index += 1) {
+		const character = text[index];
+		const nextCharacter = text[index + 1];
+
+		if (character === '"') {
+			if (inQuotes && nextCharacter === '"') {
+				current += '"';
+				index += 1;
+			} else {
+				inQuotes = !inQuotes;
+			}
+			continue;
+		}
+
+		if (!inQuotes && character === "\r" && nextCharacter === "\n") {
+			records.push(current);
+			current = "";
+			index += 1;
+			continue;
+		}
+
+		if (!inQuotes && (character === "\n" || character === "\r")) {
+			records.push(current);
+			current = "";
+			continue;
+		}
+
+		current += character;
+	}
+
+	records.push(current);
+	return records;
 }

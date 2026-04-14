@@ -19,9 +19,15 @@ import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import { formatCurrencyCents } from "./format";
 
+const CURRENCY_INPUT_PATTERN = /^(?:\d+(?:\.\d{0,2})?|\.\d{1,2})$/;
+
 function parseCurrencyInputToCents(value: string) {
 	const normalized = value.trim().replaceAll(",", "");
 	if (normalized.length === 0) {
+		return null;
+	}
+
+	if (!CURRENCY_INPUT_PATTERN.test(normalized)) {
 		return null;
 	}
 
@@ -166,9 +172,13 @@ export function WriteOffBalanceDialog({
 		centsInputValue(defaultAmountCents)
 	);
 	const [reason, setReason] = useState("");
+	const [idempotencyKey, setIdempotencyKey] = useState(() =>
+		crypto.randomUUID()
+	);
 	const { open, setOpen, setSubmitting, submitting } = useDialogState(() => {
 		setAmountInput(centsInputValue(defaultAmountCents));
 		setReason("");
+		setIdempotencyKey(crypto.randomUUID());
 	});
 
 	async function handleSubmit() {
@@ -186,7 +196,7 @@ export function WriteOffBalanceDialog({
 		try {
 			await writeOffBalance({
 				amount,
-				idempotencyKey: crypto.randomUUID(),
+				idempotencyKey,
 				obligationId,
 				reason: reason.trim(),
 			});

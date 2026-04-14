@@ -324,7 +324,9 @@ describe("admin financial ledger CSV exports", () => {
 		const chartRows = parseCsv(buildChartOfAccountsCsv([chartOfAccountsRow])).rows;
 		const journalRows = parseCsv(buildJournalLinesCsv(journalLineRows)).rows;
 		const trialBalanceExportRows = parseCsv(
-			buildTrialBalanceCsv(trialBalanceRows)
+			buildTrialBalanceCsv(trialBalanceRows, {
+				asOfDate: "2026-04-14",
+			})
 		).rows;
 
 		expect(chartRows).toEqual([
@@ -358,6 +360,7 @@ describe("admin financial ledger CSV exports", () => {
 		expect(trialBalanceExportRows).toEqual([
 			expect.objectContaining({
 				account_id: "acct-lender-payable-1",
+				as_of_date: "2026-04-14",
 				closing_balance: "1000.00",
 				credit_turnover: "123.45",
 				debit_turnover: "0.00",

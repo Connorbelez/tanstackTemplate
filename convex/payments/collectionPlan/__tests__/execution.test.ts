@@ -336,6 +336,13 @@ describe("executePlanEntry", () => {
 			method: "manual",
 			amount: 300_000,
 		});
+		await t.run((ctx) =>
+			ctx.db.patch(existingAttemptId, {
+				requestedByActorId: "scheduler",
+				requestedByActorType: "system",
+				triggerSource: "system_scheduler",
+			})
+		);
 
 		const result = await t.action(
 			internal.payments.collectionPlan.execution.executePlanEntry,
@@ -375,6 +382,11 @@ describe("executePlanEntry", () => {
 		expect(transfer?.planEntryId).toBe(planEntryId);
 		expect(transfer?.mortgageId).toBe(mortgageId);
 		expect(transfer?.borrowerId).toBe(borrowerId);
+		expect(transfer?.source).toEqual({
+			actorId: "scheduler",
+			actorType: "system",
+			channel: "scheduler",
+		});
 	});
 
 	it("returns noop for dry runs without creating attempts or transfers", async () => {

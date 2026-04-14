@@ -70,6 +70,21 @@ function buildAuditActorId(
 	);
 }
 
+function recoverExecutionTriggerSource(args: {
+	existingTriggerSource?: string;
+	fallback: ExecutePlanEntryArgs["triggerSource"];
+}): ExecutePlanEntryArgs["triggerSource"] {
+	switch (args.existingTriggerSource) {
+		case "admin_manual":
+		case "migration_backfill":
+		case "system_scheduler":
+		case "workflow_replay":
+			return args.existingTriggerSource;
+		default:
+			return args.fallback;
+	}
+}
+
 interface TransferHandoffContextSuccess {
 	borrowerId: Id<"borrowers">;
 	mortgageId: Id<"mortgages">;
@@ -248,6 +263,12 @@ async function handleExistingPlanEntryExecution(args: {
 		existingAttempt.executionIdempotencyKey ?? args.normalizedIdempotencyKey;
 	const reconciledExecutedAt =
 		existingAttempt.executionRequestedAt ?? existingAttempt.initiatedAt;
+	const recoveredTriggerSource = recoverExecutionTriggerSource({
+		existingTriggerSource: existingAttempt.triggerSource,
+		fallback: args.request.triggerSource,
+	});
+	const recoveredRequestedByActorId =
+		existingAttempt.requestedByActorId ?? args.request.requestedByActorId;
 	let recoveredTransferRequestId = existingAttempt.transferRequestId;
 
 	if (!recoveredTransferRequestId) {
@@ -270,8 +291,8 @@ async function handleExistingPlanEntryExecution(args: {
 			const handoffContext = prepareTransferHandoffContext({
 				obligations,
 				planEntry,
-				triggerSource: args.request.triggerSource,
-				requestedByActorId: args.request.requestedByActorId,
+				triggerSource: recoveredTriggerSource,
+				requestedByActorId: recoveredRequestedByActorId,
 			});
 			if ("reasonCode" in handoffContext) {
 				return buildRejectedStageExecutionResponse({
