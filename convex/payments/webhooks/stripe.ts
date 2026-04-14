@@ -1,7 +1,8 @@
 import { v } from "convex/values";
 import { internal } from "../../_generated/api";
 import type { Id } from "../../_generated/dataModel";
-import { httpAction, internalAction } from "../../_generated/server";
+import { httpAction } from "../../_generated/server";
+import { convex } from "../../fluent";
 import {
 	markTransferWebhookFailed,
 	persistVerifiedTransferWebhook,
@@ -170,17 +171,25 @@ async function scheduleUnsupportedStripeWebhookProcessing(
 				? error.message
 				: "stripe_webhook_scheduler_failed";
 		console.error("[Stripe Webhook] Failed to schedule processing:", error);
-		await markTransferWebhookFailed(ctx, {
-			webhookEventId: args.webhookEventId,
-			error: message,
-		});
+		try {
+			await markTransferWebhookFailed(ctx, {
+				webhookEventId: args.webhookEventId,
+				error: message,
+			});
+		} catch (markError) {
+			console.error(
+				"[Stripe Webhook] Failed to mark webhook as failed after scheduler error:",
+				markError
+			);
+		}
 		return { ok: false as const, error: message };
 	}
 }
 
-export const processUnsupportedStripeWebhook = internalAction({
-	args: stripeUnsupportedWebhookArgsValidator,
-	handler: async (ctx, args) => {
+export const processUnsupportedStripeWebhook = convex
+	.action()
+	.input(stripeUnsupportedWebhookArgsValidator)
+	.handler(async (ctx, args) => {
 		console.warn(
 			`[Stripe Webhook] Provider event ${args.providerEventId} is persisted but still unsupported for automated reversal processing.`
 		);
@@ -193,8 +202,8 @@ export const processUnsupportedStripeWebhook = internalAction({
 			reason: UNSUPPORTED_PROVIDER_ERROR,
 			providerEventId: args.providerEventId,
 		};
-	},
-});
+	})
+	.internal();
 
 // ── HTTP Action ─────────────────────────────────────────────────────
 
