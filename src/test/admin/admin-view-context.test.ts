@@ -136,6 +136,43 @@ describe("admin view context helpers", () => {
 		expect(resolved.viewMode).toBe("kanban");
 	});
 
+	it("falls back to table mode when the default saved kanban source view is unavailable", () => {
+		const borrowers = buildObjectDef({
+			name: "borrower",
+			nativeTable: "borrowers",
+			pluralLabel: "Borrowers",
+			singularLabel: "Borrower",
+		});
+		const tableView = buildViewDef({
+			id: "view_borrowers_table",
+			isDefault: true,
+			name: "All Borrowers",
+			objectDefId: borrowers._id,
+			viewType: "table",
+		});
+		const savedKanbanView = buildSavedView({
+			id: "saved_borrowers_board",
+			isDefault: true,
+			name: "My Borrower Board",
+			objectDefId: borrowers._id,
+			sourceViewDefId: "view_missing_borrowers_board" as Id<"viewDefs">,
+			viewType: "kanban",
+		});
+
+		const resolved = resolveAdminEntityViewContext({
+			entityType: "borrowers",
+			objectDefs: [borrowers],
+			savedViews: [savedKanbanView],
+			views: [tableView],
+		});
+
+		expect(resolved.activeSavedView?.userSavedViewId).toBe(
+			savedKanbanView.userSavedViewId
+		);
+		expect(resolved.activeSourceView?._id).toBe(tableView._id);
+		expect(resolved.viewMode).toBe("table");
+	});
+
 	it("falls back to the table system view when no saved view is active", () => {
 		const lenders = buildObjectDef({
 			name: "lender",

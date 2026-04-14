@@ -91,11 +91,7 @@ export function resolveAdminEntityViewContext(args: {
 		tableView,
 		views: args.views,
 	});
-	const viewMode =
-		activeSourceView?.viewType === "kanban" ||
-		activeSavedView?.viewType === "kanban"
-			? "kanban"
-			: "table";
+	const viewMode = activeSourceView?.viewType === "kanban" ? "kanban" : "table";
 
 	return {
 		activeSavedView,
