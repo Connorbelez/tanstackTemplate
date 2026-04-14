@@ -40,13 +40,13 @@ describe("requirePermission middleware", () => {
 		expect(result).toEqual({ ok: true });
 	});
 
-	it("allows admin:access to satisfy permission checks without explicit grants", async () => {
+	it("allows admin:access to satisfy unrelated permission checks", async () => {
 		const t = createTestConvex();
 		await seedFromIdentity(t, EXTERNAL_ORG_ADMIN);
 
 		const result = await t
 			.withIdentity(EXTERNAL_ORG_ADMIN)
-			.mutation(api.test.authTestEndpoints.testDealMutation);
+			.query(api.test.authTestEndpoints.testBrokerQuery);
 
 		expect(result).toEqual({ ok: true });
 	});

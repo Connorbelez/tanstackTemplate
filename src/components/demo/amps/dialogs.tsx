@@ -856,6 +856,13 @@ export function RuleEditorDialog({
 		});
 	}
 
+	let submitIcon = <Workflow className="size-4" />;
+	if (busy) {
+		submitIcon = <LoaderCircle className="size-4 animate-spin" />;
+	} else if (mode === "create") {
+		submitIcon = <Plus className="size-4" />;
+	}
+
 	return (
 		<Dialog onOpenChange={setOpen} open={open}>
 			<DialogTrigger asChild>
@@ -1208,13 +1215,7 @@ export function RuleEditorDialog({
 						}
 						onClick={handleSubmit}
 					>
-						{busy ? (
-							<LoaderCircle className="size-4 animate-spin" />
-						) : mode === "create" ? (
-							<Plus className="size-4" />
-						) : (
-							<Workflow className="size-4" />
-						)}
+						{submitIcon}
 						{mode === "create" ? "Create rule" : "Update rule"}
 					</Button>
 				</DialogFooter>

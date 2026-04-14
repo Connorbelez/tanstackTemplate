@@ -3,6 +3,7 @@ import type { QueryCtx } from "../_generated/server";
 import type { Viewer } from "../fluent";
 import { getAccountLenderId } from "../ledger/accountOwnership";
 import { getPostedBalance } from "../ledger/accounts";
+import { hasPermissionGrant } from "./permissionCatalog";
 
 /** The 4 entity types that generatedDocuments can be linked to. */
 type DocumentEntityType = Doc<"generatedDocuments">["entityType"];
@@ -544,7 +545,10 @@ export async function canAccessWorkoutPlan(
 // model from ENG-144:
 //   public    → entity-level access is sufficient
 //   private   → entity access + dealAccess record required
-//   sensitive → entity access + dealAccess + documents:sensitive_access permission
+//   sensitive → entity access + dealAccess + explicit `document:review`
+//               permission. This boundary intentionally ignores the
+//               `admin:access` wildcard so external org admins do not inherit
+//               access to sensitive documents.
 
 async function hasActiveDealAccess(
 	ctx: { db: QueryCtx["db"] },
@@ -670,7 +674,7 @@ export async function canAccessDocument(
 
 	// Step 4: sensitive — additionally require permission
 	if (doc.sensitivityTier === "sensitive") {
-		return viewer.permissions.has("documents:sensitive_access");
+		return viewer.permissions.has("document:review");
 	}
 
 	// private tier satisfied
@@ -715,7 +719,7 @@ export async function canAccessApplicationPackage(
 
 	// underwriting:review_decisions permission sees decision_pending_review
 	if (
-		viewer.permissions.has("underwriting:review_decisions") &&
+		hasPermissionGrant(viewer.permissions, "underwriting:review_decisions") &&
 		pkg.status === "decision_pending_review"
 	) {
 		return true;

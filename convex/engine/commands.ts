@@ -2,9 +2,9 @@ import { v } from "convex/values";
 import { internalMutation } from "../_generated/server";
 import type { Viewer } from "../fluent";
 import {
-	adminAction,
 	adminMutation,
 	authedMutation,
+	paymentAction,
 	requirePermission,
 } from "../fluent";
 import { runManualInboundCollectionForObligation } from "../payments/collectionPlan/manualCollection";
@@ -69,10 +69,10 @@ export const transitionOnboardingRequest = adminMutation
 
 /**
  * Authed transition for mortgages.
- * Requires authentication + `mortgage:transition` permission.
+ * Requires authentication + `mortgage:service` permission.
  */
 export const transitionMortgage = authedMutation
-	.use(requirePermission("mortgage:transition"))
+	.use(requirePermission("mortgage:service"))
 	.input({ ...transitionCommandArgs, entityId: v.id("mortgages") })
 	.handler(async (ctx, args) => {
 		const source =
@@ -130,10 +130,10 @@ export const transitionMortgageInternal = internalMutation({
 });
 
 /**
- * FairLend admin action for confirming obligation payments.
+ * FairLend staff payment action for confirming obligation payments.
  * Routes manual collection through the unified transfer-backed rails.
  */
-export const confirmObligationPayment = adminAction
+export const confirmObligationPayment = paymentAction
 	.input({
 		entityId: v.id("obligations"),
 		amount: v.number(),

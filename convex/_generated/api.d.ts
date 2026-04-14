@@ -24,6 +24,7 @@ import type * as auditTrailClient from "../auditTrailClient.js";
 import type * as auth from "../auth.js";
 import type * as auth_auditAuth from "../auth/auditAuth.js";
 import type * as auth_internal from "../auth/internal.js";
+import type * as auth_permissionCatalog from "../auth/permissionCatalog.js";
 import type * as auth_resourceChecks from "../auth/resourceChecks.js";
 import type * as brokers_migrations from "../brokers/migrations.js";
 import type * as constants from "../constants.js";
@@ -318,6 +319,7 @@ declare const fullApi: ApiFromModules<{
   auth: typeof auth;
   "auth/auditAuth": typeof auth_auditAuth;
   "auth/internal": typeof auth_internal;
+  "auth/permissionCatalog": typeof auth_permissionCatalog;
   "auth/resourceChecks": typeof auth_resourceChecks;
   "brokers/migrations": typeof brokers_migrations;
   constants: typeof constants;

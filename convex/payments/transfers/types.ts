@@ -134,6 +134,7 @@ export const TRANSFER_STATUSES = [
 ] as const;
 
 export type TransferStatus = (typeof TRANSFER_STATUSES)[number];
+export type PersistedTransferStatus = TransferStatus | "completed";
 
 /**
  * Persisted transfer status at the query boundary.

@@ -29,7 +29,11 @@ import {
 	ledgerQuery,
 	lenderMutation,
 	lenderQuery,
+	paymentCancelMutation,
+	paymentMutation,
 	paymentQuery,
+	paymentRetryMutation,
+	paymentWebhookMutation,
 	requireAdmin,
 	requirePermission,
 	underwriterMutation,
@@ -139,6 +143,22 @@ export const testPaymentQuery = paymentQuery
 	.handler(async () => okResponse())
 	.public();
 
+export const testPaymentManageMutation = paymentMutation
+	.handler(async () => okResponse())
+	.public();
+
+export const testPaymentRetryMutation = paymentRetryMutation
+	.handler(async () => okResponse())
+	.public();
+
+export const testPaymentCancelMutation = paymentCancelMutation
+	.handler(async () => okResponse())
+	.public();
+
+export const testPaymentWebhookMutation = paymentWebhookMutation
+	.handler(async () => okResponse())
+	.public();
+
 // ── ledger ───────────────────────────────────────────────────────────
 export const testLedgerQuery = ledgerQuery
 	.handler(async () => okResponse())
@@ -169,6 +189,11 @@ export const testDispersalQuery = authedQuery
 
 export const testObligationWaiveMutation = authedMutation
 	.use(requirePermission("obligation:waive"))
+	.handler(async () => okResponse())
+	.public();
+
+export const testOnboardingManageQuery = adminQuery
+	.use(requirePermission("onboarding:manage"))
 	.handler(async () => okResponse())
 	.public();
 

@@ -1,4 +1,8 @@
 import { redirect } from "@tanstack/react-router";
+import {
+	hasAnyPermissionGrant,
+	hasPermissionGrant,
+} from "../../convex/auth/permissionCatalog";
 import { FAIRLEND_STAFF_ORG_ID } from "../../convex/constants";
 import { buildSignInRedirect } from "./auth-redirect";
 
@@ -16,22 +20,18 @@ export const ISLAND_PERMISSIONS = {
 export type IslandPermission =
 	(typeof ISLAND_PERMISSIONS)[keyof typeof ISLAND_PERMISSIONS];
 
-const ADMIN_ACCESS_PERMISSION = ISLAND_PERMISSIONS.admin;
-
 interface PermissionCheckOptions {
 	allowAdminOverride?: boolean;
 }
-
 export function hasPermission(
 	permissions: readonly string[],
 	permission: string,
 	options: PermissionCheckOptions = {}
 ): boolean {
-	return (
-		permissions.includes(permission) ||
-		(options.allowAdminOverride !== false &&
-			permissions.includes(ADMIN_ACCESS_PERMISSION))
-	);
+	if (options.allowAdminOverride === false) {
+		return permissions.includes(permission);
+	}
+	return hasPermissionGrant(permissions, permission);
 }
 
 export function hasAnyPermission(
@@ -39,9 +39,12 @@ export function hasAnyPermission(
 	requiredPermissions: readonly string[],
 	options: PermissionCheckOptions = {}
 ): boolean {
-	return requiredPermissions.some((permission) =>
-		hasPermission(permissions, permission, options)
-	);
+	if (options.allowAdminOverride === false) {
+		return requiredPermissions.some((permission) =>
+			permissions.includes(permission)
+		);
+	}
+	return hasAnyPermissionGrant(permissions, requiredPermissions);
 }
 
 export function isFairLendStaffAdmin(context: {

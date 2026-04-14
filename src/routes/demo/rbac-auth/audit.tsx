@@ -16,6 +16,7 @@ import {
 	CardTitle,
 } from "#/components/ui/card";
 import { useAppAuth } from "#/hooks/use-app-auth";
+import { hasPermission, isFairLendStaffAdmin } from "#/lib/auth";
 import { api } from "../../../../convex/_generated/api";
 
 export const Route = createFileRoute("/demo/rbac-auth/audit")({
@@ -85,7 +86,9 @@ const SEVERITY_CONFIG: Record<
 
 function AuditPage() {
 	const auth = useAppAuth();
-	const canViewAudit = auth.permissions.includes("platform:view_audit");
+	const canViewAudit =
+		isFairLendStaffAdmin(auth) &&
+		hasPermission(auth.permissions, "platform:view_audit");
 
 	return (
 		<div className="space-y-6">
