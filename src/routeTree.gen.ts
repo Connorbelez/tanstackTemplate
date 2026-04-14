@@ -23,6 +23,7 @@ import { Route as BorrowerRouteRouteImport } from './routes/borrower/route'
 import { Route as AdminRouteRouteImport } from './routes/admin/route'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as E2eSwitchOrgRouteImport } from './routes/e2e/switch-org'
+import { Route as E2eSessionRouteImport } from './routes/e2e/session'
 import { Route as DemoWorkosRouteImport } from './routes/demo/workos'
 import { Route as DemoTanstackQueryRouteImport } from './routes/demo/tanstack-query'
 import { Route as DemoTableRouteImport } from './routes/demo/table'
@@ -183,6 +184,11 @@ const IndexRoute = IndexRouteImport.update({
 const E2eSwitchOrgRoute = E2eSwitchOrgRouteImport.update({
   id: '/e2e/switch-org',
   path: '/e2e/switch-org',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const E2eSessionRoute = E2eSessionRouteImport.update({
+  id: '/e2e/session',
+  path: '/e2e/session',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DemoWorkosRoute = DemoWorkosRouteImport.update({
@@ -724,6 +730,7 @@ export interface FileRoutesByFullPath {
   '/demo/table': typeof DemoTableRoute
   '/demo/tanstack-query': typeof DemoTanstackQueryRoute
   '/demo/workos': typeof DemoWorkosRoute
+  '/e2e/session': typeof E2eSessionRoute
   '/e2e/switch-org': typeof E2eSwitchOrgRoute
   '/demo/rbac/admin': typeof DemoRbacAdminRouteRouteWithChildren
   '/demo/rbac/borrower': typeof DemoRbacBorrowerRouteRoute
@@ -823,6 +830,7 @@ export interface FileRoutesByTo {
   '/demo/table': typeof DemoTableRoute
   '/demo/tanstack-query': typeof DemoTanstackQueryRoute
   '/demo/workos': typeof DemoWorkosRoute
+  '/e2e/session': typeof E2eSessionRoute
   '/e2e/switch-org': typeof E2eSwitchOrgRoute
   '/demo/rbac/admin': typeof DemoRbacAdminRouteRouteWithChildren
   '/demo/rbac/borrower': typeof DemoRbacBorrowerRouteRoute
@@ -931,6 +939,7 @@ export interface FileRoutesById {
   '/demo/table': typeof DemoTableRoute
   '/demo/tanstack-query': typeof DemoTanstackQueryRoute
   '/demo/workos': typeof DemoWorkosRoute
+  '/e2e/session': typeof E2eSessionRoute
   '/e2e/switch-org': typeof E2eSwitchOrgRoute
   '/demo/rbac/admin': typeof DemoRbacAdminRouteRouteWithChildren
   '/demo/rbac/borrower': typeof DemoRbacBorrowerRouteRoute
@@ -1040,6 +1049,7 @@ export interface FileRouteTypes {
     | '/demo/table'
     | '/demo/tanstack-query'
     | '/demo/workos'
+    | '/e2e/session'
     | '/e2e/switch-org'
     | '/demo/rbac/admin'
     | '/demo/rbac/borrower'
@@ -1139,6 +1149,7 @@ export interface FileRouteTypes {
     | '/demo/table'
     | '/demo/tanstack-query'
     | '/demo/workos'
+    | '/e2e/session'
     | '/e2e/switch-org'
     | '/demo/rbac/admin'
     | '/demo/rbac/borrower'
@@ -1246,6 +1257,7 @@ export interface FileRouteTypes {
     | '/demo/table'
     | '/demo/tanstack-query'
     | '/demo/workos'
+    | '/e2e/session'
     | '/e2e/switch-org'
     | '/demo/rbac/admin'
     | '/demo/rbac/borrower'
@@ -1346,6 +1358,7 @@ export interface RootRouteChildren {
   DemoTableRoute: typeof DemoTableRoute
   DemoTanstackQueryRoute: typeof DemoTanstackQueryRoute
   DemoWorkosRoute: typeof DemoWorkosRoute
+  E2eSessionRoute: typeof E2eSessionRoute
   E2eSwitchOrgRoute: typeof E2eSwitchOrgRoute
   DemoFormAddressRoute: typeof DemoFormAddressRoute
   DemoFormSimpleRoute: typeof DemoFormSimpleRoute
@@ -1449,6 +1462,13 @@ declare module '@tanstack/react-router' {
       path: '/e2e/switch-org'
       fullPath: '/e2e/switch-org'
       preLoaderRoute: typeof E2eSwitchOrgRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/e2e/session': {
+      id: '/e2e/session'
+      path: '/e2e/session'
+      fullPath: '/e2e/session'
+      preLoaderRoute: typeof E2eSessionRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/demo/workos': {
@@ -2423,6 +2443,7 @@ const rootRouteChildren: RootRouteChildren = {
   DemoTableRoute: DemoTableRoute,
   DemoTanstackQueryRoute: DemoTanstackQueryRoute,
   DemoWorkosRoute: DemoWorkosRoute,
+  E2eSessionRoute: E2eSessionRoute,
   E2eSwitchOrgRoute: E2eSwitchOrgRoute,
   DemoFormAddressRoute: DemoFormAddressRoute,
   DemoFormSimpleRoute: DemoFormSimpleRoute,

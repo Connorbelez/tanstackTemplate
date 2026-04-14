@@ -1,7 +1,13 @@
 import { v } from "convex/values";
 import { internalMutation } from "../_generated/server";
 import type { Viewer } from "../fluent";
-import { adminMutation, authedMutation, requirePermission } from "../fluent";
+import {
+	adminAction,
+	adminMutation,
+	authedMutation,
+	requirePermission,
+} from "../fluent";
+import { runManualInboundCollectionForObligation } from "../payments/collectionPlan/manualCollection";
 import { executeTransition } from "./transition";
 import type { CommandSource } from "./types";
 import { sourceValidator } from "./validators";
@@ -124,28 +130,30 @@ export const transitionMortgageInternal = internalMutation({
 });
 
 /**
- * Authed mutation for confirming obligation payments.
- * Requires authentication + `obligation:manage` permission.
- * Wraps PAYMENT_APPLIED transition for admin/broker use.
+ * FairLend admin action for confirming obligation payments.
+ * Routes manual collection through the unified transfer-backed rails.
  */
-export const confirmObligationPayment = authedMutation
-	.use(requirePermission("obligation:manage"))
+export const confirmObligationPayment = adminAction
 	.input({
 		entityId: v.id("obligations"),
 		amount: v.number(),
 		paidAt: v.optional(v.number()),
 	})
 	.handler(async (ctx, args) => {
-		const source = buildSource(ctx.viewer, "admin_dashboard");
-		return executeTransition(ctx, {
-			entityType: "obligation",
-			entityId: args.entityId,
-			eventType: "PAYMENT_APPLIED",
-			payload: {
-				amount: args.amount,
-				paidAt: args.paidAt ?? Date.now(),
+		const requestedAt = Date.now();
+		return runManualInboundCollectionForObligation(ctx, {
+			amount: args.amount,
+			manualSettlement: {
+				instrumentType: "journal",
+				settlementOccurredAt: args.paidAt ?? requestedAt,
+				enteredBy: ctx.viewer.authId,
 			},
-			source,
+			obligationId: args.entityId,
+			reason: "confirm_obligation_payment",
+			requestedAt,
+			requestedByActorId: ctx.viewer.authId,
+			requestedByActorType: "admin",
+			triggerSource: "admin_manual",
 		});
 	})
 	.public();

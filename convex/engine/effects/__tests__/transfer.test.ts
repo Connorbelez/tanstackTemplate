@@ -12,10 +12,7 @@ import {
 	seedMinimalEntities,
 	type TestHarness,
 } from "../../../payments/cashLedger/__tests__/testUtils";
-import {
-	postCashReceiptForObligation,
-	postObligationAccrued,
-} from "../../../payments/cashLedger/integrations";
+import { postObligationAccrued } from "../../../payments/cashLedger/integrations";
 import {
 	auditTrailModules,
 	convexModules,
@@ -831,14 +828,13 @@ describe("publishTransferReversed effect", () => {
 				source: SYSTEM_SOURCE,
 			});
 
-			await postCashReceiptForObligation(ctx, {
-				obligationId,
-				amount: 55_000,
-				idempotencyKey: `transfer-effect-bridged-receipt:${collectionAttemptId}`,
-				attemptId: collectionAttemptId,
-				postingGroupId: `cash-receipt:${collectionAttemptId}`,
-				source: SYSTEM_SOURCE,
-			});
+			await publishTransferConfirmedMutation._handler(
+				ctx,
+				buildEffectArgs(transferId, {
+					effectName: "publishTransferConfirmed",
+					eventType: "FUNDS_SETTLED",
+				})
+			);
 
 			await publishTransferReversedMutation._handler(
 				ctx,
@@ -849,21 +845,22 @@ describe("publishTransferReversed effect", () => {
 			);
 
 			const entries = await loadTransferEntries(ctx, transferId);
-			expect(entries.length).toBeGreaterThanOrEqual(1);
-			expect(entries.every((entry) => entry.entryType === "REVERSAL")).toBe(
-				true
+			expect(entries.length).toBeGreaterThanOrEqual(2);
+			const reversalEntries = entries.filter(
+				(entry) => entry.entryType === "REVERSAL"
 			);
+			expect(reversalEntries.length).toBeGreaterThanOrEqual(1);
 			expect(
-				entries.every(
+				reversalEntries.every(
 					(entry) =>
 						entry.postingGroupId === `reversal-group:transfer:${transferId}`
 				)
 			).toBe(true);
 			expect(
-				entries.some((entry) => entry.transferRequestId === transferId)
+				reversalEntries.some((entry) => entry.transferRequestId === transferId)
 			).toBe(true);
 			expect(
-				entries.some((entry) => entry.attemptId === collectionAttemptId)
+				reversalEntries.some((entry) => entry.attemptId === collectionAttemptId)
 			).toBe(false);
 
 			const transfer = await ctx.db.get(transferId);

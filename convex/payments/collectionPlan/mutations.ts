@@ -13,6 +13,7 @@ export const createEntry = internalMutation({
 	args: {
 		obligationIds: v.array(v.id("obligations")),
 		amount: v.number(),
+		executionIdempotencyKey: v.optional(v.string()),
 		method: v.string(),
 		scheduledDate: v.number(),
 		status: v.union(

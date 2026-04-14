@@ -1,8 +1,12 @@
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import type { Doc, Id } from "../../_generated/dataModel";
 import type { MutationCtx } from "../../_generated/server";
 import { internalMutation } from "../../_generated/server";
 import { auditLog } from "../../auditLog";
+import {
+	canAccessMortgage,
+	canAccessWorkoutPlan,
+} from "../../auth/resourceChecks";
 import { buildSource } from "../../engine/commands";
 import { paymentMutation, paymentQuery, type Viewer } from "../../fluent";
 import {
@@ -63,6 +67,34 @@ export type CreateWorkoutPlanResult =
 			reasonDetail: string;
 			requestedAt: number;
 	  };
+
+async function assertMortgageAccess(
+	ctx: Parameters<typeof canAccessMortgage>[0] & {
+		viewer: Parameters<typeof canAccessMortgage>[1];
+	},
+	mortgageId: Parameters<typeof canAccessMortgage>[2]
+) {
+	const allowed = await canAccessMortgage(ctx, ctx.viewer, mortgageId);
+	if (!allowed) {
+		throw new ConvexError(
+			`Forbidden: no mortgage access for ${String(mortgageId)}`
+		);
+	}
+}
+
+async function assertWorkoutPlanAccess(
+	ctx: Parameters<typeof canAccessWorkoutPlan>[0] & {
+		viewer: Parameters<typeof canAccessWorkoutPlan>[1];
+	},
+	workoutPlanId: Parameters<typeof canAccessWorkoutPlan>[2]
+) {
+	const allowed = await canAccessWorkoutPlan(ctx, ctx.viewer, workoutPlanId);
+	if (!allowed) {
+		throw new ConvexError(
+			`Forbidden: no workout plan access for ${String(workoutPlanId)}`
+		);
+	}
+}
 
 const activateWorkoutPlanReasonCodeValues = [
 	"active_workout_plan_exists",
@@ -1158,6 +1190,7 @@ export const createWorkoutPlan = paymentMutation
 		rationale: v.string(),
 	})
 	.handler(async (ctx, args): Promise<CreateWorkoutPlanResult> => {
+		await assertMortgageAccess(ctx, args.mortgageId);
 		return createWorkoutPlanImpl(ctx, args, buildViewerWorkoutActor(ctx));
 	})
 	.public();
@@ -1189,6 +1222,7 @@ export const activateWorkoutPlan = paymentMutation
 		// Page 14 boundary lock: workout activation only rewrites future
 		// collection strategy. Obligations, mortgage lifecycle, and cash meaning
 		// still move through their own governed seams later.
+		await assertWorkoutPlanAccess(ctx, args.workoutPlanId);
 		return activateWorkoutPlanImpl(ctx, args, buildViewerWorkoutActor(ctx));
 	})
 	.public();
@@ -1211,6 +1245,7 @@ export const activateWorkoutPlanInternal = internalMutation({
 export const completeWorkoutPlan = paymentMutation
 	.input(workoutPlanIdInput)
 	.handler(async (ctx, args): Promise<CompleteWorkoutPlanResult> => {
+		await assertWorkoutPlanAccess(ctx, args.workoutPlanId);
 		const result = await runWorkoutExit({
 			action: "collection_plan.complete_workout_plan",
 			ctx,
@@ -1243,6 +1278,7 @@ export const cancelWorkoutPlan = paymentMutation
 		...workoutPlanIdInput,
 	})
 	.handler(async (ctx, args): Promise<CancelWorkoutPlanResult> => {
+		await assertWorkoutPlanAccess(ctx, args.workoutPlanId);
 		const cancelReason = trimOrEmpty(args.reason ?? "") || undefined;
 		const result = await runWorkoutExit({
 			action: "collection_plan.cancel_workout_plan",
@@ -1278,6 +1314,7 @@ export const getWorkoutPlan = paymentQuery
 		workoutPlanId: v.id("workoutPlans"),
 	})
 	.handler(async (ctx, args) => {
+		await assertWorkoutPlanAccess(ctx, args.workoutPlanId);
 		const workoutPlan = await ctx.db.get(args.workoutPlanId);
 		if (!workoutPlan) {
 			return null;
@@ -1311,6 +1348,7 @@ export const listWorkoutPlansByMortgage = paymentQuery
 		mortgageId: v.id("mortgages"),
 	})
 	.handler(async (ctx, args) => {
+		await assertMortgageAccess(ctx, args.mortgageId);
 		const plans = await ctx.db
 			.query("workoutPlans")
 			.withIndex("by_mortgage", (q) => q.eq("mortgageId", args.mortgageId))

@@ -1,6 +1,13 @@
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import type { Doc, Id } from "../../_generated/dataModel";
 import { internalQuery, type QueryCtx } from "../../_generated/server";
+import {
+	canAccessBorrowerEntity,
+	canAccessCashLedgerAccount,
+	canAccessLenderEntity,
+	canAccessMortgage,
+	canAccessObligation,
+} from "../../auth/resourceChecks";
 import { cashLedgerQuery } from "../../fluent";
 import {
 	findCashAccount,
@@ -33,9 +40,80 @@ function compareSequence(
 	return 0;
 }
 
+async function assertCashLedgerAccountAccess(
+	ctx: Parameters<typeof canAccessCashLedgerAccount>[0] & {
+		viewer: Parameters<typeof canAccessCashLedgerAccount>[1];
+	},
+	accountId: Parameters<typeof canAccessCashLedgerAccount>[2]
+) {
+	const allowed = await canAccessCashLedgerAccount(ctx, ctx.viewer, accountId);
+	if (!allowed) {
+		throw new ConvexError(
+			`Forbidden: no cash-ledger account access for ${String(accountId)}`
+		);
+	}
+}
+
+async function assertMortgageAccess(
+	ctx: Parameters<typeof canAccessMortgage>[0] & {
+		viewer: Parameters<typeof canAccessMortgage>[1];
+	},
+	mortgageId: Parameters<typeof canAccessMortgage>[2]
+) {
+	const allowed = await canAccessMortgage(ctx, ctx.viewer, mortgageId);
+	if (!allowed) {
+		throw new ConvexError(
+			`Forbidden: no mortgage access for ${String(mortgageId)}`
+		);
+	}
+}
+
+async function assertLenderAccess(
+	ctx: Parameters<typeof canAccessLenderEntity>[0] & {
+		viewer: Parameters<typeof canAccessLenderEntity>[1];
+	},
+	lenderId: Parameters<typeof canAccessLenderEntity>[2]
+) {
+	const allowed = await canAccessLenderEntity(ctx, ctx.viewer, lenderId);
+	if (!allowed) {
+		throw new ConvexError(
+			`Forbidden: no lender access for ${String(lenderId)}`
+		);
+	}
+}
+
+async function assertBorrowerAccess(
+	ctx: Parameters<typeof canAccessBorrowerEntity>[0] & {
+		viewer: Parameters<typeof canAccessBorrowerEntity>[1];
+	},
+	borrowerId: Parameters<typeof canAccessBorrowerEntity>[2]
+) {
+	const allowed = await canAccessBorrowerEntity(ctx, ctx.viewer, borrowerId);
+	if (!allowed) {
+		throw new ConvexError(
+			`Forbidden: no borrower access for ${String(borrowerId)}`
+		);
+	}
+}
+
+async function assertObligationAccess(
+	ctx: Parameters<typeof canAccessObligation>[0] & {
+		viewer: Parameters<typeof canAccessObligation>[1];
+	},
+	obligationId: Parameters<typeof canAccessObligation>[2]
+) {
+	const allowed = await canAccessObligation(ctx, ctx.viewer, obligationId);
+	if (!allowed) {
+		throw new ConvexError(
+			`Forbidden: no obligation access for ${String(obligationId)}`
+		);
+	}
+}
+
 export const getAccountBalance = cashLedgerQuery
 	.input({ accountId: v.id("cash_ledger_accounts") })
 	.handler(async (ctx, args) => {
+		await assertCashLedgerAccountAccess(ctx, args.accountId);
 		const account = await ctx.db.get(args.accountId);
 		if (!account) {
 			throw new Error(`Cash ledger account not found: ${args.accountId}`);
@@ -47,6 +125,7 @@ export const getAccountBalance = cashLedgerQuery
 export const getObligationBalance = cashLedgerQuery
 	.input({ obligationId: v.id("obligations") })
 	.handler(async (ctx, args) => {
+		await assertObligationAccess(ctx, args.obligationId);
 		const account = await findCashAccount(ctx.db, {
 			family: "BORROWER_RECEIVABLE",
 			obligationId: args.obligationId,
@@ -67,6 +146,7 @@ export const getObligationBalance = cashLedgerQuery
 export const getMortgageCashState = cashLedgerQuery
 	.input({ mortgageId: v.id("mortgages") })
 	.handler(async (ctx, args) => {
+		await assertMortgageAccess(ctx, args.mortgageId);
 		const accounts = await ctx.db
 			.query("cash_ledger_accounts")
 			.withIndex("by_mortgage", (q) => q.eq("mortgageId", args.mortgageId))
@@ -89,6 +169,7 @@ export const getMortgageCashState = cashLedgerQuery
 export const getLenderPayableBalance = cashLedgerQuery
 	.input({ lenderId: v.id("lenders") })
 	.handler(async (ctx, args) => {
+		await assertLenderAccess(ctx, args.lenderId);
 		return computeGrossLenderPayableBalance(ctx.db, args.lenderId);
 	})
 	.public();
@@ -166,6 +247,7 @@ export async function getAvailableLenderPayableBalanceImpl(
 export const getAvailableLenderPayableBalance = cashLedgerQuery
 	.input({ lenderId: v.id("lenders") })
 	.handler(async (ctx, args) => {
+		await assertLenderAccess(ctx, args.lenderId);
 		return getAvailableLenderPayableBalanceImpl(ctx, args.lenderId);
 	})
 	.public();
@@ -213,6 +295,7 @@ export const getAccountBalanceAt = cashLedgerQuery
 		asOf: v.number(),
 	})
 	.handler(async (ctx, args) => {
+		await assertCashLedgerAccountAccess(ctx, args.accountId);
 		const [debits, credits] = await Promise.all([
 			ctx.db
 				.query("cash_ledger_journal_entries")
@@ -256,6 +339,7 @@ export const getAccountBalanceAt = cashLedgerQuery
 export const getObligationHistory = cashLedgerQuery
 	.input({ obligationId: v.id("obligations") })
 	.handler(async (ctx, args) => {
+		await assertObligationAccess(ctx, args.obligationId);
 		return ctx.db
 			.query("cash_ledger_journal_entries")
 			.withIndex("by_obligation_and_sequence", (q) =>
@@ -268,6 +352,7 @@ export const getObligationHistory = cashLedgerQuery
 export const reconcileObligationSettlementProjection = cashLedgerQuery
 	.input({ obligationId: v.id("obligations") })
 	.handler(async (ctx, args) => {
+		await assertObligationAccess(ctx, args.obligationId);
 		return reconcileObligationSettlementProjectionInternal(
 			ctx,
 			args.obligationId
@@ -278,6 +363,7 @@ export const reconcileObligationSettlementProjection = cashLedgerQuery
 export const getJournalSettledAmount = cashLedgerQuery
 	.input({ obligationId: v.id("obligations") })
 	.handler(async (ctx, args) => {
+		await assertObligationAccess(ctx, args.obligationId);
 		return getJournalSettledAmountForObligation(ctx, args.obligationId);
 	})
 	.public();
@@ -345,6 +431,7 @@ export const getAccountBalanceRange = cashLedgerQuery
 		toDate: v.string(),
 	})
 	.handler(async (ctx, args) => {
+		await assertCashLedgerAccountAccess(ctx, args.accountId);
 		if (!BUSINESS_DATE_PATTERN.test(args.fromDate)) {
 			throw new Error(
 				`Invalid fromDate "${args.fromDate}": expected YYYY-MM-DD format`
@@ -445,6 +532,7 @@ export const getAccountBalanceRange = cashLedgerQuery
 export const getBorrowerBalance = cashLedgerQuery
 	.input({ borrowerId: v.id("borrowers") })
 	.handler(async (ctx, args) => {
+		await assertBorrowerAccess(ctx, args.borrowerId);
 		const accounts = await ctx.db
 			.query("cash_ledger_accounts")
 			.withIndex("by_borrower", (q) => q.eq("borrowerId", args.borrowerId))
@@ -486,6 +574,7 @@ export const getBalancesByFamily = cashLedgerQuery
 		mortgageId: v.id("mortgages"),
 	})
 	.handler(async (ctx, args) => {
+		await assertMortgageAccess(ctx, args.mortgageId);
 		const accounts = await ctx.db
 			.query("cash_ledger_accounts")
 			.withIndex("by_mortgage", (q) => q.eq("mortgageId", args.mortgageId))
@@ -568,6 +657,12 @@ export const journalReplayIntegrityCheck = cashLedgerQuery
 		mortgageId: v.optional(v.id("mortgages")),
 	})
 	.handler(async (ctx, args) => {
+		if (args.accountId) {
+			await assertCashLedgerAccountAccess(ctx, args.accountId);
+		}
+		if (args.mortgageId) {
+			await assertMortgageAccess(ctx, args.mortgageId);
+		}
 		return replayJournalIntegrity(ctx, {
 			mode: args.mode,
 			accountId: args.accountId,

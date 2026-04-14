@@ -1,3 +1,5 @@
+import { existsSync, mkdirSync, renameSync, rmSync } from "node:fs";
+import { dirname } from "node:path";
 import type { Page } from "@playwright/test";
 import { loginViaWorkOS } from "./workos-login";
 
@@ -25,7 +27,76 @@ export async function createAuthStorageState(args: {
 	if (args.orgId) {
 		await args.page.goto(`/e2e/switch-org?orgId=${args.orgId}`);
 		await args.page.waitForURL("**/", { timeout: 15_000 });
+
+		const expectedRole =
+			args.orgId === TEST_MEMBER_ORG_ID ? "member" : "admin";
+
+		// Force the auth client to settle on the switched organization before
+		// persisting the browser state. Use a dedicated e2e route so setup does
+		// not depend on demo page tabs or layout structure.
+		await args.page.goto("/e2e/session");
+		await args.page.waitForFunction(
+			([expectedOrgId, expectedSessionRole]) => {
+				const el = document.querySelector('[data-testid="session-json"]');
+				if (!el?.textContent) {
+					return false;
+				}
+
+				try {
+					const session = JSON.parse(el.textContent) as {
+						tokenOrganizationId?: string | null;
+						tokenRole?: string | null;
+						error?: string;
+					};
+					if (session.error) {
+						return true;
+					}
+					return (
+						session.tokenOrganizationId === expectedOrgId &&
+						session.tokenRole === expectedSessionRole
+					);
+				} catch {
+					return false;
+				}
+			},
+			[args.orgId, expectedRole],
+			{ timeout: 15_000 }
+		);
+
+		const sessionJson = await args.page
+			.locator('[data-testid="session-json"]')
+			.textContent();
+		if (!sessionJson) {
+			throw new Error("E2E session bootstrap did not render session JSON");
+		}
+
+		const session = JSON.parse(sessionJson) as {
+			error?: string;
+			tokenOrganizationId?: string | null;
+			tokenRole?: string | null;
+		};
+		if (session.error) {
+			throw new Error(
+				`E2E session bootstrap failed: ${session.error} for org ${args.orgId}`
+			);
+		}
 	}
 
-	await args.page.context().storageState({ path: args.path });
+	mkdirSync(dirname(args.path), { recursive: true });
+
+	const tempPath = `${args.path}.${process.pid}.${Math.random().toString(36).slice(2)}.tmp`;
+	await args.page.context().storageState({ path: tempPath });
+
+	try {
+		renameSync(tempPath, args.path);
+	} catch (error) {
+		const err = error as NodeJS.ErrnoException;
+		rmSync(tempPath, { force: true });
+
+		if ((err.code === "EEXIST" || err.code === "EPERM") && existsSync(args.path)) {
+			return;
+		}
+
+		throw error;
+	}
 }

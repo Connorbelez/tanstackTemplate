@@ -138,13 +138,6 @@ describe("CRM user saved views", () => {
 			viewType: "table",
 			isDefault: true,
 		});
-		const userDefault = await asUser(t).mutation(CREATE_USER_SAVED_VIEW, {
-			name: "User Default",
-			objectDefId: fixture.objectDefId,
-			sourceViewDefId: fixture.defaultViewId,
-			viewType: "table",
-			isDefault: true,
-		});
 
 		const adminViews = await asAdmin(t).query(LIST_USER_SAVED_VIEWS, {
 			objectDefId: fixture.objectDefId,
@@ -162,29 +155,40 @@ describe("CRM user saved views", () => {
 		});
 		expect(adminDefault?.userSavedViewId).toBe(adminDefaultB);
 
-		const memberViews = await asUser(t).query(LIST_USER_SAVED_VIEWS, {
-			objectDefId: fixture.objectDefId,
-		});
-		expect(memberViews).toHaveLength(1);
-		expect(memberViews[0].userSavedViewId).toBe(userDefault);
+		await expect(
+			asUser(t).mutation(CREATE_USER_SAVED_VIEW, {
+				name: "User Default",
+				objectDefId: fixture.objectDefId,
+				sourceViewDefId: fixture.defaultViewId,
+				viewType: "table",
+				isDefault: true,
+			})
+		).rejects.toThrow("Forbidden: admin role required");
 
-		const memberDefault = await asUser(t).query(GET_DEFAULT_USER_SAVED_VIEW, {
-			objectDefId: fixture.objectDefId,
-		});
-		expect(memberDefault?.userSavedViewId).toBe(userDefault);
+		await expect(
+			asUser(t).query(LIST_USER_SAVED_VIEWS, {
+				objectDefId: fixture.objectDefId,
+			})
+		).rejects.toThrow("Forbidden: admin role required");
+
+		await expect(
+			asUser(t).query(GET_DEFAULT_USER_SAVED_VIEW, {
+				objectDefId: fixture.objectDefId,
+			})
+		).rejects.toThrow("Forbidden: admin role required");
 
 		await expect(
 			asUser(t).mutation(SET_DEFAULT_USER_SAVED_VIEW, {
 				userSavedViewId: adminDefaultB,
 			})
-		).rejects.toThrow("Saved view not found or access denied");
+		).rejects.toThrow("Forbidden: admin role required");
 
 		await expect(
 			asUser(t).query(api.crm.viewQueries.queryViewRecords, {
 				viewDefId: fixture.defaultViewId,
 				userSavedViewId: adminDefaultB,
 			})
-		).rejects.toThrow("Saved view not found or access denied");
+		).rejects.toThrow("Forbidden: admin role required");
 	});
 
 	it("applies the default personal table view to records and schema", async () => {

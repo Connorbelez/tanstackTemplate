@@ -1,9 +1,20 @@
 import { expect, test } from "@playwright/test";
-import { BASE_URL } from "../helpers/document-engine";
+import {
+	ADMIN_STORAGE_STATE,
+	BASE_URL,
+	openAdminPage,
+} from "../helpers/document-engine";
 
 const GENERATE_BUTTON_PATTERN = /Generate/;
 
+test.use({ storageState: ADMIN_STORAGE_STATE });
+
 test.describe("Document Engine - Generate Page", () => {
+	test.beforeAll(async ({ browser }) => {
+		const { context } = await openAdminPage(browser);
+		await context.close();
+	});
+
 	test("generate page renders with mode toggle and source selector", async ({
 		page,
 	}) => {

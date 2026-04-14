@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-const WORKOS_URL_PATTERN = /authkit\.workos\.com|workos\.com/i;
+const AUTHKIT_URL_PATTERN = /\.authkit\.app(?:\/|$)/i;
 
 test("public route /about works without auth", async ({ page }) => {
 	await page.goto("/about");
@@ -10,11 +10,11 @@ test("public route /about works without auth", async ({ page }) => {
 	).toBeVisible();
 });
 
-test("/sign-in redirects to WorkOS hosted page", async ({ page }) => {
+test("/sign-in redirects to AuthKit hosted page", async ({ page }) => {
 	await page.goto("/sign-in");
 
-	// Should redirect to the WorkOS-hosted authentication page
-	await page.waitForURL(WORKOS_URL_PATTERN, {
+	// Should redirect to the AuthKit-hosted authentication page
+	await page.waitForURL(AUTHKIT_URL_PATTERN, {
 		timeout: 30_000,
 	});
 

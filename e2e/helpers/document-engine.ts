@@ -1,7 +1,51 @@
-import { expect, type Page } from "@playwright/test";
+import { existsSync } from "node:fs";
+import {
+	expect,
+	type Browser,
+	type BrowserContext,
+	test,
+	type Page,
+} from "@playwright/test";
 import { PDFDocument } from "pdf-lib";
+import {
+	TEST_ADMIN_ORG_ID,
+	createAuthStorageState,
+} from "./auth-storage";
 
 export const BASE_URL = "/demo/document-engine";
+// Playwright reads `storageState` before `beforeAll`, so this path stays stable.
+// The helper in `auth-storage.ts` writes it atomically to avoid worker races.
+export const ADMIN_STORAGE_STATE = ".auth/admin.json";
+
+function getBaseURL(): string {
+	const baseURL = test.info().project.use.baseURL;
+	if (!baseURL) {
+		throw new Error(
+			"Playwright baseURL is required for document engine auth setup"
+		);
+	}
+
+	return baseURL;
+}
+
+async function ensureAdminStorageState(browser: Browser): Promise<void> {
+	if (existsSync(ADMIN_STORAGE_STATE)) {
+		return;
+	}
+
+	const bootstrapContext = await browser.newContext({ baseURL: getBaseURL() });
+	const bootstrapPage = await bootstrapContext.newPage();
+
+	try {
+		await createAuthStorageState({
+			orgId: TEST_ADMIN_ORG_ID,
+			page: bootstrapPage,
+			path: ADMIN_STORAGE_STATE,
+		});
+	} finally {
+		await bootstrapContext.close();
+	}
+}
 
 /**
  * Generate a unique name for test resources to avoid collisions
@@ -16,6 +60,24 @@ export function uniqueName(prefix: string): string {
  */
 export function uniqueKey(prefix: string): string {
 	return `${prefix}_${Date.now().toString(36).slice(-4)}_${Math.random().toString(36).slice(2, 5)}`;
+}
+
+/**
+ * Open a browser context/page pair authenticated as the admin test user.
+ * Use this for setup and teardown flows that create their own browser context.
+ */
+export async function openAdminPage(browser: Browser): Promise<{
+	context: BrowserContext;
+	page: Page;
+}> {
+	await ensureAdminStorageState(browser);
+
+	const context = await browser.newContext({
+		baseURL: getBaseURL(),
+		storageState: ADMIN_STORAGE_STATE,
+	});
+	const page = await context.newPage();
+	return { context, page };
 }
 
 /**

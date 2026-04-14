@@ -1,7 +1,9 @@
 import { expect, test } from "@playwright/test";
 import {
+	ADMIN_STORAGE_STATE,
 	BASE_URL,
 	createTestPdfBuffer,
+	openAdminPage,
 	uniqueName,
 } from "../helpers/document-engine";
 
@@ -9,7 +11,14 @@ const PAGE_COUNT_PATTERN = /1 page/;
 const FILE_SIZE_PATTERN = /KB/;
 const HASH_PATTERN = /SHA:/;
 
+test.use({ storageState: ADMIN_STORAGE_STATE });
+
 test.describe("Document Engine - Base PDF Library", () => {
+	test.beforeAll(async ({ browser }) => {
+		const { context } = await openAdminPage(browser);
+		await context.close();
+	});
+
 	test("library page renders with heading and upload button", async ({
 		page,
 	}) => {

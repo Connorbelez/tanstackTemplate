@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createMockViewer } from "../../../../src/test/auth/helpers";
+import {
+	createMockViewer,
+	seedFromIdentity,
+} from "../../../../src/test/auth/helpers";
 import { FAIRLEND_ADMIN } from "../../../../src/test/auth/identities";
+import { lookupPermissions } from "../../../../src/test/auth/permissions";
 import {
 	createGovernedTestConvex,
 	drainScheduledWork,
@@ -22,7 +26,11 @@ function createBackendTestConvex() {
 
 const PAYMENT_OPERATOR = createMockViewer({
 	roles: ["admin"],
-	permissions: ["payment:view", "payment:manage"],
+	permissions: [
+		...lookupPermissions(["admin"]),
+		"payment:view",
+		"payment:manage",
+	],
 	orgId: FAIRLEND_ADMIN.org_id,
 	orgName: FAIRLEND_ADMIN.organization_name,
 	subject: "user_payment_operator",
@@ -55,8 +63,27 @@ async function seedWorkoutFixture(
 		workoutScheduledDate?: number;
 	}
 ) {
+	const operatorUserId = await seedFromIdentity(t, PAYMENT_OPERATOR);
+	const operatorBrokerId = await t.run(async (ctx) => {
+		const existingBroker = await ctx.db
+			.query("brokers")
+			.withIndex("by_user", (q) => q.eq("userId", operatorUserId))
+			.first();
+		if (existingBroker) {
+			return existingBroker._id;
+		}
+
+		return ctx.db.insert("brokers", {
+			userId: operatorUserId,
+			status: "active",
+			createdAt: Date.now(),
+		});
+	});
+
 	const borrowerId = await seedBorrowerProfile(t);
-	const mortgageId = await seedMortgage(t);
+	const mortgageId = await seedMortgage(t, {
+		brokerOfRecordId: operatorBrokerId,
+	});
 	const obligationStatuses = options?.obligationStatuses ?? [
 		"upcoming",
 		"upcoming",
@@ -113,6 +140,19 @@ async function seedWorkoutFixture(
 		obligationIds,
 		originalPlanEntryIds,
 	};
+}
+
+function createUnauthorizedPaymentOperator() {
+	return createMockViewer({
+		roles: ["member"],
+		permissions: ["payment:view", "payment:manage"],
+		orgId: FAIRLEND_ADMIN.org_id,
+		orgName: FAIRLEND_ADMIN.organization_name,
+		subject: "user_unauthorized_payment_operator",
+		email: "unauthorized-payments@test.fairlend.ca",
+		firstName: "Unauthorized",
+		lastName: "Operator",
+	});
 }
 
 async function getWorkoutOwnedEntries(
@@ -581,6 +621,61 @@ describe("workout plans", () => {
 		}
 		expect(completion.reasonCode).toBe("blocking_plan_entry_execution_state");
 		expect(completion.blockingPlanEntryId).toBe(workoutEntry._id);
+	});
+
+	it("requires mortgage or workout ownership for public write handlers", async () => {
+		const t = createBackendTestConvex();
+		const asOf = new Date("2026-04-06T12:00:00.000Z").getTime();
+		vi.setSystemTime(asOf);
+
+		const outsider = createUnauthorizedPaymentOperator();
+		await seedFromIdentity(t, outsider);
+
+		const { createResult, mortgageId } = await seedWorkoutFixture(t, {
+			entryScheduledDate: asOf + 5 * 86_400_000,
+			workoutScheduledDate: asOf + 2 * 86_400_000,
+		});
+
+		await expect(
+			t
+				.withIdentity(outsider)
+				.mutation(api.payments.collectionPlan.workout.createWorkoutPlan, {
+					mortgageId,
+					name: "Unauthorized workout",
+					rationale: "Should be blocked by resource checks",
+					installments: [
+						{
+							obligationIds: [createResult.coveredObligationIds[0]],
+							scheduledDate: asOf + 3 * 86_400_000,
+							method: "manual",
+						},
+					],
+				})
+		).rejects.toThrow("Forbidden: no mortgage access");
+
+		await expect(
+			t
+				.withIdentity(outsider)
+				.mutation(api.payments.collectionPlan.workout.activateWorkoutPlan, {
+					workoutPlanId: createResult.workoutPlanId,
+				})
+		).rejects.toThrow("Forbidden: no workout plan access");
+
+		await expect(
+			t
+				.withIdentity(outsider)
+				.mutation(api.payments.collectionPlan.workout.completeWorkoutPlan, {
+					workoutPlanId: createResult.workoutPlanId,
+				})
+		).rejects.toThrow("Forbidden: no workout plan access");
+
+		await expect(
+			t
+				.withIdentity(outsider)
+				.mutation(api.payments.collectionPlan.workout.cancelWorkoutPlan, {
+					workoutPlanId: createResult.workoutPlanId,
+				})
+		).rejects.toThrow("Forbidden: no workout plan access");
 	});
 
 	it("does not create duplicate restored entries when non-workout coverage already exists", async () => {

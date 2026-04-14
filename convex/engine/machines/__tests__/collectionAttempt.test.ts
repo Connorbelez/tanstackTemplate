@@ -466,7 +466,13 @@ describe("collectionAttempt machine", () => {
 					event
 				);
 				expect(next.value).toBe("confirmed");
-				expect(actions).toHaveLength(0);
+				if (event.type === "FUNDS_SETTLED") {
+					expect(actions.map((a) => a.type)).toContain(
+						"recordSettlementObserved"
+					);
+				} else {
+					expect(actions).toHaveLength(0);
+				}
 			});
 		}
 	});

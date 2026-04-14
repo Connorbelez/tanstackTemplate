@@ -316,6 +316,228 @@ export async function canAccessDispersal(
 	return false;
 }
 
+// ── Payment / cash-ledger resource checks ───────────────────────────
+
+export async function canAccessLenderEntity(
+	ctx: { db: QueryCtx["db"] },
+	viewer: Viewer,
+	lenderId: Id<"lenders">
+): Promise<boolean> {
+	if (viewer.isFairLendAdmin) {
+		return true;
+	}
+
+	const targetLender = await ctx.db.get(lenderId);
+	if (!targetLender) {
+		return false;
+	}
+
+	const viewerLender = await getLenderByAuthId(ctx, viewer.authId);
+	if (viewerLender?._id === lenderId) {
+		return true;
+	}
+
+	const broker = await getBrokerByAuthId(ctx, viewer.authId);
+	return broker !== null && targetLender.brokerId === broker._id;
+}
+
+export async function canAccessBorrowerEntity(
+	ctx: { db: QueryCtx["db"] },
+	viewer: Viewer,
+	borrowerId: Id<"borrowers">,
+	mortgageId?: Id<"mortgages">
+): Promise<boolean> {
+	if (viewer.isFairLendAdmin) {
+		return true;
+	}
+
+	const viewerBorrower = await getBorrowerByAuthId(ctx, viewer.authId);
+	if (viewerBorrower?._id === borrowerId) {
+		return true;
+	}
+
+	if (!mortgageId) {
+		return false;
+	}
+
+	const links = await ctx.db
+		.query("mortgageBorrowers")
+		.withIndex("by_mortgage", (q) => q.eq("mortgageId", mortgageId))
+		.collect();
+
+	if (!links.some((link) => link.borrowerId === borrowerId)) {
+		return false;
+	}
+
+	return canAccessMortgage(ctx, viewer, mortgageId);
+}
+
+export async function canAccessObligation(
+	ctx: { db: QueryCtx["db"] },
+	viewer: Viewer,
+	obligationId: Id<"obligations">
+): Promise<boolean> {
+	if (viewer.isFairLendAdmin) {
+		return true;
+	}
+
+	const obligation = await ctx.db.get(obligationId);
+	if (!obligation) {
+		return false;
+	}
+
+	return canAccessMortgage(ctx, viewer, obligation.mortgageId);
+}
+
+export async function canAccessCounterpartyResource(
+	ctx: { db: QueryCtx["db"] },
+	viewer: Viewer,
+	ownerType: Doc<"bankAccounts">["ownerType"],
+	ownerId: string
+): Promise<boolean> {
+	if (viewer.isFairLendAdmin) {
+		return true;
+	}
+
+	switch (ownerType) {
+		case "borrower":
+			return canAccessBorrowerEntity(ctx, viewer, ownerId as Id<"borrowers">);
+		case "lender":
+		case "investor":
+			return canAccessLenderEntity(ctx, viewer, ownerId as Id<"lenders">);
+		case "trust":
+			return false;
+		default:
+			return false;
+	}
+}
+
+export async function canAccessTransferRequest(
+	ctx: { db: QueryCtx["db"] },
+	viewer: Viewer,
+	transferId: Id<"transferRequests">
+): Promise<boolean> {
+	if (viewer.isFairLendAdmin) {
+		return true;
+	}
+
+	const transfer = await ctx.db.get(transferId);
+	if (!transfer) {
+		return false;
+	}
+
+	if (transfer.dealId && (await canAccessDeal(ctx, viewer, transfer.dealId))) {
+		return true;
+	}
+
+	if (
+		transfer.mortgageId &&
+		(await canAccessMortgage(ctx, viewer, transfer.mortgageId))
+	) {
+		return true;
+	}
+
+	if (
+		transfer.obligationId &&
+		(await canAccessObligation(ctx, viewer, transfer.obligationId))
+	) {
+		return true;
+	}
+
+	if (
+		transfer.lenderId &&
+		(await canAccessLenderEntity(ctx, viewer, transfer.lenderId))
+	) {
+		return true;
+	}
+
+	if (
+		transfer.borrowerId &&
+		(await canAccessBorrowerEntity(
+			ctx,
+			viewer,
+			transfer.borrowerId,
+			transfer.mortgageId ?? undefined
+		))
+	) {
+		return true;
+	}
+
+	return canAccessCounterpartyResource(
+		ctx,
+		viewer,
+		transfer.counterpartyType,
+		transfer.counterpartyId
+	);
+}
+
+export async function canAccessCashLedgerAccount(
+	ctx: { db: QueryCtx["db"] },
+	viewer: Viewer,
+	accountId: Id<"cash_ledger_accounts">
+): Promise<boolean> {
+	if (viewer.isFairLendAdmin) {
+		return true;
+	}
+
+	const account = await ctx.db.get(accountId);
+	if (!account) {
+		return false;
+	}
+
+	if (
+		account.mortgageId &&
+		(await canAccessMortgage(ctx, viewer, account.mortgageId))
+	) {
+		return true;
+	}
+
+	if (
+		account.obligationId &&
+		(await canAccessObligation(ctx, viewer, account.obligationId))
+	) {
+		return true;
+	}
+
+	if (
+		account.lenderId &&
+		(await canAccessLenderEntity(ctx, viewer, account.lenderId))
+	) {
+		return true;
+	}
+
+	if (
+		account.borrowerId &&
+		(await canAccessBorrowerEntity(
+			ctx,
+			viewer,
+			account.borrowerId,
+			account.mortgageId ?? undefined
+		))
+	) {
+		return true;
+	}
+
+	return false;
+}
+
+export async function canAccessWorkoutPlan(
+	ctx: { db: QueryCtx["db"] },
+	viewer: Viewer,
+	workoutPlanId: Id<"workoutPlans">
+): Promise<boolean> {
+	if (viewer.isFairLendAdmin) {
+		return true;
+	}
+
+	const workoutPlan = await ctx.db.get(workoutPlanId);
+	if (!workoutPlan) {
+		return false;
+	}
+
+	return canAccessMortgage(ctx, viewer, workoutPlan.mortgageId);
+}
+
 // ── T-009: canAccessDocument ─────────────────────────────────────────
 // Resolves a generatedDocument to its parent entity via the polymorphic
 // entityType/entityId linkage, then applies the three-tier sensitivity

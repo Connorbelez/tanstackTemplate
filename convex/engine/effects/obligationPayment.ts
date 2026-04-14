@@ -64,15 +64,20 @@ export const applyPayment = internalMutation({
 			| Id<"collectionAttempts">
 			| undefined;
 		const postingGroupId = args.payload?.postingGroupId as string | undefined;
+		const transferRequestId = args.payload?.transferRequestId as
+			| Id<"transferRequests">
+			| undefined;
 
-		await postCashReceiptForObligation(ctx, {
-			obligationId: args.entityId,
-			amount,
-			idempotencyKey: `cash-ledger:cash-received:${args.journalEntryId}`,
-			attemptId,
-			postingGroupId,
-			source: args.source,
-		});
+		if (!transferRequestId) {
+			await postCashReceiptForObligation(ctx, {
+				obligationId: args.entityId,
+				amount,
+				idempotencyKey: `cash-ledger:cash-received:${args.journalEntryId}`,
+				attemptId,
+				postingGroupId,
+				source: args.source,
+			});
+		}
 
 		console.info(
 			`[applyPayment] obligation=${args.entityId}: amountSettled ${obligation.amountSettled} -> ${updatedAmountSettled} (payment=${amount})`

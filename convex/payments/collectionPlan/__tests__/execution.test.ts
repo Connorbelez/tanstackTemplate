@@ -427,6 +427,7 @@ describe("executePlanEntry", () => {
 			scheduledDate: Date.now() - 1000,
 			status: "planned",
 			source: "default_schedule",
+			allowMixedMortgageObligations: true,
 		});
 
 		const result = await t.action(

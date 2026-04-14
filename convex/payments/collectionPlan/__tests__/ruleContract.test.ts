@@ -13,6 +13,7 @@ function makeRule(
 ): Doc<"collectionRules"> {
 	return {
 		_id: "collectionRules_test_rule" as Id<"collectionRules">,
+		_creationTime: 0,
 		action: "test_action",
 		code: "test_rule",
 		createdAt: 0,
@@ -25,38 +26,34 @@ function makeRule(
 		updatedAt: 0,
 		updatedByActorId: "test",
 		version: 1,
+		config: { kind: "schedule", delayDays: 5 },
 		...overrides,
 	} as Doc<"collectionRules">;
 }
 
 describe("collection rule contract", () => {
-	it("falls back to defaults when legacy schedule parameters are invalid", () => {
+	it("returns the typed schedule config as-is", () => {
 		const rule = makeRule({
 			kind: "schedule",
-			parameters: {
-				delayDays: 7.5,
-			},
+			config: { kind: "schedule", delayDays: 9 },
 		});
 
 		expect(getScheduleRuleConfig(rule)).toEqual({
 			kind: "schedule",
-			delayDays: 5,
+			delayDays: 9,
 		});
 	});
 
-	it("falls back to defaults when legacy retry parameters are invalid", () => {
+	it("returns the typed retry config as-is", () => {
 		const rule = makeRule({
 			kind: "retry",
-			parameters: {
-				backoffBaseDays: -1,
-				maxRetries: 2.25,
-			},
+			config: { kind: "retry", backoffBaseDays: 2, maxRetries: 4 },
 		});
 
 		expect(getRetryRuleConfig(rule)).toEqual({
 			kind: "retry",
-			backoffBaseDays: 3,
-			maxRetries: 3,
+			backoffBaseDays: 2,
+			maxRetries: 4,
 		});
 	});
 

@@ -1,9 +1,21 @@
 import { expect, test } from "@playwright/test";
-import { BASE_URL, uniqueName } from "../helpers/document-engine";
+import {
+	ADMIN_STORAGE_STATE,
+	BASE_URL,
+	openAdminPage,
+	uniqueName,
+} from "../helpers/document-engine";
 
 const SIGNATORY_COUNT_PATTERN = /0 signator/;
 
+test.use({ storageState: ADMIN_STORAGE_STATE });
+
 test.describe("Document Engine - Template Groups", () => {
+	test.beforeAll(async ({ browser }) => {
+		const { context } = await openAdminPage(browser);
+		await context.close();
+	});
+
 	test("groups page renders with heading and create button", async ({
 		page,
 	}) => {

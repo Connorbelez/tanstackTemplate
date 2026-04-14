@@ -33,6 +33,8 @@ export interface Viewer {
 	roles: Set<string>;
 }
 // ── Helpers ──────────────────────────────────────────────────────────
+const ADMIN_ACCESS_PERMISSION = "admin:access";
+
 // Identity claims like `permissions` / `roles` may arrive as a JSON string,
 // an already-parsed array, undefined, or empty string — normalise to string[].
 function parseClaimArray(value: unknown): string[] {
@@ -50,6 +52,13 @@ function parseClaimArray(value: unknown): string[] {
 		}
 	}
 	return [];
+}
+
+function viewerHasPermission(viewer: Viewer, permission: string) {
+	return (
+		viewer.permissions.has(permission) ||
+		viewer.permissions.has(ADMIN_ACCESS_PERMISSION)
+	);
 }
 
 // ── Auth Middleware (context enrichment) ─────────────────────────────
@@ -180,7 +189,7 @@ export function requirePermission(permission: string) {
 	return convex
 		.$context<{ db: GenericDatabaseReader<DataModel>; viewer: Viewer }>()
 		.createMiddleware(async (context, next) => {
-			if (!context.viewer.permissions.has(permission)) {
+			if (!viewerHasPermission(context.viewer, permission)) {
 				await auditAuthFailure(context, context.viewer, {
 					middleware: "requirePermission",
 					required: permission,
@@ -201,7 +210,7 @@ export function requirePermissionAction(permission: string) {
 	return convex
 		.$context<{ viewer: Viewer }>()
 		.createMiddleware(async (context, next) => {
-			if (!context.viewer.permissions.has(permission)) {
+			if (!viewerHasPermission(context.viewer, permission)) {
 				await auditAuthFailure(context, context.viewer, {
 					middleware: "requirePermissionAction",
 					required: permission,

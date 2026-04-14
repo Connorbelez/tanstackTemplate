@@ -1,20 +1,24 @@
 import { expect, test } from "@playwright/test";
 import {
+	ADMIN_STORAGE_STATE,
 	BASE_URL,
 	uniqueName,
+	openAdminPage,
 	uploadTestPdf,
 } from "../helpers/document-engine";
 
 const DESIGNER_URL_PATTERN = /\/designer\//;
+
+test.use({ storageState: ADMIN_STORAGE_STATE });
 
 test.describe("Document Engine - Templates", () => {
 	const pdfName = uniqueName("TemplatePDF");
 
 	test.beforeAll(async ({ browser }) => {
 		// Upload a base PDF so templates can be created
-		const page = await browser.newPage();
+		const { context, page } = await openAdminPage(browser);
 		await uploadTestPdf(page, pdfName);
-		await page.close();
+		await context.close();
 	});
 
 	test("templates page renders with heading", async ({ page }) => {
@@ -144,7 +148,7 @@ test.describe("Document Engine - Templates", () => {
 
 	test.afterAll(async ({ browser }) => {
 		// Cleanup the base PDF (defensive — PDF may already be deleted)
-		const page = await browser.newPage();
+		const { context, page } = await openAdminPage(browser);
 		await page.goto(`${BASE_URL}/library`);
 		const pdfVisible = await page
 			.getByText(pdfName)
@@ -160,6 +164,6 @@ test.describe("Document Engine - Templates", () => {
 				.filter({ has: page.locator("svg") })
 				.click();
 		}
-		await page.close();
+		await context.close();
 	});
 });

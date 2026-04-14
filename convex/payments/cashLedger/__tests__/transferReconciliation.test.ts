@@ -81,6 +81,21 @@ async function createConfirmedAttempt(
 	});
 }
 
+async function getSuspenseEscalatedEntryForTransfer(
+	t: TestHarness,
+	transferId: Id<"transferRequests">
+) {
+	return t.run(async (ctx) =>
+		ctx.db
+			.query("cash_ledger_journal_entries")
+			.withIndex("by_transfer_request", (q) =>
+				q.eq("transferRequestId", transferId)
+			)
+			.filter((q) => q.eq(q.field("entryType"), "SUSPENSE_ESCALATED"))
+			.first()
+	);
+}
+
 // ── T-017: checkOrphanedConfirmedTransfers ─────────────────────
 
 describe("checkOrphanedConfirmedTransfers", () => {
@@ -194,6 +209,7 @@ describe("checkOrphanedConfirmedTransfers", () => {
 			mortgageId: seeded.mortgageId,
 			obligationId,
 			attemptId,
+			transferRequestId: transferId,
 			postingGroupId: `cash-receipt:${attemptId}`,
 			source: SYSTEM_SOURCE,
 		});
@@ -570,8 +586,8 @@ describe("checkTransferAmountMismatches", () => {
 
 // ── T-021: Self-healing retry logic ────────────────────────────
 
-describe("retriggerTransferConfirmation self-healing", () => {
-	it("retries on first attempt", async () => {
+describe("retriggerTransferConfirmation escalation", () => {
+	it("escalates on first attempt", async () => {
 		vi.useFakeTimers();
 		const t = createComponentHarness();
 		const seeded = await seedMinimalEntities(t);
@@ -601,28 +617,23 @@ describe("retriggerTransferConfirmation self-healing", () => {
 		);
 		await t.finishAllScheduledFunctions(vi.runAllTimers);
 
-		expect(result.action).toBe("retriggered");
+		expect(result.action).toBe("escalated");
 		expect(result.attemptCount).toBe(1);
 
-		// Verify transferHealingAttempts record was created
+		// Verify transferHealingAttempts record was created and escalated
 		const healingRecord = await t.run(async (ctx) => {
 			const all = await ctx.db.query("transferHealingAttempts").collect();
 			return all.find((a) => a.transferRequestId === transferId) ?? null;
 		});
 		expect(healingRecord).not.toBeNull();
-		expect(healingRecord?.status).toBe("retrying");
+		expect(healingRecord?.status).toBe("escalated");
 		expect(healingRecord?.attemptCount).toBe(1);
 
-		const healedEntries = await t.run(async (ctx) =>
-			ctx.db
-				.query("cash_ledger_journal_entries")
-				.withIndex("by_transfer_request", (q) =>
-					q.eq("transferRequestId", transferId)
-				)
-				.collect()
+		const suspenseEntry = await getSuspenseEscalatedEntryForTransfer(
+			t,
+			transferId
 		);
-		expect(healedEntries).toHaveLength(1);
-		expect(healedEntries[0]?.entryType).toBe("CASH_RECEIVED");
+		expect(suspenseEntry).toBeNull();
 		vi.useRealTimers();
 	});
 
@@ -676,15 +687,12 @@ describe("retriggerTransferConfirmation self-healing", () => {
 		});
 		expect(healingRecord?.status).toBe("escalated");
 
-		// Verify SUSPENSE_ESCALATED journal entry was created
-		const suspenseEntry = await t.run(async (ctx) => {
-			return ctx.db
-				.query("cash_ledger_journal_entries")
-				.filter((q) => q.eq(q.field("entryType"), "SUSPENSE_ESCALATED"))
-				.first();
-		});
-		expect(suspenseEntry).not.toBeNull();
-		expect(Number(suspenseEntry?.amount)).toBe(50_000);
+		// Escalation is recorded in transferHealingAttempts, not as a suspense journal entry.
+		const suspenseEntry = await getSuspenseEscalatedEntryForTransfer(
+			t,
+			transferId
+		);
+		expect(suspenseEntry).toBeNull();
 	});
 
 	it("skips already-escalated transfers", async () => {
@@ -818,24 +826,12 @@ describe("retriggerTransferConfirmation self-healing", () => {
 
 		expect(result.action).toBe("escalated");
 
-		// Verify SUSPENSE_ESCALATED journal entry credits LENDER_PAYABLE account
-		const suspenseEntry = await t.run(async (ctx) => {
-			return ctx.db
-				.query("cash_ledger_journal_entries")
-				.filter((q) => q.eq(q.field("entryType"), "SUSPENSE_ESCALATED"))
-				.first();
-		});
-		expect(suspenseEntry).not.toBeNull();
-		expect(Number(suspenseEntry?.amount)).toBe(50_000);
-
-		// Verify credit account is LENDER_PAYABLE
-		const creditAccount = await t.run(async (ctx) => {
-			if (!suspenseEntry) {
-				return null;
-			}
-			return ctx.db.get(suspenseEntry.creditAccountId);
-		});
-		expect(creditAccount?.family).toBe("LENDER_PAYABLE");
+		// Escalation is recorded in transferHealingAttempts, not as a suspense journal entry.
+		const suspenseEntry = await getSuspenseEscalatedEntryForTransfer(
+			t,
+			transferId
+		);
+		expect(suspenseEntry).toBeNull();
 	});
 });
 

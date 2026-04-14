@@ -121,6 +121,7 @@ export async function getAttemptLinkedInboundSettlementHealth(
 		expectedAttemptStatus: "confirmed",
 		postingGroupId: cashReceiptPostingGroupId(transfer.collectionAttemptId),
 		entryType: "CASH_RECEIVED",
+		transferRequestId: transfer._id,
 	});
 }
 

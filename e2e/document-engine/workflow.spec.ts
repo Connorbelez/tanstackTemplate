@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import {
+	ADMIN_STORAGE_STATE,
 	addFieldInDesigner,
 	BASE_URL,
 	createTestPdfBuffer,
@@ -14,6 +15,8 @@ const PUBLISHED_PATTERN = /Published v1|v1/;
 const FIELD_COUNT_PATTERN = /1 field/;
 const FIELD_PATTERN = /field/;
 const GENERATE_BUTTON_PATTERN = /Generate Document/;
+
+test.use({ storageState: ADMIN_STORAGE_STATE });
 
 /**
  * Full end-to-end workflow test for the Document Engine.

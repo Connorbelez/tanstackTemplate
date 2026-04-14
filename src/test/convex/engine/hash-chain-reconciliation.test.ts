@@ -1,7 +1,7 @@
 import { WorkflowManager } from "@convex-dev/workflow";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { api, internal } from "../../../../convex/_generated/api";
-import type { Id } from "../../../../convex/_generated/dataModel";
+import type { Doc, Id } from "../../../../convex/_generated/dataModel";
 import type { MutationCtx } from "../../../../convex/_generated/server";
 import { AuditTrail } from "../../../../convex/auditTrailClient";
 import { appendAuditJournalEntry } from "../../../../convex/engine/auditJournal";
@@ -17,6 +17,31 @@ import {
 	getAuditTrailEvents,
 	seedDefaultGovernedActors,
 } from "../onboarding/helpers";
+
+function buildAuditJournalEntry(
+	overrides: Partial<Omit<Doc<"auditJournal">, "_id" | "_creationTime">> = {}
+): Omit<Doc<"auditJournal">, "_id" | "_creationTime"> {
+	const timestamp = overrides.timestamp ?? Date.now();
+	const entityId = overrides.entityId ?? "entity_test";
+	const sequenceNumber = overrides.sequenceNumber ?? 1n;
+	return {
+		actorId: overrides.actorId ?? "user_member_test",
+		channel: overrides.channel ?? "scheduler",
+		effectiveDate: overrides.effectiveDate ?? new Date(timestamp).toISOString().slice(0, 10),
+		entityId,
+		entityType: overrides.entityType ?? "onboardingRequest",
+		eventCategory: overrides.eventCategory ?? "governed_transition",
+		eventId: overrides.eventId ?? `${entityId}:${sequenceNumber.toString()}`,
+		eventType: overrides.eventType ?? "CREATED",
+		newState: overrides.newState ?? "pending_review",
+		originSystem: overrides.originSystem ?? "convex",
+		outcome: overrides.outcome ?? "transitioned",
+		previousState: overrides.previousState ?? "none",
+		sequenceNumber,
+		timestamp,
+		...overrides,
+	};
+}
 
 describe("hash-chain and reconciliation", () => {
 	beforeEach(() => {
@@ -78,18 +103,58 @@ describe("hash-chain and reconciliation", () => {
 	});
 
 	it("builds auditTrail insert args with serialized metadata", () => {
+		const canonicalEnvelope = {
+			afterState: { status: "approved" },
+			actorId: "user_member_test",
+			beforeState: { status: "pending_review" },
+			channel: "scheduler",
+			correlationId: "correlation_1",
+			delta: { status: "approved" },
+			effectiveDate: "2026-04-11",
+			effectsScheduled: ["audit_chain"],
+			entityId: "entity_args",
+			entityType: "onboardingRequest",
+			eventCategory: "governed_transition",
+			eventId: "event_args",
+			eventType: "APPROVE",
+			idempotencyKey: "idem_1",
+			legalEntityId: "org_test",
+			linkedRecordIds: { entityId: "entity_args" },
+			machineVersion: "machine_v1",
+			newState: "approved",
+			outcome: "transitioned",
+			previousState: "pending_review",
+			reason: "Approved in test",
+			requestId: "request_1",
+			sequenceNumber: "1",
+			timestamp: 123,
+		};
+
 		expect(
 			buildAuditTrailInsertArgs({
 				actorId: "user_member_test",
+				afterState: { status: "approved" },
+				beforeState: { status: "pending_review" },
 				channel: "scheduler",
+				correlationId: "correlation_1",
+				delta: { status: "approved" },
+				effectiveDate: "2026-04-11",
+				effectsScheduled: ["audit_chain"],
 				entityId: "entity_args",
 				entityType: "onboardingRequest",
+				eventCategory: "governed_transition",
+				eventId: "event_args",
 				eventType: "APPROVE",
+				idempotencyKey: "idem_1",
+				legalEntityId: "org_test",
+				linkedRecordIds: { entityId: "entity_args" },
 				machineVersion: "machine_v1",
 				newState: "approved",
 				outcome: "transitioned",
 				previousState: "pending_review",
 				reason: "Approved in test",
+				requestId: "request_1",
+				sequenceNumber: 1n,
 				timestamp: 123,
 			})
 		).toEqual({
@@ -97,15 +162,10 @@ describe("hash-chain and reconciliation", () => {
 			entityType: "onboardingRequest",
 			eventType: "APPROVE",
 			actorId: "user_member_test",
-			beforeState: "pending_review",
-			afterState: "approved",
-			metadata: JSON.stringify({
-				outcome: "transitioned",
-				machineVersion: "machine_v1",
-				effectsScheduled: undefined,
-				channel: "scheduler",
-				reason: "Approved in test",
-			}),
+			beforeState: JSON.stringify({ status: "pending_review" }),
+			afterState: JSON.stringify({ status: "approved" }),
+			canonicalEnvelope: JSON.stringify(canonicalEnvelope),
+			metadata: JSON.stringify({ canonicalEnvelope }),
 			timestamp: 123,
 		});
 	});
@@ -374,17 +434,21 @@ describe("hash-chain and reconciliation", () => {
 				targetOrganizationId: "org_brokerage_test",
 				createdAt: Date.now(),
 			});
-			await ctx.db.insert("auditJournal", {
-				actorId: "user_member_mixed",
-				channel: "onboarding_portal",
-				entityId: requestId,
-				entityType: "onboardingRequest",
-				eventType: "CREATED",
-				previousState: "none",
-				newState: "pending_review",
-				outcome: "transitioned",
-				timestamp: Date.now(),
-			});
+			await ctx.db.insert(
+				"auditJournal",
+				buildAuditJournalEntry({
+					actorId: "user_member_mixed",
+					channel: "onboarding_portal",
+					entityId: requestId,
+					entityType: "onboardingRequest",
+					eventType: "CREATED",
+					previousState: "none",
+					newState: "pending_review",
+					outcome: "transitioned",
+					sequenceNumber: 1n,
+					timestamp: Date.now(),
+				})
+			);
 		});
 
 		let brokenEntityId: string | null = null;
@@ -446,17 +510,21 @@ describe("hash-chain and reconciliation", () => {
 					targetOrganizationId: "org_brokerage_test",
 					createdAt: Date.now() + index,
 				});
-				await ctx.db.insert("auditJournal", {
-					actorId: `user_member_paged_${index}`,
-					channel: "onboarding_portal",
-					entityId: requestId,
-					entityType: "onboardingRequest",
-					eventType: "CREATED",
-					previousState: "none",
-					newState: "pending_review",
-					outcome: "transitioned",
-					timestamp: Date.now() + index,
-				});
+				await ctx.db.insert(
+					"auditJournal",
+					buildAuditJournalEntry({
+						actorId: `user_member_paged_${index}`,
+						channel: "onboarding_portal",
+						entityId: requestId,
+						entityType: "onboardingRequest",
+						eventType: "CREATED",
+						previousState: "none",
+						newState: "pending_review",
+						outcome: "transitioned",
+						sequenceNumber: BigInt(index + 1),
+						timestamp: Date.now() + index,
+					})
+				);
 			}
 		});
 		vi.spyOn(AuditTrail.prototype, "verifyChain").mockResolvedValue({

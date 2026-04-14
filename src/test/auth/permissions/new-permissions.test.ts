@@ -46,9 +46,14 @@ const ALL_IDENTITIES: Record<string, MockIdentity> = {
 // ── Permissions with dedicated chain endpoints ───────────────────────
 
 describe("deal:view (via dealQuery endpoint)", () => {
-	const allowed = ["FAIRLEND_ADMIN", "BROKER", "LENDER", "LAWYER"];
-	const denied = [
+	const allowed = [
+		"FAIRLEND_ADMIN",
 		"EXTERNAL_ORG_ADMIN",
+		"BROKER",
+		"LENDER",
+		"LAWYER",
+	];
+	const denied = [
 		"BORROWER",
 		"JR_UNDERWRITER",
 		"UNDERWRITER",
@@ -83,9 +88,8 @@ describe("deal:view (via dealQuery endpoint)", () => {
 });
 
 describe("deal:manage (via dealMutation endpoint)", () => {
-	const allowed = ["FAIRLEND_ADMIN"];
+	const allowed = ["FAIRLEND_ADMIN", "EXTERNAL_ORG_ADMIN"];
 	const denied = [
-		"EXTERNAL_ORG_ADMIN",
 		"BROKER",
 		"LENDER",
 		"LAWYER",
@@ -125,9 +129,8 @@ describe("deal:manage (via dealMutation endpoint)", () => {
 });
 
 describe("ledger:view (via ledgerQuery endpoint)", () => {
-	const allowed = ["FAIRLEND_ADMIN", "BROKER", "LENDER"];
+	const allowed = ["FAIRLEND_ADMIN", "EXTERNAL_ORG_ADMIN", "BROKER", "LENDER"];
 	const denied = [
-		"EXTERNAL_ORG_ADMIN",
 		"BORROWER",
 		"LAWYER",
 		"JR_UNDERWRITER",
@@ -196,9 +199,8 @@ const PERMISSION_ENDPOINT_TESTS: PermissionEndpointTest[] = [
 		endpoint: api.test.authTestEndpoints.testLedgerCorrectionMutation,
 		mode: "mutation",
 		errorMessage: 'Forbidden: permission "ledger:correct" required',
-		allowed: ["FAIRLEND_ADMIN"],
+		allowed: ["FAIRLEND_ADMIN", "EXTERNAL_ORG_ADMIN"],
 		denied: [
-			"EXTERNAL_ORG_ADMIN",
 			"BROKER",
 			"LENDER",
 			"BORROWER",
@@ -214,9 +216,8 @@ const PERMISSION_ENDPOINT_TESTS: PermissionEndpointTest[] = [
 		endpoint: api.test.authTestEndpoints.testAccrualQuery,
 		mode: "query",
 		errorMessage: 'Forbidden: permission "accrual:view" required',
-		allowed: ["FAIRLEND_ADMIN", "BROKER", "LENDER"],
+		allowed: ["FAIRLEND_ADMIN", "EXTERNAL_ORG_ADMIN", "BROKER", "LENDER"],
 		denied: [
-			"EXTERNAL_ORG_ADMIN",
 			"BORROWER",
 			"LAWYER",
 			"JR_UNDERWRITER",
@@ -230,9 +231,8 @@ const PERMISSION_ENDPOINT_TESTS: PermissionEndpointTest[] = [
 		endpoint: api.test.authTestEndpoints.testDispersalQuery,
 		mode: "query",
 		errorMessage: 'Forbidden: permission "dispersal:view" required',
-		allowed: ["FAIRLEND_ADMIN", "LENDER"],
+		allowed: ["FAIRLEND_ADMIN", "EXTERNAL_ORG_ADMIN", "LENDER"],
 		denied: [
-			"EXTERNAL_ORG_ADMIN",
 			"BROKER",
 			"BORROWER",
 			"LAWYER",
@@ -247,9 +247,8 @@ const PERMISSION_ENDPOINT_TESTS: PermissionEndpointTest[] = [
 		endpoint: api.test.authTestEndpoints.testObligationWaiveMutation,
 		mode: "mutation",
 		errorMessage: 'Forbidden: permission "obligation:waive" required',
-		allowed: ["FAIRLEND_ADMIN"],
+		allowed: ["FAIRLEND_ADMIN", "EXTERNAL_ORG_ADMIN"],
 		denied: [
-			"EXTERNAL_ORG_ADMIN",
 			"BROKER",
 			"LENDER",
 			"BORROWER",
@@ -299,8 +298,9 @@ describe("permissions without dedicated endpoints", () => {
 // ── Cross-check: deal:view and ledger:view in ROLE_PERMISSIONS ───────
 
 describe("deal:view in ROLE_PERMISSIONS", () => {
-	const allowed = ["admin", "broker", "lender", "lawyer"];
+	const allowed = ["broker", "lender", "lawyer"];
 	const denied = [
+		"admin",
 		"borrower",
 		"jr_underwriter",
 		"underwriter",
@@ -322,8 +322,9 @@ describe("deal:view in ROLE_PERMISSIONS", () => {
 });
 
 describe("deal:manage in ROLE_PERMISSIONS", () => {
-	const allowed = ["admin"];
+	const allowed: string[] = [];
 	const denied = [
+		"admin",
 		"broker",
 		"lender",
 		"lawyer",
@@ -348,8 +349,9 @@ describe("deal:manage in ROLE_PERMISSIONS", () => {
 });
 
 describe("ledger:view in ROLE_PERMISSIONS", () => {
-	const allowed = ["admin", "broker", "lender"];
+	const allowed = ["broker", "lender"];
 	const denied = [
+		"admin",
 		"borrower",
 		"lawyer",
 		"jr_underwriter",

@@ -49,6 +49,50 @@ describe("ROLE_PERMISSIONS <-> PERMISSION_DISPLAY_METADATA sync", () => {
 	const KNOWN_ORPHANS: Record<string, string> = {
 		"onboarding:manage":
 			"Reserved for future onboarding admin workflow; metadata kept for UI completeness",
+		"onboarding:review":
+			"Protected in practice by admin:access wildcard; no longer explicitly assigned in ROLE_PERMISSIONS",
+		"role:assign":
+			"Protected in practice by admin:access wildcard; no longer explicitly assigned in ROLE_PERMISSIONS",
+		"application:triage":
+			"Protected in practice by admin:access wildcard; no longer explicitly assigned in ROLE_PERMISSIONS",
+		"application:manage":
+			"Protected in practice by admin:access wildcard; no longer explicitly assigned in ROLE_PERMISSIONS",
+		"condition:waive":
+			"Protected in practice by admin:access wildcard; no longer explicitly assigned in ROLE_PERMISSIONS",
+		"mortgage:originate":
+			"Protected in practice by admin:access wildcard; no longer explicitly assigned in ROLE_PERMISSIONS",
+		"payment:view":
+			"Protected in practice by admin:access wildcard; no longer explicitly assigned in ROLE_PERMISSIONS",
+		"payment:manage":
+			"Protected in practice by admin:access wildcard; no longer explicitly assigned in ROLE_PERMISSIONS",
+		"document:generate":
+			"Protected in practice by admin:access wildcard; no longer explicitly assigned in ROLE_PERMISSIONS",
+		"deal:manage":
+			"Protected in practice by admin:access wildcard; no longer explicitly assigned in ROLE_PERMISSIONS",
+		"cash_ledger:view":
+			"Protected in practice by admin:access wildcard; no longer explicitly assigned in ROLE_PERMISSIONS",
+		"cash_ledger:correct":
+			"Protected in practice by admin:access wildcard; no longer explicitly assigned in ROLE_PERMISSIONS",
+		"ledger:correct":
+			"Protected in practice by admin:access wildcard; no longer explicitly assigned in ROLE_PERMISSIONS",
+		"obligation:waive":
+			"Protected in practice by admin:access wildcard; no longer explicitly assigned in ROLE_PERMISSIONS",
+		"renewal:manage":
+			"Protected in practice by admin:access wildcard; no longer explicitly assigned in ROLE_PERMISSIONS",
+		"org:manage_members":
+			"Protected in practice by admin:access wildcard; explicit grants are handled in dedicated fixtures where needed",
+		"org:manage_settings":
+			"Protected in practice by admin:access wildcard; explicit grants are handled in dedicated fixtures where needed",
+		"platform:manage_users":
+			"Protected in practice by admin:access wildcard; no longer explicitly assigned in ROLE_PERMISSIONS",
+		"platform:manage_orgs":
+			"Protected in practice by admin:access wildcard; no longer explicitly assigned in ROLE_PERMISSIONS",
+		"platform:manage_roles":
+			"Protected in practice by admin:access wildcard; no longer explicitly assigned in ROLE_PERMISSIONS",
+		"platform:view_audit":
+			"Protected in practice by admin:access wildcard; no longer explicitly assigned in ROLE_PERMISSIONS",
+		"platform:manage_system":
+			"Protected in practice by admin:access wildcard; no longer explicitly assigned in ROLE_PERMISSIONS",
 	};
 
 	it("every metadata entry is assigned to at least one role or is a known orphan", () => {

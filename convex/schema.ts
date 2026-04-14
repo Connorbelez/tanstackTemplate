@@ -890,6 +890,7 @@ export default defineSchema({
 		.index("by_rescheduled_from", ["rescheduledFromId", "source"])
 		.index("by_retry_of", ["retryOfId", "source"])
 		.index("by_created_by_rule", ["createdByRuleId", "source"])
+		.index("by_execution_idempotency", ["executionIdempotencyKey"])
 		.index("by_workout_plan", ["workoutPlanId", "createdAt"])
 		.index("by_workout_supersession", [
 			"supersededByWorkoutPlanId",

@@ -1,4 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { createHmac } from "node:crypto";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { createWebhookTestHarness } from "../../../../src/test/convex/payments/webhooks/convexTestHarness";
+import { internal } from "../../../_generated/api";
 import type { StripeWebhookEvent } from "../stripe";
 import {
 	buildReversalCode,
@@ -25,6 +28,48 @@ function makeEvent(
 		},
 	};
 }
+
+function createHarness() {
+	return createWebhookTestHarness();
+}
+
+const TEST_STRIPE_SECRET = "whsec_test_stripe_webhook_secret";
+const TEST_TIMESTAMP = 1_711_929_600;
+const testEnvRestorers: Array<() => void> = [];
+
+function setTestEnv(key: string, value: string) {
+	const previous = process.env[key];
+	process.env[key] = value;
+	testEnvRestorers.push(() => {
+		if (previous === undefined) {
+			delete process.env[key];
+			return;
+		}
+		process.env[key] = previous;
+	});
+}
+
+function buildStripeSignature(body: string) {
+	const payload = `${TEST_TIMESTAMP}.${body}`;
+	return `t=${TEST_TIMESTAMP},v1=${createHmac("sha256", TEST_STRIPE_SECRET)
+		.update(payload)
+		.digest("hex")}`;
+}
+
+beforeEach(() => {
+	testEnvRestorers.length = 0;
+	setTestEnv("STRIPE_WEBHOOK_SECRET", TEST_STRIPE_SECRET);
+	vi.useFakeTimers();
+	vi.setSystemTime(new Date(TEST_TIMESTAMP * 1000));
+});
+
+afterEach(() => {
+	while (testEnvRestorers.length > 0) {
+		testEnvRestorers.pop()?.();
+	}
+	vi.clearAllTimers();
+	vi.useRealTimers();
+});
 
 // ── Tests ────────────────────────────────────────────────────────────
 
@@ -398,6 +443,113 @@ describe("Stripe webhook handler", () => {
 				type: "charge.succeeded",
 			});
 			expect(buildReversalCode(event)).toBeUndefined();
+		});
+	});
+});
+
+describe("stripe webhook persistence bridge", () => {
+	it("marks persisted unsupported stripe reversal events failed", async () => {
+		const t = createHarness();
+
+		const webhookEventId = await t.run(async (ctx) => {
+			return ctx.db.insert("webhookEvents", {
+				provider: "stripe",
+				providerEventId: "evt_stripe_unsupported_001",
+				rawBody: '{"id":"evt_stripe_unsupported_001"}',
+				status: "pending",
+				receivedAt: Date.now(),
+				attempts: 0,
+				signatureVerified: true,
+				normalizedEventType: "TRANSFER_REVERSED",
+			});
+		});
+
+		const result = await t.action(
+			internal.payments.webhooks.stripe.processUnsupportedStripeWebhook,
+			{
+				providerEventId: "evt_stripe_unsupported_001",
+				webhookEventId,
+			}
+		);
+
+		const webhook = await t.run(async (ctx) => ctx.db.get(webhookEventId));
+
+		expect(result).toMatchObject({
+			success: false,
+			reason: "unsupported_provider",
+			providerEventId: "evt_stripe_unsupported_001",
+		});
+		expect(webhook?.status).toBe("failed");
+		expect(webhook?.error).toBe("unsupported_provider");
+		expect(webhook?.attempts).toBe(1);
+	});
+
+	it("persists, schedules, and processes unsupported reversal events through the HTTP bridge", async () => {
+		const t = createHarness();
+		const event = makeEvent({
+			type: "charge.refunded",
+			id: "evt_stripe_bridge_001",
+			data: {
+				object: {
+					id: "ch_stripe_bridge_001",
+					amount: 15_075,
+					reason: "fraudulent",
+				},
+			},
+		});
+		const body = JSON.stringify(event);
+		const signature = buildStripeSignature(body);
+
+		const response = await t.fetch("/webhooks/stripe", {
+			method: "POST",
+			headers: {
+				"content-type": "application/json",
+				"stripe-signature": signature,
+			},
+			body,
+		});
+		const payload = (await response.json()) as {
+			accepted?: boolean;
+			processing?: string;
+			providerEventId?: string;
+			reason?: string;
+		};
+
+		const persisted = await t.run(async (ctx) =>
+			ctx.db
+				.query("webhookEvents")
+				.withIndex("by_provider_event", (q) =>
+					q.eq("provider", "stripe").eq("providerEventId", event.id)
+				)
+				.unique()
+		);
+
+		expect(response.status).toBe(200);
+		expect(payload).toMatchObject({
+			accepted: true,
+			processing: "deferred",
+			providerEventId: event.id,
+			reason: "unsupported_provider",
+		});
+		expect(persisted).toMatchObject({
+			provider: "stripe",
+			providerEventId: event.id,
+			normalizedEventType: "TRANSFER_REVERSED",
+			signatureVerified: true,
+			status: "pending",
+		});
+
+		await t.finishAllScheduledFunctions(() => vi.runAllTimers());
+
+		if (!persisted) {
+			throw new Error("Expected persisted webhook event to exist");
+		}
+
+		const processed = await t.run(async (ctx) => ctx.db.get(persisted._id));
+		expect(processed).toMatchObject({
+			status: "failed",
+			error: "unsupported_provider",
+			attempts: 1,
 		});
 	});
 });

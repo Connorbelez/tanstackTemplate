@@ -1,8 +1,10 @@
 import { v } from "convex/values";
 import type { Id } from "../../_generated/dataModel";
 import type { CommandSource } from "../../engine/types";
+import type { ManualSettlementDetails } from "../transfers/interface";
 import type { ProviderCode } from "../transfers/types";
 import { obligationTypeToTransferType } from "../transfers/types";
+import { manualSettlementValidator } from "../transfers/validators";
 
 export const executionTriggerSourceValues = [
 	"system_scheduler",
@@ -45,11 +47,13 @@ export const executePlanEntryInputValidator = {
 	requestedByActorId: v.optional(v.string()),
 	reason: v.optional(v.string()),
 	dryRun: v.optional(v.boolean()),
+	manualSettlement: v.optional(manualSettlementValidator),
 };
 
 export interface ExecutePlanEntryArgs {
 	dryRun?: boolean;
 	idempotencyKey: string;
+	manualSettlement?: ManualSettlementDetails;
 	planEntryId: Id<"collectionPlanEntries">;
 	reason?: string;
 	requestedAt: number;

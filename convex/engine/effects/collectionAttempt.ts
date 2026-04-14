@@ -232,6 +232,7 @@ export const emitPaymentReceived = internalMutation({
 				payload: {
 					amount: appliedAmount,
 					attemptId: args.entityId,
+					transferRequestId: attempt.transferRequestId,
 					postingGroupId,
 					currentAmountSettled: obligation.amountSettled,
 					totalAmount: obligation.amount,

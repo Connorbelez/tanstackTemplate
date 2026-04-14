@@ -17,6 +17,7 @@ dist-ssr
 __unconfig*
 todos.json
 .cta.json
+.tmp/
 .tmp.vite.min.ts
 .husky/_
 playwright-report

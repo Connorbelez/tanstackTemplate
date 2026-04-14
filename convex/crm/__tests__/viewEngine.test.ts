@@ -1653,6 +1653,6 @@ describe("System object view queries", () => {
 			normalizedFieldKind: "computed",
 			rendererHint: "computed",
 		});
-		expect(computedField?.fieldDefId).toBeUndefined();
+		expect(computedField?.fieldDefId).toBe("computed:verificationSummary");
 	});
 });

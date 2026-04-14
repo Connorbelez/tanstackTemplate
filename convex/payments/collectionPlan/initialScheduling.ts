@@ -33,6 +33,7 @@ export type CollectionPlanEntrySource =
 export interface CreateCollectionPlanEntryArgs {
 	amount: number;
 	createdByRuleId?: Id<"collectionRules">;
+	executionIdempotencyKey?: string;
 	executionMode?: "app_owned" | "provider_managed";
 	externalCollectionScheduleId?: Id<"externalCollectionSchedules">;
 	externalOccurrenceOrdinal?: number;
@@ -97,6 +98,19 @@ export async function createEntryImpl(
 	args: CreateCollectionPlanEntryArgs
 ): Promise<Id<"collectionPlanEntries">> {
 	const executionMode = args.executionMode ?? "app_owned";
+
+	if (args.executionIdempotencyKey) {
+		const existing = await ctx.db
+			.query("collectionPlanEntries")
+			.withIndex("by_execution_idempotency", (q) =>
+				q.eq("executionIdempotencyKey", args.executionIdempotencyKey)
+			)
+			.first();
+		if (existing) {
+			return existing._id;
+		}
+	}
+
 	const [firstObligationId] = args.obligationIds;
 	if (!firstObligationId) {
 		throw new ConvexError(
@@ -161,6 +175,7 @@ export async function createEntryImpl(
 		rescheduleRequestedAt: args.rescheduleRequestedAt,
 		rescheduleRequestedByActorId: args.rescheduleRequestedByActorId,
 		rescheduleRequestedByActorType: args.rescheduleRequestedByActorType,
+		executionIdempotencyKey: args.executionIdempotencyKey,
 		createdAt: Date.now(),
 	});
 }

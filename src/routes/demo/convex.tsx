@@ -3,11 +3,13 @@ import { useMutation, useQuery } from "convex/react";
 import { Check, Circle, Plus, Trash2 } from "lucide-react";
 import { useCallback, useState } from "react";
 import { Button } from "#/components/ui/button";
+import { guardAuthenticated } from "#/lib/auth";
 
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 
 export const Route = createFileRoute("/demo/convex")({
+	beforeLoad: guardAuthenticated(),
 	ssr: false,
 	component: ConvexTodos,
 });

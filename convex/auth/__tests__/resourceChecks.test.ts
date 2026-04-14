@@ -8,11 +8,18 @@ import { convexModules } from "../../test/moduleMaps";
 import {
 	canAccessAccrual,
 	canAccessApplicationPackage,
+	canAccessBorrowerEntity,
+	canAccessCashLedgerAccount,
+	canAccessCounterpartyResource,
 	canAccessDeal,
 	canAccessDispersal,
 	canAccessDocument,
 	canAccessLedgerPosition,
+	canAccessLenderEntity,
 	canAccessMortgage,
+	canAccessObligation,
+	canAccessTransferRequest,
+	canAccessWorkoutPlan,
 } from "../resourceChecks";
 
 const modules = convexModules;
@@ -2231,6 +2238,204 @@ describe("pendingDebits / pendingCredits — field presence in ledger_accounts",
 			const viewer = makeViewer({ authId: "lender-auth" });
 			const result = await canAccessLedgerPosition(ctx, viewer, mortgageId);
 			expect(result).toBe(true);
+		});
+	});
+});
+
+describe("payment resource helpers", () => {
+	it("canAccessLenderEntity allows the lender and their broker", async () => {
+		const t = convexTest(schema, modules);
+		await t.run(async (ctx) => {
+			const brokerUserId = await insertUser(ctx, { authId: "broker-auth" });
+			const brokerId = await insertBroker(ctx, brokerUserId);
+			const lenderUserId = await insertUser(ctx, { authId: "lender-auth" });
+			const lenderId = await insertLender(ctx, lenderUserId, brokerId);
+
+			expect(
+				await canAccessLenderEntity(
+					ctx,
+					makeViewer({ authId: "lender-auth" }),
+					lenderId
+				)
+			).toBe(true);
+			expect(
+				await canAccessLenderEntity(
+					ctx,
+					makeViewer({ authId: "broker-auth" }),
+					lenderId
+				)
+			).toBe(true);
+			expect(
+				await canAccessLenderEntity(
+					ctx,
+					makeViewer({ authId: "other-auth" }),
+					lenderId
+				)
+			).toBe(false);
+		});
+	});
+
+	it("canAccessBorrowerEntity and canAccessObligation follow borrower ownership", async () => {
+		const t = convexTest(schema, modules);
+		await t.run(async (ctx) => {
+			const brokerUserId = await insertUser(ctx, { authId: "broker-auth" });
+			const brokerId = await insertBroker(ctx, brokerUserId);
+			const borrowerUserId = await insertUser(ctx, { authId: "borrower-auth" });
+			const borrowerId = await insertBorrower(ctx, borrowerUserId);
+			const propertyId = await insertProperty(ctx);
+			const mortgageId = await insertMortgage(ctx, propertyId, brokerId);
+			await insertMortgageBorrower(ctx, mortgageId, borrowerId);
+			const obligationId = await ctx.db.insert("obligations", {
+				status: "upcoming",
+				machineContext: {},
+				lastTransitionAt: NOW,
+				mortgageId,
+				borrowerId,
+				paymentNumber: 1,
+				type: "regular_interest",
+				amount: 25_000,
+				amountSettled: 0,
+				dueDate: NOW,
+				gracePeriodEnd: NOW,
+				createdAt: NOW,
+			});
+
+			const viewer = makeViewer({ authId: "borrower-auth" });
+			expect(await canAccessBorrowerEntity(ctx, viewer, borrowerId)).toBe(true);
+			expect(await canAccessObligation(ctx, viewer, obligationId)).toBe(true);
+		});
+	});
+
+	it("canAccessBorrowerEntity scopes third-party access to the matching mortgage", async () => {
+		const t = convexTest(schema, modules);
+		await t.run(async (ctx) => {
+			const brokerAUserId = await insertUser(ctx, { authId: "broker-a" });
+			const brokerAId = await insertBroker(ctx, brokerAUserId);
+			const brokerBUserId = await insertUser(ctx, { authId: "broker-b" });
+			const brokerBId = await insertBroker(ctx, brokerBUserId);
+			const borrowerUserId = await insertUser(ctx, { authId: "borrower-auth" });
+			const borrowerId = await insertBorrower(ctx, borrowerUserId);
+
+			const propertyAId = await insertProperty(ctx);
+			const mortgageAId = await insertMortgage(ctx, propertyAId, brokerAId);
+			await insertMortgageBorrower(ctx, mortgageAId, borrowerId);
+
+			const propertyBId = await insertProperty(ctx);
+			const mortgageBId = await insertMortgage(ctx, propertyBId, brokerBId);
+			await insertMortgageBorrower(ctx, mortgageBId, borrowerId);
+
+			const viewer = makeViewer({ authId: "broker-a" });
+			expect(await canAccessBorrowerEntity(ctx, viewer, borrowerId)).toBe(
+				false
+			);
+			expect(
+				await canAccessBorrowerEntity(ctx, viewer, borrowerId, mortgageAId)
+			).toBe(true);
+			expect(
+				await canAccessBorrowerEntity(ctx, viewer, borrowerId, mortgageBId)
+			).toBe(false);
+		});
+	});
+
+	it("canAccessCounterpartyResource rejects trust for non-admin viewers", async () => {
+		const t = convexTest(schema, modules);
+		await t.run(async (ctx) => {
+			const viewer = makeViewer({ authId: "member-auth" });
+			expect(
+				await canAccessCounterpartyResource(ctx, viewer, "trust", "trust-001")
+			).toBe(false);
+		});
+	});
+
+	it("canAccessTransferRequest and canAccessWorkoutPlan follow mortgage access", async () => {
+		const t = convexTest(schema, modules);
+		await t.run(async (ctx) => {
+			const brokerUserId = await insertUser(ctx, { authId: "broker-auth" });
+			const brokerId = await insertBroker(ctx, brokerUserId);
+			const propertyId = await insertProperty(ctx);
+			const mortgageId = await insertMortgage(ctx, propertyId, brokerId);
+
+			const transferId = await ctx.db.insert("transferRequests", {
+				status: "pending",
+				direction: "inbound",
+				transferType: "borrower_interest_collection",
+				amount: 15_000,
+				currency: "CAD",
+				counterpartyType: "borrower",
+				counterpartyId: "borrower-demo",
+				providerCode: "manual",
+				idempotencyKey: "resource-check-transfer",
+				source: {
+					actorId: "test",
+					actorType: "system",
+					channel: "admin_dashboard",
+				},
+				mortgageId,
+				createdAt: NOW,
+				lastTransitionAt: NOW,
+			});
+
+			const workoutPlanId = await ctx.db.insert("workoutPlans", {
+				mortgageId,
+				name: "Workout",
+				rationale: "Test",
+				status: "draft",
+				strategy: {
+					kind: "custom_schedule",
+					installments: [],
+				},
+				createdByActorId: "test",
+				createdByActorType: "admin",
+				createdAt: NOW,
+				updatedAt: NOW,
+			});
+
+			const viewer = makeViewer({ authId: "broker-auth" });
+			expect(await canAccessTransferRequest(ctx, viewer, transferId)).toBe(
+				true
+			);
+			expect(await canAccessWorkoutPlan(ctx, viewer, workoutPlanId)).toBe(true);
+		});
+	});
+
+	it("canAccessCashLedgerAccount follows mortgage-linked receivable ownership", async () => {
+		const t = convexTest(schema, modules);
+		await t.run(async (ctx) => {
+			const brokerUserId = await insertUser(ctx, { authId: "broker-auth" });
+			const brokerId = await insertBroker(ctx, brokerUserId);
+			const borrowerUserId = await insertUser(ctx, { authId: "borrower-auth" });
+			const borrowerId = await insertBorrower(ctx, borrowerUserId);
+			const propertyId = await insertProperty(ctx);
+			const mortgageId = await insertMortgage(ctx, propertyId, brokerId);
+			await insertMortgageBorrower(ctx, mortgageId, borrowerId);
+			const obligationId = await ctx.db.insert("obligations", {
+				status: "upcoming",
+				machineContext: {},
+				lastTransitionAt: NOW,
+				mortgageId,
+				borrowerId,
+				paymentNumber: 1,
+				type: "regular_interest",
+				amount: 30_000,
+				amountSettled: 0,
+				dueDate: NOW,
+				gracePeriodEnd: NOW,
+				createdAt: NOW,
+			});
+			const accountId = await ctx.db.insert("cash_ledger_accounts", {
+				family: "BORROWER_RECEIVABLE",
+				mortgageId,
+				obligationId,
+				borrowerId,
+				cumulativeDebits: 30_000n,
+				cumulativeCredits: 0n,
+				createdAt: NOW,
+			});
+
+			const viewer = makeViewer({ authId: "borrower-auth" });
+			expect(await canAccessCashLedgerAccount(ctx, viewer, accountId)).toBe(
+				true
+			);
 		});
 	});
 });

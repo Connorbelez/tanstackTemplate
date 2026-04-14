@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 
 const testEmail = process.env.TEST_ACCOUNT_EMAIL;
 if (!testEmail) {
@@ -7,13 +7,20 @@ if (!testEmail) {
 const SIGN_OUT_PATTERN = /sign out/i;
 const SIGN_IN_PATTERN = /sign in with authkit/i;
 
+function getProfileEmailCard(page: Page) {
+	const profileTabPanel = page.getByRole("tabpanel", { name: /profile/i });
+	return profileTabPanel
+		.getByText("Email", { exact: true })
+		.locator("xpath=..");
+}
+
 test("authenticated user sees profile on workos demo page", async ({
 	page,
 }) => {
 	await page.goto("/demo/workos");
 
-	// The profile tab should show the user's email
-	await expect(page.getByText(testEmail)).toBeVisible({
+	// The profile tab should show the user's email in the email info card.
+	await expect(getProfileEmailCard(page)).toContainText(testEmail, {
 		timeout: 15_000,
 	});
 });
@@ -21,8 +28,8 @@ test("authenticated user sees profile on workos demo page", async ({
 test("sign out clears session", async ({ page }) => {
 	await page.goto("/demo/workos");
 
-	// Wait for profile to load
-	await expect(page.getByText(testEmail)).toBeVisible({
+	// Wait for the profile email card to load before signing out.
+	await expect(getProfileEmailCard(page)).toContainText(testEmail, {
 		timeout: 15_000,
 	});
 

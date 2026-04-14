@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMutation, useQuery } from "convex/react";
+import { useAction, useMutation, useQuery } from "convex/react";
 import { AlertCircle, CheckCircle2, Clock, X } from "lucide-react";
 import { useCallback, useState } from "react";
 import { Badge } from "#/components/ui/badge";
@@ -332,7 +332,7 @@ function SimulationDemo() {
 
 	const seed = useMutation(api.demo.simulation.seedSimulation);
 	const advance = useMutation(api.demo.simulation.advanceTime);
-	const trigger = useMutation(api.demo.simulation.triggerDispersal);
+	const trigger = useAction(api.demo.simulation.triggerDispersal);
 	const cleanup = useMutation(api.demo.simulation.cleanupSimulation);
 
 	const [error, setError] = useState<string | null>(null);

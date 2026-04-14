@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 
 // ── Helpers ──────────────────────────────────────────────────────
 const BASE = "/demo/governed-transitions";
+const COMMAND_CENTER = `${BASE}/`;
 const DATA_LOAD_TIMEOUT = 15_000;
 
 /**
@@ -13,12 +14,26 @@ async function goToTab(
 	path: string,
 	heading?: string,
 ) {
-	await page.goto(`${BASE}${path}`);
+	await page.goto(path ? `${BASE}${path}` : COMMAND_CENTER);
 	if (heading) {
-		await expect(page.getByText(heading).first()).toBeVisible({
+		const headingLocator =
+			heading === "Create Application"
+				? page.getByRole("button", { name: heading })
+				: heading === "Transition Journal"
+					? page.getByRole("heading", { name: heading })
+					: page.getByText(heading, { exact: true }).first();
+
+		await expect(headingLocator).toBeVisible({
 			timeout: DATA_LOAD_TIMEOUT,
 		});
 	}
+}
+
+function getStatCard(page: import("@playwright/test").Page, label: string) {
+	return page
+		.locator("[data-slot='card-content']")
+		.filter({ has: page.getByText(label, { exact: true }) })
+		.first();
 }
 
 /**
@@ -26,7 +41,10 @@ async function goToTab(
  * to clear. This ensures each test starts with a clean slate.
  */
 async function resetDemo(page: import("@playwright/test").Page) {
-	await goToTab(page, "", "Create Application");
+	await goToTab(page, "");
+	await expect(page.getByRole("button", { name: "Create Application" })).toBeVisible({
+		timeout: DATA_LOAD_TIMEOUT,
+	});
 	await page.getByRole("button", { name: "Reset Demo" }).click();
 	// Wait for the empty state to appear, confirming the reset completed
 	await expect(
@@ -48,9 +66,13 @@ async function createApplication(
 		await page.getByLabel(/Applicant Name/).fill(opts.applicantName);
 	}
 	await page.getByRole("button", { name: "Create Application" }).click();
-	await expect(page.getByText(opts.label)).toBeVisible({
+	await expect(getEntityCard(page, opts.label)).toBeVisible({
 		timeout: DATA_LOAD_TIMEOUT,
 	});
+}
+
+function getEntityCard(page: import("@playwright/test").Page, label: string) {
+	return page.locator("button").filter({ hasText: label }).first();
 }
 
 /**
@@ -61,14 +83,9 @@ async function selectEntity(
 	page: import("@playwright/test").Page,
 	label: string,
 ) {
-	// The entity card is a <button> inside a div with the label text
-	const entityCard = page
-		.locator("div")
-		.filter({ hasText: label })
-		.getByRole("button")
-		.first();
+	const entityCard = getEntityCard(page, label);
 	await entityCard.click();
-	await expect(page.getByText("Send All Events")).toBeVisible({
+	await expect(page.getByText("Send All Events", { exact: true })).toBeVisible({
 		timeout: DATA_LOAD_TIMEOUT,
 	});
 }
@@ -78,36 +95,43 @@ test.describe("Governed Transitions — Layout", () => {
 	test("renders layout with heading and all three navigation tabs", async ({
 		page,
 	}) => {
-		await page.goto(BASE);
+		await goToTab(page, "/journal", "Transition Journal");
 
 		await expect(
 			page.getByRole("heading", { name: "Governed Transitions" }),
-		).toBeVisible();
+		).toBeVisible({ timeout: DATA_LOAD_TIMEOUT });
 
-		const nav = page.locator("nav");
-		await expect(nav.getByText("Command Center")).toBeVisible();
-		await expect(nav.getByText("Journal")).toBeVisible();
-		await expect(nav.getByText("Machine Inspector")).toBeVisible();
+		await expect(page.getByRole("link", { name: "Command Center" })).toBeVisible();
+		await expect(page.getByRole("link", { name: "Journal" })).toBeVisible();
+		await expect(
+			page.getByRole("link", { name: "Machine Inspector" }),
+		).toBeVisible();
 	});
 
 	test("tabs navigate between pages", async ({ page }) => {
-		await page.goto(BASE);
+		await page.goto(COMMAND_CENTER);
 
 		// Navigate to Journal tab
-		await page.locator("nav").getByText("Journal").click();
-		await expect(page.getByText("Transition Journal")).toBeVisible({
+		await page.getByRole("link", { name: "Journal" }).click();
+		await expect(
+			page.getByRole("heading", { name: "Transition Journal" }),
+		).toBeVisible({
 			timeout: DATA_LOAD_TIMEOUT,
 		});
 
 		// Navigate to Machine Inspector tab
-		await page.locator("nav").getByText("Machine Inspector").click();
-		await expect(page.getByText("Transition Table")).toBeVisible({
-			timeout: DATA_LOAD_TIMEOUT,
-		});
+		await page.getByRole("link", { name: "Machine Inspector" }).click();
+		await expect(page.getByText("Transition Table", { exact: true })).toBeVisible(
+			{
+				timeout: DATA_LOAD_TIMEOUT,
+			},
+		);
 
 		// Navigate back to Command Center tab
-		await page.locator("nav").getByText("Command Center").click();
-		await expect(page.getByText("Create Application")).toBeVisible({
+		await page.getByRole("link", { name: "Command Center" }).click();
+		await expect(
+			page.getByRole("button", { name: "Create Application" }),
+		).toBeVisible({
 			timeout: DATA_LOAD_TIMEOUT,
 		});
 	});
@@ -128,17 +152,15 @@ test.describe("Governed Transitions — UC-1: Create Entity", () => {
 		});
 
 		// Verify entity appears in the list
-		await expect(page.getByText("E2E Draft Test")).toBeVisible();
+		await expect(getEntityCard(page, "E2E Draft Test")).toBeVisible();
 
 		// Verify it shows the loan amount
-		await expect(page.getByText("$250,000")).toBeVisible();
+		await expect(getEntityCard(page, "E2E Draft Test")).toContainText(
+			"$250,000",
+		);
 
 		// Verify the status badge shows "draft"
-		const entityRow = page
-			.locator("div")
-			.filter({ hasText: "E2E Draft Test" })
-			.first();
-		await expect(entityRow.getByText("draft")).toBeVisible();
+		await expect(getEntityCard(page, "E2E Draft Test")).toContainText("draft");
 	});
 });
 
@@ -170,12 +192,8 @@ test.describe("Governed Transitions — UC-2: Valid Transition", () => {
 
 		// Verify the status badge changes to "submitted"
 		await expect(
-			page
-				.locator("div")
-				.filter({ hasText: "E2E Submit Test" })
-				.getByText("submitted")
-				.first(),
-		).toBeVisible({ timeout: DATA_LOAD_TIMEOUT });
+			getEntityCard(page, "E2E Submit Test"),
+		).toContainText("submitted");
 	});
 });
 
@@ -205,17 +223,13 @@ test.describe("Governed Transitions — UC-3: Invalid Transition", () => {
 		await allEventsSection.getByRole("button", { name: "APPROVE" }).click();
 
 		// Verify entity status remains "draft"
-		const entityRow = page
-			.locator("div")
-			.filter({ hasText: "E2E Reject Test" })
-			.first();
-		await expect(entityRow.getByText("draft")).toBeVisible({
-			timeout: DATA_LOAD_TIMEOUT,
-		});
+		await expect(getEntityCard(page, "E2E Reject Test")).toContainText("draft");
 
 		// Navigate to Journal tab and verify a rejection entry exists
-		await page.locator("nav").getByText("Journal").click();
-		await expect(page.getByText("Transition Journal")).toBeVisible({
+		await page.getByRole("link", { name: "Journal" }).click();
+		await expect(
+			page.getByRole("heading", { name: "Transition Journal" }),
+		).toBeVisible({
 			timeout: DATA_LOAD_TIMEOUT,
 		});
 
@@ -246,16 +260,14 @@ test.describe("Governed Transitions — UC-4: Full Lifecycle Journal", () => {
 
 		// Wait for the lifecycle entity to appear in "closed" state
 		await expect(
-			page
-				.locator("div")
-				.filter({ hasText: /Lifecycle Demo/ })
-				.getByText("closed")
-				.first(),
-		).toBeVisible({ timeout: DATA_LOAD_TIMEOUT });
+			getEntityCard(page, "Lifecycle Demo"),
+		).toContainText("closed");
 
 		// Navigate to Journal tab
-		await page.locator("nav").getByText("Journal").click();
-		await expect(page.getByText("Transition Journal")).toBeVisible({
+		await page.getByRole("link", { name: "Journal" }).click();
+		await expect(
+			page.getByRole("heading", { name: "Transition Journal" }),
+		).toBeVisible({
 			timeout: DATA_LOAD_TIMEOUT,
 		});
 
@@ -298,23 +310,17 @@ test.describe("Governed Transitions — UC-6: Run Full Lifecycle", () => {
 		await page.getByRole("button", { name: "Run Full Lifecycle" }).click();
 
 		// Verify a "Lifecycle Demo" entity appears
-		await expect(
-			page.getByText(/Lifecycle Demo/).first(),
-		).toBeVisible({ timeout: DATA_LOAD_TIMEOUT });
-
-		// Verify it shows "closed" status badge
-		await expect(
-			page
-				.locator("div")
-				.filter({ hasText: /Lifecycle Demo/ })
-				.getByText("closed")
-				.first(),
-		).toBeVisible({ timeout: DATA_LOAD_TIMEOUT });
-
-		// Verify it shows the lifecycle loan amount ($500,000)
-		await expect(page.getByText("$500,000")).toBeVisible({
+		await expect(getEntityCard(page, "Lifecycle Demo")).toBeVisible({
 			timeout: DATA_LOAD_TIMEOUT,
 		});
+
+		// Verify it shows "closed" status badge
+		await expect(getEntityCard(page, "Lifecycle Demo")).toContainText("closed");
+
+		// Verify it shows the lifecycle loan amount ($500,000)
+		await expect(getEntityCard(page, "Lifecycle Demo")).toContainText(
+			"$500,000",
+		);
 	});
 });
 
@@ -326,12 +332,8 @@ test.describe("Governed Transitions — T-045A: Journal Read-Only", () => {
 		// Run a lifecycle so journal has entries to search/filter
 		await page.getByRole("button", { name: "Run Full Lifecycle" }).click();
 		await expect(
-			page
-				.locator("div")
-				.filter({ hasText: /Lifecycle Demo/ })
-				.getByText("closed")
-				.first(),
-		).toBeVisible({ timeout: DATA_LOAD_TIMEOUT });
+			getEntityCard(page, "Lifecycle Demo"),
+		).toContainText("closed");
 	});
 
 	test("journal page has filter controls but no mutation buttons", async ({
@@ -342,21 +344,21 @@ test.describe("Governed Transitions — T-045A: Journal Read-Only", () => {
 		// ── Read-only affordances ARE present ──
 
 		// Stats bar cards exist
-		await expect(page.getByText("Total")).toBeVisible();
-		await expect(page.getByText("Transitioned")).toBeVisible();
-		await expect(page.getByText("Rejected")).toBeVisible();
+		await expect(getStatCard(page, "Total")).toBeVisible();
+		await expect(getStatCard(page, "Transitioned")).toBeVisible();
+		await expect(getStatCard(page, "Rejected")).toBeVisible();
 
 		// Entity filter dropdown trigger exists
-		await expect(page.getByText("All Entities")).toBeVisible();
+		await expect(page.getByRole("combobox")).toBeVisible();
 
 		// Outcome toggle buttons exist
 		const outcomeAll = page.getByRole("button", { name: "All", exact: true });
 		await expect(outcomeAll.first()).toBeVisible();
 		await expect(
-			page.getByRole("button", { name: "Transitioned" }),
+			page.getByRole("button", { name: "Transitioned", exact: true }),
 		).toBeVisible();
 		await expect(
-			page.getByRole("button", { name: "Rejected" }),
+			page.getByRole("button", { name: "Rejected", exact: true }),
 		).toBeVisible();
 
 		// Search input exists inside InteractiveLogsTable
@@ -422,22 +424,34 @@ test.describe("Governed Transitions — T-045B: Machine Read-Only", () => {
 		});
 
 		// Read-Only badge is visible (set by readOnly={true} on N8nWorkflowBlock)
-		await expect(page.getByText("Read-Only")).toBeVisible();
+		await expect(page.getByText("Read-Only", { exact: true })).toBeVisible();
 
 		// Transition Table heading and column headers are present
-		await expect(page.getByText("Transition Table")).toBeVisible();
-		await expect(page.getByText("From State")).toBeVisible();
-		await expect(page.getByText("Event", { exact: true }).first()).toBeVisible();
-		await expect(page.getByText("Guard")).toBeVisible();
-		await expect(page.getByText("To State")).toBeVisible();
-		await expect(page.getByText("Actions")).toBeVisible();
+		await expect(page.getByText("Transition Table", { exact: true })).toBeVisible();
+		await expect(
+			page.getByRole("columnheader", { name: "From State" }),
+		).toBeVisible();
+		await expect(
+			page.getByRole("columnheader", { name: "Event" }),
+		).toBeVisible();
+		await expect(
+			page.getByRole("columnheader", { name: "Guard" }),
+		).toBeVisible();
+		await expect(
+			page.getByRole("columnheader", { name: "To State" }),
+		).toBeVisible();
+		await expect(
+			page.getByRole("columnheader", { name: "Actions" }),
+		).toBeVisible();
 
 		// State names are visible in the workflow diagram nodes
 		await expect(page.getByText("draft").first()).toBeVisible();
 		await expect(page.getByText("submitted").first()).toBeVisible();
 
 		// Entity highlight selector exists
-		await expect(page.getByText("Highlight entity state:")).toBeVisible();
+		await expect(
+			page.getByText("Highlight entity state:", { exact: true }),
+		).toBeVisible();
 
 		// ── "Add Node" button must NOT exist (hidden by readOnly) ──
 		await expect(
@@ -493,17 +507,15 @@ test.describe(
 				.click();
 
 			// Verify entity shows "submitted" on Command Center
-			await expect(
-				page
-					.locator("div")
-					.filter({ hasText: "E2E Reactive Success" })
-					.getByText("submitted")
-					.first(),
-			).toBeVisible({ timeout: DATA_LOAD_TIMEOUT });
+			await expect(getEntityCard(page, "E2E Reactive Success")).toContainText(
+				"submitted",
+			);
 
 			// Navigate to Journal tab
-			await page.locator("nav").getByText("Journal").click();
-			await expect(page.getByText("Transition Journal")).toBeVisible({
+			await page.getByRole("link", { name: "Journal" }).click();
+			await expect(
+				page.getByRole("heading", { name: "Transition Journal" }),
+			).toBeVisible({
 				timeout: DATA_LOAD_TIMEOUT,
 			});
 
@@ -518,14 +530,10 @@ test.describe(
 			});
 
 			// Navigate back to Command Center and verify entity still shows "submitted"
-			await page.locator("nav").getByText("Command Center").click();
-			await expect(
-				page
-					.locator("div")
-					.filter({ hasText: "E2E Reactive Success" })
-					.getByText("submitted")
-					.first(),
-			).toBeVisible({ timeout: DATA_LOAD_TIMEOUT });
+			await page.getByRole("link", { name: "Command Center" }).click();
+			await expect(getEntityCard(page, "E2E Reactive Success")).toContainText(
+				"submitted",
+			);
 		});
 
 		test("rejected transition appears in journal with entity staying in original state", async ({
@@ -547,17 +555,15 @@ test.describe(
 				.click();
 
 			// Verify entity remains in "draft" on Command Center
-			await expect(
-				page
-					.locator("div")
-					.filter({ hasText: "E2E Reactive Reject" })
-					.getByText("draft")
-					.first(),
-			).toBeVisible({ timeout: DATA_LOAD_TIMEOUT });
+			await expect(getEntityCard(page, "E2E Reactive Reject")).toContainText(
+				"draft",
+			);
 
 			// Navigate to Journal tab
-			await page.locator("nav").getByText("Journal").click();
-			await expect(page.getByText("Transition Journal")).toBeVisible({
+			await page.getByRole("link", { name: "Journal" }).click();
+			await expect(
+				page.getByRole("heading", { name: "Transition Journal" }),
+			).toBeVisible({
 				timeout: DATA_LOAD_TIMEOUT,
 			});
 
