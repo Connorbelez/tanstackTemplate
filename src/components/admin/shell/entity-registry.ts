@@ -151,6 +151,20 @@ export const STATIC_ADMIN_NAV_ITEMS = [
 		domain: "system",
 		iconName: "shield",
 	},
+	{
+		kind: "route",
+		label: "Payment Operations",
+		route: "/admin/payment-operations",
+		domain: "payments",
+		iconName: "calendar-clock",
+	},
+	{
+		kind: "route",
+		label: "Financial Ledger",
+		route: "/admin/financial-ledger",
+		domain: "ledger",
+		iconName: "landmark",
+	},
 ] as const satisfies readonly StaticAdminNavigationItem[];
 
 export type StaticAdminRoute = (typeof STATIC_ADMIN_NAV_ITEMS)[number]["route"];

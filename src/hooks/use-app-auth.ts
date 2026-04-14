@@ -1,4 +1,9 @@
 import { useAuth } from "@workos/authkit-tanstack-react-start/client";
+import {
+	normalizePermissions,
+	normalizeRoles,
+	resolvePrimaryRole,
+} from "#/lib/auth-policy";
 
 export interface AppAuthContext {
 	loading: boolean;
@@ -16,13 +21,14 @@ export interface AppAuthContext {
  */
 export function useAppAuth(): AppAuthContext {
 	const auth = useAuth();
+	const roles = normalizeRoles({ role: auth.role, roles: auth.roles });
 	return {
 		user: auth.user,
 		loading: auth.loading,
 		signOut: auth.signOut,
 		orgId: auth.organizationId ?? null,
-		role: auth.role ?? null,
-		roles: auth.roles ?? [],
-		permissions: auth.permissions ?? [],
+		role: resolvePrimaryRole({ role: auth.role, roles }),
+		roles,
+		permissions: normalizePermissions(auth.permissions),
 	};
 }

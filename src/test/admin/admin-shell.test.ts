@@ -98,6 +98,7 @@ function buildBorrowerRecord(): UnifiedRecord {
 const FAIRLEND_ADMIN_CONTEXT = {
 	orgId: FAIRLEND_STAFF_ORG_ID,
 	permissions: ["admin:access"],
+	role: "admin",
 	roles: ["admin"],
 	token: null,
 	userId: "user_fairlend_admin",
@@ -106,6 +107,7 @@ const FAIRLEND_ADMIN_CONTEXT = {
 const UNDERWRITER_CONTEXT = {
 	orgId: null,
 	permissions: ["underwriter:access"],
+	role: "underwriter",
 	roles: ["underwriter"],
 	token: null,
 	userId: "user_underwriter",
@@ -114,9 +116,19 @@ const UNDERWRITER_CONTEXT = {
 const EXTERNAL_ADMIN_CONTEXT = {
 	orgId: "org_external_test",
 	permissions: ["admin:access"],
+	role: "admin",
 	roles: ["admin"],
 	token: null,
 	userId: "user_external_admin",
+};
+
+const ROLE_ONLY_ADMIN_CONTEXT = {
+	orgId: FAIRLEND_STAFF_ORG_ID,
+	permissions: ["admin:access"],
+	role: "admin",
+	roles: [],
+	token: null,
+	userId: "user_fairlend_admin_role_only",
 };
 
 describe("admin shell helpers", () => {
@@ -202,6 +214,9 @@ describe("admin shell helpers", () => {
 			false
 		);
 		expect(canAccessAdminPath("/admin/mortgages", FAIRLEND_ADMIN_CONTEXT)).toBe(
+			true
+		);
+		expect(canAccessAdminPath("/admin/mortgages", ROLE_ONLY_ADMIN_CONTEXT)).toBe(
 			true
 		);
 		expect(canAccessAdminPath("/admin/mortgages", EXTERNAL_ADMIN_CONTEXT)).toBe(

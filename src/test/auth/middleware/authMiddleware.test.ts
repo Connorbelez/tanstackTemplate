@@ -62,8 +62,9 @@ describe("authMiddleware (whoAmI)", () => {
 
 	it("handles empty/missing claims", async () => {
 		const identity = createMockIdentity({
-			roles: JSON.stringify([]),
 			permissions: JSON.stringify([]),
+			role: undefined,
+			roles: JSON.stringify([]),
 		});
 		const t = createTestConvex();
 		await seedFromIdentity(t, identity);
@@ -72,6 +73,23 @@ describe("authMiddleware (whoAmI)", () => {
 
 		expect(result.roles).toEqual([]);
 		expect(result.permissions).toEqual([]);
+	});
+
+	it("promotes the singular role claim into roles for staff admins", async () => {
+		const identity = createMockIdentity({
+			org_id: FAIRLEND_STAFF_ORG_ID,
+			permissions: JSON.stringify(["admin:access"]),
+			role: "admin",
+			roles: JSON.stringify([]),
+		});
+		const t = createTestConvex();
+		await seedFromIdentity(t, identity);
+
+		const result = await t.withIdentity(identity).query(api.fluent.whoAmI);
+
+		expect(result.role).toBe("admin");
+		expect(result.roles).toContain("admin");
+		expect(result.isFairLendAdmin).toBe(true);
 	});
 
 	it("sets isFairLendAdmin true for FairLend Staff admin", async () => {

@@ -1,11 +1,11 @@
 #!/usr/bin/env sh
 set -e
 
-staged_files="$(git diff --cached --name-only --diff-filter=ACMR)"
-
-if [ -z "$staged_files" ]; then
+# Use NUL-separated paths so filenames with spaces or `$` (e.g. TanStack `$param`
+# routes) are not word-split or expanded by the shell.
+if git diff --cached --quiet; then
 	exit 0
 fi
 
-bunx ultracite fix $(printf '%s\n' "$staged_files" | sed 's/ /\\ /g')
+git diff --cached --name-only --diff-filter=ACMR -z | xargs -0 bunx ultracite fix
 git update-index --again

@@ -20,7 +20,7 @@ import {
 	CardTitle,
 } from "#/components/ui/card";
 import { useAppAuth } from "#/hooks/use-app-auth";
-import { hasPermission, isFairLendStaffAdmin } from "#/lib/auth";
+import { useCanDo } from "#/hooks/use-can-do";
 import {
 	ROLE_COLOR_CLASSES,
 	ROLE_DISPLAY_METADATA,
@@ -100,9 +100,7 @@ const STATE_MACHINE_NODES = [
 
 function OnboardingPage() {
 	const auth = useAppAuth();
-	const canReview =
-		isFairLendStaffAdmin(auth) &&
-		hasPermission(auth.permissions, "onboarding:review");
+	const canReview = useCanDo("onboarding:review");
 	const isMember =
 		auth.role === "member" || (auth.roles.length === 0 && !auth.loading);
 

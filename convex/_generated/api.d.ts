@@ -176,6 +176,7 @@ import type * as onboarding_internal from "../onboarding/internal.js";
 import type * as onboarding_mutations from "../onboarding/mutations.js";
 import type * as onboarding_queries from "../onboarding/queries.js";
 import type * as onboarding_validators from "../onboarding/validators.js";
+import type * as payments_adminDashboard_queries from "../payments/adminDashboard/queries.js";
 import type * as payments_bankAccounts_mutations from "../payments/bankAccounts/mutations.js";
 import type * as payments_bankAccounts_queries from "../payments/bankAccounts/queries.js";
 import type * as payments_bankAccounts_types from "../payments/bankAccounts/types.js";
@@ -472,6 +473,7 @@ declare const fullApi: ApiFromModules<{
   "onboarding/mutations": typeof onboarding_mutations;
   "onboarding/queries": typeof onboarding_queries;
   "onboarding/validators": typeof onboarding_validators;
+  "payments/adminDashboard/queries": typeof payments_adminDashboard_queries;
   "payments/bankAccounts/mutations": typeof payments_bankAccounts_mutations;
   "payments/bankAccounts/queries": typeof payments_bankAccounts_queries;
   "payments/bankAccounts/types": typeof payments_bankAccounts_types;

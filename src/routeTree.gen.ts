@@ -50,6 +50,8 @@ import { Route as DemoConvexApiCredentialsRouteImport } from './routes/demo/conv
 import { Route as DemoConvexAggregateRouteImport } from './routes/demo/convex-aggregate'
 import { Route as DemoConvexActionCacheRouteImport } from './routes/demo/convex-action-cache'
 import { Route as DemoConvexRouteImport } from './routes/demo/convex'
+import { Route as AdminPaymentOperationsRouteImport } from './routes/admin/payment-operations'
+import { Route as AdminFinancialLedgerRouteImport } from './routes/admin/financial-ledger'
 import { Route as AdminEntitytypeRouteImport } from './routes/admin/$entitytype'
 import { Route as AuthenticatedAuthenticatedRouteImport } from './routes/_authenticated/authenticated'
 import { Route as DemoRbacAuthRouteRouteImport } from './routes/demo/rbac-auth/route'
@@ -57,6 +59,7 @@ import { Route as DemoRbacRouteRouteImport } from './routes/demo/rbac/route'
 import { Route as DemoGovernedTransitionsRouteRouteImport } from './routes/demo/governed-transitions/route'
 import { Route as DemoDocumentEngineRouteRouteImport } from './routes/demo/document-engine/route'
 import { Route as DemoCrmRouteRouteImport } from './routes/demo/crm/route'
+import { Route as DemoBrokerWhitelabelRouteRouteImport } from './routes/demo/broker-whitelabel/route'
 import { Route as DemoAuditTraceabilityRouteRouteImport } from './routes/demo/audit-traceability/route'
 import { Route as DemoAmpsRouteRouteImport } from './routes/demo/amps/route'
 import { Route as AdminUnderwritingRouteRouteImport } from './routes/admin/underwriting/route'
@@ -72,6 +75,7 @@ import { Route as DemoListingsIndexRouteImport } from './routes/demo/listings/in
 import { Route as DemoGovernedTransitionsIndexRouteImport } from './routes/demo/governed-transitions/index'
 import { Route as DemoDocumentEngineIndexRouteImport } from './routes/demo/document-engine/index'
 import { Route as DemoCrmIndexRouteImport } from './routes/demo/crm/index'
+import { Route as DemoBrokerWhitelabelIndexRouteImport } from './routes/demo/broker-whitelabel/index'
 import { Route as DemoAuditTraceabilityIndexRouteImport } from './routes/demo/audit-traceability/index'
 import { Route as DemoAmpsIndexRouteImport } from './routes/demo/amps/index'
 import { Route as DemoRbacAuthRolesRouteImport } from './routes/demo/rbac-auth/roles'
@@ -90,6 +94,8 @@ import { Route as DemoDocumentEngineGroupsRouteImport } from './routes/demo/docu
 import { Route as DemoDocumentEngineGenerateRouteImport } from './routes/demo/document-engine/generate'
 import { Route as DemoCrmSystemRouteImport } from './routes/demo/crm/system'
 import { Route as DemoCrmLinksRouteImport } from './routes/demo/crm/links'
+import { Route as DemoBrokerWhitelabelOnboardingRouteImport } from './routes/demo/broker-whitelabel/onboarding'
+import { Route as DemoBrokerWhitelabelAuthRouteImport } from './routes/demo/broker-whitelabel/auth'
 import { Route as DemoAuditTraceabilityReportRouteImport } from './routes/demo/audit-traceability/report'
 import { Route as DemoAuditTraceabilityPipelineRouteImport } from './routes/demo/audit-traceability/pipeline'
 import { Route as DemoAuditTraceabilityHashChainRouteImport } from './routes/demo/audit-traceability/hash-chain'
@@ -111,8 +117,11 @@ import { Route as DemoRbacLawyerRouteRouteImport } from './routes/demo/rbac/lawy
 import { Route as DemoRbacBrokerRouteRouteImport } from './routes/demo/rbac/broker/route'
 import { Route as DemoRbacBorrowerRouteRouteImport } from './routes/demo/rbac/borrower/route'
 import { Route as DemoRbacAdminRouteRouteImport } from './routes/demo/rbac/admin/route'
+import { Route as DemoBrokerWhitelabelListingsRouteRouteImport } from './routes/demo/broker-whitelabel/listings/route'
+import { Route as DemoBrokerWhitelabelListingsIndexRouteImport } from './routes/demo/broker-whitelabel/listings/index'
 import { Route as DemoDocumentEngineDesignerTemplateIdRouteImport } from './routes/demo/document-engine/designer.$templateId'
 import { Route as DemoCrmObjectDefIdRecordIdRouteImport } from './routes/demo/crm/$objectDefId.$recordId'
+import { Route as DemoBrokerWhitelabelListingsListingIdRouteImport } from './routes/demo/broker-whitelabel/listings/$listingId'
 import { Route as DemoRbacAdminUnderwritingRouteRouteImport } from './routes/demo/rbac/admin/underwriting/route'
 import { Route as DemoAmpsMortgagesMortgageIdPaymentsRouteImport } from './routes/demo/amps/mortgages.$mortgageId.payments'
 
@@ -324,6 +333,16 @@ const DemoConvexRoute = DemoConvexRouteImport.update({
   path: '/demo/convex',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminPaymentOperationsRoute = AdminPaymentOperationsRouteImport.update({
+  id: '/payment-operations',
+  path: '/payment-operations',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const AdminFinancialLedgerRoute = AdminFinancialLedgerRouteImport.update({
+  id: '/financial-ledger',
+  path: '/financial-ledger',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
 const AdminEntitytypeRoute = AdminEntitytypeRouteImport.update({
   id: '/$entitytype',
   path: '/$entitytype',
@@ -361,6 +380,12 @@ const DemoCrmRouteRoute = DemoCrmRouteRouteImport.update({
   path: '/demo/crm',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DemoBrokerWhitelabelRouteRoute =
+  DemoBrokerWhitelabelRouteRouteImport.update({
+    id: '/demo/broker-whitelabel',
+    path: '/demo/broker-whitelabel',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const DemoAuditTraceabilityRouteRoute =
   DemoAuditTraceabilityRouteRouteImport.update({
     id: '/demo/audit-traceability',
@@ -438,6 +463,12 @@ const DemoCrmIndexRoute = DemoCrmIndexRouteImport.update({
   path: '/',
   getParentRoute: () => DemoCrmRouteRoute,
 } as any)
+const DemoBrokerWhitelabelIndexRoute =
+  DemoBrokerWhitelabelIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => DemoBrokerWhitelabelRouteRoute,
+  } as any)
 const DemoAuditTraceabilityIndexRoute =
   DemoAuditTraceabilityIndexRouteImport.update({
     id: '/',
@@ -537,6 +568,18 @@ const DemoCrmLinksRoute = DemoCrmLinksRouteImport.update({
   path: '/links',
   getParentRoute: () => DemoCrmRouteRoute,
 } as any)
+const DemoBrokerWhitelabelOnboardingRoute =
+  DemoBrokerWhitelabelOnboardingRouteImport.update({
+    id: '/onboarding',
+    path: '/onboarding',
+    getParentRoute: () => DemoBrokerWhitelabelRouteRoute,
+  } as any)
+const DemoBrokerWhitelabelAuthRoute =
+  DemoBrokerWhitelabelAuthRouteImport.update({
+    id: '/auth',
+    path: '/auth',
+    getParentRoute: () => DemoBrokerWhitelabelRouteRoute,
+  } as any)
 const DemoAuditTraceabilityReportRoute =
   DemoAuditTraceabilityReportRouteImport.update({
     id: '/report',
@@ -649,6 +692,18 @@ const DemoRbacAdminRouteRoute = DemoRbacAdminRouteRouteImport.update({
   path: '/admin',
   getParentRoute: () => DemoRbacRouteRoute,
 } as any)
+const DemoBrokerWhitelabelListingsRouteRoute =
+  DemoBrokerWhitelabelListingsRouteRouteImport.update({
+    id: '/listings',
+    path: '/listings',
+    getParentRoute: () => DemoBrokerWhitelabelRouteRoute,
+  } as any)
+const DemoBrokerWhitelabelListingsIndexRoute =
+  DemoBrokerWhitelabelListingsIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => DemoBrokerWhitelabelListingsRouteRoute,
+  } as any)
 const DemoDocumentEngineDesignerTemplateIdRoute =
   DemoDocumentEngineDesignerTemplateIdRouteImport.update({
     id: '/designer/$templateId',
@@ -660,6 +715,12 @@ const DemoCrmObjectDefIdRecordIdRoute =
     id: '/$objectDefId/$recordId',
     path: '/$objectDefId/$recordId',
     getParentRoute: () => DemoCrmRouteRoute,
+  } as any)
+const DemoBrokerWhitelabelListingsListingIdRoute =
+  DemoBrokerWhitelabelListingsListingIdRouteImport.update({
+    id: '/$listingId',
+    path: '/$listingId',
+    getParentRoute: () => DemoBrokerWhitelabelListingsRouteRoute,
   } as any)
 const DemoRbacAdminUnderwritingRouteRoute =
   DemoRbacAdminUnderwritingRouteRouteImport.update({
@@ -697,6 +758,7 @@ export interface FileRoutesByFullPath {
   '/admin/underwriting': typeof AdminUnderwritingRouteRoute
   '/demo/amps': typeof DemoAmpsRouteRouteWithChildren
   '/demo/audit-traceability': typeof DemoAuditTraceabilityRouteRouteWithChildren
+  '/demo/broker-whitelabel': typeof DemoBrokerWhitelabelRouteRouteWithChildren
   '/demo/crm': typeof DemoCrmRouteRouteWithChildren
   '/demo/document-engine': typeof DemoDocumentEngineRouteRouteWithChildren
   '/demo/governed-transitions': typeof DemoGovernedTransitionsRouteRouteWithChildren
@@ -704,6 +766,8 @@ export interface FileRoutesByFullPath {
   '/demo/rbac-auth': typeof DemoRbacAuthRouteRouteWithChildren
   '/authenticated': typeof AuthenticatedAuthenticatedRoute
   '/admin/$entitytype': typeof AdminEntitytypeRouteWithChildren
+  '/admin/financial-ledger': typeof AdminFinancialLedgerRoute
+  '/admin/payment-operations': typeof AdminPaymentOperationsRoute
   '/demo/convex': typeof DemoConvexRoute
   '/demo/convex-action-cache': typeof DemoConvexActionCacheRoute
   '/demo/convex-aggregate': typeof DemoConvexAggregateRoute
@@ -732,6 +796,7 @@ export interface FileRoutesByFullPath {
   '/demo/workos': typeof DemoWorkosRoute
   '/e2e/session': typeof E2eSessionRoute
   '/e2e/switch-org': typeof E2eSwitchOrgRoute
+  '/demo/broker-whitelabel/listings': typeof DemoBrokerWhitelabelListingsRouteRouteWithChildren
   '/demo/rbac/admin': typeof DemoRbacAdminRouteRouteWithChildren
   '/demo/rbac/borrower': typeof DemoRbacBorrowerRouteRoute
   '/demo/rbac/broker': typeof DemoRbacBrokerRouteRoute
@@ -753,6 +818,8 @@ export interface FileRoutesByFullPath {
   '/demo/audit-traceability/hash-chain': typeof DemoAuditTraceabilityHashChainRoute
   '/demo/audit-traceability/pipeline': typeof DemoAuditTraceabilityPipelineRoute
   '/demo/audit-traceability/report': typeof DemoAuditTraceabilityReportRoute
+  '/demo/broker-whitelabel/auth': typeof DemoBrokerWhitelabelAuthRoute
+  '/demo/broker-whitelabel/onboarding': typeof DemoBrokerWhitelabelOnboardingRoute
   '/demo/crm/links': typeof DemoCrmLinksRoute
   '/demo/crm/system': typeof DemoCrmSystemRoute
   '/demo/document-engine/generate': typeof DemoDocumentEngineGenerateRoute
@@ -771,6 +838,7 @@ export interface FileRoutesByFullPath {
   '/demo/rbac-auth/roles': typeof DemoRbacAuthRolesRoute
   '/demo/amps/': typeof DemoAmpsIndexRoute
   '/demo/audit-traceability/': typeof DemoAuditTraceabilityIndexRoute
+  '/demo/broker-whitelabel/': typeof DemoBrokerWhitelabelIndexRoute
   '/demo/crm/': typeof DemoCrmIndexRoute
   '/demo/document-engine/': typeof DemoDocumentEngineIndexRoute
   '/demo/governed-transitions/': typeof DemoGovernedTransitionsIndexRoute
@@ -778,8 +846,10 @@ export interface FileRoutesByFullPath {
   '/demo/rbac-auth/': typeof DemoRbacAuthIndexRoute
   '/demo/rbac/': typeof DemoRbacIndexRoute
   '/demo/rbac/admin/underwriting': typeof DemoRbacAdminUnderwritingRouteRoute
+  '/demo/broker-whitelabel/listings/$listingId': typeof DemoBrokerWhitelabelListingsListingIdRoute
   '/demo/crm/$objectDefId/$recordId': typeof DemoCrmObjectDefIdRecordIdRoute
   '/demo/document-engine/designer/$templateId': typeof DemoDocumentEngineDesignerTemplateIdRoute
+  '/demo/broker-whitelabel/listings/': typeof DemoBrokerWhitelabelListingsIndexRoute
   '/demo/amps/mortgages/$mortgageId/payments': typeof DemoAmpsMortgagesMortgageIdPaymentsRoute
 }
 export interface FileRoutesByTo {
@@ -805,6 +875,8 @@ export interface FileRoutesByTo {
   '/admin/underwriting': typeof AdminUnderwritingRouteRoute
   '/authenticated': typeof AuthenticatedAuthenticatedRoute
   '/admin/$entitytype': typeof AdminEntitytypeRouteWithChildren
+  '/admin/financial-ledger': typeof AdminFinancialLedgerRoute
+  '/admin/payment-operations': typeof AdminPaymentOperationsRoute
   '/demo/convex': typeof DemoConvexRoute
   '/demo/convex-action-cache': typeof DemoConvexActionCacheRoute
   '/demo/convex-aggregate': typeof DemoConvexAggregateRoute
@@ -853,6 +925,8 @@ export interface FileRoutesByTo {
   '/demo/audit-traceability/hash-chain': typeof DemoAuditTraceabilityHashChainRoute
   '/demo/audit-traceability/pipeline': typeof DemoAuditTraceabilityPipelineRoute
   '/demo/audit-traceability/report': typeof DemoAuditTraceabilityReportRoute
+  '/demo/broker-whitelabel/auth': typeof DemoBrokerWhitelabelAuthRoute
+  '/demo/broker-whitelabel/onboarding': typeof DemoBrokerWhitelabelOnboardingRoute
   '/demo/crm/links': typeof DemoCrmLinksRoute
   '/demo/crm/system': typeof DemoCrmSystemRoute
   '/demo/document-engine/generate': typeof DemoDocumentEngineGenerateRoute
@@ -871,6 +945,7 @@ export interface FileRoutesByTo {
   '/demo/rbac-auth/roles': typeof DemoRbacAuthRolesRoute
   '/demo/amps': typeof DemoAmpsIndexRoute
   '/demo/audit-traceability': typeof DemoAuditTraceabilityIndexRoute
+  '/demo/broker-whitelabel': typeof DemoBrokerWhitelabelIndexRoute
   '/demo/crm': typeof DemoCrmIndexRoute
   '/demo/document-engine': typeof DemoDocumentEngineIndexRoute
   '/demo/governed-transitions': typeof DemoGovernedTransitionsIndexRoute
@@ -878,8 +953,10 @@ export interface FileRoutesByTo {
   '/demo/rbac-auth': typeof DemoRbacAuthIndexRoute
   '/demo/rbac': typeof DemoRbacIndexRoute
   '/demo/rbac/admin/underwriting': typeof DemoRbacAdminUnderwritingRouteRoute
+  '/demo/broker-whitelabel/listings/$listingId': typeof DemoBrokerWhitelabelListingsListingIdRoute
   '/demo/crm/$objectDefId/$recordId': typeof DemoCrmObjectDefIdRecordIdRoute
   '/demo/document-engine/designer/$templateId': typeof DemoDocumentEngineDesignerTemplateIdRoute
+  '/demo/broker-whitelabel/listings': typeof DemoBrokerWhitelabelListingsIndexRoute
   '/demo/amps/mortgages/$mortgageId/payments': typeof DemoAmpsMortgagesMortgageIdPaymentsRoute
 }
 export interface FileRoutesById {
@@ -906,6 +983,7 @@ export interface FileRoutesById {
   '/admin/underwriting': typeof AdminUnderwritingRouteRoute
   '/demo/amps': typeof DemoAmpsRouteRouteWithChildren
   '/demo/audit-traceability': typeof DemoAuditTraceabilityRouteRouteWithChildren
+  '/demo/broker-whitelabel': typeof DemoBrokerWhitelabelRouteRouteWithChildren
   '/demo/crm': typeof DemoCrmRouteRouteWithChildren
   '/demo/document-engine': typeof DemoDocumentEngineRouteRouteWithChildren
   '/demo/governed-transitions': typeof DemoGovernedTransitionsRouteRouteWithChildren
@@ -913,6 +991,8 @@ export interface FileRoutesById {
   '/demo/rbac-auth': typeof DemoRbacAuthRouteRouteWithChildren
   '/_authenticated/authenticated': typeof AuthenticatedAuthenticatedRoute
   '/admin/$entitytype': typeof AdminEntitytypeRouteWithChildren
+  '/admin/financial-ledger': typeof AdminFinancialLedgerRoute
+  '/admin/payment-operations': typeof AdminPaymentOperationsRoute
   '/demo/convex': typeof DemoConvexRoute
   '/demo/convex-action-cache': typeof DemoConvexActionCacheRoute
   '/demo/convex-aggregate': typeof DemoConvexAggregateRoute
@@ -941,6 +1021,7 @@ export interface FileRoutesById {
   '/demo/workos': typeof DemoWorkosRoute
   '/e2e/session': typeof E2eSessionRoute
   '/e2e/switch-org': typeof E2eSwitchOrgRoute
+  '/demo/broker-whitelabel/listings': typeof DemoBrokerWhitelabelListingsRouteRouteWithChildren
   '/demo/rbac/admin': typeof DemoRbacAdminRouteRouteWithChildren
   '/demo/rbac/borrower': typeof DemoRbacBorrowerRouteRoute
   '/demo/rbac/broker': typeof DemoRbacBrokerRouteRoute
@@ -962,6 +1043,8 @@ export interface FileRoutesById {
   '/demo/audit-traceability/hash-chain': typeof DemoAuditTraceabilityHashChainRoute
   '/demo/audit-traceability/pipeline': typeof DemoAuditTraceabilityPipelineRoute
   '/demo/audit-traceability/report': typeof DemoAuditTraceabilityReportRoute
+  '/demo/broker-whitelabel/auth': typeof DemoBrokerWhitelabelAuthRoute
+  '/demo/broker-whitelabel/onboarding': typeof DemoBrokerWhitelabelOnboardingRoute
   '/demo/crm/links': typeof DemoCrmLinksRoute
   '/demo/crm/system': typeof DemoCrmSystemRoute
   '/demo/document-engine/generate': typeof DemoDocumentEngineGenerateRoute
@@ -980,6 +1063,7 @@ export interface FileRoutesById {
   '/demo/rbac-auth/roles': typeof DemoRbacAuthRolesRoute
   '/demo/amps/': typeof DemoAmpsIndexRoute
   '/demo/audit-traceability/': typeof DemoAuditTraceabilityIndexRoute
+  '/demo/broker-whitelabel/': typeof DemoBrokerWhitelabelIndexRoute
   '/demo/crm/': typeof DemoCrmIndexRoute
   '/demo/document-engine/': typeof DemoDocumentEngineIndexRoute
   '/demo/governed-transitions/': typeof DemoGovernedTransitionsIndexRoute
@@ -987,8 +1071,10 @@ export interface FileRoutesById {
   '/demo/rbac-auth/': typeof DemoRbacAuthIndexRoute
   '/demo/rbac/': typeof DemoRbacIndexRoute
   '/demo/rbac/admin/underwriting': typeof DemoRbacAdminUnderwritingRouteRoute
+  '/demo/broker-whitelabel/listings/$listingId': typeof DemoBrokerWhitelabelListingsListingIdRoute
   '/demo/crm/$objectDefId/$recordId': typeof DemoCrmObjectDefIdRecordIdRoute
   '/demo/document-engine/designer/$templateId': typeof DemoDocumentEngineDesignerTemplateIdRoute
+  '/demo/broker-whitelabel/listings/': typeof DemoBrokerWhitelabelListingsIndexRoute
   '/demo/amps/mortgages/$mortgageId/payments': typeof DemoAmpsMortgagesMortgageIdPaymentsRoute
 }
 export interface FileRouteTypes {
@@ -1016,6 +1102,7 @@ export interface FileRouteTypes {
     | '/admin/underwriting'
     | '/demo/amps'
     | '/demo/audit-traceability'
+    | '/demo/broker-whitelabel'
     | '/demo/crm'
     | '/demo/document-engine'
     | '/demo/governed-transitions'
@@ -1023,6 +1110,8 @@ export interface FileRouteTypes {
     | '/demo/rbac-auth'
     | '/authenticated'
     | '/admin/$entitytype'
+    | '/admin/financial-ledger'
+    | '/admin/payment-operations'
     | '/demo/convex'
     | '/demo/convex-action-cache'
     | '/demo/convex-aggregate'
@@ -1051,6 +1140,7 @@ export interface FileRouteTypes {
     | '/demo/workos'
     | '/e2e/session'
     | '/e2e/switch-org'
+    | '/demo/broker-whitelabel/listings'
     | '/demo/rbac/admin'
     | '/demo/rbac/borrower'
     | '/demo/rbac/broker'
@@ -1072,6 +1162,8 @@ export interface FileRouteTypes {
     | '/demo/audit-traceability/hash-chain'
     | '/demo/audit-traceability/pipeline'
     | '/demo/audit-traceability/report'
+    | '/demo/broker-whitelabel/auth'
+    | '/demo/broker-whitelabel/onboarding'
     | '/demo/crm/links'
     | '/demo/crm/system'
     | '/demo/document-engine/generate'
@@ -1090,6 +1182,7 @@ export interface FileRouteTypes {
     | '/demo/rbac-auth/roles'
     | '/demo/amps/'
     | '/demo/audit-traceability/'
+    | '/demo/broker-whitelabel/'
     | '/demo/crm/'
     | '/demo/document-engine/'
     | '/demo/governed-transitions/'
@@ -1097,8 +1190,10 @@ export interface FileRouteTypes {
     | '/demo/rbac-auth/'
     | '/demo/rbac/'
     | '/demo/rbac/admin/underwriting'
+    | '/demo/broker-whitelabel/listings/$listingId'
     | '/demo/crm/$objectDefId/$recordId'
     | '/demo/document-engine/designer/$templateId'
+    | '/demo/broker-whitelabel/listings/'
     | '/demo/amps/mortgages/$mortgageId/payments'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -1124,6 +1219,8 @@ export interface FileRouteTypes {
     | '/admin/underwriting'
     | '/authenticated'
     | '/admin/$entitytype'
+    | '/admin/financial-ledger'
+    | '/admin/payment-operations'
     | '/demo/convex'
     | '/demo/convex-action-cache'
     | '/demo/convex-aggregate'
@@ -1172,6 +1269,8 @@ export interface FileRouteTypes {
     | '/demo/audit-traceability/hash-chain'
     | '/demo/audit-traceability/pipeline'
     | '/demo/audit-traceability/report'
+    | '/demo/broker-whitelabel/auth'
+    | '/demo/broker-whitelabel/onboarding'
     | '/demo/crm/links'
     | '/demo/crm/system'
     | '/demo/document-engine/generate'
@@ -1190,6 +1289,7 @@ export interface FileRouteTypes {
     | '/demo/rbac-auth/roles'
     | '/demo/amps'
     | '/demo/audit-traceability'
+    | '/demo/broker-whitelabel'
     | '/demo/crm'
     | '/demo/document-engine'
     | '/demo/governed-transitions'
@@ -1197,8 +1297,10 @@ export interface FileRouteTypes {
     | '/demo/rbac-auth'
     | '/demo/rbac'
     | '/demo/rbac/admin/underwriting'
+    | '/demo/broker-whitelabel/listings/$listingId'
     | '/demo/crm/$objectDefId/$recordId'
     | '/demo/document-engine/designer/$templateId'
+    | '/demo/broker-whitelabel/listings'
     | '/demo/amps/mortgages/$mortgageId/payments'
   id:
     | '__root__'
@@ -1224,6 +1326,7 @@ export interface FileRouteTypes {
     | '/admin/underwriting'
     | '/demo/amps'
     | '/demo/audit-traceability'
+    | '/demo/broker-whitelabel'
     | '/demo/crm'
     | '/demo/document-engine'
     | '/demo/governed-transitions'
@@ -1231,6 +1334,8 @@ export interface FileRouteTypes {
     | '/demo/rbac-auth'
     | '/_authenticated/authenticated'
     | '/admin/$entitytype'
+    | '/admin/financial-ledger'
+    | '/admin/payment-operations'
     | '/demo/convex'
     | '/demo/convex-action-cache'
     | '/demo/convex-aggregate'
@@ -1259,6 +1364,7 @@ export interface FileRouteTypes {
     | '/demo/workos'
     | '/e2e/session'
     | '/e2e/switch-org'
+    | '/demo/broker-whitelabel/listings'
     | '/demo/rbac/admin'
     | '/demo/rbac/borrower'
     | '/demo/rbac/broker'
@@ -1280,6 +1386,8 @@ export interface FileRouteTypes {
     | '/demo/audit-traceability/hash-chain'
     | '/demo/audit-traceability/pipeline'
     | '/demo/audit-traceability/report'
+    | '/demo/broker-whitelabel/auth'
+    | '/demo/broker-whitelabel/onboarding'
     | '/demo/crm/links'
     | '/demo/crm/system'
     | '/demo/document-engine/generate'
@@ -1298,6 +1406,7 @@ export interface FileRouteTypes {
     | '/demo/rbac-auth/roles'
     | '/demo/amps/'
     | '/demo/audit-traceability/'
+    | '/demo/broker-whitelabel/'
     | '/demo/crm/'
     | '/demo/document-engine/'
     | '/demo/governed-transitions/'
@@ -1305,8 +1414,10 @@ export interface FileRouteTypes {
     | '/demo/rbac-auth/'
     | '/demo/rbac/'
     | '/demo/rbac/admin/underwriting'
+    | '/demo/broker-whitelabel/listings/$listingId'
     | '/demo/crm/$objectDefId/$recordId'
     | '/demo/document-engine/designer/$templateId'
+    | '/demo/broker-whitelabel/listings/'
     | '/demo/amps/mortgages/$mortgageId/payments'
   fileRoutesById: FileRoutesById
 }
@@ -1326,6 +1437,7 @@ export interface RootRouteChildren {
   UnauthorizedRoute: typeof UnauthorizedRoute
   DemoAmpsRouteRoute: typeof DemoAmpsRouteRouteWithChildren
   DemoAuditTraceabilityRouteRoute: typeof DemoAuditTraceabilityRouteRouteWithChildren
+  DemoBrokerWhitelabelRouteRoute: typeof DemoBrokerWhitelabelRouteRouteWithChildren
   DemoCrmRouteRoute: typeof DemoCrmRouteRouteWithChildren
   DemoDocumentEngineRouteRoute: typeof DemoDocumentEngineRouteRouteWithChildren
   DemoGovernedTransitionsRouteRoute: typeof DemoGovernedTransitionsRouteRouteWithChildren
@@ -1653,6 +1765,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DemoConvexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin/payment-operations': {
+      id: '/admin/payment-operations'
+      path: '/payment-operations'
+      fullPath: '/admin/payment-operations'
+      preLoaderRoute: typeof AdminPaymentOperationsRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/admin/financial-ledger': {
+      id: '/admin/financial-ledger'
+      path: '/financial-ledger'
+      fullPath: '/admin/financial-ledger'
+      preLoaderRoute: typeof AdminFinancialLedgerRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
     '/admin/$entitytype': {
       id: '/admin/$entitytype'
       path: '/$entitytype'
@@ -1700,6 +1826,13 @@ declare module '@tanstack/react-router' {
       path: '/demo/crm'
       fullPath: '/demo/crm'
       preLoaderRoute: typeof DemoCrmRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/demo/broker-whitelabel': {
+      id: '/demo/broker-whitelabel'
+      path: '/demo/broker-whitelabel'
+      fullPath: '/demo/broker-whitelabel'
+      preLoaderRoute: typeof DemoBrokerWhitelabelRouteRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/demo/audit-traceability': {
@@ -1806,6 +1939,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/demo/crm/'
       preLoaderRoute: typeof DemoCrmIndexRouteImport
       parentRoute: typeof DemoCrmRouteRoute
+    }
+    '/demo/broker-whitelabel/': {
+      id: '/demo/broker-whitelabel/'
+      path: '/'
+      fullPath: '/demo/broker-whitelabel/'
+      preLoaderRoute: typeof DemoBrokerWhitelabelIndexRouteImport
+      parentRoute: typeof DemoBrokerWhitelabelRouteRoute
     }
     '/demo/audit-traceability/': {
       id: '/demo/audit-traceability/'
@@ -1932,6 +2072,20 @@ declare module '@tanstack/react-router' {
       fullPath: '/demo/crm/links'
       preLoaderRoute: typeof DemoCrmLinksRouteImport
       parentRoute: typeof DemoCrmRouteRoute
+    }
+    '/demo/broker-whitelabel/onboarding': {
+      id: '/demo/broker-whitelabel/onboarding'
+      path: '/onboarding'
+      fullPath: '/demo/broker-whitelabel/onboarding'
+      preLoaderRoute: typeof DemoBrokerWhitelabelOnboardingRouteImport
+      parentRoute: typeof DemoBrokerWhitelabelRouteRoute
+    }
+    '/demo/broker-whitelabel/auth': {
+      id: '/demo/broker-whitelabel/auth'
+      path: '/auth'
+      fullPath: '/demo/broker-whitelabel/auth'
+      preLoaderRoute: typeof DemoBrokerWhitelabelAuthRouteImport
+      parentRoute: typeof DemoBrokerWhitelabelRouteRoute
     }
     '/demo/audit-traceability/report': {
       id: '/demo/audit-traceability/report'
@@ -2080,6 +2234,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DemoRbacAdminRouteRouteImport
       parentRoute: typeof DemoRbacRouteRoute
     }
+    '/demo/broker-whitelabel/listings': {
+      id: '/demo/broker-whitelabel/listings'
+      path: '/listings'
+      fullPath: '/demo/broker-whitelabel/listings'
+      preLoaderRoute: typeof DemoBrokerWhitelabelListingsRouteRouteImport
+      parentRoute: typeof DemoBrokerWhitelabelRouteRoute
+    }
+    '/demo/broker-whitelabel/listings/': {
+      id: '/demo/broker-whitelabel/listings/'
+      path: '/'
+      fullPath: '/demo/broker-whitelabel/listings/'
+      preLoaderRoute: typeof DemoBrokerWhitelabelListingsIndexRouteImport
+      parentRoute: typeof DemoBrokerWhitelabelListingsRouteRoute
+    }
     '/demo/document-engine/designer/$templateId': {
       id: '/demo/document-engine/designer/$templateId'
       path: '/designer/$templateId'
@@ -2093,6 +2261,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/demo/crm/$objectDefId/$recordId'
       preLoaderRoute: typeof DemoCrmObjectDefIdRecordIdRouteImport
       parentRoute: typeof DemoCrmRouteRoute
+    }
+    '/demo/broker-whitelabel/listings/$listingId': {
+      id: '/demo/broker-whitelabel/listings/$listingId'
+      path: '/$listingId'
+      fullPath: '/demo/broker-whitelabel/listings/$listingId'
+      preLoaderRoute: typeof DemoBrokerWhitelabelListingsListingIdRouteImport
+      parentRoute: typeof DemoBrokerWhitelabelListingsRouteRoute
     }
     '/demo/rbac/admin/underwriting': {
       id: '/demo/rbac/admin/underwriting'
@@ -2201,6 +2376,8 @@ interface AdminRouteRouteChildren {
   AdminPropertiesRouteRoute: typeof AdminPropertiesRouteRouteWithChildren
   AdminUnderwritingRouteRoute: typeof AdminUnderwritingRouteRoute
   AdminEntitytypeRoute: typeof AdminEntitytypeRouteWithChildren
+  AdminFinancialLedgerRoute: typeof AdminFinancialLedgerRoute
+  AdminPaymentOperationsRoute: typeof AdminPaymentOperationsRoute
 }
 
 const AdminRouteRouteChildren: AdminRouteRouteChildren = {
@@ -2212,6 +2389,8 @@ const AdminRouteRouteChildren: AdminRouteRouteChildren = {
   AdminPropertiesRouteRoute: AdminPropertiesRouteRouteWithChildren,
   AdminUnderwritingRouteRoute: AdminUnderwritingRouteRoute,
   AdminEntitytypeRoute: AdminEntitytypeRouteWithChildren,
+  AdminFinancialLedgerRoute: AdminFinancialLedgerRoute,
+  AdminPaymentOperationsRoute: AdminPaymentOperationsRoute,
 }
 
 const AdminRouteRouteWithChildren = AdminRouteRoute._addFileChildren(
@@ -2263,6 +2442,45 @@ const DemoAuditTraceabilityRouteRouteChildren: DemoAuditTraceabilityRouteRouteCh
 const DemoAuditTraceabilityRouteRouteWithChildren =
   DemoAuditTraceabilityRouteRoute._addFileChildren(
     DemoAuditTraceabilityRouteRouteChildren,
+  )
+
+interface DemoBrokerWhitelabelListingsRouteRouteChildren {
+  DemoBrokerWhitelabelListingsListingIdRoute: typeof DemoBrokerWhitelabelListingsListingIdRoute
+  DemoBrokerWhitelabelListingsIndexRoute: typeof DemoBrokerWhitelabelListingsIndexRoute
+}
+
+const DemoBrokerWhitelabelListingsRouteRouteChildren: DemoBrokerWhitelabelListingsRouteRouteChildren =
+  {
+    DemoBrokerWhitelabelListingsListingIdRoute:
+      DemoBrokerWhitelabelListingsListingIdRoute,
+    DemoBrokerWhitelabelListingsIndexRoute:
+      DemoBrokerWhitelabelListingsIndexRoute,
+  }
+
+const DemoBrokerWhitelabelListingsRouteRouteWithChildren =
+  DemoBrokerWhitelabelListingsRouteRoute._addFileChildren(
+    DemoBrokerWhitelabelListingsRouteRouteChildren,
+  )
+
+interface DemoBrokerWhitelabelRouteRouteChildren {
+  DemoBrokerWhitelabelListingsRouteRoute: typeof DemoBrokerWhitelabelListingsRouteRouteWithChildren
+  DemoBrokerWhitelabelAuthRoute: typeof DemoBrokerWhitelabelAuthRoute
+  DemoBrokerWhitelabelOnboardingRoute: typeof DemoBrokerWhitelabelOnboardingRoute
+  DemoBrokerWhitelabelIndexRoute: typeof DemoBrokerWhitelabelIndexRoute
+}
+
+const DemoBrokerWhitelabelRouteRouteChildren: DemoBrokerWhitelabelRouteRouteChildren =
+  {
+    DemoBrokerWhitelabelListingsRouteRoute:
+      DemoBrokerWhitelabelListingsRouteRouteWithChildren,
+    DemoBrokerWhitelabelAuthRoute: DemoBrokerWhitelabelAuthRoute,
+    DemoBrokerWhitelabelOnboardingRoute: DemoBrokerWhitelabelOnboardingRoute,
+    DemoBrokerWhitelabelIndexRoute: DemoBrokerWhitelabelIndexRoute,
+  }
+
+const DemoBrokerWhitelabelRouteRouteWithChildren =
+  DemoBrokerWhitelabelRouteRoute._addFileChildren(
+    DemoBrokerWhitelabelRouteRouteChildren,
   )
 
 interface DemoCrmRouteRouteChildren {
@@ -2410,6 +2628,7 @@ const rootRouteChildren: RootRouteChildren = {
   UnauthorizedRoute: UnauthorizedRoute,
   DemoAmpsRouteRoute: DemoAmpsRouteRouteWithChildren,
   DemoAuditTraceabilityRouteRoute: DemoAuditTraceabilityRouteRouteWithChildren,
+  DemoBrokerWhitelabelRouteRoute: DemoBrokerWhitelabelRouteRouteWithChildren,
   DemoCrmRouteRoute: DemoCrmRouteRouteWithChildren,
   DemoDocumentEngineRouteRoute: DemoDocumentEngineRouteRouteWithChildren,
   DemoGovernedTransitionsRouteRoute:

@@ -16,6 +16,11 @@ import { AppErrorComponent } from "../components/error-boundary";
 import Header from "../components/header";
 import { Toaster } from "../components/ui/sonner";
 import { isAdminPathname } from "../lib/admin-routes";
+import {
+	normalizePermissions,
+	normalizeRoles,
+	resolvePrimaryRole,
+} from "../lib/auth-policy";
 import appCss from "../styles.css?url";
 
 // Suppress known TanStack Start SSR hydration warning (dev-only, harmless)
@@ -30,6 +35,7 @@ const fetchWorkosAuth = createServerFn({ method: "GET" }).handler(async () => {
 		return {
 			userId: null as string | null,
 			token: null as string | null,
+			role: null as string | null,
 			roles: [] as string[],
 			permissions: [] as string[],
 			orgId: null as string | null,
@@ -37,11 +43,13 @@ const fetchWorkosAuth = createServerFn({ method: "GET" }).handler(async () => {
 	}
 
 	const info = auth as UserInfo;
+	const roles = normalizeRoles({ role: info.role, roles: info.roles });
 	return {
 		userId: user.id,
 		token: info.accessToken,
-		roles: info.roles ?? [],
-		permissions: info.permissions ?? [],
+		role: resolvePrimaryRole({ role: info.role, roles }),
+		roles,
+		permissions: normalizePermissions(info.permissions),
 		orgId: info.organizationId ?? null,
 	};
 });
@@ -85,7 +93,7 @@ export const Route = createRootRouteWithContext<{
 		</RootDocument>
 	),
 	beforeLoad: async (ctx) => {
-		const { userId, token, roles, permissions, orgId } =
+		const { userId, token, role, roles, permissions, orgId } =
 			await fetchWorkosAuth();
 
 		// During SSR only (the only time serverHttpClient exists),
@@ -94,7 +102,7 @@ export const Route = createRootRouteWithContext<{
 			ctx.context.convexQueryClient.serverHttpClient?.setAuth(token);
 		}
 
-		return { userId, token, roles, permissions, orgId };
+		return { userId, token, role, roles, permissions, orgId };
 	},
 });
 

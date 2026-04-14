@@ -1,15 +1,18 @@
 import { useAuth } from "@workos/authkit-tanstack-react-start/client";
 import { useQuery } from "convex/react";
 import { useEffect, useMemo, useState } from "react";
+import { isFairLendStaffAdmin } from "#/lib/auth-policy";
 import { api } from "../../../../convex/_generated/api";
-import { FAIRLEND_STAFF_ORG_ID } from "../../../../convex/constants";
 
 export function useAmpsDemoAccess() {
 	const auth = useAuth();
-	const canAccess =
-		Boolean(auth.user) &&
-		auth.organizationId === FAIRLEND_STAFF_ORG_ID &&
-		Boolean(auth.roles?.includes("admin"));
+	const canAccess = auth.user
+		? isFairLendStaffAdmin({
+				orgId: auth.organizationId ?? null,
+				role: auth.role,
+				roles: auth.roles,
+			})
+		: false;
 
 	const workspaceOverview = useQuery(
 		api.demo.amps.getWorkspaceOverview,
