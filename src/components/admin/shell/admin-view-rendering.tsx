@@ -140,7 +140,7 @@ function renderLinkValue(
 			<a
 				className="inline-flex items-center gap-1 text-primary underline-offset-4 hover:underline"
 				href={safeUrl}
-				rel="noreferrer"
+				rel="noopener noreferrer"
 				target="_blank"
 			>
 				<span className="truncate">{value}</span>
@@ -167,10 +167,13 @@ export function renderAdminFieldValue(
 
 	switch (field.fieldType) {
 		case "boolean":
+			if (typeof value !== "boolean") {
+				return renderEmptyValue();
+			}
 			return (
-				<Badge variant={value === true ? "default" : "outline"}>
-					{value === true ? <CheckCheck className="size-3" /> : null}
-					{value === true ? "True" : "False"}
+				<Badge variant={value ? "default" : "outline"}>
+					{value ? <CheckCheck className="size-3" /> : null}
+					{value ? "True" : "False"}
 				</Badge>
 			);
 		case "select":
