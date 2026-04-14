@@ -205,7 +205,7 @@ describe("collection plan admin surfaces", () => {
 		expect(collectionAttempt).not.toBeNull();
 		expect(attemptRow?.transfer?.status).toBe("confirmed");
 		expect(typeof attemptRow?.reconciliation?.isHealthy).toBe("boolean");
-		expect(Array.isArray(attemptAuditEvents)).toBe(true);
+		expect(attemptAuditEvents).not.toHaveLength(0);
 		expect(transitionJournal.length).toBeGreaterThan(0);
 
 		const summary = await t
