@@ -112,10 +112,13 @@ export function AdminEntityViewPage({
 	const setDefaultUserSavedView = useMutation(
 		api.crm.userSavedViews.setDefaultUserSavedView
 	);
-	const [tableCursorHistory, setTableCursorHistory] = useState<
-		Array<string | null>
-	>([null]);
-	const [tablePageIndex, setTablePageIndex] = useState(0);
+	const [tablePagination, setTablePagination] = useState<{
+		cursorHistory: Array<string | null>;
+		pageIndex: number;
+	}>({
+		cursorHistory: [null],
+		pageIndex: 0,
+	});
 	const [isMutating, setIsMutating] = useState(false);
 	const [selectedKanbanFieldId, setSelectedKanbanFieldId] = useState<
 		Id<"fieldDefs"> | undefined
@@ -143,7 +146,8 @@ export function AdminEntityViewPage({
 			: "skip"
 	) as AdminViewSchemaResult | undefined;
 	const activeViewMode: AdminEntityViewMode = resolvedContext.viewMode;
-	const tableCursor = tableCursorHistory[tablePageIndex] ?? null;
+	const tableCursor =
+		tablePagination.cursorHistory[tablePagination.pageIndex] ?? null;
 	const tableResult = useQuery(
 		api.crm.viewQueries.queryViewRecords,
 		activeSourceView && activeViewMode === "table"
@@ -195,8 +199,10 @@ export function AdminEntityViewPage({
 		}
 
 		previousActiveViewRef.current = currentActiveViewKey;
-		setTableCursorHistory([null]);
-		setTablePageIndex(0);
+		setTablePagination({
+			cursorHistory: [null],
+			pageIndex: 0,
+		});
 	}, [currentActiveViewKey]);
 
 	useEffect(() => {
@@ -373,16 +379,25 @@ export function AdminEntityViewPage({
 			return;
 		}
 
-		setTableCursorHistory((current) =>
-			current[tablePageIndex + 1] === tableResult.cursor
-				? current
-				: [...current, tableResult.cursor]
-		);
-		setTablePageIndex((current) => current + 1);
+		setTablePagination((current) => {
+			const nextPageIndex = current.pageIndex + 1;
+			const nextCursorHistory =
+				current.cursorHistory[nextPageIndex] === tableResult.cursor
+					? current.cursorHistory
+					: [...current.cursorHistory, tableResult.cursor];
+
+			return {
+				cursorHistory: nextCursorHistory,
+				pageIndex: nextPageIndex,
+			};
+		});
 	}
 
 	function handlePreviousTablePage() {
-		setTablePageIndex((current) => Math.max(current - 1, 0));
+		setTablePagination((current) => ({
+			...current,
+			pageIndex: Math.max(current.pageIndex - 1, 0),
+		}));
 	}
 
 	if (isLoadingContext) {
@@ -527,17 +542,21 @@ export function AdminEntityViewPage({
 					{tableResult.totalCount > RECORD_PAGE_SIZE ? (
 						<div className="flex flex-col gap-3 rounded-2xl border border-border/70 bg-muted/10 px-4 py-3 text-sm lg:flex-row lg:items-center lg:justify-between">
 							<div className="space-y-1">
-								<p className="font-medium">Server page {tablePageIndex + 1}</p>
+								<p className="font-medium">
+									Server page {tablePagination.pageIndex + 1}
+								</p>
 								<p className="text-muted-foreground">
-									Showing records {tablePageIndex * RECORD_PAGE_SIZE + 1}-
-									{tablePageIndex * RECORD_PAGE_SIZE + tableResult.rows.length}{" "}
+									Showing records{" "}
+									{tablePagination.pageIndex * RECORD_PAGE_SIZE + 1}-
+									{tablePagination.pageIndex * RECORD_PAGE_SIZE +
+										tableResult.rows.length}{" "}
 									of {tableResult.totalCount}
 									{tableResult.totalCountExact ? "." : "+."}
 								</p>
 							</div>
 							<div className="flex items-center gap-2">
 								<Button
-									disabled={tablePageIndex === 0}
+									disabled={tablePagination.pageIndex === 0}
 									onClick={handlePreviousTablePage}
 									size="sm"
 									variant="outline"
