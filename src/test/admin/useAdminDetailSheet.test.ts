@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { resolveAdminDetailSheetState } from "#/hooks/useAdminDetailSheet";
 import { getAdminDetailRouteState } from "#/lib/admin-detail-route-state";
 
 describe("getAdminDetailRouteState", () => {
@@ -31,6 +32,39 @@ describe("getAdminDetailRouteState", () => {
 			detailOpen: false,
 			entityType: undefined,
 			recordId: undefined,
+		});
+	});
+});
+
+describe("resolveAdminDetailSheetState", () => {
+	it("keeps the sheet closed on direct admin detail pages", () => {
+		expect(
+			resolveAdminDetailSheetState({
+				current: undefined,
+				isOpen: false,
+				pathname: "/admin/borrowers/borrower_123",
+			})
+		).toEqual({
+			detailOpen: false,
+			entityType: "borrowers",
+			recordId: "borrower_123",
+		});
+	});
+
+	it("prefers explicit sidebar state over route-derived state", () => {
+		expect(
+			resolveAdminDetailSheetState({
+				current: {
+					entityType: "mortgages",
+					recordId: "mtg_456",
+				},
+				isOpen: true,
+				pathname: "/admin/borrowers/borrower_123",
+			})
+		).toEqual({
+			detailOpen: true,
+			entityType: "mortgages",
+			recordId: "mtg_456",
 		});
 	});
 });

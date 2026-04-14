@@ -3,30 +3,94 @@
 import { Badge } from "#/components/ui/badge";
 import { cn } from "#/lib/utils";
 import type { Doc } from "../../../../convex/_generated/dataModel";
+import type { NormalizedFieldDefinition } from "../../../../convex/crm/types";
+import {
+	CurrencyCell,
+	DateCell,
+	MultiSelectCell,
+	PercentCell,
+	SelectCell,
+	TextCell,
+} from "./cell-renderers";
 
 type FieldType = Doc<"fieldDefs">["fieldType"];
 
 export interface FieldRendererProps {
 	readonly className?: string;
+	readonly field?: NormalizedFieldDefinition;
 	readonly fieldType?: FieldType;
-	readonly label: string;
+	readonly label?: string;
 	readonly value: unknown;
 }
 
 export function FieldRenderer({
 	className,
+	field,
 	fieldType,
 	label,
 	value,
 }: FieldRendererProps) {
+	const resolvedFieldType = field?.fieldType ?? fieldType;
+	const resolvedLabel = field?.label ?? label ?? "Field";
+	const metadataBadge = resolveMetadataBadge(field);
+
 	return (
-		<div className={cn("space-y-2 rounded-lg border bg-card p-4", className)}>
-			<p className="font-medium text-muted-foreground text-xs uppercase tracking-[0.16em]">
-				{label}
-			</p>
-			<div className="min-h-6">{renderFieldValue(value, fieldType)}</div>
+		<div className={cn("space-y-3 rounded-lg border bg-card p-4", className)}>
+			<div className="flex items-start justify-between gap-3">
+				<p className="font-medium text-muted-foreground text-xs uppercase tracking-[0.16em]">
+					{resolvedLabel}
+				</p>
+				{metadataBadge ? (
+					<Badge className="shrink-0" variant={metadataBadge.variant}>
+						{metadataBadge.label}
+					</Badge>
+				) : null}
+			</div>
+			<div className="min-h-6">
+				{renderFieldValue({ field, fieldType: resolvedFieldType, value })}
+			</div>
+			{field?.description ? (
+				<p className="text-muted-foreground text-xs">{field.description}</p>
+			) : null}
+			{field?.editability.reason &&
+			field.editability.mode !== "editable" &&
+			field.editability.reason !== field.description ? (
+				<p className="text-muted-foreground text-xs">
+					{field.editability.reason}
+				</p>
+			) : null}
 		</div>
 	);
+}
+
+function resolveMetadataBadge(field: NormalizedFieldDefinition | undefined):
+	| {
+			label: string;
+			variant: "outline" | "secondary";
+	  }
+	| undefined {
+	if (!field) {
+		return undefined;
+	}
+
+	switch (field.editability.mode) {
+		case "computed":
+			return { label: "Computed", variant: "secondary" };
+		case "read_only":
+			return { label: "Read only", variant: "outline" };
+		default:
+			return undefined;
+	}
+}
+
+function toSelectOptions(
+	options: NormalizedFieldDefinition["options"]
+): Array<{ color?: string; label: string; value: string }> {
+	return (options ?? []).map((option) => ({
+		color: option.color,
+		label: option.label,
+		value: option.value,
+	}));
 }
 
 function getArrayItemKey(item: unknown, seenKeys: Map<string, number>): string {
@@ -37,11 +101,64 @@ function getArrayItemKey(item: unknown, seenKeys: Map<string, number>): string {
 	return `${baseKey}-${nextCount}`;
 }
 
-function renderFieldValue(value: unknown, fieldType?: FieldType) {
-	if (value === null || value === undefined || value === "") {
+function renderFieldValue(args: {
+	field: NormalizedFieldDefinition | undefined;
+	fieldType: FieldType | undefined;
+	value: unknown;
+}) {
+	if (args.value === null || args.value === undefined || args.value === "") {
 		return <p className="text-muted-foreground text-sm">No value</p>;
 	}
 
+	switch (args.field?.rendererHint ?? args.fieldType) {
+		case "currency":
+			return typeof args.value === "number" ? (
+				<CurrencyCell currency="CAD" locale="en-CA" value={args.value} />
+			) : (
+				<TextCell value={String(args.value)} />
+			);
+		case "percentage":
+			return typeof args.value === "number" ? (
+				<PercentCell decimals={2} value={args.value} />
+			) : (
+				<TextCell value={String(args.value)} />
+			);
+		case "date":
+			return (
+				<DateCell format="absolute" value={args.value as string | number} />
+			);
+		case "datetime":
+			return <DateCell format="both" value={args.value as string | number} />;
+		case "select":
+			return (
+				<SelectCell
+					options={toSelectOptions(args.field?.options)}
+					value={
+						typeof args.value === "string" ? args.value : String(args.value)
+					}
+				/>
+			);
+		case "multi_select":
+			return (
+				<MultiSelectCell
+					options={toSelectOptions(args.field?.options)}
+					values={
+						Array.isArray(args.value) ? args.value.filter(isString) : undefined
+					}
+				/>
+			);
+		case "boolean":
+			return (
+				<Badge variant={args.value === true ? "default" : "secondary"}>
+					{args.value === true ? "Yes" : "No"}
+				</Badge>
+			);
+		default:
+			return renderGenericValue(args.value, args.fieldType);
+	}
+}
+
+function renderGenericValue(value: unknown, fieldType?: FieldType) {
 	if (Array.isArray(value)) {
 		if (value.length === 0) {
 			return <p className="text-muted-foreground text-sm">No values</p>;
@@ -52,17 +169,17 @@ function renderFieldValue(value: unknown, fieldType?: FieldType) {
 			<div className="flex flex-wrap gap-2">
 				{value.map((item) => (
 					<Badge key={getArrayItemKey(item, seenKeys)} variant="secondary">
-						{formatScalarValue(item, fieldType)}
+						{formatScalarValue(item)}
 					</Badge>
 				))}
 			</div>
 		);
 	}
 
-	if (fieldType === "boolean" || typeof value === "boolean") {
+	if (typeof value === "boolean") {
 		return (
-			<Badge variant={value === true ? "default" : "secondary"}>
-				{value === true ? "Yes" : "No"}
+			<Badge variant={value ? "default" : "secondary"}>
+				{value ? "Yes" : "No"}
 			</Badge>
 		);
 	}
@@ -75,22 +192,25 @@ function renderFieldValue(value: unknown, fieldType?: FieldType) {
 		);
 	}
 
-	return <p className="text-sm">{formatScalarValue(value, fieldType)}</p>;
-}
-
-function formatScalarValue(value: unknown, fieldType?: FieldType): string {
-	if (value === null || value === undefined) {
-		return "No value";
+	if (typeof value === "string") {
+		if (fieldType === "email") {
+			return <TextCell href={`mailto:${value}`} value={value} />;
+		}
+		if (fieldType === "phone") {
+			return <TextCell href={`tel:${value}`} value={value} />;
+		}
+		if (fieldType === "url") {
+			return <TextCell href={sanitizeExternalUrl(value)} value={value} />;
+		}
+		return <TextCell value={value} />;
 	}
 
-	if (
-		fieldType === "date" &&
-		(typeof value === "number" || typeof value === "string")
-	) {
-		const date = new Date(value);
-		if (!Number.isNaN(date.getTime())) {
-			return date.toLocaleString();
-		}
+	return <p className="text-sm">{formatScalarValue(value)}</p>;
+}
+
+function formatScalarValue(value: unknown): string {
+	if (value === null || value === undefined) {
+		return "No value";
 	}
 
 	if (typeof value === "number") {
@@ -101,13 +221,26 @@ function formatScalarValue(value: unknown, fieldType?: FieldType): string {
 				}).format(value);
 	}
 
-	if (typeof value === "string") {
-		return value;
-	}
-
 	if (typeof value === "boolean") {
 		return value ? "Yes" : "No";
 	}
 
 	return String(value);
+}
+
+function isString(value: unknown): value is string {
+	return typeof value === "string";
+}
+
+function sanitizeExternalUrl(value: string): string | undefined {
+	try {
+		const parsedUrl = new URL(value);
+		if (parsedUrl.protocol === "http:" || parsedUrl.protocol === "https:") {
+			return parsedUrl.toString();
+		}
+	} catch {
+		return undefined;
+	}
+
+	return undefined;
 }

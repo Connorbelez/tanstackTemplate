@@ -3,11 +3,17 @@ import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import { crmQuery } from "../fluent";
 import {
+	buildEntityViewAdapter,
+	buildNormalizedFieldDefinitions,
+	materializeRecordComputedFields,
+} from "./entityViewFields";
+import {
 	getNativeRecordById,
 	type NativeRecordPage,
 	queryNativeRecords,
 } from "./systemAdapters/queryAdapter";
 import type {
+	GetRecordDetailSurfaceResult,
 	LinkedRecord,
 	QueryRecordsResult,
 	RecordFilter,
@@ -563,6 +569,62 @@ async function loadLinksForReference(
 	};
 }
 
+async function loadReferencedRecord(args: {
+	activeFieldDefs: FieldDef[];
+	ctx: QueryCtx;
+	objectDef: Doc<"objectDefs">;
+	orgId: string;
+	recordId: string;
+	recordKind: "record" | "native";
+}): Promise<UnifiedRecord> {
+	if (args.recordKind === "record") {
+		const normalizedId = args.ctx.db.normalizeId("records", args.recordId);
+		if (!normalizedId) {
+			throw new ConvexError("Record not found or access denied");
+		}
+
+		const recordDoc = await args.ctx.db.get(normalizedId);
+		if (
+			!recordDoc ||
+			recordDoc.orgId !== args.orgId ||
+			recordDoc.isDeleted ||
+			recordDoc.objectDefId !== args.objectDef._id
+		) {
+			throw new ConvexError("Record not found or access denied");
+		}
+
+		return {
+			_id: recordDoc._id as string,
+			_kind: "record",
+			objectDefId: recordDoc.objectDefId,
+			fields: await assembleRecordFields(
+				args.ctx,
+				recordDoc._id,
+				args.activeFieldDefs
+			),
+			createdAt: recordDoc.createdAt,
+			updatedAt: recordDoc.updatedAt,
+		};
+	}
+
+	if (!(args.objectDef.isSystem && args.objectDef.nativeTable)) {
+		throw new ConvexError("Native record detail requires a system object");
+	}
+
+	const nativeRecord = await getNativeRecordById(
+		args.ctx,
+		args.objectDef,
+		args.activeFieldDefs,
+		args.orgId,
+		args.recordId
+	);
+	if (!nativeRecord) {
+		throw new ConvexError("Record not found or access denied");
+	}
+
+	return nativeRecord;
+}
+
 function hasFiltersOrSort(args: QueryRecordsArgs): boolean {
 	return (args.filters?.length ?? 0) > 0 || args.sort !== undefined;
 }
@@ -903,49 +965,14 @@ export const getRecordReference = crmQuery
 		}
 
 		const activeFieldDefs = await loadActiveFieldDefs(ctx, args.objectDefId);
-		let record: UnifiedRecord;
-
-		if (args.recordKind === "record") {
-			const normalizedId = ctx.db.normalizeId("records", args.recordId);
-			if (!normalizedId) {
-				throw new ConvexError("Record not found or access denied");
-			}
-
-			const recordDoc = await ctx.db.get(normalizedId);
-			if (
-				!recordDoc ||
-				recordDoc.orgId !== orgId ||
-				recordDoc.isDeleted ||
-				recordDoc.objectDefId !== args.objectDefId
-			) {
-				throw new ConvexError("Record not found or access denied");
-			}
-
-			record = {
-				_id: recordDoc._id as string,
-				_kind: "record",
-				objectDefId: recordDoc.objectDefId,
-				fields: await assembleRecordFields(ctx, recordDoc._id, activeFieldDefs),
-				createdAt: recordDoc.createdAt,
-				updatedAt: recordDoc.updatedAt,
-			};
-		} else {
-			if (!(objectDef.isSystem && objectDef.nativeTable)) {
-				throw new ConvexError("Native record detail requires a system object");
-			}
-
-			const nativeRecord = await getNativeRecordById(
-				ctx,
-				objectDef,
-				activeFieldDefs,
-				orgId,
-				args.recordId
-			);
-			if (!nativeRecord) {
-				throw new ConvexError("Record not found or access denied");
-			}
-			record = nativeRecord;
-		}
+		const record = await loadReferencedRecord({
+			activeFieldDefs,
+			ctx,
+			objectDef,
+			orgId,
+			recordId: args.recordId,
+			recordKind: args.recordKind,
+		});
 
 		return {
 			record,
@@ -955,6 +982,58 @@ export const getRecordReference = crmQuery
 				args.recordKind,
 				args.recordId
 			),
+		};
+	})
+	.public();
+
+export const getRecordDetailSurface = crmQuery
+	.input({
+		objectDefId: v.id("objectDefs"),
+		recordId: v.string(),
+		recordKind: entityKindValidator,
+	})
+	.handler(async (ctx, args): Promise<GetRecordDetailSurfaceResult> => {
+		const orgId = ctx.viewer.orgId;
+		if (!orgId) {
+			throw new ConvexError("Org context required");
+		}
+
+		const objectDef = await ctx.db.get(args.objectDefId);
+		if (!objectDef || objectDef.orgId !== orgId || !objectDef.isActive) {
+			throw new ConvexError("Object not found or access denied");
+		}
+
+		const activeFieldDefs = await loadActiveFieldDefs(ctx, args.objectDefId);
+		const adapterContract = buildEntityViewAdapter({
+			currentLayout: "table",
+			fieldDefs: activeFieldDefs,
+			objectDef,
+			objectDefId: objectDef._id,
+		});
+		const record = materializeRecordComputedFields(
+			await loadReferencedRecord({
+				activeFieldDefs,
+				ctx,
+				objectDef,
+				orgId,
+				recordId: args.recordId,
+				recordKind: args.recordKind,
+			}),
+			adapterContract
+		);
+
+		return {
+			adapterContract,
+			fields: buildNormalizedFieldDefinitions({
+				adapterContract,
+				applyLayoutVisibility: false,
+				currentLayout: "table",
+				fieldDefs: activeFieldDefs,
+				objectDefId: objectDef._id,
+				viewIsDefault: true,
+			}),
+			objectDef,
+			record,
 		};
 	})
 	.public();

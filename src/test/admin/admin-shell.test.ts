@@ -1,6 +1,10 @@
 import type { Doc, Id } from "../../../../convex/_generated/dataModel";
-import type { UnifiedRecord } from "../../../../convex/crm/types";
-import { Children, isValidElement } from "react";
+import type {
+	NormalizedFieldDefinition,
+	UnifiedRecord,
+} from "../../../../convex/crm/types";
+import { isValidElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { FAIRLEND_STAFF_ORG_ID } from "../../../convex/constants";
 import {
@@ -17,24 +21,23 @@ import { isAdminPathname } from "#/lib/admin-routes";
 
 function buildFieldDef(args: {
 	displayOrder: number;
-	fieldType?: Doc<"fieldDefs">["fieldType"];
+	fieldType?: NormalizedFieldDefinition["fieldType"];
 	label: string;
 	name: string;
-}): Doc<"fieldDefs"> {
+}): NormalizedFieldDefinition {
 	return {
-		_id: `field_${args.name}` as Id<"fieldDefs">,
-		_creationTime: 0,
 		aggregation: {
 			enabled: false,
 			reason: "Test fixture",
 			supportedFunctions: [],
 		},
 		computed: undefined,
-		createdAt: 0,
 		defaultValue: undefined,
 		description: undefined,
 		displayOrder: args.displayOrder,
 		editability: { mode: "editable" },
+		fieldDefId: `field_${args.name}` as Id<"fieldDefs">,
+		fieldSource: "persisted",
 		fieldType: args.fieldType ?? "text",
 		isActive: true,
 		isRequired: false,
@@ -53,10 +56,8 @@ function buildFieldDef(args: {
 		normalizedFieldKind: "primitive",
 		objectDefId: "object_borrower" as Id<"objectDefs">,
 		options: undefined,
-		orgId: "org_test",
 		relation: undefined,
 		rendererHint: "text",
-		updatedAt: 0,
 	};
 }
 
@@ -235,6 +236,7 @@ describe("admin shell helpers", () => {
 
 	it("resolves dedicated adapters from object definitions and preserves overrides", () => {
 		const adapter = resolveRecordSidebarEntityAdapter({
+			detailSurfaceKey: "borrowers",
 			objectDef: buildBorrowerObjectDef(),
 			overrides: {
 				borrowers: {
@@ -248,6 +250,7 @@ describe("admin shell helpers", () => {
 		expect(adapter?.renderDetailsTab).toBeTypeOf("function");
 		expect(
 			adapter?.getRecordTitle?.({
+				adapterContract: undefined,
 				entity: undefined,
 				objectDef: buildBorrowerObjectDef(),
 				record: buildBorrowerRecord(),
@@ -266,7 +269,7 @@ describe("admin shell helpers", () => {
 			throw new Error("Borrower adapter not found");
 		}
 
-		const fieldDefs = [
+		const fields = [
 			buildFieldDef({ displayOrder: 2, label: "Notes", name: "notes" }),
 			buildFieldDef({ displayOrder: 1, label: "IDV Status", name: "idvStatus" }),
 			buildFieldDef({ displayOrder: 0, label: "Status", name: "status" }),
@@ -274,8 +277,9 @@ describe("admin shell helpers", () => {
 		const record = buildBorrowerRecord();
 
 		const content = adapter.renderDetailsTab({
+			adapterContract: undefined,
 			entity: undefined,
-			fieldDefs,
+			fields,
 			objectDef: buildBorrowerObjectDef(),
 			record,
 			recordId: record._id,
@@ -285,16 +289,11 @@ describe("admin shell helpers", () => {
 			throw new Error("Expected dedicated details renderer to return an element");
 		}
 
-		const labels = Children.toArray(content.props.children).flatMap((child) => {
-			if (
-				!isValidElement<{ label?: string }>(child) ||
-				typeof child.props.label !== "string"
-			) {
-				return [];
-			}
-
-			return [child.props.label];
-		});
-		expect(labels).toEqual(["Status", "IDV Status", "Notes"]);
+		const markup = renderToStaticMarkup(content);
+		expect(markup).toContain("Status");
+		expect(markup).toContain("IDV Status");
+		expect(markup).toContain("Notes");
+		expect(markup.indexOf("Status")).toBeLessThan(markup.indexOf("IDV Status"));
+		expect(markup.indexOf("IDV Status")).toBeLessThan(markup.indexOf("Notes"));
 	});
 });

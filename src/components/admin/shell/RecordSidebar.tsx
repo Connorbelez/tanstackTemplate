@@ -24,7 +24,11 @@ import {
 import { cn } from "#/lib/utils";
 import { api } from "../../../../convex/_generated/api";
 import type { Doc } from "../../../../convex/_generated/dataModel";
-import type { UnifiedRecord } from "../../../../convex/crm/types";
+import type {
+	EntityViewAdapterContract,
+	NormalizedFieldDefinition,
+	UnifiedRecord,
+} from "../../../../convex/crm/types";
 import { ActivityTimeline } from "./ActivityTimeline";
 import { EntityIcon } from "./entity-icon";
 import {
@@ -43,7 +47,7 @@ import {
 	useRecordSidebar,
 } from "./RecordSidebarProvider";
 
-type FieldDef = Doc<"fieldDefs">;
+type DetailField = NormalizedFieldDefinition;
 type ObjectDef = Doc<"objectDefs">;
 type RecordDetailRecord = UnifiedRecord;
 const PLACEHOLDER_RECORD_ID_PATTERN = /^\d+$/;
@@ -116,23 +120,47 @@ export function AdminRecordDetailSurface({
 	const { push } = useRecordSidebar();
 	const objectDefs = useQuery(api.crm.objectDefs.listObjects);
 
-	const objectDef = useMemo(
+	const fallbackObjectDef = useMemo(
 		() => resolveObjectDef(reference, objectDefs),
 		[reference, objectDefs]
 	);
-	const entity = useMemo(
-		() => resolveAdminEntity(reference.entityType, objectDef ?? undefined),
-		[objectDef, reference.entityType]
+	const recordKind =
+		reference.recordKind ?? (fallbackObjectDef?.isSystem ? "native" : "record");
+	const shouldLoadLiveRecord =
+		Boolean(fallbackObjectDef) && !isPlaceholderRecordId(reference.recordId);
+	const detailSurface = useQuery(
+		api.crm.recordQueries.getRecordDetailSurface,
+		fallbackObjectDef && shouldLoadLiveRecord
+			? {
+					objectDefId: fallbackObjectDef._id,
+					recordId: reference.recordId,
+					recordKind,
+				}
+			: "skip"
 	);
-	const resolvedEntityType = entity?.entityType ?? reference.entityType;
+	const objectDef = detailSurface?.objectDef ?? fallbackObjectDef;
+	const adapterContract = detailSurface?.adapterContract;
+	const detailFields = detailSurface?.fields;
+	const record = detailSurface?.record;
+	const entity = useMemo(
+		() =>
+			resolveAdminEntity(
+				adapterContract?.entityType ?? reference.entityType,
+				objectDef ?? undefined
+			),
+		[adapterContract?.entityType, objectDef, reference.entityType]
+	);
+	const resolvedEntityType =
+		adapterContract?.entityType ?? entity?.entityType ?? reference.entityType;
 	const adapter = useMemo(
 		() =>
 			resolveRecordSidebarEntityAdapter({
+				detailSurfaceKey: adapterContract?.detailSurfaceKey,
 				entityType: resolvedEntityType,
 				objectDef,
 				overrides: adapters,
 			}),
-		[adapters, objectDef, resolvedEntityType]
+		[adapters, adapterContract?.detailSurfaceKey, objectDef, resolvedEntityType]
 	);
 	const fullPageTarget = useMemo(() => {
 		if (!resolvedEntityType) {
@@ -156,45 +184,36 @@ export function AdminRecordDetailSurface({
 			},
 		} as const;
 	}, [reference.recordId, resolvedEntityType]);
-	const recordKind =
-		reference.recordKind ?? (objectDef?.isSystem ? "native" : "record");
-	const shouldLoadLiveRecord =
-		Boolean(objectDef) && !isPlaceholderRecordId(reference.recordId);
-	const fieldDefs = useQuery(
-		api.crm.fieldDefs.listFields,
-		objectDef ? { objectDefId: objectDef._id } : "skip"
-	);
-	const recordReference = useQuery(
-		api.crm.recordQueries.getRecordReference,
-		objectDef && shouldLoadLiveRecord
-			? {
-					objectDefId: objectDef._id,
-					recordId: reference.recordId,
-					recordKind,
-				}
-			: "skip"
-	);
 
-	const record = recordReference?.record;
 	const title =
 		adapter?.getRecordTitle?.({
+			adapterContract,
 			entity,
 			objectDef,
 			record,
 			recordId: reference.recordId,
-		}) ?? getRecordTitle(record, objectDef, entity, reference.recordId);
+		}) ??
+		getRecordTitle(
+			record,
+			objectDef,
+			entity,
+			reference.recordId,
+			adapterContract
+		);
 	const status =
 		adapter?.getRecordStatus?.({
+			adapterContract,
 			entity,
 			objectDef,
 			record,
-		}) ?? getDefaultRecordStatus(recordKind, record);
+		}) ?? getDefaultRecordStatus(recordKind, record, adapterContract);
 	const recordLabel =
 		objectDef?.singularLabel ?? entity?.singularLabel ?? "Record";
 	const iconName = entity?.iconName ?? objectDef?.icon;
 	const sharedTabArgs: RecordTabRenderArgs = {
+		adapterContract,
 		entity,
-		fieldDefs: fieldDefs ?? [],
+		fields: detailFields ?? [],
 		objectDef,
 		record,
 		reference,
@@ -296,8 +315,10 @@ export function AdminRecordDetailSurface({
 					<TabsContent className="space-y-4 p-4 sm:p-6" value="details">
 						<DetailsTab
 							adapter={adapter}
+							adapterContract={adapterContract}
 							entity={entity}
-							fieldDefs={fieldDefs}
+							fields={detailFields}
+							isLoading={shouldLoadLiveRecord && detailSurface === undefined}
 							objectDef={objectDef}
 							record={record}
 							recordId={reference.recordId}
@@ -305,7 +326,7 @@ export function AdminRecordDetailSurface({
 					</TabsContent>
 
 					<TabsContent className="p-4 sm:p-6" value="relations">
-						{objectDef && record && fieldDefs ? (
+						{objectDef && record ? (
 							<LinkedRecordsPanel
 								objectDefId={objectDef._id}
 								onNavigate={(recordId, linkedRecordKind, linkedObjectDefId) => {
@@ -409,16 +430,20 @@ function RecordMetaRow({
 }
 
 function DetailsTab({
+	adapterContract,
 	adapter,
 	entity,
-	fieldDefs,
+	fields,
+	isLoading,
 	objectDef,
 	record,
 	recordId,
 }: {
+	readonly adapterContract: EntityViewAdapterContract | undefined;
 	readonly adapter: RecordSidebarEntityAdapter | undefined;
 	readonly entity: ReturnType<typeof getAdminEntityByType> | undefined;
-	readonly fieldDefs: readonly FieldDef[] | undefined;
+	readonly fields: readonly DetailField[] | undefined;
+	readonly isLoading: boolean;
 	readonly objectDef: ObjectDef | undefined;
 	readonly record: RecordDetailRecord | undefined;
 	readonly recordId: string;
@@ -433,7 +458,7 @@ function DetailsTab({
 		);
 	}
 
-	if (fieldDefs === undefined) {
+	if (isLoading) {
 		return (
 			<div className="space-y-3">
 				{FIELD_SKELETON_IDS.map((skeletonId) => (
@@ -468,8 +493,9 @@ function DetailsTab({
 	}
 
 	const adapterDetails = adapter?.renderDetailsTab?.({
+		adapterContract,
 		entity,
-		fieldDefs,
+		fields: fields ?? [],
 		objectDef,
 		record,
 		recordId,
@@ -478,10 +504,9 @@ function DetailsTab({
 		return adapterDetails;
 	}
 
-	const visibleFields = fieldDefs.filter((fieldDef) => {
-		const value = record.fields[fieldDef.name];
-		return value !== undefined && value !== null && value !== "";
-	});
+	const visibleFields = (fields ?? []).filter((field) =>
+		hasRenderableFieldValue(record.fields[field.name])
+	);
 
 	if (visibleFields.length === 0) {
 		return (
@@ -495,12 +520,11 @@ function DetailsTab({
 
 	return (
 		<div className="grid gap-3">
-			{visibleFields.map((fieldDef) => (
+			{visibleFields.map((field) => (
 				<FieldRenderer
-					fieldType={fieldDef.fieldType}
-					key={fieldDef._id}
-					label={fieldDef.label}
-					value={record.fields[fieldDef.name]}
+					field={field}
+					key={field.name}
+					value={record.fields[field.name]}
 				/>
 			))}
 		</div>
@@ -594,14 +618,26 @@ function resolveAdminEntity(
 	return objectDef ? getAdminEntityForObjectDef(objectDef) : undefined;
 }
 
+function hasRenderableFieldValue(value: unknown): boolean {
+	return value !== undefined && value !== null && value !== "";
+}
+
 function getRecordTitle(
 	record: RecordDetailRecord | undefined,
 	objectDef: ObjectDef | undefined,
 	entity: ReturnType<typeof getAdminEntityByType> | undefined,
-	recordId: string
+	recordId: string,
+	adapterContract: EntityViewAdapterContract | undefined
 ) {
 	if (record) {
-		const priorityKeys = ["name", "label", "title", "address", "streetAddress"];
+		const priorityKeys = [
+			adapterContract?.titleFieldName,
+			"name",
+			"label",
+			"title",
+			"address",
+			"streetAddress",
+		].filter((value): value is string => Boolean(value));
 		for (const key of priorityKeys) {
 			const value = record.fields[key];
 			if (typeof value === "string" && value.trim().length > 0) {
@@ -623,10 +659,13 @@ function getRecordTitle(
 
 function getDefaultRecordStatus(
 	recordKind: "record" | "native",
-	record: RecordDetailRecord | undefined
+	record: RecordDetailRecord | undefined,
+	adapterContract: EntityViewAdapterContract | undefined
 ) {
 	if (record) {
-		const statusCandidate = record.fields.status;
+		const statusCandidate = adapterContract?.statusFieldName
+			? record.fields[adapterContract.statusFieldName]
+			: record.fields.status;
 		if (
 			typeof statusCandidate === "string" &&
 			statusCandidate.trim().length > 0
