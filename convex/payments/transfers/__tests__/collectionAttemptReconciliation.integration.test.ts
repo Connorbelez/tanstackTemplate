@@ -7,6 +7,7 @@ import { api } from "../../../_generated/api";
 import type { Id } from "../../../_generated/dataModel";
 import type { MutationCtx } from "../../../_generated/server";
 import auditTrailSchema from "../../../components/auditTrail/schema";
+import { FAIRLEND_STAFF_ORG_ID } from "../../../constants";
 import { emitPaymentReceived } from "../../../engine/effects/collectionAttempt";
 import { applyPayment } from "../../../engine/effects/obligationPayment";
 import {
@@ -27,6 +28,8 @@ import { postObligationAccrued } from "../../cashLedger/integrations";
 const PAYMENT_HANDLER_IDENTITY = {
 	subject: "test-transfer-reconciliation-user",
 	issuer: "https://api.workos.com",
+	org_id: FAIRLEND_STAFF_ORG_ID,
+	organization_name: "FairLend Staff",
 	role: "admin",
 	roles: JSON.stringify(["admin"]),
 	permissions: JSON.stringify([

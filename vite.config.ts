@@ -49,6 +49,7 @@ function skipPdfmeBabelTransform(): Plugin {
 const config = defineConfig({
 	test: {
 		exclude: [...configDefaults.exclude, "e2e/**"],
+		setupFiles: ["./src/test/setup/workosEnv.ts"],
 		coverage: {
 			provider: "v8",
 			reporter: ["text", "json-summary", "html"],

@@ -1,17 +1,17 @@
 import { afterAll, describe, expect, it, vi } from "vitest";
 import workflowSchema from "../../../../node_modules/@convex-dev/workflow/dist/component/schema.js";
 import workpoolSchema from "../../../../node_modules/@convex-dev/workpool/dist/component/schema.js";
-import { registerAuditLogComponent } from "../../../../src/test/convex/registerAuditLogComponent";
-import type { Id } from "../../../_generated/dataModel";
-import type { MutationCtx } from "../../../_generated/server";
-import auditTrailSchema from "../../../components/auditTrail/schema";
 import {
 	createHarness,
 	createTestAccount,
 	SYSTEM_SOURCE,
 	seedMinimalEntities,
 	type TestHarness,
-} from "../../../payments/cashLedger/__tests__/testUtils";
+} from "../../../../src/test/convex/payments/cashLedger/testUtils";
+import { registerAuditLogComponent } from "../../../../src/test/convex/registerAuditLogComponent";
+import type { Id } from "../../../_generated/dataModel";
+import type { MutationCtx } from "../../../_generated/server";
+import auditTrailSchema from "../../../components/auditTrail/schema";
 import { postObligationAccrued } from "../../../payments/cashLedger/integrations";
 import {
 	auditTrailModules,

@@ -72,6 +72,10 @@ describe("ROLE_PERMISSIONS truth table", () => {
 			});
 		});
 	}
+
+	it("admin only carries admin:access in the canonical role matrix", () => {
+		expect(ROLE_PERMISSIONS.admin).toEqual(["admin:access"]);
+	});
 });
 
 // ── T-012: Underwriter hierarchy ─────────────────────────────────────

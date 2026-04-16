@@ -34,6 +34,12 @@ async function getRemainingScheduledJobCount(t: SchedulableTestRuntime) {
 	});
 }
 
+async function flushMicrotasks(passes = 2) {
+	for (let pass = 0; pass < passes; pass += 1) {
+		await Promise.resolve();
+	}
+}
+
 export async function drainScheduledWork(
 	t: SchedulableTestRuntime,
 	options?: { flushMicrotasks?: boolean; maxIterations?: number }
@@ -42,10 +48,15 @@ export async function drainScheduledWork(
 
 	for (let iteration = 0; iteration < maxIterations; iteration += 1) {
 		vi.runAllTimers();
+
+		if (options?.flushMicrotasks) {
+			await flushMicrotasks();
+		}
+
 		await t.finishInProgressScheduledFunctions();
 
 		if (options?.flushMicrotasks) {
-			await Promise.resolve();
+			await flushMicrotasks();
 		}
 
 		const remainingJobs = await getRemainingScheduledJobCount(t);
@@ -58,7 +69,13 @@ export async function drainScheduledWork(
 		// timers and re-check so we only return once the queue stabilizes at zero.
 		vi.runAllTimers();
 		if (options?.flushMicrotasks) {
-			await Promise.resolve();
+			await flushMicrotasks();
+		}
+
+		await t.finishInProgressScheduledFunctions();
+
+		if (options?.flushMicrotasks) {
+			await flushMicrotasks();
 		}
 
 		const stabilizedJobs = await getRemainingScheduledJobCount(t);

@@ -10,10 +10,19 @@
 import { ConvexError } from "convex/values";
 import { convexTest } from "convex-test";
 import { describe, expect, it } from "vitest";
+import workflowSchema from "../../../node_modules/@convex-dev/workflow/dist/component/schema.js";
+import workpoolSchema from "../../../node_modules/@convex-dev/workpool/dist/component/schema.js";
+import { registerAuditLogComponent } from "../../../src/test/convex/registerAuditLogComponent";
 import { internal } from "../../_generated/api";
 import type { Doc, Id } from "../../_generated/dataModel";
+import auditTrailSchema from "../../components/auditTrail/schema";
 import schema from "../../schema";
-import { convexModules } from "../../test/moduleMaps";
+import {
+	auditTrailModules,
+	convexModules,
+	workflowModules,
+	workpoolModules,
+} from "../../test/moduleMaps";
 import { buildDisbursementIdempotencyKey } from "../disbursementBridge";
 
 const modules = convexModules;
@@ -72,7 +81,12 @@ function createHarness() {
 	process.env.DISABLE_CASH_LEDGER_HASHCHAIN = "true";
 	// Enable mock providers so the bridge's mock_eft check passes
 	process.env.ENABLE_MOCK_PROVIDERS = "true";
-	return convexTest(schema, modules);
+	const t = convexTest(schema, modules);
+	registerAuditLogComponent(t, "auditLog");
+	t.registerComponent("auditTrail", auditTrailSchema, auditTrailModules);
+	t.registerComponent("workflow", workflowSchema, workflowModules);
+	t.registerComponent("workflow/workpool", workpoolSchema, workpoolModules);
+	return t;
 }
 
 /**
@@ -136,6 +150,21 @@ async function seedFullScenario(
 			accreditationStatus: "accredited",
 			onboardingEntryPath: "/tests/lender-a",
 			status: "active",
+			createdAt: now,
+		});
+
+		await ctx.db.insert("bankAccounts", {
+			ownerType: "lender",
+			ownerId: String(lenderAId),
+			institutionNumber: "001",
+			transitNumber: "00011",
+			accountLast4: "6789",
+			status: "validated",
+			validationMethod: "provider_verified",
+			mandateStatus: "active",
+			isDefaultOutbound: true,
+			country: "CA",
+			currency: "CAD",
 			createdAt: now,
 		});
 
@@ -379,6 +408,57 @@ describe("processSingleDisbursement — idempotency", () => {
 		expect(second.transferId).toBe(first.transferId);
 
 		// Verify only one transfer exists
+		const transfers = await t.run(async (ctx) => {
+			return ctx.db
+				.query("transferRequests")
+				.withIndex("by_idempotency", (q) =>
+					q.eq(
+						"idempotencyKey",
+						buildDisbursementIdempotencyKey(dispersalEntryId)
+					)
+				)
+				.collect();
+		});
+		expect(transfers).toHaveLength(1);
+	});
+});
+
+describe("triggerDisbursementBridge — idempotent replay accounting", () => {
+	it("reports an idempotent skip on the second batch run for the same pending entry", async () => {
+		const t = createHarness();
+		const { dispersalEntryId } = await seedFullScenario(t, {
+			entryAmount: 45_000,
+			payoutEligibleAfter: "2026-02-28",
+		});
+
+		const first = await t.action(
+			internal.dispersal.disbursementBridge.triggerDisbursementBridge,
+			{
+				asOfDate: "2026-03-01",
+				batchSize: 1,
+				providerCode: "mock_eft",
+			}
+		);
+		const second = await t.action(
+			internal.dispersal.disbursementBridge.triggerDisbursementBridge,
+			{
+				asOfDate: "2026-03-01",
+				batchSize: 1,
+				providerCode: "mock_eft",
+			}
+		);
+
+		expect(first.created).toBe(1);
+		expect(first.skippedIdempotent).toBe(0);
+		expect(second.created).toBe(0);
+		expect(second.skippedIdempotent).toBe(1);
+		expect(second.results).toContainEqual(
+			expect.objectContaining({
+				dispersalEntryId,
+				outcome: "skipped_idempotent",
+			})
+		);
+
 		const transfers = await t.run(async (ctx) => {
 			return ctx.db
 				.query("transferRequests")
