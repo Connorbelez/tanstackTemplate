@@ -19,6 +19,14 @@ describe("getAdminDetailRouteState", () => {
 		});
 	});
 
+	it("parses metadata-fallback entity routes without the static admin registry", () => {
+		expect(getAdminDetailRouteState("/admin/lead/lead_123")).toEqual({
+			detailOpen: true,
+			entityType: "lead",
+			recordId: "lead_123",
+		});
+	});
+
 	it("keeps entity list routes closed", () => {
 		expect(getAdminDetailRouteState("/admin/listings")).toEqual({
 			detailOpen: false,
@@ -29,6 +37,11 @@ describe("getAdminDetailRouteState", () => {
 
 	it("ignores non-entity admin routes", () => {
 		expect(getAdminDetailRouteState("/admin/underwriting")).toEqual({
+			detailOpen: false,
+			entityType: undefined,
+			recordId: undefined,
+		});
+		expect(getAdminDetailRouteState("/admin/underwriting/request_1")).toEqual({
 			detailOpen: false,
 			entityType: undefined,
 			recordId: undefined,

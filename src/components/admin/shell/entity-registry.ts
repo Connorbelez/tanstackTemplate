@@ -282,6 +282,25 @@ export function getAdminEntityForObjectDef(objectDef: {
 		);
 	});
 }
+
+export function resolveAdminEntityTypeForObjectDef(objectDef: {
+	name?: string;
+	nativeTable?: string;
+	pluralLabel?: string;
+	singularLabel?: string;
+}) {
+	const registeredEntity = getAdminEntityForObjectDef(objectDef);
+	if (registeredEntity) {
+		return registeredEntity.entityType;
+	}
+
+	return normalizeCandidateStrings([
+		objectDef.nativeTable,
+		objectDef.name,
+		objectDef.singularLabel,
+	])[0];
+}
+
 export function getAdminEntityByPathname(pathname: string) {
 	const segments = pathname.split("/").filter(Boolean);
 	if (segments[0] !== "admin") {

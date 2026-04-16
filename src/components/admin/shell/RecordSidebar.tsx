@@ -551,7 +551,16 @@ function resolveObjectDef(
 	const entity = reference.entityType
 		? getAdminEntityByType(reference.entityType)
 		: undefined;
-	if (!entity) {
+	const entityCandidates = entity
+		? normalizeCandidateStrings([
+				entity.entityType,
+				entity.tableName,
+				entity.singularLabel,
+				entity.pluralLabel,
+			])
+		: normalizeCandidateStrings([reference.entityType]);
+
+	if (entityCandidates.length === 0) {
 		return undefined;
 	}
 
@@ -561,13 +570,6 @@ function resolveObjectDef(
 			objectDef.nativeTable,
 			objectDef.singularLabel,
 			objectDef.pluralLabel,
-		]);
-
-		const entityCandidates = normalizeCandidateStrings([
-			entity.entityType,
-			entity.tableName,
-			entity.singularLabel,
-			entity.pluralLabel,
 		]);
 
 		return entityCandidates.some((candidate) => candidates.includes(candidate));

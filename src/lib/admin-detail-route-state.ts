@@ -1,4 +1,5 @@
 import { getAdminEntityByPathname } from "#/components/admin/shell/entity-registry";
+import { isReservedAdminRouteSegment } from "#/lib/admin-entities";
 
 export interface AdminDetailRouteState {
 	readonly detailOpen: boolean;
@@ -22,7 +23,22 @@ function decodePathSegment(value: string | undefined): string | undefined {
 export function getAdminDetailRouteState(
 	pathname: string
 ): AdminDetailRouteState {
-	const entityType = getAdminEntityByPathname(pathname)?.entityType;
+	const segments = pathname.split("/").filter(Boolean);
+	if (segments[0] !== "admin") {
+		return {
+			detailOpen: false,
+			entityType: undefined,
+			recordId: undefined,
+		};
+	}
+
+	const routeEntityType = getAdminEntityByPathname(pathname)?.entityType;
+	const pathEntityType = decodePathSegment(segments[1]);
+	const entityType =
+		routeEntityType ??
+		(pathEntityType && !isReservedAdminRouteSegment(pathEntityType)
+			? pathEntityType
+			: undefined);
 
 	if (!entityType) {
 		return {
@@ -32,11 +48,8 @@ export function getAdminDetailRouteState(
 		};
 	}
 
-	const segments = pathname.split("/").filter(Boolean);
 	const recordId =
-		segments[0] === "admin" && segments[1] === entityType
-			? decodePathSegment(segments[2])
-			: undefined;
+		pathEntityType === entityType ? decodePathSegment(segments[2]) : undefined;
 
 	return {
 		detailOpen: recordId !== undefined,

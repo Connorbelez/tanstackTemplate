@@ -92,6 +92,17 @@ describe("admin view context helpers", () => {
 		expect(resolveAdminObjectDef("borrowers", [borrowers])).toEqual(borrowers);
 	});
 
+	it("resolves metadata-fallback objects by fallback entity type", () => {
+		const leads = buildObjectDef({
+			name: "lead",
+			pluralLabel: "Leads",
+			singularLabel: "Lead",
+		});
+
+		expect(resolveAdminObjectDef("lead", [leads])).toEqual(leads);
+		expect(resolveAdminObjectDef("leads", [leads])).toEqual(leads);
+	});
+
 	it("prefers the default saved kanban view when one is active", () => {
 		const borrowers = buildObjectDef({
 			name: "borrower",
