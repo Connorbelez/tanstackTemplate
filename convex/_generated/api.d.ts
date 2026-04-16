@@ -44,6 +44,7 @@ import type * as crm_objectDefs from "../crm/objectDefs.js";
 import type * as crm_recordLinks from "../crm/recordLinks.js";
 import type * as crm_recordQueries from "../crm/recordQueries.js";
 import type * as crm_records from "../crm/records.js";
+import type * as crm_relationCellPayloads from "../crm/relationCellPayloads.js";
 import type * as crm_systemAdapters_bootstrap from "../crm/systemAdapters/bootstrap.js";
 import type * as crm_systemAdapters_columnResolver from "../crm/systemAdapters/columnResolver.js";
 import type * as crm_systemAdapters_queryAdapter from "../crm/systemAdapters/queryAdapter.js";
@@ -341,6 +342,7 @@ declare const fullApi: ApiFromModules<{
   "crm/recordLinks": typeof crm_recordLinks;
   "crm/recordQueries": typeof crm_recordQueries;
   "crm/records": typeof crm_records;
+  "crm/relationCellPayloads": typeof crm_relationCellPayloads;
   "crm/systemAdapters/bootstrap": typeof crm_systemAdapters_bootstrap;
   "crm/systemAdapters/columnResolver": typeof crm_systemAdapters_columnResolver;
   "crm/systemAdapters/queryAdapter": typeof crm_systemAdapters_queryAdapter;

@@ -4,14 +4,16 @@ import type {
 	EditabilityMetadata,
 	EffectiveViewDefinition,
 	EntityViewAdapterContract,
+	EntityViewPageResult,
+	EntityViewRow,
 	FieldLayoutEligibility,
 	FieldRendererHint,
 	NormalizedFieldDefinition,
 	NormalizedFieldKind,
 	RelationMetadata,
 	SystemViewDefinition,
-	UnifiedRecord,
 	UserSavedViewDefinition,
+	ViewAggregateResult,
 	ViewLayout,
 } from "../../../../convex/crm/types";
 
@@ -51,11 +53,13 @@ export interface AdminViewSchemaResult {
 
 export interface AdminTableQueryResult {
 	adapterContract: EntityViewAdapterContract;
+	aggregates: ViewAggregateResult[];
 	columns: AdminViewColumn[];
 	cursor: string | null;
 	fields: NormalizedFieldDefinition[];
 	needsRepair: boolean;
-	rows: UnifiedRecord[];
+	page: EntityViewPageResult;
+	rows: EntityViewRow["record"][];
 	totalCount: number;
 	totalCountExact: boolean;
 	truncated: boolean;
@@ -69,11 +73,13 @@ export interface AdminKanbanGroup {
 	groupId: Id<"viewKanbanGroups">;
 	isCollapsed: boolean;
 	label: string;
-	records: UnifiedRecord[];
+	records: EntityViewRow["record"][];
+	rows: EntityViewRow[];
 }
 
 export interface AdminKanbanQueryResult {
 	adapterContract: EntityViewAdapterContract;
+	aggregates: ViewAggregateResult[];
 	columns: AdminViewColumn[];
 	fields: NormalizedFieldDefinition[];
 	groups: AdminKanbanGroup[];

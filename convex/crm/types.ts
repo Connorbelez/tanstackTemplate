@@ -234,7 +234,30 @@ export interface EntityViewAdapterContract {
 	variant: "dedicated" | "fallback";
 }
 
+export interface RelationCellItem {
+	label: string;
+	objectDefId: Id<"objectDefs">;
+	recordId: string;
+	recordKind: "record" | "native";
+}
+
+export interface ScalarCellDisplayValue {
+	kind: "scalar";
+	value: unknown;
+}
+
+export interface RelationCellDisplayValue {
+	cardinality: RelationMetadata["cardinality"];
+	items: RelationCellItem[];
+	kind: "relation";
+}
+
+export type EntityViewCellDisplayValue =
+	| ScalarCellDisplayValue
+	| RelationCellDisplayValue;
+
 export interface EntityViewCell {
+	displayValue?: EntityViewCellDisplayValue;
 	fieldDefId: Id<"fieldDefs">;
 	fieldName: string;
 	label: string;

@@ -1,6 +1,7 @@
 "use client";
 
 import { Badge } from "#/components/ui/badge";
+import type { AdminRelationNavigationTarget } from "#/lib/admin-relation-navigation";
 import { cn } from "#/lib/utils";
 import type { Doc } from "../../../../convex/_generated/dataModel";
 import type { NormalizedFieldDefinition } from "../../../../convex/crm/types";
@@ -12,6 +13,7 @@ import {
 	SelectCell,
 	TextCell,
 } from "./cell-renderers";
+import { isRelationCellDisplayValue, RelationCell } from "./RelationCell";
 
 type FieldType = Doc<"fieldDefs">["fieldType"];
 
@@ -20,6 +22,7 @@ export interface FieldRendererProps {
 	readonly field?: NormalizedFieldDefinition;
 	readonly fieldType?: FieldType;
 	readonly label?: string;
+	readonly onNavigateRelation?: (target: AdminRelationNavigationTarget) => void;
 	readonly value: unknown;
 }
 
@@ -28,6 +31,7 @@ export function FieldRenderer({
 	field,
 	fieldType,
 	label,
+	onNavigateRelation,
 	value,
 }: FieldRendererProps) {
 	const resolvedFieldType = field?.fieldType ?? fieldType;
@@ -47,7 +51,12 @@ export function FieldRenderer({
 				) : null}
 			</div>
 			<div className="min-h-6">
-				{renderFieldValue({ field, fieldType: resolvedFieldType, value })}
+				{renderFieldValue({
+					field,
+					fieldType: resolvedFieldType,
+					onNavigateRelation,
+					value,
+				})}
 			</div>
 			{field?.description ? (
 				<p className="text-muted-foreground text-xs">{field.description}</p>
@@ -104,8 +113,21 @@ function getArrayItemKey(item: unknown, seenKeys: Map<string, number>): string {
 function renderFieldValue(args: {
 	field: NormalizedFieldDefinition | undefined;
 	fieldType: FieldType | undefined;
+	onNavigateRelation?: (target: AdminRelationNavigationTarget) => void;
 	value: unknown;
 }) {
+	if (isRelationCellDisplayValue(args.value)) {
+		return (
+			<RelationCell
+				allowToggle={false}
+				expanded
+				onNavigate={args.onNavigateRelation}
+				value={args.value}
+				variant="detail"
+			/>
+		);
+	}
+
 	if (args.value === null || args.value === undefined || args.value === "") {
 		return <p className="text-muted-foreground text-sm">No value</p>;
 	}

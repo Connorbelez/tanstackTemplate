@@ -124,3 +124,7 @@ export function useRecordSidebar() {
 
 	return context;
 }
+
+export function useOptionalRecordSidebar() {
+	return useContext(RecordSidebarContext);
+}
