@@ -11,6 +11,7 @@ import {
 	buildAdminPreviewRecords,
 	getAdminPreviewRecord,
 } from "#/components/admin/shell/admin-preview-records";
+import { getAdminBreadcrumbLabel } from "#/components/admin/shell/AdminBreadcrumbs";
 import {
 	getAdminRecordSupportingText,
 	getAdminRecordTitle,
@@ -178,6 +179,27 @@ describe("admin shell helpers", () => {
 	it("matches dashboard routes exactly instead of every admin page", () => {
 		expect(isAdminRouteActive("/admin", "/admin")).toBe(true);
 		expect(isAdminRouteActive("/admin/mortgages", "/admin")).toBe(false);
+	});
+
+	it("prefers the loaded record title for the breadcrumb leaf when available", () => {
+		expect(
+			getAdminBreadcrumbLabel({
+				breadcrumbLabel: "King Street Bridge Loan",
+				index: 2,
+				segment: "listing_123",
+				segments: ["admin", "listings", "listing_123"],
+			})
+		).toBe("King Street Bridge Loan");
+	});
+
+	it("falls back to the record placeholder label when no breadcrumb override exists", () => {
+		expect(
+			getAdminBreadcrumbLabel({
+				index: 2,
+				segment: "listing_123",
+				segments: ["admin", "listings", "listing_123"],
+			})
+		).toBe("Record listing_123");
 	});
 
 	it("matches entity routes for nested detail pages", () => {

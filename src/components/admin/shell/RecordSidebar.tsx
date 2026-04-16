@@ -28,6 +28,12 @@ import type {
 	UnifiedRecord,
 } from "../../../../convex/crm/types";
 import { ActivityTimeline } from "./ActivityTimeline";
+import { useAdminBreadcrumbLabel } from "./AdminPageMetadataContext";
+import {
+	getAdminRecordSupportingText,
+	renderAdminFieldValue,
+} from "./admin-view-rendering";
+import { EntityPage } from "./EntityPage";
 import { EntityIcon } from "./entity-icon";
 import {
 	getAdminEntityByType,
@@ -64,6 +70,16 @@ interface RecordDetailSurfaceProps {
 	readonly reference: SidebarRecordRef;
 	readonly variant: "page" | "sheet";
 }
+
+const DEFAULT_PAGE_SUMMARY_FIELD_NAMES = [
+	"principal",
+	"amount",
+	"interestRate",
+	"dueDate",
+	"maturityDate",
+	"paymentAmount",
+	"status",
+] as const;
 
 export function RecordSidebar({
 	adapters,
@@ -206,15 +222,173 @@ export function AdminRecordDetailSurface({
 		record,
 		reference,
 	};
+	const supportingText =
+		record && objectDef && adapterContract
+			? getAdminRecordSupportingText({
+					adapterContract,
+					objectDef,
+					record,
+				})
+			: undefined;
+	const summaryFields = useMemo(
+		() =>
+			resolveSummaryFields({
+				adapter,
+				fields: detailFields ?? [],
+				record,
+			}),
+		[adapter, detailFields, record]
+	);
+	useAdminBreadcrumbLabel(variant === "page" ? title : undefined);
+
+	const tabsContent = (
+		<div
+			className={cn(
+				"min-h-0 flex-1 overflow-y-auto",
+				variant === "page" && "rounded-2xl border border-border/70 bg-card"
+			)}
+		>
+			<Tabs className="min-h-0 flex-1" defaultValue="details">
+				<div className="border-b px-4 pt-4 sm:px-6">
+					<TabsList className="w-full justify-start" variant="line">
+						<TabsTrigger value="details">Details</TabsTrigger>
+						<TabsTrigger value="relations">Relations</TabsTrigger>
+						<TabsTrigger value="notes">Notes</TabsTrigger>
+						<TabsTrigger value="files">Files</TabsTrigger>
+						<TabsTrigger value="history">History</TabsTrigger>
+					</TabsList>
+				</div>
+
+				<TabsContent className="space-y-4 p-4 sm:p-6" value="details">
+					<DetailsTab
+						adapter={adapter}
+						adapterContract={adapterContract}
+						entity={entity}
+						fields={detailFields}
+						isLoading={shouldLoadLiveRecord && detailSurface === undefined}
+						objectDef={objectDef}
+						onNavigateRelation={navigateRelation}
+						record={record}
+						recordId={reference.recordId}
+					/>
+				</TabsContent>
+
+				<TabsContent className="p-4 sm:p-6" value="relations">
+					{objectDef && record ? (
+						<LinkedRecordsPanel
+							objectDefId={objectDef._id}
+							onNavigate={navigateRelation}
+							recordId={record._id}
+							recordKind={record._kind}
+						/>
+					) : (
+						<UnavailableTab
+							description="Linked records will appear here once this table is wired to live entity data."
+							icon={<Link2 className="h-5 w-5" />}
+							title="Relations unavailable"
+						/>
+					)}
+				</TabsContent>
+
+				<TabsContent className="p-4 sm:p-6" value="notes">
+					{adapter?.renderNotesTab?.(sharedTabArgs) ?? (
+						<UnavailableTab
+							description="Notes are intentionally adapter-driven so each entity can supply the right editing and persistence behavior."
+							icon={<FileText className="h-5 w-5" />}
+							title="Notes adapter not configured"
+						/>
+					)}
+				</TabsContent>
+
+				<TabsContent className="p-4 sm:p-6" value="files">
+					{adapter?.renderFilesTab?.(sharedTabArgs) ?? (
+						<UnavailableTab
+							description="Files are also pluggable. Wire this entity to a storage adapter when upload and access contracts are ready."
+							icon={<Folder className="h-5 w-5" />}
+							title="Files adapter not configured"
+						/>
+					)}
+				</TabsContent>
+
+				<TabsContent className="p-4 sm:p-6" value="history">
+					{record ? (
+						<ActivityTimeline recordId={record._id} recordKind={record._kind} />
+					) : (
+						<UnavailableTab
+							description="History will populate once the selected record resolves to a live CRM or native entity."
+							icon={<History className="h-5 w-5" />}
+							title="History unavailable"
+						/>
+					)}
+				</TabsContent>
+			</Tabs>
+		</div>
+	);
+
+	if (variant === "page") {
+		const pageBackAction = entity ? (
+			<Button asChild size="sm" variant="outline">
+				<Link
+					params={{ entitytype: entity.entityType }}
+					search={EMPTY_ADMIN_DETAIL_SEARCH}
+					to="/admin/$entitytype"
+					viewTransition
+				>
+					<ChevronLeft className="h-4 w-4" />
+					Back to {entity.pluralLabel}
+				</Link>
+			</Button>
+		) : null;
+		const summaryAction = entity ? (
+			<Button asChild size="sm" variant="outline">
+				<Link
+					params={{ entitytype: entity.entityType }}
+					search={EMPTY_ADMIN_DETAIL_SEARCH}
+					to="/admin/$entitytype"
+					viewTransition
+				>
+					View {entity.pluralLabel}
+				</Link>
+			</Button>
+		) : null;
+		const pageActions = adapter?.renderPageActions?.(sharedTabArgs);
+		const pageAside = (
+			<PageSummaryRail
+				adapterAside={adapter?.renderPageAside?.(sharedTabArgs)}
+				entity={entity}
+				objectDef={objectDef}
+				record={record}
+				recordId={reference.recordId}
+				summaryActions={summaryAction}
+				summaryFields={summaryFields}
+				supportingText={supportingText}
+				title={title}
+			/>
+		);
+
+		return (
+			<EntityPage
+				actions={pageActions}
+				backAction={pageBackAction}
+				customSections={adapter?.renderPageSections?.(sharedTabArgs)}
+				headerBadges={
+					<>
+						<Badge variant="secondary">{recordLabel}</Badge>
+						{status ? <Badge variant="outline">{status}</Badge> : null}
+					</>
+				}
+				iconName={iconName}
+				mainContent={tabsContent}
+				summary={pageAside}
+				supportingText={supportingText}
+				title={title}
+			/>
+		);
+	}
 
 	const content = (
 		<div className="flex min-h-0 flex-1 flex-col">
-			<SheetHeader
-				className={cn(
-					"gap-4 border-b pb-5",
-					variant === "page" && "rounded-xl border bg-card px-6 py-6"
-				)}
-			>
+			<SheetHeader className="gap-4 border-b pb-5">
 				<div className="flex items-start justify-between gap-3">
 					<div className="flex items-start gap-3">
 						<div className="flex h-11 w-11 items-center justify-center rounded-xl bg-muted text-muted-foreground">
@@ -222,11 +396,7 @@ export function AdminRecordDetailSurface({
 						</div>
 						<div className="space-y-2">
 							<div className="flex flex-wrap items-center gap-2">
-								{variant === "sheet" ? (
-									<h2 className="font-semibold text-xl">{title}</h2>
-								) : (
-									<h1 className="font-semibold text-2xl">{title}</h1>
-								)}
+								<h2 className="font-semibold text-xl">{title}</h2>
 								<Badge variant="secondary">{recordLabel}</Badge>
 								{status ? <Badge variant="outline">{status}</Badge> : null}
 							</div>
@@ -283,96 +453,9 @@ export function AdminRecordDetailSurface({
 				<RecordMetaRow record={record} />
 			</SheetHeader>
 
-			<div
-				className={cn(
-					"min-h-0 flex-1 overflow-y-auto",
-					variant === "page" && "rounded-xl border bg-card"
-				)}
-			>
-				<Tabs className="min-h-0 flex-1" defaultValue="details">
-					<div className="border-b px-4 pt-4 sm:px-6">
-						<TabsList className="w-full justify-start" variant="line">
-							<TabsTrigger value="details">Details</TabsTrigger>
-							<TabsTrigger value="relations">Relations</TabsTrigger>
-							<TabsTrigger value="notes">Notes</TabsTrigger>
-							<TabsTrigger value="files">Files</TabsTrigger>
-							<TabsTrigger value="history">History</TabsTrigger>
-						</TabsList>
-					</div>
-
-					<TabsContent className="space-y-4 p-4 sm:p-6" value="details">
-						<DetailsTab
-							adapter={adapter}
-							adapterContract={adapterContract}
-							entity={entity}
-							fields={detailFields}
-							isLoading={shouldLoadLiveRecord && detailSurface === undefined}
-							objectDef={objectDef}
-							onNavigateRelation={navigateRelation}
-							record={record}
-							recordId={reference.recordId}
-						/>
-					</TabsContent>
-
-					<TabsContent className="p-4 sm:p-6" value="relations">
-						{objectDef && record ? (
-							<LinkedRecordsPanel
-								objectDefId={objectDef._id}
-								onNavigate={navigateRelation}
-								recordId={record._id}
-								recordKind={record._kind}
-							/>
-						) : (
-							<UnavailableTab
-								description="Linked records will appear here once this table is wired to live entity data."
-								icon={<Link2 className="h-5 w-5" />}
-								title="Relations unavailable"
-							/>
-						)}
-					</TabsContent>
-
-					<TabsContent className="p-4 sm:p-6" value="notes">
-						{adapter?.renderNotesTab?.(sharedTabArgs) ?? (
-							<UnavailableTab
-								description="Notes are intentionally adapter-driven so each entity can supply the right editing and persistence behavior."
-								icon={<FileText className="h-5 w-5" />}
-								title="Notes adapter not configured"
-							/>
-						)}
-					</TabsContent>
-
-					<TabsContent className="p-4 sm:p-6" value="files">
-						{adapter?.renderFilesTab?.(sharedTabArgs) ?? (
-							<UnavailableTab
-								description="Files are also pluggable. Wire this entity to a storage adapter when upload and access contracts are ready."
-								icon={<Folder className="h-5 w-5" />}
-								title="Files adapter not configured"
-							/>
-						)}
-					</TabsContent>
-
-					<TabsContent className="p-4 sm:p-6" value="history">
-						{record ? (
-							<ActivityTimeline
-								recordId={record._id}
-								recordKind={record._kind}
-							/>
-						) : (
-							<UnavailableTab
-								description="History will populate once the selected record resolves to a live CRM or native entity."
-								icon={<History className="h-5 w-5" />}
-								title="History unavailable"
-							/>
-						)}
-					</TabsContent>
-				</Tabs>
-			</div>
+			{tabsContent}
 		</div>
 	);
-
-	if (variant === "page") {
-		return <div className="space-y-6">{content}</div>;
-	}
 
 	return content;
 }
@@ -531,6 +614,122 @@ function UnavailableTab({
 	);
 }
 
+function PageSummaryRail({
+	adapterAside,
+	entity,
+	objectDef,
+	record,
+	recordId,
+	summaryActions,
+	summaryFields,
+	supportingText,
+	title,
+}: {
+	readonly adapterAside: ReactNode;
+	readonly entity: ReturnType<typeof getAdminEntityByType> | undefined;
+	readonly objectDef: ObjectDef | undefined;
+	readonly record: RecordDetailRecord | undefined;
+	readonly recordId: string;
+	readonly summaryActions: ReactNode;
+	readonly summaryFields: readonly DetailField[];
+	readonly supportingText: string | undefined;
+	readonly title: string;
+}) {
+	return (
+		<>
+			<PageSummarySection title="At a Glance">
+				<div className="space-y-3">
+					<div>
+						<p className="font-medium text-sm">{title}</p>
+						<p className="mt-1 text-muted-foreground text-sm">
+							{supportingText ??
+								"Shared entity detail surface for dedicated admin record routes."}
+						</p>
+					</div>
+					<div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
+						<SummaryValueCard label="Record ID" value={recordId} />
+						<SummaryValueCard
+							label="Entity"
+							value={
+								entity?.singularLabel ?? objectDef?.singularLabel ?? "Record"
+							}
+						/>
+					</div>
+				</div>
+			</PageSummarySection>
+
+			{summaryActions ? (
+				<PageSummarySection title="Quick Actions">
+					<div className="flex flex-col gap-2">{summaryActions}</div>
+				</PageSummarySection>
+			) : null}
+
+			{summaryFields.length > 0 ? (
+				<PageSummarySection title="Key Metrics">
+					<div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
+						{summaryFields.map((field) => (
+							<SummaryValueCard
+								key={field.name}
+								label={field.label}
+								value={renderAdminFieldValue(field, record?.fields[field.name])}
+							/>
+						))}
+					</div>
+				</PageSummarySection>
+			) : null}
+
+			{record ? (
+				<PageSummarySection title="Timeline">
+					<div className="grid gap-3">
+						<SummaryValueCard
+							label="Created"
+							value={formatTimestamp(record.createdAt)}
+						/>
+						<SummaryValueCard
+							label="Updated"
+							value={formatTimestamp(record.updatedAt)}
+						/>
+					</div>
+				</PageSummarySection>
+			) : null}
+
+			{adapterAside}
+		</>
+	);
+}
+
+function PageSummarySection({
+	children,
+	title,
+}: {
+	readonly children: ReactNode;
+	readonly title: string;
+}) {
+	return (
+		<section className="rounded-2xl border border-border/70 bg-card p-4 shadow-sm">
+			<h2 className="font-medium text-sm tracking-[0.02em]">{title}</h2>
+			<div className="mt-3">{children}</div>
+		</section>
+	);
+}
+
+function SummaryValueCard({
+	label,
+	value,
+}: {
+	readonly label: string;
+	readonly value: ReactNode;
+}) {
+	return (
+		<div className="rounded-xl border border-border/60 bg-muted/20 px-3 py-3">
+			<p className="text-muted-foreground text-xs uppercase tracking-[0.08em]">
+				{label}
+			</p>
+			<div className="mt-2 font-medium text-sm">{value}</div>
+		</div>
+	);
+}
+
 function resolveObjectDef(
 	reference: SidebarRecordRef,
 	objectDefs: readonly ObjectDef[] | undefined
@@ -602,6 +801,47 @@ function resolveAdminEntity(
 
 function hasRenderableFieldValue(value: unknown): boolean {
 	return value !== undefined && value !== null && value !== "";
+}
+
+function resolveSummaryFields(args: {
+	adapter: RecordSidebarEntityAdapter | undefined;
+	fields: readonly DetailField[];
+	record: RecordDetailRecord | undefined;
+}) {
+	if (!args.record) {
+		return [];
+	}
+
+	const record = args.record;
+	const fieldLookup = new Map(args.fields.map((field) => [field.name, field]));
+	const preferredNames = [
+		...(args.adapter?.pageSummaryFieldNames ?? []),
+		...DEFAULT_PAGE_SUMMARY_FIELD_NAMES,
+	];
+	const preferredFields = preferredNames.flatMap((fieldName) => {
+		const field = fieldLookup.get(fieldName);
+		if (!(field && hasRenderableFieldValue(record.fields[field.name]))) {
+			return [];
+		}
+
+		return [field];
+	});
+	const uniquePreferredFields = preferredFields.filter(
+		(field, index, fields) =>
+			fields.findIndex((candidate) => candidate.name === field.name) === index
+	);
+
+	if (uniquePreferredFields.length > 0) {
+		return uniquePreferredFields.slice(0, 4);
+	}
+
+	return args.fields
+		.filter(
+			(field) =>
+				!["name", "title", "label", "status"].includes(field.name) &&
+				hasRenderableFieldValue(record.fields[field.name])
+		)
+		.slice(0, 4);
 }
 
 function getRecordTitle(

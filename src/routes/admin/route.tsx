@@ -1,5 +1,6 @@
 import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
 import { AdminDetailSheet } from "#/components/admin/shell/AdminDetailSheet";
+import { AdminPageMetadataProvider } from "#/components/admin/shell/AdminPageMetadataContext";
 import { AdminRouteErrorBoundary } from "#/components/admin/shell/AdminRouteStates";
 import DashboardShell from "#/components/admin/shell/DashboardShell";
 import { RecordSidebarProvider } from "#/components/admin/shell/RecordSidebarProvider";
@@ -25,11 +26,13 @@ export const Route = createFileRoute("/admin")({
 
 function AdminPage() {
 	return (
-		<RecordSidebarProvider>
-			<DashboardShell>
-				<Outlet />
-				<AdminDetailSheet />
-			</DashboardShell>
-		</RecordSidebarProvider>
+		<AdminPageMetadataProvider>
+			<RecordSidebarProvider>
+				<DashboardShell>
+					<Outlet />
+					<AdminDetailSheet />
+				</DashboardShell>
+			</RecordSidebarProvider>
+		</AdminPageMetadataProvider>
 	);
 }
