@@ -101,6 +101,25 @@ function buildBorrowerRecord(): UnifiedRecord {
 	};
 }
 
+function buildLeadObjectDef(): Doc<"objectDefs"> {
+	return {
+		_id: "object_lead" as Id<"objectDefs">,
+		_creationTime: 0,
+		createdAt: 0,
+		createdBy: "user_test",
+		description: "Test lead object",
+		icon: "briefcase",
+		isActive: true,
+		isSystem: false,
+		name: "lead",
+		nativeTable: undefined,
+		orgId: "org_test",
+		pluralLabel: "Leads",
+		singularLabel: "Lead",
+		updatedAt: 0,
+	};
+}
+
 const FAIRLEND_ADMIN_CONTEXT = {
 	orgId: FAIRLEND_STAFF_ORG_ID,
 	permissions: ["admin:access"],
@@ -338,6 +357,26 @@ describe("admin shell helpers", () => {
 		});
 	});
 
+	it("resolves fallback relation references from object metadata", () => {
+		const objectDef = buildLeadObjectDef();
+
+		expect(
+			resolveAdminRelationReference({
+				objectDefs: [objectDef],
+				target: {
+					objectDefId: String(objectDef._id),
+					recordId: "lead_1",
+					recordKind: "record",
+				},
+			})
+		).toEqual({
+			entityType: "lead",
+			objectDefId: String(objectDef._id),
+			recordId: "lead_1",
+			recordKind: "record",
+		});
+	});
+
 	it("builds dedicated admin detail routes for related records", () => {
 		expect(
 			resolveAdminRecordRouteTarget({
@@ -350,6 +389,22 @@ describe("admin shell helpers", () => {
 			},
 			search: EMPTY_ADMIN_DETAIL_SEARCH,
 			to: "/admin/borrowers/$recordid",
+		});
+	});
+
+	it("builds generic admin detail routes for metadata-fallback related records", () => {
+		expect(
+			resolveAdminRecordRouteTarget({
+				entityType: "lead",
+				recordId: "lead_1",
+			})
+		).toEqual({
+			params: {
+				entitytype: "lead",
+				recordid: "lead_1",
+			},
+			search: EMPTY_ADMIN_DETAIL_SEARCH,
+			to: "/admin/$entitytype/$recordid",
 		});
 	});
 
@@ -400,6 +455,31 @@ describe("admin shell helpers", () => {
 			},
 			search: EMPTY_ADMIN_DETAIL_SEARCH,
 			to: "/admin/borrowers/$recordid",
+		});
+	});
+
+	it("falls back to generic full-page navigation for metadata-fallback relations", () => {
+		const navigate = vi.fn();
+		const objectDef = buildLeadObjectDef();
+
+		navigateToAdminRelation({
+			navigate,
+			objectDefs: [objectDef],
+			presentation: "sheet",
+			target: {
+				objectDefId: String(objectDef._id),
+				recordId: "lead_1",
+				recordKind: "record",
+			},
+		});
+
+		expect(navigate).toHaveBeenCalledWith({
+			params: {
+				entitytype: "lead",
+				recordid: "lead_1",
+			},
+			search: EMPTY_ADMIN_DETAIL_SEARCH,
+			to: "/admin/$entitytype/$recordid",
 		});
 	});
 });

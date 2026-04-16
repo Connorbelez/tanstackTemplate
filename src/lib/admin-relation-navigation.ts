@@ -1,4 +1,4 @@
-import { getAdminEntityForObjectDef } from "#/components/admin/shell/entity-registry";
+import { resolveAdminEntityTypeForObjectDef } from "#/components/admin/shell/entity-registry";
 import type { SidebarRecordRef } from "#/components/admin/shell/RecordSidebarProvider";
 import { EMPTY_ADMIN_DETAIL_SEARCH } from "#/lib/admin-detail-search";
 import {
@@ -46,7 +46,7 @@ export function resolveAdminRelationReference(args: {
 		(candidate) => String(candidate._id) === args.target.objectDefId
 	);
 	const entityType = objectDef
-		? getAdminEntityForObjectDef(objectDef)?.entityType
+		? resolveAdminEntityTypeForObjectDef(objectDef)
 		: undefined;
 
 	return {
