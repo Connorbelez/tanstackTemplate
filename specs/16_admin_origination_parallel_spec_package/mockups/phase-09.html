@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1">
+		<title>Phase 09 — Archive &amp; broker mockups</title>
+		<link rel="stylesheet" href="styles.css">
+	</head>
+	<body>
+		<div class="mock-doc">
+			<h1>Phase 09 — Signed archive &amp; broker visibility</h1>
+			<p class="lede">
+				Final deal documents stack with archived artifacts; blocked legacy
+				mortgage-backed listing entry.
+			</p>
+
+			<article class="mock-screen" id="deal-final">
+				<header class="meta">
+					<strong>Deal — Final document stack</strong
+					><span class="route">/admin/deals/:dealId</span>
+				</header>
+				<div class="dash">
+					<nav class="dash-nav" aria-label="Application">
+						<div class="dash-brand">FairLend</div>
+						<a href="#">Admin</a>
+						<a href="#">Mortgages</a>
+						<a href="#">Originations</a>
+						<a href="#">Listings</a>
+						<a href="#" class="is-active">Deals</a>
+					</nav>
+					<div class="dash-main">
+						<div class="workspace-header">
+							<div class="breadcrumbs">
+								Admin <span class="sep">/</span> Deals
+								<span class="sep">/</span>
+								D-8801
+							</div>
+							<div class="title-row">
+								<h2>Deal D-8801</h2>
+								<div class="chips">
+									<span class="chip neutral">Locked</span>
+									<span class="chip success">All parties signed</span>
+								</div>
+							</div>
+						</div>
+						<div class="workspace-body">
+							<div class="card">
+								<div class="card-h">Package overview</div>
+								<div class="card-b">
+									<p class="subtitle" style="margin: 0">
+										Package <span class="chip success">ready</span> · Signing
+										<span class="chip success">complete</span>
+									</p>
+								</div>
+							</div>
+							<div class="card">
+								<div class="card-h">Signable documents</div>
+								<div class="card-b">
+									<p class="subtitle" style="margin: 0">
+										Investor direction ·
+										<span class="chip success">Signed</span>
+									</p>
+								</div>
+							</div>
+							<div class="card">
+								<div class="card-h">Archived signed artifacts</div>
+								<div class="card-b" style="padding: 0">
+									<div class="table-wrap" style="border: 0">
+										<table class="data">
+											<thead>
+												<tr>
+													<th>Artifact</th>
+													<th>Type</th>
+													<th></th>
+												</tr>
+											</thead>
+											<tbody>
+												<tr>
+													<td>Final signed investor direction</td>
+													<td>PDF</td>
+													<td>
+														<button
+															type="button"
+															class="btn btn-primary"
+															style="height: 30px"
+														>
+															Open
+														</button>
+													</td>
+												</tr>
+												<tr>
+													<td>Completion certificate</td>
+													<td>Optional</td>
+													<td>
+														<button
+															type="button"
+															class="btn"
+															style="height: 30px"
+														>
+															Open
+														</button>
+													</td>
+												</tr>
+											</tbody>
+										</table>
+									</div>
+								</div>
+							</div>
+						</div>
+					</div>
+				</div>
+			</article>
+
+			<article class="mock-screen" id="legacy-blocked">
+				<header class="meta">
+					<strong>Legacy entrypoint blocked</strong
+					><span class="route">Deprecated create path</span>
+				</header>
+				<div class="dash">
+					<nav class="dash-nav" aria-label="Application">
+						<div class="dash-brand">FairLend</div>
+						<a href="#">Admin</a>
+						<a href="#">Mortgages</a>
+						<a href="#">Originations</a>
+						<a href="#" class="is-active">Listings</a>
+						<a href="#">Deals</a>
+					</nav>
+					<div class="dash-main">
+						<div class="workspace-body" style="padding-top: 48px">
+							<div class="banner warn" style="max-width: 640px">
+								<strong
+									>Mortgage-backed listings use Admin → Originations.</strong
+								>
+								This route is not the production entrypoint. Use the origination
+								workflow so mortgage, listing, payments, and documents stay
+								canonical.
+							</div>
+							<div style="margin-top: 20px">
+								<button type="button" class="btn btn-primary">
+									Go to originations
+								</button>
+							</div>
+						</div>
+					</div>
+				</div>
+			</article>
+		</div>
+	</body>
+</html>

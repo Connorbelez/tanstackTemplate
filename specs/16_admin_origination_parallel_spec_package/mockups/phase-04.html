@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1">
+		<title>Phase 04 — Payment bootstrap mockups</title>
+		<link rel="stylesheet" href="styles.css">
+	</head>
+	<body>
+		<div class="mock-doc">
+			<h1>Phase 04 — Payment setup (bootstrap)</h1>
+			<p class="lede">
+				Mortgage detail: app-owned execution summary, schedule warning,
+				obligations and plan entry tables.
+			</p>
+
+			<article class="mock-screen" id="payment-setup">
+				<header class="meta">
+					<strong>Payment setup</strong
+					><span class="route">Mortgage M-2031</span>
+				</header>
+				<div class="dash">
+					<nav class="dash-nav" aria-label="Application">
+						<div class="dash-brand">FairLend</div>
+						<a href="#">Admin</a>
+						<a href="#" class="is-active">Mortgages</a>
+						<a href="#">Originations</a>
+						<a href="#">Listings</a>
+						<a href="#">Deals</a>
+					</nav>
+					<div class="dash-main">
+						<div class="workspace-header">
+							<div class="breadcrumbs">
+								Admin <span class="sep">/</span> Mortgages
+								<span class="sep">/</span>
+								M-2031
+							</div>
+							<div class="title-row">
+								<h2>Mortgage M-2031</h2>
+							</div>
+						</div>
+						<div class="workspace-body">
+							<div class="card">
+								<div class="card-h">Payment setup</div>
+								<div class="card-b">
+									<div class="chips" style="margin-bottom: 12px">
+										<span class="chip neutral">Execution: App-owned</span>
+										<span class="chip neutral">Obligations: 25</span>
+										<span class="chip neutral">Plan entries: 25</span>
+										<span class="chip warn">Schedule rule: missing</span>
+									</div>
+									<p class="subtitle" style="margin: 0">
+										Bootstrap used defaults. Provider activation is out of scope
+										for this phase.
+									</p>
+								</div>
+							</div>
+							<div class="banner warn">
+								<strong>Operational warning.</strong>
+								No active schedule rule was found. Bootstrap used existing
+								default scheduling config.
+							</div>
+							<div class="card">
+								<div class="card-h">Obligations</div>
+								<div class="card-b" style="padding: 0">
+									<div class="table-wrap" style="border: 0; border-radius: 0">
+										<table class="data">
+											<thead>
+												<tr>
+													<th>#</th>
+													<th>Due</th>
+													<th>Type</th>
+													<th>Amount</th>
+													<th>Status</th>
+												</tr>
+											</thead>
+											<tbody>
+												<tr>
+													<td>1</td>
+													<td>2026-06-01</td>
+													<td>regular_interest</td>
+													<td>8,500</td>
+													<td><span class="chip neutral">planned</span></td>
+												</tr>
+												<tr>
+													<td>25</td>
+													<td>2027-05-01</td>
+													<td>principal_repayment</td>
+													<td>850,000</td>
+													<td><span class="chip neutral">planned</span></td>
+												</tr>
+											</tbody>
+										</table>
+									</div>
+								</div>
+							</div>
+							<div class="card">
+								<div class="card-h">Collection plan entries</div>
+								<div class="card-b" style="padding: 0">
+									<div class="table-wrap" style="border: 0; border-radius: 0">
+										<table class="data">
+											<thead>
+												<tr>
+													<th>Date</th>
+													<th>Amount</th>
+													<th>Mode</th>
+													<th>Status</th>
+													<th>Provider</th>
+												</tr>
+											</thead>
+											<tbody>
+												<tr>
+													<td>2026-06-01</td>
+													<td>8500</td>
+													<td>app_owned</td>
+													<td><span class="chip neutral">planned</span></td>
+													<td>—</td>
+												</tr>
+											</tbody>
+										</table>
+									</div>
+								</div>
+							</div>
+						</div>
+					</div>
+				</div>
+			</article>
+		</div>
+	</body>
+</html>

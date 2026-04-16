@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1">
+		<title>Phase 07 — Deal package mockups</title>
+		<link rel="stylesheet" href="styles.css">
+	</head>
+	<body>
+		<div class="mock-doc">
+			<h1>Phase 07 — Deal document package</h1>
+			<p class="lede">
+				Deal page documents area: package overview, private static, generated
+				read-only, signable placeholder.
+			</p>
+
+			<article class="mock-screen" id="deal-documents">
+				<header class="meta">
+					<strong>Deal — Documents</strong
+					><span class="route">/admin/deals/:dealId</span>
+				</header>
+				<div class="dash">
+					<nav class="dash-nav" aria-label="Application">
+						<div class="dash-brand">FairLend</div>
+						<a href="#">Admin</a>
+						<a href="#">Mortgages</a>
+						<a href="#">Originations</a>
+						<a href="#">Listings</a>
+						<a href="#" class="is-active">Deals</a>
+					</nav>
+					<div class="dash-main">
+						<div class="workspace-header">
+							<div class="breadcrumbs">
+								Admin <span class="sep">/</span> Deals
+								<span class="sep">/</span>
+								D-8801
+							</div>
+							<div class="title-row">
+								<h2>Deal D-8801</h2>
+								<div class="chips">
+									<span class="chip neutral">Locked</span>
+									<span class="chip success">Package ready</span>
+								</div>
+							</div>
+							<p class="subtitle">12 King St opportunity</p>
+						</div>
+						<div class="workspace-body">
+							<div class="card">
+								<div class="card-h">Package overview</div>
+								<div class="card-b">
+									<div class="chips">
+										<span class="chip success">ready</span>
+										<span class="chip neutral">Created 2026-04-15 14:02</span>
+										<span class="chip neutral">Retries: 0</span>
+									</div>
+								</div>
+							</div>
+							<div class="card">
+								<div class="card-h">Private static documents</div>
+								<div class="card-b" style="padding: 0">
+									<div class="table-wrap" style="border: 0">
+										<table class="data">
+											<thead>
+												<tr>
+													<th>Name</th>
+													<th>Source</th>
+													<th>Status</th>
+													<th></th>
+												</tr>
+											</thead>
+											<tbody>
+												<tr>
+													<td>Appraisal PDF</td>
+													<td>blueprint</td>
+													<td><span class="chip success">available</span></td>
+													<td>
+														<button
+															type="button"
+															class="btn btn-ghost"
+															style="height: 30px"
+														>
+															View
+														</button>
+													</td>
+												</tr>
+											</tbody>
+										</table>
+									</div>
+								</div>
+							</div>
+							<div class="card">
+								<div class="card-h">Generated read-only</div>
+								<div class="card-b">
+									<p class="subtitle" style="margin: 0">
+										Commitment letter · template <strong>v12</strong> ·
+										<span class="chip success">available</span>
+										· View
+									</p>
+								</div>
+							</div>
+							<div class="card">
+								<div class="card-h">Signable docs (reserved)</div>
+								<div class="card-b">
+									<p class="subtitle" style="margin: 0">
+										Runtime arrives in phase 8.
+									</p>
+								</div>
+							</div>
+						</div>
+					</div>
+				</div>
+			</article>
+
+			<article class="mock-screen" id="package-issue">
+				<header class="meta">
+					<strong>Package issue</strong
+					><span class="route">partial_failure banner</span>
+				</header>
+				<div
+					style="background: var(--bg-workspace); padding: 28px; border-radius: 0 0 16px 16px"
+				>
+					<div class="banner warn" style="max-width: 720px">
+						<strong>Package status: partial_failure.</strong>
+						1 of 5 documents failed; successful documents remain available.<br>
+						Last error: unsupported variable key
+						<code>closing_lawyer_phone</code>
+						<div style="margin-top: 14px; text-align: right">
+							<button type="button" class="btn btn-primary">
+								Retry generation
+							</button>
+						</div>
+					</div>
+				</div>
+			</article>
+		</div>
+	</body>
+</html>

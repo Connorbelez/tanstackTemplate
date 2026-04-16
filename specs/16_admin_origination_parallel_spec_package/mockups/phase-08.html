@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1">
+		<title>Phase 08 — Signable docs mockups</title>
+		<link rel="stylesheet" href="styles.css">
+	</head>
+	<body>
+		<div class="mock-doc">
+			<h1>Phase 08 — Signable documents (Documenso)</h1>
+			<p class="lede">
+				Signable list, embedded signing surface, envelope inspection drawer.
+			</p>
+
+			<article class="mock-screen" id="signable-list">
+				<header class="meta">
+					<strong>Signable documents</strong
+					><span class="route">Deal or case surface</span>
+				</header>
+				<div
+					style="background: var(--bg-workspace); padding: 28px; border-radius: 0 0 16px 16px"
+				>
+					<div class="table-wrap">
+						<table class="data">
+							<thead>
+								<tr>
+									<th>Name</th>
+									<th>Status</th>
+									<th>Recipients</th>
+									<th>Action</th>
+								</tr>
+							</thead>
+							<tbody>
+								<tr>
+									<td>Investor direction</td>
+									<td><span class="chip warn">Signature sent</span></td>
+									<td>Jane · waiting · Lender · complete</td>
+									<td>
+										<button
+											type="button"
+											class="btn btn-primary"
+											style="height: 32px"
+										>
+											Start
+										</button>
+									</td>
+								</tr>
+								<tr>
+									<td>Lawyer undertaking</td>
+									<td><span class="chip warn">Partially signed</span></td>
+									<td>Lawyer · waiting · Borrower · complete</td>
+									<td>
+										<button type="button" class="btn" style="height: 32px">
+											View
+										</button>
+									</td>
+								</tr>
+							</tbody>
+						</table>
+					</div>
+				</div>
+			</article>
+
+			<article class="mock-screen" id="embedded-signing">
+				<header class="meta">
+					<strong>Embedded signing</strong
+					><span class="route">Modal / sheet</span>
+				</header>
+				<div class="dash">
+					<nav class="dash-nav" aria-label="Application">
+						<div class="dash-brand">FairLend</div>
+						<a href="#">Admin</a>
+						<a href="#">Mortgages</a>
+						<a href="#">Deals</a>
+					</nav>
+					<div class="dash-main" style="position: relative">
+						<div class="overlay" style="min-height: 520px">
+							<div class="modal">
+								<div class="modal-h">Investor direction</div>
+								<div class="modal-b">
+									<p class="subtitle" style="margin: 0 0 12px">
+										Signing as <strong>Jane Doe</strong> · jane@example.com
+									</p>
+									<div class="frame-placeholder">
+										Embedded signing frame / provider session
+									</div>
+									<p
+										class="subtitle"
+										style="margin-top: 12px; margin-bottom: 0"
+									>
+										Status may lag a few seconds after completion.
+									</p>
+								</div>
+								<div class="modal-f">
+									<button type="button" class="btn">Close</button>
+									<button type="button" class="btn btn-primary">
+										Refresh status
+									</button>
+								</div>
+							</div>
+						</div>
+					</div>
+				</div>
+			</article>
+
+			<article class="mock-screen" id="envelope">
+				<header class="meta">
+					<strong>Envelope details</strong
+					><span class="route">Drawer / secondary modal</span>
+				</header>
+				<div
+					style="background: var(--bg-workspace); padding: 28px; border-radius: 0 0 16px 16px; display: flex; justify-content: flex-end"
+				>
+					<div
+						class="card"
+						style="width: min(400px, 100%); box-shadow: 0 16px 48px rgb(0 0 0 / 0.12)"
+					>
+						<div class="card-h">Envelope · Investor direction</div>
+						<div class="card-b">
+							<p class="subtitle" style="margin: 0 0 8px">
+								<strong>Status</strong>
+								signature_sent · <strong>Provider</strong> documenso
+							</p>
+							<p class="subtitle" style="margin: 0 0 12px">
+								<strong>Last sync</strong>
+								2026-04-15 16:11
+							</p>
+							<p class="subtitle" style="margin: 0 0 6px">
+								<strong>Recipients</strong>
+							</p>
+							<ul class="checklist">
+								<li style="border: 0; padding: 4px 0">Jane Doe — waiting</li>
+								<li style="border: 0; padding: 4px 0">Ops lender — signed</li>
+							</ul>
+							<p class="subtitle" style="margin: 12px 0 0">
+								<strong>Last error</strong>
+								—
+							</p>
+						</div>
+						<div
+							class="card-b"
+							style="border-top: 1px solid var(--border); display: flex; gap: 8px; justify-content: flex-end"
+						>
+							<button type="button" class="btn">Retry sync</button>
+							<button type="button" class="btn btn-primary">
+								Resend invite
+							</button>
+						</div>
+					</div>
+				</div>
+			</article>
+		</div>
+	</body>
+</html>

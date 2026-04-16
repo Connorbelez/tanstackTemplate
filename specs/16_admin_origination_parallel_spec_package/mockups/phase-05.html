@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1">
+		<title>Phase 05 — Rotessa activation mockups</title>
+		<link rel="stylesheet" href="styles.css">
+	</head>
+	<body>
+		<div class="mock-doc">
+			<h1>Phase 05 — Collections &amp; provider activation</h1>
+			<p class="lede">
+				Origination collections step: explicit mode cards, preflight checklist,
+				mortgage detail activation strip.
+			</p>
+
+			<article class="mock-screen" id="collections-modes">
+				<header class="meta">
+					<strong>Collections mode</strong
+					><span class="route">Origination case — Collections step</span>
+				</header>
+				<div
+					style="background: var(--bg-workspace); padding: 28px; border-radius: 0 0 16px 16px"
+				>
+					<h3 style="margin: 0 0 16px; font-size: 15px">
+						Choose how collections should start after commit
+					</h3>
+					<div class="radio-row">
+						<div class="radio-card">
+							<strong>No collection setup</strong>
+							<p>No recurring activation. Manual servicing only.</p>
+						</div>
+						<div class="radio-card is-selected">
+							<strong>Manual / app-owned</strong>
+							<p>
+								Bootstrap obligations and plan entries; execution stays in-app.
+							</p>
+						</div>
+						<div class="radio-card">
+							<strong>Provider-managed now</strong>
+							<p>Attempt Rotessa setup after canonical commit completes.</p>
+						</div>
+					</div>
+					<p class="subtitle" style="margin-top: 20px; margin-bottom: 0">
+						Provider: <code>pad_rotessa</code> · v1: selected bank account must
+						belong to primary borrower.
+					</p>
+				</div>
+			</article>
+
+			<article class="mock-screen" id="preflight">
+				<header class="meta">
+					<strong>Provider-managed preflight</strong
+					><span class="route">Conditional checklist</span>
+				</header>
+				<div
+					style="background: var(--bg-workspace); padding: 28px; border-radius: 0 0 16px 16px"
+				>
+					<div class="card" style="max-width: 560px">
+						<div class="card-h">Selected account</div>
+						<div class="card-b">
+							<p style="margin: 0 0 12px; font-weight: 600">
+								TD ····1842 — Jane Doe
+							</p>
+							<ul class="checklist">
+								<li><span class="check">✓</span> Primary borrower ownership</li>
+								<li><span class="check">✓</span> Validated account</li>
+								<li><span class="check">✓</span> Active PAD mandate</li>
+								<li><span class="check">✓</span> Rotessa metadata present</li>
+								<li><span class="check">✓</span> Supported cadence: monthly</li>
+								<li style="color: var(--text-muted)">
+									• Uniform installment amounts confirmed after canonical
+									bootstrap
+								</li>
+							</ul>
+						</div>
+					</div>
+				</div>
+			</article>
+
+			<article class="mock-screen" id="activation">
+				<header class="meta">
+					<strong>Payment setup / activation</strong
+					><span class="route">Mortgage detail extension</span>
+				</header>
+				<div class="dash">
+					<nav class="dash-nav" aria-label="Application">
+						<div class="dash-brand">FairLend</div>
+						<a href="#">Admin</a>
+						<a href="#" class="is-active">Mortgages</a>
+						<a href="#">Originations</a>
+						<a href="#">Listings</a>
+						<a href="#">Deals</a>
+					</nav>
+					<div class="dash-main">
+						<div class="workspace-header">
+							<div class="breadcrumbs">
+								Admin <span class="sep">/</span> Mortgages
+								<span class="sep">/</span>
+								M-2031
+							</div>
+							<div class="title-row">
+								<h2>Mortgage M-2031</h2>
+								<div class="chips">
+									<span class="chip success">Active</span>
+								</div>
+							</div>
+						</div>
+						<div class="workspace-body">
+							<div class="card">
+								<div class="card-h">Activation</div>
+								<div class="card-b">
+									<div class="chips">
+										<span class="chip neutral">Provider-managed</span>
+										<span class="chip neutral">pad_rotessa</span>
+										<span class="chip success">Activation: Active</span>
+										<span class="chip neutral">Schedule sch_123</span>
+									</div>
+									<p
+										class="subtitle"
+										style="margin-top: 14px; margin-bottom: 0"
+									>
+										Alternate state: failed banner with <code>lastError</code>,
+										mortgage remains valid,
+										<strong>Retry activation</strong>
+										CTA.
+									</p>
+								</div>
+							</div>
+						</div>
+					</div>
+				</div>
+			</article>
+		</div>
+	</body>
+</html>

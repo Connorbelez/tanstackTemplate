@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1">
+		<title>Phase 03 — Listing projection mockups</title>
+		<link rel="stylesheet" href="styles.css">
+	</head>
+	<body>
+		<div class="mock-doc">
+			<h1>Phase 03 — Mortgage-backed listing projection</h1>
+			<p class="lede">
+				Linked listing card on mortgage detail, listing detail with read-only vs
+				curated split, blocked legacy path.
+			</p>
+
+			<article class="mock-screen" id="linked-listing-card">
+				<header class="meta">
+					<strong>Linked listing (mortgage detail)</strong
+					><span class="route">Card on mortgage</span>
+				</header>
+				<div
+					style="background: var(--bg-workspace); padding: 28px; border-radius: 0 0 16px 16px"
+				>
+					<div class="card" style="max-width: 640px">
+						<div class="card-h">Linked listing</div>
+						<div class="card-b">
+							<p style="margin: 0 0 8px; font-weight: 600">
+								12 King St opportunity
+							</p>
+							<div class="chips">
+								<span class="chip warn">Draft</span>
+								<span class="chip neutral">Mortgage-backed projection</span>
+							</div>
+							<p class="subtitle" style="margin-top: 12px">
+								Economics and property facts are projection-owned. Curated
+								marketing fields stay editable on listing detail.
+							</p>
+							<div style="margin-top: 16px; text-align: right">
+								<button type="button" class="btn btn-primary">
+									Open listing
+								</button>
+							</div>
+						</div>
+					</div>
+				</div>
+			</article>
+
+			<article class="mock-screen" id="listing-detail">
+				<header class="meta">
+					<strong>Listing detail (admin)</strong
+					><span class="route">GET /admin/listings/:id</span>
+				</header>
+				<div class="dash">
+					<nav class="dash-nav" aria-label="Application">
+						<div class="dash-brand">FairLend</div>
+						<a href="#">Admin</a>
+						<a href="#">Mortgages</a>
+						<a href="#">Originations</a>
+						<a href="#" class="is-active">Listings</a>
+						<a href="#">Deals</a>
+					</nav>
+					<div class="dash-main">
+						<div class="workspace-header">
+							<div class="breadcrumbs">
+								Admin <span class="sep">/</span> Listings
+								<span class="sep">/</span>
+								12 King St opportunity
+							</div>
+							<div class="title-row">
+								<h2>12 King St opportunity</h2>
+								<button type="button" class="btn">Refresh projection</button>
+							</div>
+							<div class="chips" style="margin-top: 10px">
+								<span class="chip warn">Draft</span>
+								<span class="chip neutral">Mortgage-backed projection</span>
+							</div>
+							<p class="subtitle">Linked mortgage <strong>M-2031</strong></p>
+						</div>
+						<div class="workspace-body">
+							<div class="banner info">
+								Projection fields are read-only. Curated marketplace fields
+								remain editable on the right.
+							</div>
+							<div class="split">
+								<div>
+									<div class="card" style="margin-bottom: 14px">
+										<div class="card-h">Economics</div>
+										<div class="card-b">
+											<p class="subtitle" style="margin: 0">
+												Principal <strong>$850,000</strong> · Payment
+												<strong>$8,500 / monthly</strong>
+												· Rate
+												<strong>11.5% fixed</strong>
+												· LTV <strong>62%</strong>
+											</p>
+										</div>
+									</div>
+									<div class="card" style="margin-bottom: 14px">
+										<div class="card-h">Property facts</div>
+										<div class="card-b">
+											<p class="subtitle" style="margin: 0">
+												12 King St, Toronto · residential · lat/long redacted
+											</p>
+										</div>
+									</div>
+									<div class="card" style="margin-bottom: 14px">
+										<div class="card-h">Appraisal summary</div>
+										<div class="card-b">
+											<p class="subtitle" style="margin: 0">
+												$1,370,000 as-is · 2026-04-10
+											</p>
+										</div>
+									</div>
+									<div class="card">
+										<div class="card-h">Public documents</div>
+										<div class="card-b">
+											<p class="subtitle" style="margin: 0">
+												0 documents in compatibility cache (read-only)
+											</p>
+										</div>
+									</div>
+								</div>
+								<div class="card">
+									<div class="card-h">Curated</div>
+									<div class="card-b">
+										<p class="subtitle" style="margin: 0 0 10px">
+											Title, description, hero images, SEO slug, publish
+											controls.
+										</p>
+										<button
+											type="button"
+											class="btn btn-primary"
+											style="width: 100%"
+										>
+											Save curated fields
+										</button>
+									</div>
+								</div>
+							</div>
+						</div>
+					</div>
+				</div>
+			</article>
+
+			<article class="mock-screen" id="blocked-legacy">
+				<header class="meta">
+					<strong>Blocked legacy path</strong
+					><span class="route">Legacy create listing</span>
+				</header>
+				<div class="dash">
+					<nav class="dash-nav" aria-label="Application">
+						<div class="dash-brand">FairLend</div>
+						<a href="#">Admin</a>
+						<a href="#">Mortgages</a>
+						<a href="#">Originations</a>
+						<a href="#" class="is-active">Listings</a>
+						<a href="#">Deals</a>
+					</nav>
+					<div class="dash-main">
+						<div class="workspace-body" style="padding-top: 48px">
+							<div class="banner warn" style="max-width: 640px">
+								<strong>Mortgage-backed listings are not created here.</strong>
+								Use Admin → Originations for the canonical path. Non-mortgage
+								flows may still exist elsewhere.
+							</div>
+							<div style="margin-top: 20px">
+								<button type="button" class="btn btn-primary">
+									Go to originations
+								</button>
+							</div>
+						</div>
+					</div>
+				</div>
+			</article>
+		</div>
+	</body>
+</html>

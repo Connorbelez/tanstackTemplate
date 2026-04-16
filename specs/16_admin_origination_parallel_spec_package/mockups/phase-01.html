@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1">
+		<title>Phase 01 — Origination scaffold mockups</title>
+		<link rel="stylesheet" href="styles.css">
+	</head>
+	<body>
+		<div class="mock-doc">
+			<h1>Phase 01 — Origination case scaffold</h1>
+			<p class="lede">
+				Dashboard shell with narrow app navigation and wide workspace. Inner
+				step rail is subordinate to the global sidebar.
+			</p>
+
+			<!-- Index -->
+			<article class="mock-screen" id="originations-index">
+				<header class="meta">
+					<strong>Origination index</strong
+					><span class="route">GET /admin/originations</span>
+				</header>
+				<div class="dash">
+					<nav class="dash-nav" aria-label="Application">
+						<div class="dash-brand">FairLend</div>
+						<a href="#">Admin</a>
+						<a href="#">Mortgages</a>
+						<a href="#" class="is-active">Originations</a>
+						<a href="#">Listings</a>
+						<a href="#">Deals</a>
+					</nav>
+					<div class="dash-main">
+						<div class="workspace-header">
+							<div class="breadcrumbs">
+								Admin <span class="sep">/</span> Originations
+							</div>
+							<div class="title-row">
+								<h2>Origination cases</h2>
+								<button type="button" class="btn btn-primary">
+									New origination
+								</button>
+							</div>
+							<p class="subtitle">
+								Draft mortgage-originations staged in backoffice before commit.
+							</p>
+							<div class="toolbar">
+								<button type="button" class="btn">Search</button>
+								<button type="button" class="btn">Status ▾</button>
+								<button type="button" class="btn">Updated ▾</button>
+							</div>
+						</div>
+						<div class="workspace-body">
+							<div class="table-wrap">
+								<table class="data">
+									<thead>
+										<tr>
+											<th>Case</th>
+											<th>Borrower</th>
+											<th>Property</th>
+											<th>Step</th>
+											<th>Updated</th>
+											<th></th>
+										</tr>
+									</thead>
+									<tbody>
+										<tr>
+											<td>ORG-1042</td>
+											<td>Jane Doe</td>
+											<td>12 King St</td>
+											<td>Terms</td>
+											<td>2m ago</td>
+											<td>
+												<button
+													type="button"
+													class="btn btn-ghost"
+													style="height: 32px"
+												>
+													Resume
+												</button>
+											</td>
+										</tr>
+										<tr>
+											<td>ORG-1041</td>
+											<td>—</td>
+											<td>9 Elm Ave</td>
+											<td>Docs</td>
+											<td>6m ago</td>
+											<td>
+												<button
+													type="button"
+													class="btn btn-ghost"
+													style="height: 32px"
+												>
+													Resume
+												</button>
+											</td>
+										</tr>
+										<tr>
+											<td>ORG-1038</td>
+											<td>Alex Li</td>
+											<td>—</td>
+											<td>Review</td>
+											<td>1h ago</td>
+											<td>
+												<button
+													type="button"
+													class="btn btn-ghost"
+													style="height: 32px"
+												>
+													Resume
+												</button>
+											</td>
+										</tr>
+									</tbody>
+								</table>
+							</div>
+						</div>
+					</div>
+				</div>
+			</article>
+
+			<!-- Bootstrap -->
+			<article class="mock-screen" id="originations-new">
+				<header class="meta">
+					<strong>New origination bootstrap</strong
+					><span class="route">GET /admin/originations/new</span>
+				</header>
+				<div class="dash">
+					<nav class="dash-nav" aria-label="Application">
+						<div class="dash-brand">FairLend</div>
+						<a href="#">Admin</a>
+						<a href="#">Mortgages</a>
+						<a href="#" class="is-active">Originations</a>
+						<a href="#">Listings</a>
+						<a href="#">Deals</a>
+					</nav>
+					<div class="dash-main">
+						<div class="workspace-header">
+							<div class="breadcrumbs">
+								Admin <span class="sep">/</span> Originations
+								<span class="sep">/</span>
+								New
+							</div>
+							<div class="title-row">
+								<h2>New origination</h2>
+							</div>
+						</div>
+						<div
+							class="workspace-body"
+							style="align-items: center; justify-content: center"
+						>
+							<div class="card" style="max-width: 400px; width: 100%">
+								<div class="card-b" style="text-align: center">
+									<p style="margin: 0 0 12px; font-weight: 600">
+										Creating case…
+									</p>
+									<p class="subtitle" style="margin: 0">
+										Allocating a durable case id, then redirecting to the
+										workspace.
+									</p>
+									<div
+										style="margin-top: 20px; height: 4px; background: #f4f4f5; border-radius: 999px; overflow: hidden"
+									>
+										<div
+											style="width: 42%; height: 100%; background: #18181b"
+										></div>
+									</div>
+								</div>
+							</div>
+						</div>
+					</div>
+				</div>
+			</article>
+
+			<!-- Case workspace -->
+			<article class="mock-screen" id="origination-case">
+				<header class="meta">
+					<strong>Origination workspace</strong
+					><span class="route">GET /admin/originations/:caseId</span>
+				</header>
+				<div class="dash">
+					<nav class="dash-nav" aria-label="Application">
+						<div class="dash-brand">FairLend</div>
+						<a href="#">Admin</a>
+						<a href="#">Mortgages</a>
+						<a href="#" class="is-active">Originations</a>
+						<a href="#">Listings</a>
+						<a href="#">Deals</a>
+					</nav>
+					<div class="dash-main">
+						<div class="workspace-header">
+							<div class="breadcrumbs">
+								Admin <span class="sep">/</span> Originations
+								<span class="sep">/</span>
+								Case ORG-1042
+							</div>
+							<div class="title-row">
+								<h2>Origination case ORG-1042</h2>
+								<div class="chips">
+									<span class="chip warn">Draft</span>
+									<span class="chip success">Saved</span>
+									<span class="chip neutral">Updated 2m ago</span>
+								</div>
+							</div>
+						</div>
+						<div class="workspace-body">
+							<div class="case-layout">
+								<div
+									class="step-rail"
+									role="navigation"
+									aria-label="Workflow steps"
+								>
+									<div class="step is-done">
+										<span class="dot"></span>
+										<span>Participants</span>
+										<span class="state">complete</span>
+									</div>
+									<div class="step is-current">
+										<span class="dot"></span>
+										<span>Property + valuation</span>
+										<span class="state">current</span>
+									</div>
+									<div class="step">
+										<span class="dot"></span>
+										<span>Mortgage terms</span>
+										<span class="state">not started</span>
+									</div>
+									<div class="step">
+										<span class="dot"></span>
+										<span>Collections</span>
+										<span class="state">not started</span>
+									</div>
+									<div class="step">
+										<span class="dot"></span>
+										<span>Documents</span>
+										<span class="state">shell only</span>
+									</div>
+									<div class="step">
+										<span class="dot"></span>
+										<span>Listing curation</span>
+										<span class="state">not started</span>
+									</div>
+									<div class="step">
+										<span class="dot"></span>
+										<span>Review + commit</span>
+										<span class="state">disabled</span>
+									</div>
+								</div>
+								<div>
+									<div class="case-content">
+										Step content: forms, cards, and validation for the active
+										step render here.
+									</div>
+									<div class="footer-actions">
+										<button type="button" class="btn">Back</button>
+										<button type="button" class="btn btn-primary">
+											Next step
+										</button>
+									</div>
+								</div>
+							</div>
+						</div>
+					</div>
+				</div>
+			</article>
+		</div>
+	</body>
+</html>

@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1">
+		<title>Phase 06 — Document blueprints mockups</title>
+		<link rel="stylesheet" href="styles.css">
+	</head>
+	<body>
+		<div class="mock-doc">
+			<h1>Phase 06 — Mortgage document blueprints</h1>
+			<p class="lede">
+				Origination documents step (four sections) and mortgage detail documents
+				hub.
+			</p>
+
+			<article class="mock-screen" id="origination-documents">
+				<header class="meta">
+					<strong>Origination — Documents step</strong
+					><span class="route">/admin/originations/:caseId</span>
+				</header>
+				<div class="dash">
+					<nav class="dash-nav" aria-label="Application">
+						<div class="dash-brand">FairLend</div>
+						<a href="#">Admin</a>
+						<a href="#">Mortgages</a>
+						<a href="#" class="is-active">Originations</a>
+						<a href="#">Listings</a>
+						<a href="#">Deals</a>
+					</nav>
+					<div class="dash-main">
+						<div class="workspace-header">
+							<div class="breadcrumbs">
+								Admin <span class="sep">/</span> Originations
+								<span class="sep">/</span>
+								Case ORG-1042
+								<span class="sep">/</span>
+								Documents
+							</div>
+							<div class="title-row">
+								<h2>Documents</h2>
+							</div>
+						</div>
+						<div class="workspace-body">
+							<div class="card" style="margin-bottom: 12px">
+								<div class="card-h">Public static docs</div>
+								<div class="card-b">
+									<p class="subtitle" style="margin: 0 0 12px">
+										Immutable PDFs on the listing.
+									</p>
+									<button type="button" class="btn btn-primary">
+										Upload PDF
+									</button>
+								</div>
+							</div>
+							<div class="card" style="margin-bottom: 12px">
+								<div class="card-h">Private static docs</div>
+								<div class="card-b">
+									<p class="subtitle" style="margin: 0 0 12px">
+										Materialize on deal lock.
+									</p>
+									<button type="button" class="btn">Upload</button>
+								</div>
+							</div>
+							<div class="card" style="margin-bottom: 12px">
+								<div class="card-h">Private templated non-signable</div>
+								<div class="card-b">
+									<button type="button" class="btn btn-primary">
+										Attach template
+									</button>
+								</div>
+							</div>
+							<div class="card">
+								<div class="card-h">Private templated signable</div>
+								<div class="card-b">
+									<button type="button" class="btn btn-primary">
+										Attach template
+									</button>
+								</div>
+							</div>
+						</div>
+					</div>
+				</div>
+			</article>
+
+			<article class="mock-screen" id="mortgage-documents">
+				<header class="meta">
+					<strong>Mortgage documents tab</strong
+					><span class="route">/admin/mortgages/:id/documents</span>
+				</header>
+				<div class="dash">
+					<nav class="dash-nav" aria-label="Application">
+						<div class="dash-brand">FairLend</div>
+						<a href="#">Admin</a>
+						<a href="#" class="is-active">Mortgages</a>
+						<a href="#">Originations</a>
+						<a href="#">Listings</a>
+						<a href="#">Deals</a>
+					</nav>
+					<div class="dash-main">
+						<div class="workspace-header">
+							<div class="breadcrumbs">
+								Admin <span class="sep">/</span> Mortgages
+								<span class="sep">/</span>
+								M-2031
+								<span class="sep">/</span>
+								Documents
+							</div>
+							<div class="title-row">
+								<h2>Documents</h2>
+								<button type="button" class="btn btn-primary">
+									Add document
+								</button>
+							</div>
+							<p class="subtitle">
+								Active blueprints: 7 · Archived: 2 · Public on listing: 2
+							</p>
+							<div class="toolbar">
+								<button type="button" class="btn">Active</button>
+								<button type="button" class="btn">Archived</button>
+							</div>
+						</div>
+						<div class="workspace-body">
+							<div class="card">
+								<div class="card-h">Public static</div>
+								<div class="card-b" style="padding: 0">
+									<div class="table-wrap" style="border: 0">
+										<table class="data">
+											<thead>
+												<tr>
+													<th>Name</th>
+													<th>Category</th>
+													<th>Status</th>
+													<th>Actions</th>
+												</tr>
+											</thead>
+											<tbody>
+												<tr>
+													<td>Appraisal summary</td>
+													<td>appraisal</td>
+													<td><span class="chip success">active</span></td>
+													<td>
+														<button
+															type="button"
+															class="btn btn-ghost"
+															style="height: 30px"
+														>
+															Preview
+														</button>
+													</td>
+												</tr>
+											</tbody>
+										</table>
+									</div>
+								</div>
+							</div>
+						</div>
+					</div>
+				</div>
+			</article>
+		</div>
+	</body>
+</html>

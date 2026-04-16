@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1">
+		<title>Phase 02 — Canonical activation mockups</title>
+		<link rel="stylesheet" href="styles.css">
+	</head>
+	<body>
+		<div class="mock-doc">
+			<h1>Phase 02 — Review, identity sync, mortgage detail</h1>
+			<p class="lede">
+				Commit panel, stop state, and post-commit mortgage destination in the
+				dashboard shell.
+			</p>
+
+			<article class="mock-screen" id="review-commit">
+				<header class="meta">
+					<strong>Review and commit</strong
+					><span class="route">/admin/originations/:caseId — Review</span>
+				</header>
+				<div class="dash">
+					<nav class="dash-nav" aria-label="Application">
+						<div class="dash-brand">FairLend</div>
+						<a href="#">Admin</a>
+						<a href="#">Mortgages</a>
+						<a href="#" class="is-active">Originations</a>
+						<a href="#">Listings</a>
+						<a href="#">Deals</a>
+					</nav>
+					<div class="dash-main">
+						<div class="workspace-header">
+							<div class="breadcrumbs">
+								Admin <span class="sep">/</span> Originations
+								<span class="sep">/</span>
+								Case ORG-1042
+								<span class="sep">/</span>
+								Review
+							</div>
+							<div class="title-row">
+								<h2>Review and commit</h2>
+								<button type="button" class="btn btn-primary">
+									Commit origination
+								</button>
+							</div>
+							<div class="chips" style="margin-top: 10px">
+								<span class="chip warn">Draft</span>
+								<span class="chip success">Saved</span>
+							</div>
+						</div>
+						<div class="workspace-body">
+							<div class="card">
+								<div class="card-h">Readiness checklist</div>
+								<div class="card-b">
+									<table class="data" style="box-shadow: none; border: 0">
+										<tbody>
+											<tr>
+												<td style="border: 0; font-weight: 500">
+													Participants
+												</td>
+												<td style="border: 0; text-align: right">
+													<span class="chip success">✓</span>
+												</td>
+											</tr>
+											<tr>
+												<td style="border: 0; font-weight: 500">Property</td>
+												<td style="border: 0; text-align: right">
+													<span class="chip success">✓</span>
+												</td>
+											</tr>
+											<tr>
+												<td style="border: 0; font-weight: 500">Terms</td>
+												<td style="border: 0; text-align: right">
+													<span class="chip success">✓</span>
+												</td>
+											</tr>
+											<tr>
+												<td style="border: 0; font-weight: 500">Collections</td>
+												<td style="border: 0; text-align: right">
+													<span class="chip neutral">Optional</span>
+												</td>
+											</tr>
+											<tr>
+												<td style="border: 0; font-weight: 500">Documents</td>
+												<td style="border: 0; text-align: right">
+													<span class="chip neutral">Shell</span>
+												</td>
+											</tr>
+											<tr>
+												<td style="border: 0; font-weight: 500">Listing</td>
+												<td style="border: 0; text-align: right">
+													<span class="chip success">✓</span>
+												</td>
+											</tr>
+										</tbody>
+									</table>
+								</div>
+							</div>
+							<div class="footer-actions">
+								<button type="button" class="btn">Back</button>
+								<button type="button" class="btn btn-primary">
+									Commit origination
+								</button>
+							</div>
+						</div>
+					</div>
+				</div>
+			</article>
+
+			<article class="mock-screen" id="identity-sync">
+				<header class="meta">
+					<strong>Identity sync stop</strong
+					><span class="route">Origination shell — awaiting WorkOS sync</span>
+				</header>
+				<div class="dash">
+					<nav class="dash-nav" aria-label="Application">
+						<div class="dash-brand">FairLend</div>
+						<a href="#">Admin</a>
+						<a href="#">Mortgages</a>
+						<a href="#" class="is-active">Originations</a>
+						<a href="#">Listings</a>
+						<a href="#">Deals</a>
+					</nav>
+					<div class="dash-main">
+						<div class="workspace-header">
+							<div class="breadcrumbs">
+								Admin <span class="sep">/</span> Originations
+								<span class="sep">/</span>
+								Case ORG-1042
+							</div>
+							<div class="title-row">
+								<h2>Origination case ORG-1042</h2>
+								<div class="chips">
+									<span class="chip warn">Awaiting identity sync</span>
+								</div>
+							</div>
+						</div>
+						<div class="workspace-body">
+							<div class="banner info">
+								<strong>Awaiting identity sync.</strong>
+								Invitations have been sent, but synced user rows are not present
+								yet. No canonical mortgage writes have started.
+							</div>
+							<div class="card">
+								<div class="card-h">Missing identities</div>
+								<div class="card-b">
+									<ul class="checklist" style="border: 0">
+										<li>
+											jane@example.com
+											<span
+												class="state"
+												style="margin-left: auto; color: var(--text-muted)"
+												>primary borrower</span
+											>
+										</li>
+										<li>
+											coborrower@example.com
+											<span
+												class="state"
+												style="margin-left: auto; color: var(--text-muted)"
+												>co-borrower</span
+											>
+										</li>
+									</ul>
+								</div>
+							</div>
+							<div class="footer-actions">
+								<button type="button" class="btn">Refresh status</button>
+								<button type="button" class="btn btn-primary">
+									Retry commit
+								</button>
+							</div>
+						</div>
+					</div>
+				</div>
+			</article>
+
+			<article class="mock-screen" id="mortgage-detail">
+				<header class="meta">
+					<strong>Mortgage detail</strong
+					><span class="route">GET /admin/mortgages/:id</span>
+				</header>
+				<div class="dash">
+					<nav class="dash-nav" aria-label="Application">
+						<div class="dash-brand">FairLend</div>
+						<a href="#">Admin</a>
+						<a href="#" class="is-active">Mortgages</a>
+						<a href="#">Originations</a>
+						<a href="#">Listings</a>
+						<a href="#">Deals</a>
+					</nav>
+					<div class="dash-main">
+						<div class="workspace-header">
+							<div class="breadcrumbs">
+								Admin <span class="sep">/</span> Mortgages
+								<span class="sep">/</span>
+								M-2031
+							</div>
+							<div class="title-row">
+								<h2>Mortgage M-2031</h2>
+								<div class="chips">
+									<span class="chip success">Active</span>
+									<span class="chip neutral">Originated via admin</span>
+								</div>
+							</div>
+							<p class="subtitle">
+								12 King St, Toronto · $850,000 · 11.5% · matures 2027-06-01 ·
+								Jane Doe
+							</p>
+						</div>
+						<div class="workspace-body">
+							<div class="card">
+								<div class="card-h">Summary</div>
+								<div class="card-b">
+									<p class="subtitle" style="margin: 0">
+										Principal <strong>$850,000</strong> · Payment
+										<strong>$8,500 / mo</strong>
+										· Property
+										<strong>12 King St</strong>
+									</p>
+								</div>
+							</div>
+							<div class="split">
+								<div class="card">
+									<div class="card-h">Borrowers</div>
+									<div class="card-b">
+										<table class="data" style="border: 0; box-shadow: none">
+											<tbody>
+												<tr>
+													<td style="border: 0">Jane Doe</td>
+													<td style="border: 0; text-align: right">
+														<span class="chip neutral">Primary</span>
+													</td>
+												</tr>
+												<tr>
+													<td style="border: 0">Alex Doe</td>
+													<td style="border: 0; text-align: right">
+														<span class="chip neutral">Co-borrower</span>
+													</td>
+												</tr>
+											</tbody>
+										</table>
+									</div>
+								</div>
+								<div class="card">
+									<div class="card-h">Audit</div>
+									<div class="card-b">
+										<p class="subtitle" style="margin: 0">
+											Created via admin · <code>ops@fairlend.test</code>
+										</p>
+									</div>
+								</div>
+							</div>
+							<div class="card">
+								<div class="card-h">Payment · Listing · Documents</div>
+								<div class="card-b">
+									<p class="subtitle" style="margin: 0">
+										Placeholder cards anchored for later phases (payment
+										bootstrap, listing projection, blueprints).
+									</p>
+								</div>
+							</div>
+						</div>
+					</div>
+				</div>
+			</article>
+		</div>
+	</body>
+</html>
