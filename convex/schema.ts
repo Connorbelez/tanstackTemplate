@@ -199,14 +199,24 @@ export default defineSchema({
 		idvStatus: v.optional(v.string()),
 		personaInquiryId: v.optional(v.string()),
 
+		// ─── Provenance ───
+		creationSource: v.optional(v.string()),
+		originatingWorkflowId: v.optional(v.string()),
+		originatingWorkflowType: v.optional(v.string()),
+		workflowSourceId: v.optional(v.string()),
+		workflowSourceKey: v.optional(v.string()),
+		workflowSourceType: v.optional(v.string()),
+
 		// ─── Lifecycle ───
 		onboardedAt: v.optional(v.number()),
 		createdAt: v.number(),
 	})
 		.index("by_user", ["userId"])
+		.index("by_org_user", ["orgId", "userId"])
 		.index("by_status", ["status"])
 		.index("by_org", ["orgId"])
-		.index("by_org_status", ["orgId", "status"]),
+		.index("by_org_status", ["orgId", "status"])
+		.index("by_workflow_source_key", ["workflowSourceKey"]),
 
 	lenders: defineTable({
 		// ─── Auth link ───
@@ -489,6 +499,20 @@ export default defineSchema({
 		.index("by_property", ["propertyId"])
 		.index("by_property_and_date", ["propertyId", "effectiveDate"]),
 
+	mortgageValuationSnapshots: defineTable({
+		mortgageId: v.id("mortgages"),
+		propertyId: v.id("properties"),
+		effectiveDate: v.string(),
+		valueAsIs: v.number(),
+		relatedDocumentAssetId: v.optional(v.id("_storage")),
+		visibilityHint: v.optional(
+			v.union(v.literal("public"), v.literal("private"))
+		),
+		createdAt: v.number(),
+	})
+		.index("by_mortgage_created_at", ["mortgageId", "createdAt"])
+		.index("by_property_created_at", ["propertyId", "createdAt"]),
+
 	appraisalComparables: defineTable({
 		appraisalId: v.id("appraisals"),
 
@@ -530,7 +554,12 @@ export default defineSchema({
 		validationSnapshot: v.optional(originationValidationSnapshotValidator),
 		committedMortgageId: v.optional(v.id("mortgages")),
 		committedListingId: v.optional(v.id("listings")),
+		committedValuationSnapshotId: v.optional(
+			v.id("mortgageValuationSnapshots")
+		),
 		committedAt: v.optional(v.number()),
+		lastCommitError: v.optional(v.string()),
+		failedAt: v.optional(v.number()),
 		createdAt: v.number(),
 		updatedAt: v.number(),
 	})
@@ -609,6 +638,16 @@ export default defineSchema({
 		priorMortgageId: v.optional(v.id("mortgages")),
 		isRenewal: v.optional(v.boolean()),
 
+		// ─── Provenance ───
+		creationSource: v.optional(v.string()),
+		originationPath: v.optional(v.string()),
+		originatedByUserId: v.optional(v.string()),
+		originatingWorkflowId: v.optional(v.string()),
+		originatingWorkflowType: v.optional(v.string()),
+		workflowSourceId: v.optional(v.string()),
+		workflowSourceKey: v.optional(v.string()),
+		workflowSourceType: v.optional(v.string()),
+
 		// ─── Simulation ───
 		simulationId: v.optional(v.string()),
 
@@ -625,6 +664,7 @@ export default defineSchema({
 		.index("by_simulation", ["simulationId"])
 		.index("by_org", ["orgId"])
 		.index("by_org_status", ["orgId", "status"])
+		.index("by_workflow_source_key", ["workflowSourceKey"])
 		.index("by_collection_execution_mode", [
 			"collectionExecutionMode",
 			"status",

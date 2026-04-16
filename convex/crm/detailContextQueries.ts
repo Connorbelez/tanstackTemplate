@@ -24,30 +24,43 @@ export const getMortgageDetailContext = crmQuery
 			throw new ConvexError("Mortgage not found or access denied");
 		}
 
-		const [property, borrowerLinks, listing, obligations, auditEvents] =
-			await Promise.all([
-				ctx.db.get(mortgage.propertyId),
-				ctx.db
-					.query("mortgageBorrowers")
-					.withIndex("by_mortgage", (q) => q.eq("mortgageId", args.mortgageId))
-					.collect(),
-				ctx.db
-					.query("listings")
-					.withIndex("by_mortgage", (q) => q.eq("mortgageId", args.mortgageId))
-					.unique(),
-				ctx.db
-					.query("obligations")
-					.withIndex("by_mortgage_and_date", (q) =>
-						q.eq("mortgageId", args.mortgageId)
-					)
-					.collect(),
-				ctx.db
-					.query("auditJournal")
-					.withIndex("by_mortgage", (q) =>
-						q.eq("mortgageId", String(args.mortgageId))
-					)
-					.collect(),
-			]);
+		const [
+			property,
+			borrowerLinks,
+			listing,
+			obligations,
+			auditEvents,
+			latestValuationSnapshot,
+		] = await Promise.all([
+			ctx.db.get(mortgage.propertyId),
+			ctx.db
+				.query("mortgageBorrowers")
+				.withIndex("by_mortgage", (q) => q.eq("mortgageId", args.mortgageId))
+				.collect(),
+			ctx.db
+				.query("listings")
+				.withIndex("by_mortgage", (q) => q.eq("mortgageId", args.mortgageId))
+				.unique(),
+			ctx.db
+				.query("obligations")
+				.withIndex("by_mortgage_and_date", (q) =>
+					q.eq("mortgageId", args.mortgageId)
+				)
+				.collect(),
+			ctx.db
+				.query("auditJournal")
+				.withIndex("by_mortgage", (q) =>
+					q.eq("mortgageId", String(args.mortgageId))
+				)
+				.collect(),
+			ctx.db
+				.query("mortgageValuationSnapshots")
+				.withIndex("by_mortgage_created_at", (q) =>
+					q.eq("mortgageId", args.mortgageId)
+				)
+				.order("desc")
+				.first(),
+		]);
 
 		const borrowers = await Promise.all(
 			borrowerLinks.map(async (link) => {
@@ -116,6 +129,16 @@ export const getMortgageDetailContext = crmQuery
 						interestRate: listing.interestRate,
 						ltvRatio: listing.ltvRatio,
 						publishedAt: listing.publishedAt ?? null,
+					}
+				: null,
+			latestValuationSnapshot: latestValuationSnapshot
+				? {
+						effectiveDate: latestValuationSnapshot.effectiveDate,
+						relatedDocumentAssetId:
+							latestValuationSnapshot.relatedDocumentAssetId ?? null,
+						valueAsIs: latestValuationSnapshot.valueAsIs,
+						valuationSnapshotId: latestValuationSnapshot._id,
+						visibilityHint: latestValuationSnapshot.visibilityHint ?? null,
 					}
 				: null,
 			recentObligations,

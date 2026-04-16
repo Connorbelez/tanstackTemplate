@@ -52,9 +52,15 @@ export const ORIGINATION_STEPS: readonly OriginationStepDefinition[] = [
 	{
 		key: "review",
 		label: "Review + commit",
-		description: "Summary shell with commit intentionally disabled.",
+		description: "Persisted summary and canonical activation controls.",
 	},
 ] as const;
+
+export const ORIGINATION_COMMIT_BLOCKING_STEP_KEYS = [
+	"participants",
+	"property",
+	"mortgageTerms",
+] as const satisfies readonly OriginationStepKey[];
 
 export interface OriginationParticipantDraft {
 	draftId?: string;
@@ -166,8 +172,20 @@ export interface OriginationCaseDraftValues {
 
 export interface OriginationCaseDraftRecord extends OriginationCaseDraftValues {
 	_id: string;
+	committedAt?: number;
+	committedListingId?: string;
+	committedMortgageId?: string;
+	committedValuationSnapshotId?: string;
 	createdAt: number;
-	status: "awaiting_identity_sync" | "committed" | "draft";
+	failedAt?: number;
+	lastCommitError?: string;
+	status:
+		| "awaiting_identity_sync"
+		| "committed"
+		| "committing"
+		| "draft"
+		| "failed"
+		| "ready_to_commit";
 	updatedAt: number;
 }
 

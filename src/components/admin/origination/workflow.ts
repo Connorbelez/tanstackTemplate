@@ -3,6 +3,7 @@ import {
 	buildOriginationCaseShortId,
 	ensureOriginationParticipantDraftIds,
 	INITIAL_ORIGINATION_STEP,
+	ORIGINATION_COMMIT_BLOCKING_STEP_KEYS,
 	ORIGINATION_STEPS,
 	type OriginationCaseDraftRecord,
 	type OriginationCaseDraftValues,
@@ -57,6 +58,61 @@ export interface OriginationStepperItem {
 	status: OriginationStepperStatus;
 }
 
+export type OriginationCommitParticipantRole =
+	| "co_borrower"
+	| "guarantor"
+	| "primary";
+
+export interface OriginationCommitPendingIdentity {
+	email: string;
+	fullName?: string;
+	role: OriginationCommitParticipantRole;
+	workosUserId?: string;
+}
+
+export type OriginationWorkspaceCommitState =
+	| { status: "idle" }
+	| { status: "validating" }
+	| { status: "committing" }
+	| {
+			pendingIdentities: OriginationCommitPendingIdentity[];
+			status: "awaiting_identity_sync";
+	  }
+	| { committedMortgageId: string; status: "committed" }
+	| { message: string; status: "failed" };
+
+export function resolveOriginationCommitStateFromRecord(
+	record: OriginationWorkspaceRecord | null | undefined
+): OriginationWorkspaceCommitState {
+	if (!record) {
+		return { status: "idle" };
+	}
+
+	if (record.status === "committed" && record.committedMortgageId) {
+		return {
+			committedMortgageId: record.committedMortgageId,
+			status: "committed",
+		};
+	}
+
+	if (record.status === "awaiting_identity_sync") {
+		return { pendingIdentities: [], status: "awaiting_identity_sync" };
+	}
+
+	if (record.status === "committing") {
+		return { status: "committing" };
+	}
+
+	if (record.status === "failed") {
+		return {
+			message: record.lastCommitError ?? "Unable to commit origination",
+			status: "failed",
+		};
+	}
+
+	return { status: "idle" };
+}
+
 export const ORIGINATION_DOCUMENT_SECTION_SHELLS = [
 	{
 		key: "public-static",
@@ -80,7 +136,7 @@ export const ORIGINATION_DOCUMENT_SECTION_SHELLS = [
 		key: "private-signable",
 		title: "Private templated signable docs",
 		description:
-			"Signature-ready document packages are intentionally deferred beyond the phase-1 shell.",
+			"Signature-ready document packages are intentionally deferred beyond the phase-2 activation surface.",
 	},
 ] as const;
 
@@ -125,6 +181,14 @@ export function resolveOriginationReviewValues(
 	optimisticValues: OriginationCaseDraftValues
 ) {
 	return persistedValues ?? optimisticValues;
+}
+
+export function getOriginationCommitBlockingErrors(
+	snapshot: OriginationValidationSnapshot | undefined
+) {
+	return ORIGINATION_COMMIT_BLOCKING_STEP_KEYS.flatMap(
+		(step) => snapshot?.stepErrors?.[step] ?? []
+	);
 }
 
 function hasValue(value: unknown): boolean {

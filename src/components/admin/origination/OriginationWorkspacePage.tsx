@@ -1,5 +1,5 @@
-import { Link } from "@tanstack/react-router";
-import { useMutation, useQuery } from "convex/react";
+import { Link, useNavigate } from "@tanstack/react-router";
+import { useAction, useMutation, useQuery } from "convex/react";
 import {
 	ChevronLeft,
 	ChevronRight,
@@ -46,9 +46,13 @@ import {
 	createOriginationDraftPatch,
 	extractOriginationDraft,
 	formatOriginationDateTime,
+	getOriginationCommitBlockingErrors,
 	getOriginationStepErrors,
 	type OriginationCasePatch,
+	type OriginationWorkspaceCommitState,
+	type OriginationWorkspaceRecord,
 	type OriginationWorkspaceSaveState,
+	resolveOriginationCommitStateFromRecord,
 	resolveOriginationReviewValues,
 } from "./workflow";
 
@@ -58,8 +62,8 @@ interface OriginationWorkspacePageProps {
 
 const SAVE_DEBOUNCE_MS = 450;
 
-function resolveSaveErrorMessage(error: unknown) {
-	return error instanceof Error ? error.message : "Unable to save draft";
+function resolveErrorMessage(error: unknown, fallback: string) {
+	return error instanceof Error ? error.message : fallback;
 }
 
 function resolveSettledSaveState(
@@ -70,17 +74,144 @@ function resolveSettledSaveState(
 	return currentVersion > targetVersion ? "pending" : settledState;
 }
 
+function resolveEffectiveCommitState(args: {
+	caseRecord: OriginationWorkspaceRecord | null | undefined;
+	commitState: OriginationWorkspaceCommitState;
+}): OriginationWorkspaceCommitState {
+	if (args.commitState.status !== "idle") {
+		return args.commitState;
+	}
+
+	return resolveOriginationCommitStateFromRecord(args.caseRecord);
+}
+
+function renderOriginationStepContent(args: {
+	applyDraftUpdate: (
+		updater: (current: OriginationCasePatch) => OriginationCasePatch,
+		options?: { immediate?: boolean }
+	) => void;
+	canCommit: boolean;
+	caseRecord: OriginationWorkspaceRecord;
+	commitState: OriginationWorkspaceCommitState;
+	currentStep: OriginationStepKey;
+	currentStepErrors: string[];
+	draft: OriginationCasePatch;
+	handleCommit: () => void;
+	openCommittedMortgage: (mortgageId: string) => void;
+}) {
+	switch (args.currentStep) {
+		case "participants":
+			return (
+				<ParticipantsStep
+					draft={args.draft.participantsDraft}
+					errors={args.currentStepErrors}
+					onChange={(participantsDraft) =>
+						args.applyDraftUpdate((current) => ({
+							...current,
+							participantsDraft,
+						}))
+					}
+				/>
+			);
+		case "property":
+			return (
+				<PropertyStep
+					errors={args.currentStepErrors}
+					onChange={({ propertyDraft, valuationDraft }) =>
+						args.applyDraftUpdate((current) => ({
+							...current,
+							propertyDraft,
+							valuationDraft,
+						}))
+					}
+					propertyDraft={args.draft.propertyDraft}
+					valuationDraft={args.draft.valuationDraft}
+				/>
+			);
+		case "mortgageTerms":
+			return (
+				<MortgageTermsStep
+					draft={args.draft.mortgageDraft}
+					errors={args.currentStepErrors}
+					onChange={(mortgageDraft) =>
+						args.applyDraftUpdate((current) => ({
+							...current,
+							mortgageDraft,
+						}))
+					}
+				/>
+			);
+		case "collections":
+			return (
+				<CollectionsStep
+					draft={args.draft.collectionsDraft}
+					errors={args.currentStepErrors}
+					onChange={(collectionsDraft) =>
+						args.applyDraftUpdate((current) => ({
+							...current,
+							collectionsDraft,
+						}))
+					}
+				/>
+			);
+		case "documents":
+			return <DocumentsStep errors={args.currentStepErrors} />;
+		case "listingCuration":
+			return (
+				<ListingCurationStep
+					draft={args.draft.listingOverrides}
+					errors={args.currentStepErrors}
+					onChange={(listingOverrides) =>
+						args.applyDraftUpdate((current) => ({
+							...current,
+							listingOverrides,
+						}))
+					}
+				/>
+			);
+		case "review": {
+			const committedMortgageId =
+				args.commitState.status === "committed"
+					? args.commitState.committedMortgageId
+					: args.caseRecord.committedMortgageId;
+			return (
+				<ReviewStep
+					canCommit={args.canCommit}
+					commitState={args.commitState}
+					committedMortgageId={committedMortgageId}
+					onCommit={args.handleCommit}
+					onOpenCommittedMortgage={
+						committedMortgageId
+							? () => args.openCommittedMortgage(committedMortgageId)
+							: undefined
+					}
+					snapshot={args.caseRecord.validationSnapshot}
+					values={resolveOriginationReviewValues(args.caseRecord, args.draft)}
+				/>
+			);
+		}
+		default:
+			return null;
+	}
+}
+
 export function OriginationWorkspacePage({
 	caseId,
 }: OriginationWorkspacePageProps) {
 	const typedCaseId = caseId as Id<"adminOriginationCases">;
+	const navigate = useNavigate({ from: "/admin/originations/$caseId" });
 	const caseRecord = useQuery(api.admin.origination.cases.getCase, {
 		caseId: typedCaseId,
 	});
+	const commitCase = useAction(api.admin.origination.commit.commitCase);
 	const patchCase = useMutation(api.admin.origination.cases.patchCase);
 	const [draft, setDraft] = useState<OriginationCasePatch>(() =>
 		extractOriginationDraft(undefined)
 	);
+	const [commitState, setCommitState] =
+		useState<OriginationWorkspaceCommitState>({
+			status: "idle",
+		});
 	const [lastSavedAt, setLastSavedAt] = useState<number | undefined>(undefined);
 	const [saveError, setSaveError] = useState<string | undefined>(undefined);
 	const [saveState, setSaveState] =
@@ -89,6 +220,7 @@ export function OriginationWorkspacePage({
 	const latestDraftRef = useRef<OriginationCasePatch>(draft);
 	const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 	const saveInFlightRef = useRef(false);
+	const savePromiseRef = useRef<Promise<void> | null>(null);
 	const versionRef = useRef(0);
 	const lastSavedVersionRef = useRef(0);
 	const queueSaveRef = useRef<(immediate?: boolean) => void>(() => undefined);
@@ -109,6 +241,11 @@ export function OriginationWorkspacePage({
 		setLastSavedAt(caseRecord.updatedAt);
 		setSaveError(undefined);
 		setSaveState("saved");
+		setCommitState((current) =>
+			current.status === "validating" || current.status === "committing"
+				? current
+				: resolveOriginationCommitStateFromRecord(caseRecord)
+		);
 		versionRef.current = 0;
 		lastSavedVersionRef.current = 0;
 	}, [caseRecord]);
@@ -122,35 +259,46 @@ export function OriginationWorkspacePage({
 	}, [caseRecord?._id]);
 
 	const persistDraft = useCallback(
-		async (targetVersion: number) => {
-			saveInFlightRef.current = true;
-			setSaveState("saving");
-			setSaveError(undefined);
+		(targetVersion: number) => {
+			const savePromise = (async () => {
+				saveInFlightRef.current = true;
+				setSaveState("saving");
+				setSaveError(undefined);
 
-			try {
-				const updated = await patchCase({
-					caseId: typedCaseId,
-					patch: createOriginationDraftPatch(
-						latestDraftRef.current
-					) as Parameters<typeof patchCase>[0]["patch"],
-				});
+				try {
+					const updated = await patchCase({
+						caseId: typedCaseId,
+						patch: createOriginationDraftPatch(
+							latestDraftRef.current
+						) as Parameters<typeof patchCase>[0]["patch"],
+					});
 
-				lastSavedVersionRef.current = targetVersion;
-				setLastSavedAt(updated.updatedAt);
-				setSaveState(
-					resolveSettledSaveState(versionRef.current, targetVersion, "saved")
-				);
-			} catch (error) {
-				setSaveError(resolveSaveErrorMessage(error));
-				setSaveState(
-					resolveSettledSaveState(versionRef.current, targetVersion, "error")
-				);
-			} finally {
-				saveInFlightRef.current = false;
-				if (versionRef.current > lastSavedVersionRef.current) {
-					queueSaveRef.current(true);
+					lastSavedVersionRef.current = targetVersion;
+					setLastSavedAt(updated.updatedAt);
+					setSaveState(
+						resolveSettledSaveState(versionRef.current, targetVersion, "saved")
+					);
+				} catch (error) {
+					setSaveError(resolveErrorMessage(error, "Unable to save draft"));
+					setSaveState(
+						resolveSettledSaveState(versionRef.current, targetVersion, "error")
+					);
+					throw error;
+				} finally {
+					saveInFlightRef.current = false;
+					if (versionRef.current > lastSavedVersionRef.current) {
+						queueSaveRef.current(true);
+					}
 				}
-			}
+			})();
+
+			const trackedSavePromise = savePromise.finally(() => {
+				if (savePromiseRef.current === trackedSavePromise) {
+					savePromiseRef.current = null;
+				}
+			});
+			savePromiseRef.current = trackedSavePromise;
+			return trackedSavePromise;
 		},
 		[patchCase, typedCaseId]
 	);
@@ -172,7 +320,7 @@ export function OriginationWorkspacePage({
 						return;
 					}
 
-					void persistDraft(targetVersion);
+					void persistDraft(targetVersion).catch(() => undefined);
 				},
 				immediate ? 0 : SAVE_DEBOUNCE_MS
 			);
@@ -204,6 +352,7 @@ export function OriginationWorkspacePage({
 				return nextDraft;
 			});
 			versionRef.current += 1;
+			setCommitState({ status: "idle" });
 			setSaveError(undefined);
 			setSaveState("pending");
 			queueSave(options?.immediate === true);
@@ -223,6 +372,15 @@ export function OriginationWorkspacePage({
 		caseRecord?.validationSnapshot,
 		currentStep
 	);
+	const commitBlockingErrors = getOriginationCommitBlockingErrors(
+		caseRecord?.validationSnapshot
+	);
+	const canCommit =
+		commitBlockingErrors.length === 0 && caseRecord?.status !== "committed";
+	const effectiveCommitState = resolveEffectiveCommitState({
+		caseRecord: caseRecord as OriginationWorkspaceRecord | null | undefined,
+		commitState,
+	});
 	const stepperItems = useMemo(
 		() =>
 			buildOriginationStepperItems({
@@ -238,6 +396,73 @@ export function OriginationWorkspacePage({
 		label: caseRecord?.label,
 		values: draft,
 	});
+
+	const openCommittedMortgage = useCallback(
+		async (mortgageId: string) => {
+			await navigate({
+				to: "/admin/mortgages/$recordid",
+				params: { recordid: mortgageId },
+				replace: true,
+				search: EMPTY_ADMIN_DETAIL_SEARCH,
+			});
+		},
+		[navigate]
+	);
+
+	const flushDraftBeforeCommit = useCallback(async () => {
+		if (saveTimerRef.current) {
+			clearTimeout(saveTimerRef.current);
+			saveTimerRef.current = null;
+		}
+
+		if (savePromiseRef.current) {
+			await savePromiseRef.current;
+		}
+
+		const targetVersion = versionRef.current;
+		if (targetVersion > lastSavedVersionRef.current) {
+			await persistDraft(targetVersion);
+		}
+	}, [persistDraft]);
+
+	const handleCommit = useCallback(async () => {
+		if (!caseRecord) {
+			return;
+		}
+
+		setCommitState({ status: "validating" });
+
+		try {
+			await flushDraftBeforeCommit();
+			setCommitState({ status: "committing" });
+			const result = await commitCase({ caseId: typedCaseId });
+
+			if (result.status === "awaiting_identity_sync") {
+				setCommitState({
+					pendingIdentities: result.pendingIdentities,
+					status: "awaiting_identity_sync",
+				});
+				return;
+			}
+
+			setCommitState({
+				committedMortgageId: result.committedMortgageId,
+				status: "committed",
+			});
+			await openCommittedMortgage(result.committedMortgageId);
+		} catch (error) {
+			setCommitState({
+				message: resolveErrorMessage(error, "Unable to commit origination"),
+				status: "failed",
+			});
+		}
+	}, [
+		caseRecord,
+		commitCase,
+		flushDraftBeforeCommit,
+		openCommittedMortgage,
+		typedCaseId,
+	]);
 
 	useAdminBreadcrumbLabel(pageTitle);
 
@@ -311,16 +536,17 @@ export function OriginationWorkspacePage({
 						</div>
 						<div className="space-y-2">
 							<p className="font-semibold text-muted-foreground text-sm uppercase tracking-[0.18em]">
-								Phase 1 workspace
+								Phase 2 workspace
 							</p>
 							<h1 className="font-semibold text-3xl tracking-tight">
 								{pageTitle}
 							</h1>
 							<p className="max-w-3xl text-muted-foreground text-sm leading-6">
-								Stage every origination input in one backoffice aggregate. Later
-								phases enable identity sync, canonical mortgage construction,
-								listing projection, payments, and documents from this exact
-								route family.
+								Stage every origination input in one backoffice aggregate, then
+								activate canonical borrower, property, valuation, mortgage,
+								ledger, and audit rows from this exact review surface. Payments,
+								provider-managed collections, listing projection, and document
+								projection stay deferred.
 							</p>
 						</div>
 					</div>
@@ -351,8 +577,8 @@ export function OriginationWorkspacePage({
 						<CardHeader>
 							<CardTitle className="text-base">Draft contract</CardTitle>
 							<CardDescription>
-								This page persists a staging aggregate only. It intentionally
-								creates zero canonical domain rows.
+								Draft edits always land in staging first; canonical rows are
+								created only from the review-step commit action.
 							</CardDescription>
 						</CardHeader>
 						<CardContent className="space-y-3 text-sm leading-6">
@@ -366,8 +592,10 @@ export function OriginationWorkspacePage({
 							<div className="flex items-start gap-3">
 								<FileClock className="mt-0.5 size-4 text-muted-foreground" />
 								<p>
-									Collections and documents are phase-1 shells only, but the
-									route and payload shape are now stable for downstream work.
+									Phase 2 commit writes borrower, property, appraisal,
+									mortgageBorrower, mortgage, ledger-genesis, and origination
+									audit rows, but leaves listings and payment automation for
+									downstream phases.
 								</p>
 							</div>
 						</CardContent>
@@ -377,77 +605,18 @@ export function OriginationWorkspacePage({
 				<div className="space-y-6">
 					{commonStepDescription}
 
-					{currentStep === "participants" ? (
-						<ParticipantsStep
-							draft={draft.participantsDraft}
-							errors={currentStepErrors}
-							onChange={(participantsDraft) =>
-								applyDraftUpdate((current) => ({
-									...current,
-									participantsDraft,
-								}))
-							}
-						/>
-					) : null}
-					{currentStep === "property" ? (
-						<PropertyStep
-							errors={currentStepErrors}
-							onChange={({ propertyDraft, valuationDraft }) =>
-								applyDraftUpdate((current) => ({
-									...current,
-									propertyDraft,
-									valuationDraft,
-								}))
-							}
-							propertyDraft={draft.propertyDraft}
-							valuationDraft={draft.valuationDraft}
-						/>
-					) : null}
-					{currentStep === "mortgageTerms" ? (
-						<MortgageTermsStep
-							draft={draft.mortgageDraft}
-							errors={currentStepErrors}
-							onChange={(mortgageDraft) =>
-								applyDraftUpdate((current) => ({
-									...current,
-									mortgageDraft,
-								}))
-							}
-						/>
-					) : null}
-					{currentStep === "collections" ? (
-						<CollectionsStep
-							draft={draft.collectionsDraft}
-							errors={currentStepErrors}
-							onChange={(collectionsDraft) =>
-								applyDraftUpdate((current) => ({
-									...current,
-									collectionsDraft,
-								}))
-							}
-						/>
-					) : null}
-					{currentStep === "documents" ? (
-						<DocumentsStep errors={currentStepErrors} />
-					) : null}
-					{currentStep === "listingCuration" ? (
-						<ListingCurationStep
-							draft={draft.listingOverrides}
-							errors={currentStepErrors}
-							onChange={(listingOverrides) =>
-								applyDraftUpdate((current) => ({
-									...current,
-									listingOverrides,
-								}))
-							}
-						/>
-					) : null}
-					{currentStep === "review" ? (
-						<ReviewStep
-							snapshot={caseRecord.validationSnapshot}
-							values={resolveOriginationReviewValues(caseRecord, draft)}
-						/>
-					) : null}
+					{renderOriginationStepContent({
+						applyDraftUpdate,
+						canCommit,
+						caseRecord: caseRecord as OriginationWorkspaceRecord,
+						commitState: effectiveCommitState,
+						currentStep,
+						currentStepErrors,
+						draft,
+						handleCommit: () => void handleCommit(),
+						openCommittedMortgage: (mortgageId) =>
+							void openCommittedMortgage(mortgageId),
+					})}
 
 					<div className="flex flex-col gap-4 rounded-[2rem] border border-border/70 bg-card px-5 py-5 shadow-sm sm:flex-row sm:items-center sm:justify-between">
 						<div className="space-y-1">

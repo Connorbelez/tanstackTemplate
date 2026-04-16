@@ -1,6 +1,7 @@
 import { type Infer, v } from "convex/values";
 import {
 	INITIAL_ORIGINATION_STEP,
+	ORIGINATION_COMMIT_BLOCKING_STEP_KEYS,
 	ORIGINATION_STEP_KEYS,
 	type OriginationStepKey,
 	type OriginationValidationSnapshot,
@@ -8,7 +9,10 @@ import {
 
 export const originationCaseStatusValidator = v.union(
 	v.literal("draft"),
+	v.literal("ready_to_commit"),
 	v.literal("awaiting_identity_sync"),
+	v.literal("committing"),
+	v.literal("failed"),
 	v.literal("committed")
 );
 
@@ -178,15 +182,22 @@ export type OriginationListingOverridesDraftValue = Infer<
 export interface OriginationCaseDraftState {
 	collectionsDraft?: OriginationCollectionsDraftValue;
 	currentStep?: OriginationStepKey;
+	failedAt?: number;
+	lastCommitError?: string;
 	listingOverrides?: OriginationListingOverridesDraftValue;
 	mortgageDraft?: OriginationMortgageDraftValue;
 	participantsDraft?: OriginationParticipantsDraftValue;
 	propertyDraft?: OriginationPropertyDraftValue;
+	status?: Infer<typeof originationCaseStatusValidator>;
 	validationSnapshot?: OriginationValidationSnapshot;
 	valuationDraft?: OriginationValuationDraftValue;
 }
 
-const PHASE_ONE_OWNED_STEP_KEYS = [
+export type OriginationCaseStatus = Infer<
+	typeof originationCaseStatusValidator
+>;
+
+const PHASE_TWO_OWNED_STEP_KEYS = [
 	"participants",
 	"property",
 	"mortgageTerms",
@@ -194,8 +205,10 @@ const PHASE_ONE_OWNED_STEP_KEYS = [
 	"listingCuration",
 ] as const satisfies readonly OriginationStepKey[];
 
-export const PHASE_ONE_ORIGINATION_REVIEW_WARNING =
-	"Commit stays disabled until every required phase-1 field is staged.";
+export const ORIGINATION_COMMIT_REVIEW_WARNING =
+	"Resolve the required participant, property, and mortgage fields before committing this origination case.";
+export const ORIGINATION_PROVIDER_MANAGED_COLLECTIONS_WARNING =
+	"Provider-managed collections are deferred. Phase 2 activation always creates an app-owned mortgage.";
 
 function trimToUndefined(value: string | undefined) {
 	if (typeof value !== "string") {
@@ -338,7 +351,7 @@ export function computeOriginationValidationSnapshot(
 	const mergedStepErrors: Record<string, string[]> = Object.fromEntries(
 		Object.entries(existingSnapshot?.stepErrors ?? {}).filter(
 			([key]) =>
-				!PHASE_ONE_OWNED_STEP_KEYS.some((ownedStep) => ownedStep === key)
+				!PHASE_TWO_OWNED_STEP_KEYS.some((ownedStep) => ownedStep === key)
 		)
 	);
 	for (const [key, errors] of Object.entries(phaseOneStepErrors)) {
@@ -351,17 +364,49 @@ export function computeOriginationValidationSnapshot(
 
 	const reviewWarnings = [
 		...(existingSnapshot?.reviewWarnings ?? []).filter(
-			(warning) => warning !== PHASE_ONE_ORIGINATION_REVIEW_WARNING
+			(warning) =>
+				warning !== ORIGINATION_COMMIT_REVIEW_WARNING &&
+				warning !== ORIGINATION_PROVIDER_MANAGED_COLLECTIONS_WARNING
 		),
 	];
-	if (Object.keys(phaseOneStepErrors).length > 0) {
-		reviewWarnings.push(PHASE_ONE_ORIGINATION_REVIEW_WARNING);
+	const hasCommitBlockingErrors = ORIGINATION_COMMIT_BLOCKING_STEP_KEYS.some(
+		(step) => (mergedStepErrors[step] ?? []).length > 0
+	);
+	if (hasCommitBlockingErrors) {
+		reviewWarnings.push(ORIGINATION_COMMIT_REVIEW_WARNING);
+	}
+	if (normalized.collectionsDraft?.mode === "provider_managed_now") {
+		reviewWarnings.push(ORIGINATION_PROVIDER_MANAGED_COLLECTIONS_WARNING);
 	}
 
 	return {
 		reviewWarnings,
 		stepErrors: mergedStepErrors,
 	};
+}
+
+export function hasOriginationCommitBlockingErrors(
+	snapshot: OriginationValidationSnapshot | undefined
+) {
+	return ORIGINATION_COMMIT_BLOCKING_STEP_KEYS.some(
+		(step) => (snapshot?.stepErrors?.[step] ?? []).length > 0
+	);
+}
+
+export function resolveDraftOriginationCaseStatus(args: {
+	currentStatus?: OriginationCaseStatus;
+	validationSnapshot?: OriginationValidationSnapshot;
+}): OriginationCaseStatus {
+	if (
+		args.currentStatus === "awaiting_identity_sync" ||
+		args.currentStatus === "committed"
+	) {
+		return args.currentStatus;
+	}
+
+	return hasOriginationCommitBlockingErrors(args.validationSnapshot)
+		? "draft"
+		: "ready_to_commit";
 }
 
 function assignStepErrors(
@@ -393,41 +438,49 @@ function collectMissingFieldErrors(
 
 function buildParticipantsValidationErrors(values: OriginationCaseDraftState) {
 	const primaryBorrower = values.participantsDraft?.primaryBorrower;
+	const primaryBorrowerUsesExisting = Boolean(
+		primaryBorrower?.existingBorrowerId
+	);
 
 	return collectMissingFieldErrors([
 		{
-			value: primaryBorrower?.fullName,
+			value: primaryBorrowerUsesExisting ? true : primaryBorrower?.fullName,
 			message: "Primary borrower full name is required.",
 		},
 		{
-			value: primaryBorrower?.email,
+			value: primaryBorrowerUsesExisting ? true : primaryBorrower?.email,
 			message: "Primary borrower email is required.",
+		},
+		{
+			value: values.participantsDraft?.brokerOfRecordId,
+			message: "Broker of record is required.",
 		},
 	]);
 }
 
 function buildPropertyValidationErrors(values: OriginationCaseDraftState) {
 	const propertyCreate = values.propertyDraft?.create;
+	const propertyReference = values.propertyDraft?.propertyId;
 
 	return collectMissingFieldErrors([
 		{
-			value: propertyCreate?.streetAddress,
+			value: propertyReference || propertyCreate?.streetAddress,
 			message: "Property street address is required.",
 		},
 		{
-			value: propertyCreate?.city,
+			value: propertyReference || propertyCreate?.city,
 			message: "Property city is required.",
 		},
 		{
-			value: propertyCreate?.province,
+			value: propertyReference || propertyCreate?.province,
 			message: "Property province is required.",
 		},
 		{
-			value: propertyCreate?.postalCode,
+			value: propertyReference || propertyCreate?.postalCode,
 			message: "Property postal code is required.",
 		},
 		{
-			value: propertyCreate?.propertyType,
+			value: propertyReference || propertyCreate?.propertyType,
 			message: "Property type is required.",
 		},
 		{
@@ -462,12 +515,24 @@ function buildMortgageValidationErrors(values: OriginationCaseDraftState) {
 			message: "Amortization is required.",
 		},
 		{
+			value: mortgage?.paymentAmount,
+			message: "Payment amount is required.",
+		},
+		{
 			value: mortgage?.paymentFrequency,
 			message: "Payment frequency is required.",
 		},
 		{
 			value: mortgage?.loanType,
 			message: "Loan type is required.",
+		},
+		{
+			value: mortgage?.lienPosition,
+			message: "Lien position is required.",
+		},
+		{
+			value: mortgage?.interestAdjustmentDate,
+			message: "Interest adjustment date is required.",
 		},
 		{
 			value: mortgage?.termStartDate,
@@ -477,29 +542,19 @@ function buildMortgageValidationErrors(values: OriginationCaseDraftState) {
 			value: mortgage?.firstPaymentDate,
 			message: "First payment date is required.",
 		},
-	]);
-}
-
-function buildCollectionsValidationErrors(values: OriginationCaseDraftState) {
-	return collectMissingFieldErrors([
 		{
-			value: values.collectionsDraft?.mode,
-			message: "Collection mode is required.",
+			value: mortgage?.maturityDate,
+			message: "Maturity date is required.",
 		},
 	]);
 }
 
-function buildListingValidationErrors(values: OriginationCaseDraftState) {
-	return collectMissingFieldErrors([
-		{
-			value: values.listingOverrides?.title,
-			message: "Listing title is required.",
-		},
-		{
-			value: values.listingOverrides?.description,
-			message: "Listing description is required.",
-		},
-	]);
+function buildCollectionsValidationErrors(_values: OriginationCaseDraftState) {
+	return [];
+}
+
+function buildListingValidationErrors(_values: OriginationCaseDraftState) {
+	return [];
 }
 
 export function determineRecommendedOriginationStep(
