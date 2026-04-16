@@ -363,6 +363,119 @@ describe("queryNativeTable", () => {
 		expect(result.records[0]._kind).toBe("native");
 	});
 
+	it("returns documents from listings table via queryRecords", async () => {
+		const { mortgageId, propertyId } = await t.run(async (ctx) => {
+			const userId = await ctx.db.insert("users", {
+				authId: "test-user-listing",
+				email: "listing-broker@test.ca",
+				firstName: "Lena",
+				lastName: "Listing",
+			});
+			const brokerId = await ctx.db.insert("brokers", {
+				status: "active",
+				userId,
+				orgId: ORG_ID,
+				createdAt: Date.now(),
+			});
+			const propertyId = await ctx.db.insert("properties", {
+				streetAddress: "789 King St W",
+				city: "Toronto",
+				province: "ON",
+				postalCode: "M5V1M5",
+				propertyType: "condo",
+				createdAt: Date.now(),
+			});
+			const mortgageId = await ctx.db.insert("mortgages", {
+				orgId: ORG_ID,
+				status: "active",
+				propertyId,
+				principal: 425_000,
+				interestRate: 5.1,
+				rateType: "fixed",
+				termMonths: 48,
+				amortizationMonths: 300,
+				paymentAmount: 2460,
+				paymentFrequency: "monthly",
+				loanType: "conventional",
+				lienPosition: 1,
+				interestAdjustmentDate: "2026-06-01",
+				termStartDate: "2026-06-01",
+				maturityDate: "2030-05-31",
+				firstPaymentDate: "2026-07-01",
+				brokerOfRecordId: brokerId,
+				createdAt: Date.now(),
+			});
+
+			return { mortgageId, propertyId };
+		});
+
+		await t.run(async (ctx) => {
+			await ctx.db.insert("listings", {
+				mortgageId,
+				propertyId,
+				dataSource: "mortgage_pipeline",
+				status: "draft",
+				principal: 425_000,
+				interestRate: 5.1,
+				ltvRatio: 67.5,
+				termMonths: 48,
+				maturityDate: "2030-05-31",
+				monthlyPayment: 2460,
+				rateType: "fixed",
+				paymentFrequency: "monthly",
+				loanType: "conventional",
+				lienPosition: 1,
+				propertyType: "condo",
+				city: "Toronto",
+				province: "ON",
+				latestAppraisalValueAsIs: 630_000,
+				latestAppraisalDate: "2026-05-15",
+				title: "Downtown First Mortgage",
+				heroImages: [],
+				featured: true,
+				publicDocumentIds: [],
+				viewCount: 12,
+				createdAt: Date.now(),
+				updatedAt: Date.now(),
+			});
+		});
+
+		await t.mutation(
+			internal.crm.systemAdapters.bootstrap.bootstrapSystemObjects,
+			{ orgId: ORG_ID }
+		);
+
+		const listingObjDef = await t.run(async (ctx) => {
+			return ctx.db
+				.query("objectDefs")
+				.withIndex("by_org_name", (q) =>
+					q.eq("orgId", ORG_ID).eq("name", "listing")
+				)
+				.first();
+		});
+		expect(listingObjDef).not.toBeNull();
+		if (!listingObjDef) {
+			throw new Error("unreachable");
+		}
+
+		const result = await asAdmin(t).query(api.crm.recordQueries.queryRecords, {
+			objectDefId: listingObjDef._id,
+			paginationOpts: { numItems: 10, cursor: null },
+		});
+
+		expect(result.records).toHaveLength(1);
+		expect(result.records[0]).toMatchObject({
+			_kind: "native",
+			fields: {
+				city: "Toronto",
+				interestRate: 5.1,
+				principal: 425_000,
+				status: "draft",
+				title: "Downtown First Mortgage",
+			},
+		});
+	});
+
 	it("throws for unknown native table names", async () => {
 		// Insert a fake objectDef with an unknown nativeTable value
 		const fakeObjectDefId = await t.run(async (ctx) => {

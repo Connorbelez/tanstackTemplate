@@ -11,6 +11,7 @@ import type {
 } from "../../../../convex/crm/types";
 
 type ObjectDef = Pick<Doc<"objectDefs">, "nativeTable" | "singularLabel">;
+const TOKEN_LABEL_SEPARATOR_REGEX = /[\s._-]+/;
 
 function renderEmptyValue() {
 	return <span className="text-muted-foreground">—</span>;
@@ -34,6 +35,110 @@ function formatScalarValue(value: unknown) {
 	}
 
 	return String(value);
+}
+
+function formatCompactCurrency(value: number, divisor = 1) {
+	return new Intl.NumberFormat("en-US", {
+		style: "currency",
+		currency: "USD",
+		maximumFractionDigits: 0,
+	}).format(value / divisor);
+}
+
+function formatCompactPercentage(value: number) {
+	return `${value.toLocaleString("en-US", {
+		maximumFractionDigits: 2,
+	})}%`;
+}
+
+function formatCompactDate(value: unknown) {
+	if (typeof value !== "number" && typeof value !== "string") {
+		return undefined;
+	}
+
+	const date = new Date(value);
+	if (Number.isNaN(date.getTime())) {
+		return undefined;
+	}
+
+	return date.toLocaleDateString();
+}
+
+function formatTokenLabel(value: unknown) {
+	if (typeof value !== "string" || value.trim().length === 0) {
+		return undefined;
+	}
+
+	return value
+		.split(TOKEN_LABEL_SEPARATOR_REGEX)
+		.filter((part) => part.length > 0)
+		.map((part) => `${part[0]?.toUpperCase() ?? ""}${part.slice(1)}`)
+		.join(" ");
+}
+
+function joinSummaryParts(parts: Array<string | undefined>) {
+	return parts.filter(Boolean).join(" • ");
+}
+
+function formatRecordSummaryByEntity(args: {
+	adapterContract: Pick<EntityViewAdapterContract, "entityType">;
+	record: UnifiedRecord;
+}): string | undefined {
+	switch (args.adapterContract.entityType) {
+		case "listings":
+			return joinSummaryParts([
+				typeof args.record.fields.propertySummary === "string"
+					? args.record.fields.propertySummary
+					: joinSummaryParts([
+							typeof args.record.fields.city === "string"
+								? args.record.fields.city
+								: undefined,
+							typeof args.record.fields.province === "string"
+								? args.record.fields.province
+								: undefined,
+						]),
+				typeof args.record.fields.propertyType === "string"
+					? formatTokenLabel(args.record.fields.propertyType)
+					: undefined,
+				typeof args.record.fields.interestRate === "number"
+					? formatCompactPercentage(args.record.fields.interestRate)
+					: undefined,
+				typeof args.record.fields.ltvRatio === "number"
+					? `LTV ${formatCompactPercentage(args.record.fields.ltvRatio)}`
+					: undefined,
+			]);
+		case "mortgages":
+			return joinSummaryParts([
+				typeof args.record.fields.borrowerSummary === "string"
+					? args.record.fields.borrowerSummary
+					: undefined,
+				typeof args.record.fields.paymentSummary === "string"
+					? args.record.fields.paymentSummary
+					: undefined,
+				typeof args.record.fields.principal === "number"
+					? formatCompactCurrency(args.record.fields.principal)
+					: undefined,
+			]);
+		case "obligations":
+			return joinSummaryParts([
+				typeof args.record.fields.borrowerSummary === "string"
+					? args.record.fields.borrowerSummary
+					: undefined,
+				typeof args.record.fields.paymentProgressSummary === "string"
+					? args.record.fields.paymentProgressSummary
+					: undefined,
+				formatCompactDate(args.record.fields.dueDate),
+			]);
+		case "borrowers":
+			return joinSummaryParts([
+				typeof args.record.fields.verificationSummary === "string"
+					? args.record.fields.verificationSummary
+					: undefined,
+				formatCompactDate(args.record.fields.onboardedAt),
+			]);
+		default:
+			return undefined;
+	}
 }
 
 function getOption(
@@ -214,7 +319,10 @@ export function renderAdminFieldValue(
 }
 
 export function getAdminRecordTitle(args: {
-	adapterContract: Pick<EntityViewAdapterContract, "titleFieldName">;
+	adapterContract: Pick<
+		EntityViewAdapterContract,
+		"entityType" | "titleFieldName"
+	>;
 	fields: readonly NormalizedFieldDefinition[];
 	record: UnifiedRecord;
 }) {
@@ -239,7 +347,28 @@ export function getAdminRecordTitle(args: {
 	return args.record._id;
 }
 
-export function getAdminRecordSupportingText(
+export function getAdminRecordSupportingText(args: {
+	adapterContract: Pick<EntityViewAdapterContract, "entityType">;
+	record: Pick<UnifiedRecord, "_kind" | "createdAt" | "fields">;
+	objectDef: ObjectDef;
+}) {
+	const dedicatedSummary = formatRecordSummaryByEntity({
+		adapterContract: args.adapterContract,
+		record: args.record as UnifiedRecord,
+	});
+	if (dedicatedSummary) {
+		return dedicatedSummary;
+	}
+
+	const createdLabel = new Date(args.record.createdAt).toLocaleDateString();
+	if (args.record._kind === "native") {
+		return `${args.objectDef.nativeTable ?? args.objectDef.singularLabel} • native • ${createdLabel}`;
+	}
+
+	return `${args.objectDef.singularLabel} • custom • ${createdLabel}`;
+}
+
+export function getAdminRecordKindLabel(
 	record: Pick<UnifiedRecord, "_kind" | "createdAt">,
 	objectDef: ObjectDef
 ) {

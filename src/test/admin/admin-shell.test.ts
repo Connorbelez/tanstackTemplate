@@ -11,6 +11,10 @@ import {
 	buildAdminPreviewRecords,
 	getAdminPreviewRecord,
 } from "#/components/admin/shell/admin-preview-records";
+import {
+	getAdminRecordSupportingText,
+	getAdminRecordTitle,
+} from "#/components/admin/shell/admin-view-rendering";
 import { resolveRecordSidebarEntityAdapter } from "#/components/admin/shell/entity-view-adapters";
 import {
 	getAdminNavigationSections,
@@ -68,20 +72,34 @@ function buildFieldDef(args: {
 }
 
 function buildBorrowerObjectDef(): Doc<"objectDefs"> {
+	return buildSystemObjectDef({
+		name: "borrower",
+		nativeTable: "borrowers",
+		pluralLabel: "Borrowers",
+		singularLabel: "Borrower",
+	});
+}
+
+function buildSystemObjectDef(args: {
+	name: string;
+	nativeTable: Doc<"objectDefs">["nativeTable"];
+	pluralLabel: string;
+	singularLabel: string;
+}): Doc<"objectDefs"> {
 	return {
-		_id: "object_borrower" as Id<"objectDefs">,
+		_id: `object_${args.name}` as Id<"objectDefs">,
 		_creationTime: 0,
 		createdAt: 0,
 		createdBy: "user_test",
-		description: "Test borrower object",
+		description: `Test ${args.singularLabel.toLowerCase()} object`,
 		icon: "user",
 		isActive: true,
 		isSystem: true,
-		name: "borrower",
-		nativeTable: "borrowers",
+		name: args.name,
+		nativeTable: args.nativeTable,
 		orgId: "org_test",
-		pluralLabel: "Borrowers",
-		singularLabel: "Borrower",
+		pluralLabel: args.pluralLabel,
+		singularLabel: args.singularLabel,
 		updatedAt: 0,
 	};
 }
@@ -335,6 +353,106 @@ describe("admin shell helpers", () => {
 		expect(markup).toContain("Notes");
 		expect(markup.indexOf("Status")).toBeLessThan(markup.indexOf("IDV Status"));
 		expect(markup.indexOf("IDV Status")).toBeLessThan(markup.indexOf("Notes"));
+	});
+
+	it("uses listing-specific title and supporting text semantics", () => {
+		const fields = [
+			buildFieldDef({ displayOrder: 0, label: "Title", name: "title" }),
+			buildFieldDef({
+				displayOrder: 1,
+				label: "Property Summary",
+				name: "propertySummary",
+			}),
+		];
+		const record: UnifiedRecord = {
+			_id: "listing_1",
+			_kind: "native",
+			createdAt: 0,
+			fields: {
+				interestRate: 5.1,
+				ltvRatio: 67.5,
+				propertySummary: "789 King St W, Toronto, ON",
+				propertyType: "condo",
+				title: "Downtown First Mortgage",
+			},
+			objectDefId: "object_listing" as Id<"objectDefs">,
+			updatedAt: 0,
+		};
+		const objectDef = buildSystemObjectDef({
+			name: "listing",
+			nativeTable: "listings",
+			pluralLabel: "Listings",
+			singularLabel: "Listing",
+		});
+
+		expect(
+			getAdminRecordTitle({
+				adapterContract: { entityType: "listings", titleFieldName: "title" },
+				fields,
+				record,
+			})
+		).toBe("Downtown First Mortgage");
+		expect(
+			getAdminRecordSupportingText({
+				adapterContract: { entityType: "listings" },
+				objectDef,
+				record,
+			})
+		).toBe("789 King St W, Toronto, ON • Condo • 5.1% • LTV 67.5%");
+	});
+
+	it("uses mortgage summary fields for card copy when a dedicated adapter is active", () => {
+		const fields = [
+			buildFieldDef({
+				displayOrder: 0,
+				fieldType: "text",
+				label: "Property Summary",
+				name: "propertySummary",
+			}),
+			buildFieldDef({
+				displayOrder: 1,
+				fieldType: "text",
+				label: "Borrower Summary",
+				name: "borrowerSummary",
+			}),
+		];
+		const record: UnifiedRecord = {
+			_id: "mortgage_1",
+			_kind: "native",
+			createdAt: 0,
+			fields: {
+				borrowerSummary: "Alice Borrower + 1 more",
+				paymentSummary: "Monthly • $2,460",
+				principal: 425_000,
+				propertySummary: "789 King St W, Toronto, ON",
+			},
+			objectDefId: "object_mortgage" as Id<"objectDefs">,
+			updatedAt: 0,
+		};
+		const objectDef = buildSystemObjectDef({
+			name: "mortgage",
+			nativeTable: "mortgages",
+			pluralLabel: "Mortgages",
+			singularLabel: "Mortgage",
+		});
+
+		expect(
+			getAdminRecordTitle({
+				adapterContract: {
+					entityType: "mortgages",
+					titleFieldName: "propertySummary",
+				},
+				fields,
+				record,
+			})
+		).toBe("789 King St W, Toronto, ON");
+		expect(
+			getAdminRecordSupportingText({
+				adapterContract: { entityType: "mortgages" },
+				objectDef,
+				record,
+			})
+		).toBe("Alice Borrower + 1 more • Monthly • $2,460 • $425,000");
 	});
 
 	it("resolves relation references from object metadata", () => {

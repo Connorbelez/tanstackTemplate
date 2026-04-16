@@ -1735,8 +1735,10 @@ describe("System object view queries", () => {
 			schema.adapterContract.layoutDefaults.preferredVisibleFieldNames
 		).toEqual(
 			expect.arrayContaining([
+				"propertySummary",
 				"principal",
-				"paymentAmount",
+				"borrowerSummary",
+				"paymentSummary",
 				"interestRate",
 				"maturityDate",
 				"status",
@@ -1802,7 +1804,7 @@ describe("System object view queries", () => {
 			},
 			fieldSource: "adapter_computed",
 			fieldType: "text",
-			isVisibleByDefault: false,
+			isVisibleByDefault: true,
 			label: "Verification Summary",
 			normalizedFieldKind: "computed",
 			rendererHint: "computed",

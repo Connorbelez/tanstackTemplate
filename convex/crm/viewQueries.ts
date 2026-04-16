@@ -4,6 +4,7 @@ import type { QueryCtx } from "../_generated/server";
 import { auditLog } from "../auditLog";
 import { crmMutation, crmQuery } from "../fluent";
 import { queryCalendarViewData } from "./calendarQuery";
+import { materializeEntityViewRecords } from "./entityViewHydration";
 import type { FilterOperator } from "./filterConstants";
 import {
 	applyFilters,
@@ -604,15 +605,22 @@ async function queryTableView(
 			paginateUnfilteredTableRecords(ctx, state, cursor ?? null, limit),
 			countUnfilteredRecords(ctx, state),
 		]);
+		const materializedRecords = await materializeEntityViewRecords({
+			adapterContract: state.adapterContract,
+			ctx,
+			objectDef: state.objectDef,
+			orgId: state.viewDef.orgId,
+			records: pagedRecords.records,
+		});
 		const relationDisplayValuesByRecordId =
 			await buildRelationCellDisplayValueMap({
 				ctx,
 				fields: state.fields,
 				objectDef: state.objectDef,
 				orgId: state.viewDef.orgId,
-				records: pagedRecords.records,
+				records: materializedRecords,
 			});
-		const rows = pagedRecords.records.map((record) =>
+		const rows = materializedRecords.map((record) =>
 			projectRecordToVisibleColumns(record, state.columns)
 		);
 
@@ -622,13 +630,13 @@ async function queryTableView(
 			cursor: pagedRecords.continueCursor,
 			page: buildPageResult({
 				cellDisplayValuesByRecordId: buildEntityViewCellDisplayValueMap({
-					records: pagedRecords.records,
+					records: materializedRecords,
 					relationDisplayValuesByRecordId,
 				}),
 				continueCursor: pagedRecords.continueCursor,
 				isDone: pagedRecords.isDone,
 				limit,
-				records: pagedRecords.records,
+				records: materializedRecords,
 				columns: state.columns,
 				totalCount: totalCountSummary.totalCount,
 				totalCountExact: totalCountSummary.totalCountExact,
@@ -649,6 +657,13 @@ async function queryTableView(
 	);
 	const offset = parseOffsetCursor(cursor ?? null);
 	const page = filtered.slice(offset, offset + limit);
+	const materializedPage = await materializeEntityViewRecords({
+		adapterContract: state.adapterContract,
+		ctx,
+		objectDef: state.objectDef,
+		orgId: state.viewDef.orgId,
+		records: page,
+	});
 	const nextOffset = offset + limit;
 	const isDone = nextOffset >= filtered.length;
 	const relationDisplayValuesByRecordId =
@@ -657,9 +672,9 @@ async function queryTableView(
 			fields: state.fields,
 			objectDef: state.objectDef,
 			orgId: state.viewDef.orgId,
-			records: page,
+			records: materializedPage,
 		});
-	const rows = page.map((record) =>
+	const rows = materializedPage.map((record) =>
 		projectRecordToVisibleColumns(record, state.columns)
 	);
 
@@ -673,13 +688,13 @@ async function queryTableView(
 		cursor: isDone ? null : `offset:${String(nextOffset)}`,
 		page: buildPageResult({
 			cellDisplayValuesByRecordId: buildEntityViewCellDisplayValueMap({
-				records: page,
+				records: materializedPage,
 				relationDisplayValuesByRecordId,
 			}),
 			continueCursor: isDone ? null : `offset:${String(nextOffset)}`,
 			isDone,
 			limit,
-			records: page,
+			records: materializedPage,
 			columns: state.columns,
 			totalCount: filtered.length,
 			totalCountExact: !assembled.truncated,
@@ -707,17 +722,24 @@ async function queryKanbanView(
 		recordFilters,
 		state.fieldDefsById
 	);
+	const materializedFiltered = await materializeEntityViewRecords({
+		adapterContract: state.adapterContract,
+		ctx,
+		objectDef: state.objectDef,
+		orgId: state.viewDef.orgId,
+		records: filtered,
+	});
 	const relationDisplayValuesByRecordId =
 		await buildRelationCellDisplayValueMap({
 			ctx,
 			fields: state.fields,
 			objectDef: state.objectDef,
 			orgId: state.viewDef.orgId,
-			records: filtered,
+			records: materializedFiltered,
 		});
 	const optionsLookup = buildKanbanOptionsLookup(boundFieldDef);
 	const groupRecordMap = distributeKanbanRecords(
-		filtered,
+		materializedFiltered,
 		boundFieldDef,
 		kanbanGroups
 	);
@@ -735,11 +757,11 @@ async function queryKanbanView(
 			optionsLookup,
 			state.columns,
 			buildEntityViewCellDisplayValueMap({
-				records: filtered,
+				records: materializedFiltered,
 				relationDisplayValuesByRecordId,
 			})
 		),
-		totalCount: filtered.length,
+		totalCount: materializedFiltered.length,
 		totalCountExact: !assembled.truncated,
 		truncated: assembled.truncated,
 	};

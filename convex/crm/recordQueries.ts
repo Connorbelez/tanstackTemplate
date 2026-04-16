@@ -5,8 +5,8 @@ import { crmQuery } from "../fluent";
 import {
 	buildEntityViewAdapter,
 	buildNormalizedFieldDefinitions,
-	materializeRecordComputedFields,
 } from "./entityViewFields";
+import { materializeEntityViewRecords } from "./entityViewHydration";
 import { materializeRelationFieldValues } from "./relationCellPayloads";
 import {
 	getNativeRecordById,
@@ -876,18 +876,34 @@ export const queryRecords = crmQuery
 		const fieldDefsById = new Map(
 			activeFieldDefs.map((fd) => [fd._id.toString(), fd])
 		);
+		const adapterContract = buildEntityViewAdapter({
+			currentLayout: "table",
+			fieldDefs: activeFieldDefs,
+			objectDef,
+			objectDefId: objectDef._id,
+		});
 
 		if (!hasFiltersOrSort(args)) {
-			return queryNativeRecordPage(
+			const page = await queryNativeRecordPage(
 				ctx,
 				orgId,
 				objectDef,
 				args,
 				activeFieldDefs
 			);
+			return {
+				...page,
+				records: await materializeEntityViewRecords({
+					adapterContract,
+					ctx,
+					objectDef,
+					orgId,
+					records: page.records,
+				}),
+			};
 		}
 
-		return queryFilteredRecordPage(
+		const page = await queryFilteredRecordPage(
 			ctx,
 			orgId,
 			objectDef,
@@ -895,6 +911,16 @@ export const queryRecords = crmQuery
 			activeFieldDefs,
 			fieldDefsById
 		);
+		return {
+			...page,
+			records: await materializeEntityViewRecords({
+				adapterContract,
+				ctx,
+				objectDef,
+				orgId,
+				records: page.records,
+			}),
+		};
 	})
 	.public();
 
@@ -1024,8 +1050,12 @@ export const getRecordDetailSurface = crmQuery
 			fields,
 			objectDef,
 			orgId,
-			records: [
-				materializeRecordComputedFields(
+			records: await materializeEntityViewRecords({
+				adapterContract,
+				ctx,
+				objectDef,
+				orgId,
+				records: [
 					await loadReferencedRecord({
 						activeFieldDefs,
 						ctx,
@@ -1034,9 +1064,8 @@ export const getRecordDetailSurface = crmQuery
 						recordId: args.recordId,
 						recordKind: args.recordKind,
 					}),
-					adapterContract
-				),
-			],
+				],
+			}),
 		});
 
 		return {

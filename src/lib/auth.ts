@@ -1,9 +1,9 @@
 import { redirect } from "@tanstack/react-router";
+import { isFairLendStaffAdmin as policyIsFairLendStaffAdmin } from "#/lib/auth-policy";
 import {
 	hasAnyPermissionGrant,
 	hasPermissionGrant,
 } from "../../convex/auth/permissionCatalog";
-import { isFairLendStaffAdmin as policyIsFairLendStaffAdmin } from "#/lib/auth-policy";
 import { buildSignInRedirect } from "./auth-redirect";
 
 /** Permissions that control island-level route access. */

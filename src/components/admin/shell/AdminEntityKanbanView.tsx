@@ -20,7 +20,10 @@ import { isRelationCellDisplayValue, RelationCell } from "./RelationCell";
 type ObjectDef = Pick<Doc<"objectDefs">, "nativeTable" | "singularLabel">;
 
 interface AdminEntityKanbanViewProps {
-	readonly adapterContract: Pick<EntityViewAdapterContract, "titleFieldName">;
+	readonly adapterContract: Pick<
+		EntityViewAdapterContract,
+		"entityType" | "titleFieldName"
+	>;
 	readonly columns: readonly AdminViewColumn[];
 	readonly fields: readonly NormalizedFieldDefinition[];
 	readonly groups: readonly AdminKanbanGroup[];
@@ -106,7 +109,11 @@ export function AdminEntityKanbanView({
 													})}
 												</p>
 												<p className="text-muted-foreground text-xs">
-													{getAdminRecordSupportingText(row.record, objectDef)}
+													{getAdminRecordSupportingText({
+														adapterContract,
+														objectDef,
+														record: row.record,
+													})}
 												</p>
 											</div>
 											<Badge
