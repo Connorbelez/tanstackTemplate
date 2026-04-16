@@ -1,6 +1,17 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 import {
+	originationCaseStatusValidator,
+	originationCollectionsDraftValidator,
+	originationListingOverridesValidator,
+	originationMortgageDraftValidator,
+	originationParticipantsDraftValidator,
+	originationPropertyDraftValidator,
+	originationStepValidator,
+	originationValidationSnapshotValidator,
+	originationValuationDraftValidator,
+} from "./admin/origination/validators";
+import {
 	aggregatePresetValidator,
 	aggregationEligibilityValidator,
 	capabilityValidator,
@@ -502,6 +513,43 @@ export default defineSchema({
 		sortOrder: v.number(),
 		createdAt: v.number(),
 	}).index("by_appraisal", ["appraisalId"]),
+
+	adminOriginationCases: defineTable({
+		bootstrapToken: v.optional(v.string()),
+		createdByUserId: v.id("users"),
+		updatedByUserId: v.optional(v.id("users")),
+		orgId: v.optional(v.string()),
+		status: originationCaseStatusValidator,
+		currentStep: v.optional(originationStepValidator),
+		participantsDraft: v.optional(originationParticipantsDraftValidator),
+		propertyDraft: v.optional(originationPropertyDraftValidator),
+		valuationDraft: v.optional(originationValuationDraftValidator),
+		mortgageDraft: v.optional(originationMortgageDraftValidator),
+		collectionsDraft: v.optional(originationCollectionsDraftValidator),
+		listingOverrides: v.optional(originationListingOverridesValidator),
+		validationSnapshot: v.optional(originationValidationSnapshotValidator),
+		committedMortgageId: v.optional(v.id("mortgages")),
+		committedListingId: v.optional(v.id("listings")),
+		committedAt: v.optional(v.number()),
+		createdAt: v.number(),
+		updatedAt: v.number(),
+	})
+		.index("by_bootstrap_token", ["bootstrapToken"])
+		.index("by_created_by", ["createdByUserId"])
+		.index("by_org", ["orgId"])
+		.index("by_status", ["status"])
+		.index("by_updated_at", ["updatedAt"])
+		.index("by_org_updated_at", ["orgId", "updatedAt"]),
+
+	originationCaseDocumentDrafts: defineTable({
+		caseId: v.id("adminOriginationCases"),
+		createdByUserId: v.optional(v.id("users")),
+		updatedByUserId: v.optional(v.id("users")),
+		createdAt: v.number(),
+		updatedAt: v.number(),
+	})
+		.index("by_case", ["caseId"])
+		.index("by_case_updated_at", ["caseId", "updatedAt"]),
 
 	mortgages: defineTable({
 		/** WorkOS organization id — denormalized from broker of record. */

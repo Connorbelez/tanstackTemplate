@@ -23,6 +23,15 @@ export type IslandPermission =
 interface PermissionCheckOptions {
 	allowAdminOverride?: boolean;
 }
+
+function hasExactOperationalPermission(
+	permissions: readonly string[],
+	permission: string
+) {
+	return hasPermission(permissions, permission, {
+		allowAdminOverride: false,
+	});
+}
 export function hasPermission(
 	permissions: readonly string[],
 	permission: string,
@@ -63,17 +72,27 @@ export function canAccessAdminPath(
 		return true;
 	}
 
-	if (pathname === "/admin/underwriting") {
-		return hasPermission(context.permissions, "underwriter:access", {
-			allowAdminOverride: false,
-		});
+	if (
+		pathname === "/admin/underwriting" ||
+		pathname.startsWith("/admin/underwriting/")
+	) {
+		return hasExactOperationalPermission(
+			context.permissions,
+			"underwriter:access"
+		);
 	}
 
-	return pathname.startsWith("/admin/underwriting/")
-		? hasPermission(context.permissions, "underwriter:access", {
-				allowAdminOverride: false,
-			})
-		: false;
+	if (
+		pathname === "/admin/originations" ||
+		pathname.startsWith("/admin/originations/")
+	) {
+		return hasExactOperationalPermission(
+			context.permissions,
+			"mortgage:originate"
+		);
+	}
+
+	return false;
 }
 
 /** Auth context returned by the root beforeLoad and available to all child routes. */
@@ -179,6 +198,26 @@ export function guardAnyPermission(
 			throw redirect(buildSignInRedirect(location.href));
 		}
 		if (!hasAnyPermission(context.permissions, requiredPermissions, options)) {
+			throw redirect({ to: "/unauthorized" });
+		}
+	};
+}
+
+export function guardOperationalAdminPermission(permission: string) {
+	return ({
+		context,
+		location,
+	}: {
+		context: RouteAuthContext;
+		location: { href: string };
+	}) => {
+		if (!context.userId) {
+			throw redirect(buildSignInRedirect(location.href));
+		}
+		if (isFairLendStaffAdmin(context)) {
+			return;
+		}
+		if (!hasExactOperationalPermission(context.permissions, permission)) {
 			throw redirect({ to: "/unauthorized" });
 		}
 	};

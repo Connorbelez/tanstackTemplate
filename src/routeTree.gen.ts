@@ -51,6 +51,7 @@ import { Route as DemoConvexAggregateRouteImport } from './routes/demo/convex-ag
 import { Route as DemoConvexActionCacheRouteImport } from './routes/demo/convex-action-cache'
 import { Route as DemoConvexRouteImport } from './routes/demo/convex'
 import { Route as AdminPaymentOperationsRouteImport } from './routes/admin/payment-operations'
+import { Route as AdminOriginationsRouteImport } from './routes/admin/originations'
 import { Route as AdminFinancialLedgerRouteImport } from './routes/admin/financial-ledger'
 import { Route as AdminEntitytypeRouteImport } from './routes/admin/$entitytype'
 import { Route as AuthenticatedAuthenticatedRouteImport } from './routes/_authenticated/authenticated'
@@ -106,6 +107,8 @@ import { Route as DemoAmpsE2ePaymentsRouteImport } from './routes/demo/amps/e2e-
 import { Route as DemoAmpsCollectionPlanRouteImport } from './routes/demo/amps/collection-plan'
 import { Route as DemoAmpsCollectionAttemptsRouteImport } from './routes/demo/amps/collection-attempts'
 import { Route as AdminPropertiesRecordidRouteImport } from './routes/admin/properties/$recordid'
+import { Route as AdminOriginationsNewRouteImport } from './routes/admin/originations.new'
+import { Route as AdminOriginationsCaseIdRouteImport } from './routes/admin/originations.$caseId'
 import { Route as AdminObligationsRecordidRouteImport } from './routes/admin/obligations/$recordid'
 import { Route as AdminMortgagesRecordidRouteImport } from './routes/admin/mortgages/$recordid'
 import { Route as AdminListingsRecordidRouteImport } from './routes/admin/listings/$recordid'
@@ -336,6 +339,11 @@ const DemoConvexRoute = DemoConvexRouteImport.update({
 const AdminPaymentOperationsRoute = AdminPaymentOperationsRouteImport.update({
   id: '/payment-operations',
   path: '/payment-operations',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const AdminOriginationsRoute = AdminOriginationsRouteImport.update({
+  id: '/originations',
+  path: '/originations',
   getParentRoute: () => AdminRouteRoute,
 } as any)
 const AdminFinancialLedgerRoute = AdminFinancialLedgerRouteImport.update({
@@ -636,6 +644,16 @@ const AdminPropertiesRecordidRoute = AdminPropertiesRecordidRouteImport.update({
   path: '/$recordid',
   getParentRoute: () => AdminPropertiesRouteRoute,
 } as any)
+const AdminOriginationsNewRoute = AdminOriginationsNewRouteImport.update({
+  id: '/new',
+  path: '/new',
+  getParentRoute: () => AdminOriginationsRoute,
+} as any)
+const AdminOriginationsCaseIdRoute = AdminOriginationsCaseIdRouteImport.update({
+  id: '/$caseId',
+  path: '/$caseId',
+  getParentRoute: () => AdminOriginationsRoute,
+} as any)
 const AdminObligationsRecordidRoute =
   AdminObligationsRecordidRouteImport.update({
     id: '/$recordid',
@@ -767,6 +785,7 @@ export interface FileRoutesByFullPath {
   '/authenticated': typeof AuthenticatedAuthenticatedRoute
   '/admin/$entitytype': typeof AdminEntitytypeRouteWithChildren
   '/admin/financial-ledger': typeof AdminFinancialLedgerRoute
+  '/admin/originations': typeof AdminOriginationsRouteWithChildren
   '/admin/payment-operations': typeof AdminPaymentOperationsRoute
   '/demo/convex': typeof DemoConvexRoute
   '/demo/convex-action-cache': typeof DemoConvexActionCacheRoute
@@ -808,6 +827,8 @@ export interface FileRoutesByFullPath {
   '/admin/listings/$recordid': typeof AdminListingsRecordidRoute
   '/admin/mortgages/$recordid': typeof AdminMortgagesRecordidRoute
   '/admin/obligations/$recordid': typeof AdminObligationsRecordidRoute
+  '/admin/originations/$caseId': typeof AdminOriginationsCaseIdRoute
+  '/admin/originations/new': typeof AdminOriginationsNewRoute
   '/admin/properties/$recordid': typeof AdminPropertiesRecordidRoute
   '/demo/amps/collection-attempts': typeof DemoAmpsCollectionAttemptsRoute
   '/demo/amps/collection-plan': typeof DemoAmpsCollectionPlanRoute
@@ -876,6 +897,7 @@ export interface FileRoutesByTo {
   '/authenticated': typeof AuthenticatedAuthenticatedRoute
   '/admin/$entitytype': typeof AdminEntitytypeRouteWithChildren
   '/admin/financial-ledger': typeof AdminFinancialLedgerRoute
+  '/admin/originations': typeof AdminOriginationsRouteWithChildren
   '/admin/payment-operations': typeof AdminPaymentOperationsRoute
   '/demo/convex': typeof DemoConvexRoute
   '/demo/convex-action-cache': typeof DemoConvexActionCacheRoute
@@ -915,6 +937,8 @@ export interface FileRoutesByTo {
   '/admin/listings/$recordid': typeof AdminListingsRecordidRoute
   '/admin/mortgages/$recordid': typeof AdminMortgagesRecordidRoute
   '/admin/obligations/$recordid': typeof AdminObligationsRecordidRoute
+  '/admin/originations/$caseId': typeof AdminOriginationsCaseIdRoute
+  '/admin/originations/new': typeof AdminOriginationsNewRoute
   '/admin/properties/$recordid': typeof AdminPropertiesRecordidRoute
   '/demo/amps/collection-attempts': typeof DemoAmpsCollectionAttemptsRoute
   '/demo/amps/collection-plan': typeof DemoAmpsCollectionPlanRoute
@@ -992,6 +1016,7 @@ export interface FileRoutesById {
   '/_authenticated/authenticated': typeof AuthenticatedAuthenticatedRoute
   '/admin/$entitytype': typeof AdminEntitytypeRouteWithChildren
   '/admin/financial-ledger': typeof AdminFinancialLedgerRoute
+  '/admin/originations': typeof AdminOriginationsRouteWithChildren
   '/admin/payment-operations': typeof AdminPaymentOperationsRoute
   '/demo/convex': typeof DemoConvexRoute
   '/demo/convex-action-cache': typeof DemoConvexActionCacheRoute
@@ -1033,6 +1058,8 @@ export interface FileRoutesById {
   '/admin/listings/$recordid': typeof AdminListingsRecordidRoute
   '/admin/mortgages/$recordid': typeof AdminMortgagesRecordidRoute
   '/admin/obligations/$recordid': typeof AdminObligationsRecordidRoute
+  '/admin/originations/$caseId': typeof AdminOriginationsCaseIdRoute
+  '/admin/originations/new': typeof AdminOriginationsNewRoute
   '/admin/properties/$recordid': typeof AdminPropertiesRecordidRoute
   '/demo/amps/collection-attempts': typeof DemoAmpsCollectionAttemptsRoute
   '/demo/amps/collection-plan': typeof DemoAmpsCollectionPlanRoute
@@ -1111,6 +1138,7 @@ export interface FileRouteTypes {
     | '/authenticated'
     | '/admin/$entitytype'
     | '/admin/financial-ledger'
+    | '/admin/originations'
     | '/admin/payment-operations'
     | '/demo/convex'
     | '/demo/convex-action-cache'
@@ -1152,6 +1180,8 @@ export interface FileRouteTypes {
     | '/admin/listings/$recordid'
     | '/admin/mortgages/$recordid'
     | '/admin/obligations/$recordid'
+    | '/admin/originations/$caseId'
+    | '/admin/originations/new'
     | '/admin/properties/$recordid'
     | '/demo/amps/collection-attempts'
     | '/demo/amps/collection-plan'
@@ -1220,6 +1250,7 @@ export interface FileRouteTypes {
     | '/authenticated'
     | '/admin/$entitytype'
     | '/admin/financial-ledger'
+    | '/admin/originations'
     | '/admin/payment-operations'
     | '/demo/convex'
     | '/demo/convex-action-cache'
@@ -1259,6 +1290,8 @@ export interface FileRouteTypes {
     | '/admin/listings/$recordid'
     | '/admin/mortgages/$recordid'
     | '/admin/obligations/$recordid'
+    | '/admin/originations/$caseId'
+    | '/admin/originations/new'
     | '/admin/properties/$recordid'
     | '/demo/amps/collection-attempts'
     | '/demo/amps/collection-plan'
@@ -1335,6 +1368,7 @@ export interface FileRouteTypes {
     | '/_authenticated/authenticated'
     | '/admin/$entitytype'
     | '/admin/financial-ledger'
+    | '/admin/originations'
     | '/admin/payment-operations'
     | '/demo/convex'
     | '/demo/convex-action-cache'
@@ -1376,6 +1410,8 @@ export interface FileRouteTypes {
     | '/admin/listings/$recordid'
     | '/admin/mortgages/$recordid'
     | '/admin/obligations/$recordid'
+    | '/admin/originations/$caseId'
+    | '/admin/originations/new'
     | '/admin/properties/$recordid'
     | '/demo/amps/collection-attempts'
     | '/demo/amps/collection-plan'
@@ -1772,6 +1808,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminPaymentOperationsRouteImport
       parentRoute: typeof AdminRouteRoute
     }
+    '/admin/originations': {
+      id: '/admin/originations'
+      path: '/originations'
+      fullPath: '/admin/originations'
+      preLoaderRoute: typeof AdminOriginationsRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
     '/admin/financial-ledger': {
       id: '/admin/financial-ledger'
       path: '/financial-ledger'
@@ -2157,6 +2200,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminPropertiesRecordidRouteImport
       parentRoute: typeof AdminPropertiesRouteRoute
     }
+    '/admin/originations/new': {
+      id: '/admin/originations/new'
+      path: '/new'
+      fullPath: '/admin/originations/new'
+      preLoaderRoute: typeof AdminOriginationsNewRouteImport
+      parentRoute: typeof AdminOriginationsRoute
+    }
+    '/admin/originations/$caseId': {
+      id: '/admin/originations/$caseId'
+      path: '/$caseId'
+      fullPath: '/admin/originations/$caseId'
+      preLoaderRoute: typeof AdminOriginationsCaseIdRouteImport
+      parentRoute: typeof AdminOriginationsRoute
+    }
     '/admin/obligations/$recordid': {
       id: '/admin/obligations/$recordid'
       path: '/$recordid'
@@ -2367,6 +2424,19 @@ const AdminEntitytypeRouteWithChildren = AdminEntitytypeRoute._addFileChildren(
   AdminEntitytypeRouteChildren,
 )
 
+interface AdminOriginationsRouteChildren {
+  AdminOriginationsCaseIdRoute: typeof AdminOriginationsCaseIdRoute
+  AdminOriginationsNewRoute: typeof AdminOriginationsNewRoute
+}
+
+const AdminOriginationsRouteChildren: AdminOriginationsRouteChildren = {
+  AdminOriginationsCaseIdRoute: AdminOriginationsCaseIdRoute,
+  AdminOriginationsNewRoute: AdminOriginationsNewRoute,
+}
+
+const AdminOriginationsRouteWithChildren =
+  AdminOriginationsRoute._addFileChildren(AdminOriginationsRouteChildren)
+
 interface AdminRouteRouteChildren {
   AdminBorrowersRouteRoute: typeof AdminBorrowersRouteRouteWithChildren
   AdminDealsRouteRoute: typeof AdminDealsRouteRouteWithChildren
@@ -2377,6 +2447,7 @@ interface AdminRouteRouteChildren {
   AdminUnderwritingRouteRoute: typeof AdminUnderwritingRouteRoute
   AdminEntitytypeRoute: typeof AdminEntitytypeRouteWithChildren
   AdminFinancialLedgerRoute: typeof AdminFinancialLedgerRoute
+  AdminOriginationsRoute: typeof AdminOriginationsRouteWithChildren
   AdminPaymentOperationsRoute: typeof AdminPaymentOperationsRoute
 }
 
@@ -2390,6 +2461,7 @@ const AdminRouteRouteChildren: AdminRouteRouteChildren = {
   AdminUnderwritingRouteRoute: AdminUnderwritingRouteRoute,
   AdminEntitytypeRoute: AdminEntitytypeRouteWithChildren,
   AdminFinancialLedgerRoute: AdminFinancialLedgerRoute,
+  AdminOriginationsRoute: AdminOriginationsRouteWithChildren,
   AdminPaymentOperationsRoute: AdminPaymentOperationsRoute,
 }
 

@@ -157,6 +157,15 @@ const UNDERWRITER_CONTEXT = {
 	userId: "user_underwriter",
 };
 
+const ORIGINATION_OPERATOR_CONTEXT = {
+	orgId: "org_origination_ops",
+	permissions: ["mortgage:originate"],
+	role: "operations",
+	roles: ["operations"],
+	token: null,
+	userId: "user_origination_ops",
+};
+
 const EXTERNAL_ADMIN_CONTEXT = {
 	orgId: "org_external_test",
 	permissions: ["admin:access"],
@@ -287,6 +296,49 @@ describe("admin shell helpers", () => {
 		expect(canAccessAdminPath("/admin/mortgages", EXTERNAL_ADMIN_CONTEXT)).toBe(
 			false
 		);
+	});
+
+	it("allows mortgage originators only on the origination workflow subtree", () => {
+		expect(
+			canAccessAdminPath("/admin/originations", ORIGINATION_OPERATOR_CONTEXT)
+		).toBe(true);
+		expect(
+			canAccessAdminPath(
+				"/admin/originations/new",
+				ORIGINATION_OPERATOR_CONTEXT
+			)
+		).toBe(true);
+		expect(
+			canAccessAdminPath(
+				"/admin/originations/case_123",
+				ORIGINATION_OPERATOR_CONTEXT
+			)
+		).toBe(true);
+		expect(canAccessAdminPath("/admin/originations", UNDERWRITER_CONTEXT)).toBe(
+			false
+		);
+		expect(
+			canAccessAdminPath("/admin/originations", FAIRLEND_ADMIN_CONTEXT)
+		).toBe(true);
+		expect(
+			canAccessAdminPath("/admin/originations", EXTERNAL_ADMIN_CONTEXT)
+		).toBe(false);
+	});
+
+	it("registers the origination route in payments navigation and breadcrumbs", () => {
+		const sections = getAdminNavigationSections();
+		const paymentsSection = sections.find((section) => section.domain === "payments");
+
+		expect(paymentsSection?.items.map((item) => item.label)).toContain(
+			"Originations"
+		);
+		expect(
+			getAdminBreadcrumbLabel({
+				index: 1,
+				segment: "originations",
+				segments: ["admin", "originations"],
+			})
+		).toBe("Originations");
 	});
 
 	it("identifies admin pathnames for root header suppression", () => {

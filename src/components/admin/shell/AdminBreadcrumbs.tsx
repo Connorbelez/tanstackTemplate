@@ -20,6 +20,7 @@ const adminSegmentLabels: Record<string, string> = {
 	listings: "Listings",
 	mortgages: "Mortgages",
 	obligations: "Obligations",
+	originations: "Originations",
 	"payment-operations": "Payment Operations",
 	"financial-ledger": "Financial Ledger",
 	properties: "Properties",
