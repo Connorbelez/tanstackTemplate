@@ -19,7 +19,8 @@
       "!!src/components/storybook/*",
       "!!e2e/*",
       "!!src/test/*",
-      "!!convex/ledger/__tests__/*"
+      "!!convex/ledger/__tests__/*",
+      "!!specs/**/*"
     ]
   },
   "formatter": {
