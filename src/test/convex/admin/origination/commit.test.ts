@@ -315,8 +315,10 @@ describe("admin origination commit", () => {
 			workflowSourceType: "admin_origination_case",
 		});
 		expect(artifacts.mortgageValuationSnapshots[0]).toMatchObject({
+			createdByUserId: artifacts.caseRecord?.updatedByUserId,
 			mortgageId: firstResult.committedMortgageId,
-			propertyId: firstResult.propertyId,
+			source: "admin_origination",
+			valuationDate: "2026-05-01",
 			valueAsIs: 425_000,
 		});
 		expect(artifacts.mortgages[0].collectionExecutionProviderCode).toBeUndefined();

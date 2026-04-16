@@ -1,8 +1,10 @@
 "use client";
 
+import { Link } from "@tanstack/react-router";
 import { useQuery } from "convex/react";
 import type { ReactNode } from "react";
 import { Badge } from "#/components/ui/badge";
+import { EMPTY_ADMIN_DETAIL_SEARCH } from "#/lib/admin-detail-search";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import type {
@@ -33,6 +35,17 @@ function formatDate(value: number | string | null | undefined) {
 	}
 
 	return date.toLocaleDateString();
+}
+
+function formatEnumLabel(value: string) {
+	return value
+		.split("_")
+		.map((segment) =>
+			segment.length > 0
+				? `${segment.slice(0, 1).toUpperCase()}${segment.slice(1)}`
+				: segment
+		)
+		.join(" ");
 }
 
 function filterDetailFields(
@@ -420,7 +433,16 @@ export function MortgagesDedicatedDetails({
 									className="rounded-lg border border-border/60 bg-background/80 px-3 py-3"
 									key={String(borrower.borrowerId)}
 								>
-									<p className="font-medium text-sm">{borrower.name}</p>
+									<Link
+										className="font-medium text-primary text-sm underline-offset-4 hover:underline"
+										params={{
+											recordid: String(borrower.borrowerId),
+										}}
+										search={EMPTY_ADMIN_DETAIL_SEARCH}
+										to="/admin/borrowers/$recordid"
+									>
+										{borrower.name}
+									</Link>
 									<p className="text-muted-foreground text-sm">
 										{borrower.role} • {borrower.status}
 										{borrower.idvStatus ? ` • ${borrower.idvStatus}` : ""}
@@ -441,9 +463,23 @@ export function MortgagesDedicatedDetails({
 						items={[
 							{
 								label: "Property",
-								value: detailContext?.property
-									? `${detailContext.property.streetAddress}, ${detailContext.property.city}, ${detailContext.property.province}`
-									: "No property context",
+								value: detailContext?.property ? (
+									<div className="space-y-1">
+										<div>{`${detailContext.property.streetAddress}, ${detailContext.property.city}, ${detailContext.property.province}`}</div>
+										<Link
+											className="text-primary text-xs underline-offset-4 hover:underline"
+											params={{
+												recordid: String(detailContext.property.propertyId),
+											}}
+											search={EMPTY_ADMIN_DETAIL_SEARCH}
+											to="/admin/properties/$recordid"
+										>
+											Open property record
+										</Link>
+									</div>
+								) : (
+									"No property context"
+								),
 							},
 							{
 								label: "Postal Code",
@@ -551,20 +587,24 @@ export function MortgagesDedicatedDetails({
 									: "No valuation snapshot",
 							},
 							{
-								label: "Effective Date",
+								label: "Valuation Date",
 								value:
-									detailContext?.latestValuationSnapshot?.effectiveDate ??
+									detailContext?.latestValuationSnapshot?.valuationDate ??
 									"Unavailable",
 							},
 							{
-								label: "Visibility",
-								value: detailContext?.latestValuationSnapshot?.visibilityHint
-									? `${detailContext.latestValuationSnapshot.visibilityHint
-											.slice(0, 1)
-											.toUpperCase()}${detailContext.latestValuationSnapshot.visibilityHint.slice(
-											1
-										)}`
-									: "Not set",
+								label: "Source",
+								value: detailContext?.latestValuationSnapshot?.source
+									? formatEnumLabel(
+											detailContext.latestValuationSnapshot.source
+										)
+									: "Unavailable",
+							},
+							{
+								label: "Document Asset",
+								value:
+									detailContext?.latestValuationSnapshot
+										?.relatedDocumentAssetId ?? "Not attached",
 							},
 						]}
 					/>

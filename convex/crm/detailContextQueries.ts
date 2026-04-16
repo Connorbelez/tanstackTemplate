@@ -133,12 +133,13 @@ export const getMortgageDetailContext = crmQuery
 				: null,
 			latestValuationSnapshot: latestValuationSnapshot
 				? {
-						effectiveDate: latestValuationSnapshot.effectiveDate,
+						createdByUserId: latestValuationSnapshot.createdByUserId,
 						relatedDocumentAssetId:
 							latestValuationSnapshot.relatedDocumentAssetId ?? null,
+						source: latestValuationSnapshot.source,
 						valueAsIs: latestValuationSnapshot.valueAsIs,
 						valuationSnapshotId: latestValuationSnapshot._id,
-						visibilityHint: latestValuationSnapshot.visibilityHint ?? null,
+						valuationDate: latestValuationSnapshot.valuationDate,
 					}
 				: null,
 			recentObligations,

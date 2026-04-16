@@ -322,7 +322,7 @@ export function PropertyStep({
 										},
 									})
 								}
-								placeholder="storage_..."
+								placeholder="document asset record id"
 								value={nextValuationDraft.relatedDocumentAssetId ?? ""}
 							/>
 						</div>

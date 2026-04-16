@@ -1,3 +1,4 @@
+import { ConvexError } from "convex/values";
 import type { Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 
@@ -9,46 +10,52 @@ export async function createOriginationValuationSnapshot(
 	ctx: Pick<MutationCtx, "db">,
 	args: {
 		createdAt: number;
+		createdByUserId: Id<"users">;
 		mortgageId: Id<"mortgages">;
-		propertyId: Id<"properties">;
-		relatedDocumentAssetId?: Id<"_storage">;
+		relatedDocumentAssetId?: Id<"documentAssets">;
+		source: "admin_origination" | "appraisal_import" | "underwriting";
 		termStartDate: string;
 		valuationDate?: string;
 		valueAsIs: number;
-		visibilityHint?: "private" | "public";
 	}
 ) {
-	const effectiveDate =
+	const mortgage = await ctx.db.get(args.mortgageId);
+	if (!mortgage) {
+		throw new ConvexError("Mortgage no longer exists for valuation snapshot");
+	}
+	const valuationDate =
 		args.valuationDate?.trim() ||
 		args.termStartDate ||
 		toBusinessDate(args.createdAt);
-	const notes = args.visibilityHint
-		? `Origination valuation visibility: ${args.visibilityHint}`
-		: undefined;
+	const relatedDocumentAsset = args.relatedDocumentAssetId
+		? await ctx.db.get(args.relatedDocumentAssetId)
+		: null;
+	if (args.relatedDocumentAssetId && !relatedDocumentAsset) {
+		throw new ConvexError("Related valuation document asset no longer exists");
+	}
 	const valuationSnapshotId = await ctx.db.insert(
 		"mortgageValuationSnapshots",
 		{
 			createdAt: args.createdAt,
-			effectiveDate,
+			createdByUserId: args.createdByUserId,
 			mortgageId: args.mortgageId,
-			propertyId: args.propertyId,
 			relatedDocumentAssetId: args.relatedDocumentAssetId,
+			source: args.source,
 			valueAsIs: args.valueAsIs,
-			visibilityHint: args.visibilityHint,
+			valuationDate,
 		}
 	);
 	const appraisalId = await ctx.db.insert("appraisals", {
-		propertyId: args.propertyId,
+		propertyId: mortgage.propertyId,
 		appraisalType: "as_is",
 		appraisedValue: args.valueAsIs,
 		appraiserName: "FairLend Origination Workspace",
 		appraiserFirm: "FairLend",
-		effectiveDate,
-		reportDate: effectiveDate,
-		reportFileRef: args.relatedDocumentAssetId,
-		notes,
+		effectiveDate: valuationDate,
+		reportDate: valuationDate,
+		reportFileRef: relatedDocumentAsset?.fileRef,
 		createdAt: args.createdAt,
 	});
 
-	return { appraisalId, effectiveDate, valuationSnapshotId };
+	return { appraisalId, valuationDate, valuationSnapshotId };
 }

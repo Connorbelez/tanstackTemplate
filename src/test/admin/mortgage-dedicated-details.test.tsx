@@ -4,6 +4,7 @@
 
 import { cleanup, render, screen } from "@testing-library/react";
 import { useQuery } from "convex/react";
+import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Id } from "../../../convex/_generated/dataModel";
 import type {
@@ -14,6 +15,25 @@ import { MortgagesDedicatedDetails } from "#/components/admin/shell/dedicated-de
 
 vi.mock("convex/react", () => ({
 	useQuery: vi.fn(),
+}));
+
+vi.mock("@tanstack/react-router", () => ({
+	Link: (props: {
+		children: ReactNode;
+		className?: string;
+		params?: Record<string, string>;
+		to: string;
+	}) => (
+		<a
+			className={props.className}
+			href={props.to.replace(
+				"$recordid",
+				props.params?.recordid ?? "$recordid"
+			)}
+		>
+			{props.children}
+		</a>
+	),
 }));
 
 function buildFieldDef(args: {
@@ -91,10 +111,11 @@ describe("mortgage dedicated details", () => {
 					title: "King West bridge opportunity",
 				},
 				latestValuationSnapshot: {
-					effectiveDate: "2026-05-01",
-					relatedDocumentAssetId: "storage_valuation_report",
+					createdByUserId: "user_admin_1",
+					relatedDocumentAssetId: "document_asset_valuation_report",
+					source: "admin_origination",
 					valueAsIs: 425_000,
-					visibilityHint: "private",
+					valuationDate: "2026-05-01",
 				},
 				obligationStats: {},
 				property: {
@@ -227,6 +248,14 @@ describe("mortgage dedicated details", () => {
 		expect(screen.getByText("Audit")).toBeTruthy();
 		expect(screen.getByText(/425,000/)).toBeTruthy();
 		expect(screen.getByText(/2026-05-01/)).toBeTruthy();
-		expect(screen.getAllByText(/Private/i).length).toBeGreaterThan(0);
+		expect(screen.getByText("Admin Origination")).toBeTruthy();
+		expect(
+			screen.getByRole("link", { name: "Ada Borrower" }).getAttribute("href")
+		).toBe("/admin/borrowers/borrower_1");
+		expect(
+			screen
+				.getByRole("link", { name: "Open property record" })
+				.getAttribute("href")
+		).toBe("/admin/properties/property_1");
 	});
 });

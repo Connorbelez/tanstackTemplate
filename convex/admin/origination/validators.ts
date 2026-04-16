@@ -68,7 +68,7 @@ export const originationPropertyDraftValidator = v.object({
 export const originationValuationDraftValidator = v.object({
 	valueAsIs: v.optional(v.number()),
 	valuationDate: v.optional(v.string()),
-	relatedDocumentAssetId: v.optional(v.id("_storage")),
+	relatedDocumentAssetId: v.optional(v.id("documentAssets")),
 	visibilityHint: v.optional(
 		v.union(v.literal("public"), v.literal("private"))
 	),

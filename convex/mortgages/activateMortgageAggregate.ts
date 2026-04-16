@@ -297,13 +297,13 @@ export async function activateMortgageAggregate(
 	const valuationSnapshot = args.valuationDraft?.valueAsIs
 		? await createOriginationValuationSnapshot(ctx, {
 				createdAt: args.now,
+				createdByUserId: args.viewerUserId,
 				mortgageId,
-				propertyId,
 				relatedDocumentAssetId: args.valuationDraft.relatedDocumentAssetId,
+				source: "admin_origination",
 				termStartDate: mortgageInputs.termStartDate,
 				valuationDate: args.valuationDraft.valuationDate,
 				valueAsIs: args.valuationDraft.valueAsIs,
-				visibilityHint: args.valuationDraft.visibilityHint,
 			})
 		: null;
 

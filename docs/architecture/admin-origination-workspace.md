@@ -72,7 +72,7 @@ That action:
 - records durable `failed` state with `lastCommitError` and `failedAt` when canonical activation aborts
 - reuses same-org borrowers and properties when possible
 - creates the canonical mortgage directly in `active`
-- creates the canonical `mortgageValuationSnapshots` row and a compatibility `appraisals` projection
+- creates the canonical `mortgageValuationSnapshots` row with `source`, `valuationDate`, `createdByUserId`, and optional `documentAssets` linkage, plus a compatibility `appraisals` projection
 - mints the ownership-ledger genesis entry through the existing ledger primitive
 - writes an origination audit journal entry
 - patches the case to `committed` with `committedMortgageId`, `committedValuationSnapshotId`, and `committedAt`

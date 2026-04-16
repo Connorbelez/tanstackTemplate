@@ -501,17 +501,17 @@ export default defineSchema({
 
 	mortgageValuationSnapshots: defineTable({
 		mortgageId: v.id("mortgages"),
-		propertyId: v.id("properties"),
-		effectiveDate: v.string(),
-		valueAsIs: v.number(),
-		relatedDocumentAssetId: v.optional(v.id("_storage")),
-		visibilityHint: v.optional(
-			v.union(v.literal("public"), v.literal("private"))
+		source: v.union(
+			v.literal("admin_origination"),
+			v.literal("underwriting"),
+			v.literal("appraisal_import")
 		),
+		valueAsIs: v.number(),
+		valuationDate: v.string(),
+		relatedDocumentAssetId: v.optional(v.id("documentAssets")),
+		createdByUserId: v.id("users"),
 		createdAt: v.number(),
-	})
-		.index("by_mortgage_created_at", ["mortgageId", "createdAt"])
-		.index("by_property_created_at", ["propertyId", "createdAt"]),
+	}).index("by_mortgage_created_at", ["mortgageId", "createdAt"]),
 
 	appraisalComparables: defineTable({
 		appraisalId: v.id("appraisals"),
@@ -1812,6 +1812,26 @@ export default defineSchema({
 	// ══════════════════════════════════════════════════════════
 	// DOCUMENT ENGINE
 	// ══════════════════════════════════════════════════════════
+
+	documentAssets: defineTable({
+		name: v.string(),
+		description: v.optional(v.string()),
+		originalFilename: v.string(),
+		mimeType: v.literal("application/pdf"),
+		fileRef: v.id("_storage"),
+		fileHash: v.string(),
+		fileSize: v.number(),
+		pageCount: v.optional(v.number()),
+		uploadedByUserId: v.id("users"),
+		uploadedAt: v.number(),
+		source: v.union(
+			v.literal("admin_upload"),
+			v.literal("external_import"),
+			v.literal("signature_archive")
+		),
+	})
+		.index("by_hash", ["fileHash"])
+		.index("by_uploaded_by", ["uploadedByUserId"]),
 
 	documentBasePdfs: defineTable({
 		name: v.string(),
