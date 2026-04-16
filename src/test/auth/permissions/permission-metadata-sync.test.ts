@@ -40,7 +40,60 @@ describe("ROLE_PERMISSIONS <-> PERMISSION_DISPLAY_METADATA sync", () => {
 		).toEqual([]);
 	});
 
-	const KNOWN_ORPHANS: Record<string, string> = {};
+	const KNOWN_ORPHANS: Record<string, string> = {
+		"application:manage":
+			"Canonical catalog entry retained for future assignment; admin reaches it through admin:access.",
+		"application:triage":
+			"Canonical catalog entry retained for future assignment; admin reaches it through admin:access.",
+		"cash_ledger:correct":
+			"Staff-only runtime gate retained in the catalog without a dedicated non-admin role assignment.",
+		"cash_ledger:view":
+			"Staff-only runtime gate retained in the catalog without a dedicated non-admin role assignment.",
+		"condition:waive":
+			"Canonical catalog entry retained for future assignment; admin reaches it through admin:access.",
+		"deal:manage":
+			"Canonical catalog entry retained for future assignment; admin reaches it through admin:access.",
+		"document:generate":
+			"Canonical catalog entry retained for future assignment; admin reaches it through admin:access.",
+		"ledger:correct":
+			"Canonical catalog entry retained for future assignment; admin reaches it through admin:access.",
+		"mortgage:originate":
+			"Canonical catalog entry retained for future assignment; admin reaches it through admin:access.",
+		"obligation:waive":
+			"Canonical catalog entry retained for future assignment; admin reaches it through admin:access.",
+		"onboarding:manage":
+			"Catalogued runtime permission kept intentionally unassigned pending final RBAC disposition.",
+		"onboarding:review":
+			"Canonical catalog entry retained so admin-only onboarding approval flows still have a named permission gate.",
+		"org:manage_members":
+			"Catalogued org-admin permission used by explicit fixtures rather than a canonical WorkOS role assignment.",
+		"org:manage_settings":
+			"Catalogued org-admin permission used by explicit fixtures rather than a canonical WorkOS role assignment.",
+		"payment:cancel":
+			"Canonical catalog entry retained for future assignment; admin reaches it through admin:access.",
+		"payment:manage":
+			"Canonical catalog entry retained for future assignment; admin reaches it through admin:access.",
+		"payment:retry":
+			"Canonical catalog entry retained for future assignment; admin reaches it through admin:access.",
+		"payment:view":
+			"Canonical catalog entry retained for future assignment; admin reaches it through admin:access.",
+		"payment:webhook_process":
+			"Canonical catalog entry retained for future assignment; admin reaches it through admin:access.",
+		"platform:manage_orgs":
+			"Platform-admin catalog permission remains intentional even though no non-admin role currently receives it.",
+		"platform:manage_roles":
+			"Platform-admin catalog permission remains intentional even though no non-admin role currently receives it.",
+		"platform:manage_system":
+			"Platform-admin catalog permission remains intentional even though no non-admin role currently receives it.",
+		"platform:manage_users":
+			"Platform-admin catalog permission remains intentional even though no non-admin role currently receives it.",
+		"platform:view_audit":
+			"Platform-admin catalog permission remains intentional even though no non-admin role currently receives it.",
+		"renewal:manage":
+			"Canonical catalog entry retained for future assignment; admin reaches it through admin:access.",
+		"role:assign":
+			"Canonical catalog entry retained for future assignment; admin reaches it through admin:access.",
+	};
 
 	it("every metadata entry is assigned to at least one role or is a known orphan", () => {
 		const unexpectedOrphans: string[] = [];

@@ -120,9 +120,6 @@ export const findEligibleEntriesInternal = internalQuery({
 			if (args.lenderId && entry.lenderId !== args.lenderId) {
 				return false;
 			}
-			if (entry.transferRequestId) {
-				return false;
-			}
 			return (
 				entry.payoutEligibleAfter !== undefined &&
 				entry.payoutEligibleAfter !== ""
@@ -137,9 +134,6 @@ export const findEligibleEntriesInternal = internalQuery({
 
 		const eligibleLegacy = pendingAll.filter((entry) => {
 			if (args.lenderId && entry.lenderId !== args.lenderId) {
-				return false;
-			}
-			if (entry.transferRequestId) {
 				return false;
 			}
 			return !entry.payoutEligibleAfter;

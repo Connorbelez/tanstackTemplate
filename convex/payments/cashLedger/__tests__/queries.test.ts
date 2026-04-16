@@ -32,14 +32,14 @@ const CASH_LEDGER_IDENTITY = {
 };
 
 /**
- * Identity with "ledger:view" but NOT "cash_ledger:view".
- * Used to prove the permission boundary — cashLedgerQuery must reject this.
+ * External org admin with "ledger:view" but not the FairLend staff boundary or
+ * "cash_ledger:view". cashLedgerQuery must reject this identity.
  */
-const WRONG_PERMISSION_IDENTITY = {
+const EXTERNAL_LEDGER_VIEW_IDENTITY = {
 	subject: "test-wrong-perm-user",
 	issuer: "https://api.workos.com",
-	org_id: FAIRLEND_STAFF_ORG_ID,
-	organization_name: "FairLend Staff",
+	org_id: "org_test_external_cash_ledger",
+	organization_name: "External Test Org",
 	role: "admin",
 	roles: JSON.stringify(["admin"]),
 	permissions: JSON.stringify(["ledger:view"]),
@@ -647,9 +647,9 @@ describe("auth", () => {
 		).rejects.toThrow(UNAUTHORIZED_PATTERN);
 	});
 
-	it("rejects ledger:view (without cash_ledger:view) on getAccountBalanceRange", async () => {
+	it("rejects external org admin with ledger:view on getAccountBalanceRange", async () => {
 		const t = createHarness();
-		const wrongAuth = t.withIdentity(WRONG_PERMISSION_IDENTITY);
+		const wrongAuth = t.withIdentity(EXTERNAL_LEDGER_VIEW_IDENTITY);
 		const seeded = await seedCore(t);
 
 		const accountId = await insertAccount(t, {
@@ -668,9 +668,9 @@ describe("auth", () => {
 		).rejects.toThrow(FORBIDDEN_PATTERN);
 	});
 
-	it("rejects ledger:view (without cash_ledger:view) on getBorrowerBalance", async () => {
+	it("rejects external org admin with ledger:view on getBorrowerBalance", async () => {
 		const t = createHarness();
-		const wrongAuth = t.withIdentity(WRONG_PERMISSION_IDENTITY);
+		const wrongAuth = t.withIdentity(EXTERNAL_LEDGER_VIEW_IDENTITY);
 		const seeded = await seedCore(t);
 
 		await expect(
@@ -680,9 +680,9 @@ describe("auth", () => {
 		).rejects.toThrow(FORBIDDEN_PATTERN);
 	});
 
-	it("rejects ledger:view (without cash_ledger:view) on getBalancesByFamily", async () => {
+	it("rejects external org admin with ledger:view on getBalancesByFamily", async () => {
 		const t = createHarness();
-		const wrongAuth = t.withIdentity(WRONG_PERMISSION_IDENTITY);
+		const wrongAuth = t.withIdentity(EXTERNAL_LEDGER_VIEW_IDENTITY);
 		const seeded = await seedCore(t);
 
 		await expect(

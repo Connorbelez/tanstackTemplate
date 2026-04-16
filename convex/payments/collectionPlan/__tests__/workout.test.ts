@@ -623,7 +623,7 @@ describe("workout plans", () => {
 		expect(completion.blockingPlanEntryId).toBe(workoutEntry._id);
 	});
 
-	it("requires mortgage or workout ownership for public write handlers", async () => {
+	it("requires FairLend admin before public write handlers reach resource checks", async () => {
 		const t = createBackendTestConvex();
 		const asOf = new Date("2026-04-06T12:00:00.000Z").getTime();
 		vi.setSystemTime(asOf);
@@ -642,7 +642,7 @@ describe("workout plans", () => {
 				.mutation(api.payments.collectionPlan.workout.createWorkoutPlan, {
 					mortgageId,
 					name: "Unauthorized workout",
-					rationale: "Should be blocked by resource checks",
+					rationale: "Should be blocked by the staff admin boundary",
 					installments: [
 						{
 							obligationIds: [createResult.coveredObligationIds[0]],
@@ -651,7 +651,7 @@ describe("workout plans", () => {
 						},
 					],
 				})
-		).rejects.toThrow("Forbidden: no mortgage access");
+		).rejects.toThrow("Forbidden: fair lend admin role required");
 
 		await expect(
 			t
@@ -659,7 +659,7 @@ describe("workout plans", () => {
 				.mutation(api.payments.collectionPlan.workout.activateWorkoutPlan, {
 					workoutPlanId: createResult.workoutPlanId,
 				})
-		).rejects.toThrow("Forbidden: no workout plan access");
+		).rejects.toThrow("Forbidden: fair lend admin role required");
 
 		await expect(
 			t
@@ -667,7 +667,7 @@ describe("workout plans", () => {
 				.mutation(api.payments.collectionPlan.workout.completeWorkoutPlan, {
 					workoutPlanId: createResult.workoutPlanId,
 				})
-		).rejects.toThrow("Forbidden: no workout plan access");
+		).rejects.toThrow("Forbidden: fair lend admin role required");
 
 		await expect(
 			t
@@ -675,7 +675,7 @@ describe("workout plans", () => {
 				.mutation(api.payments.collectionPlan.workout.cancelWorkoutPlan, {
 					workoutPlanId: createResult.workoutPlanId,
 				})
-		).rejects.toThrow("Forbidden: no workout plan access");
+		).rejects.toThrow("Forbidden: fair lend admin role required");
 	});
 
 	it("does not create duplicate restored entries when non-workout coverage already exists", async () => {

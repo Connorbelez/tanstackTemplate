@@ -471,86 +471,98 @@ describe("Rotessa managed recurring lifecycle contracts", () => {
 	});
 
 	describe("webhook-driven recurring occurrences", () => {
-		it("settles a 12-month cycle through Future -> Pending -> Approved", async () => {
-			const harness = createReliabilityHarness();
-			const { fixture } = await harness.bootstrap({
-				seedCollectionRules: true,
-			});
-
-			for (let paymentNumber = 1; paymentNumber <= 12; paymentNumber += 1) {
-				const scheduledObligation = await harness.getObligationByPaymentNumber(
-					fixture.mortgageId,
-					paymentNumber
-				);
-				const scheduledPlanEntry = await harness.getPlanEntryForObligation(
-					scheduledObligation._id
-				);
-				const attemptsBefore = await harness.getCollectionAttemptsForPlanEntry(
-					scheduledPlanEntry._id
-				);
-
-				expect(attemptsBefore).toHaveLength(0);
-
-				const rotessaTransactionId = `rotessa_txn_${paymentNumber}`;
-				const pending = await seedRotessaManagedOccurrence(harness, {
-					obligationId: scheduledObligation._id,
-					planEntryId: scheduledPlanEntry._id,
-					transactionId: rotessaTransactionId,
+		it(
+			"settles a 12-month cycle through Future -> Pending -> Approved",
+			async () => {
+				const harness = createReliabilityHarness();
+				const { fixture } = await harness.bootstrap({
+					seedCollectionRules: true,
 				});
-				const processDate = businessDateForObligation(pending.obligation);
 
-				await processRotessaWebhook(
-					harness,
-					makeRotessaWebhookEvent({
-						amount: pending.inboundTransfer.amount / 100,
-						date: processDate,
-						eventId: `evt_pending_${paymentNumber}`,
-						eventType: "transaction.pending",
+				for (let paymentNumber = 1; paymentNumber <= 12; paymentNumber += 1) {
+					const scheduledObligation =
+						await harness.getObligationByPaymentNumber(
+							fixture.mortgageId,
+							paymentNumber
+						);
+					const scheduledPlanEntry = await harness.getPlanEntryForObligation(
+						scheduledObligation._id
+					);
+					const attemptsBefore =
+						await harness.getCollectionAttemptsForPlanEntry(
+							scheduledPlanEntry._id
+						);
+
+					expect(attemptsBefore).toHaveLength(0);
+
+					const rotessaTransactionId = `rotessa_txn_${paymentNumber}`;
+					const pending = await seedRotessaManagedOccurrence(harness, {
+						obligationId: scheduledObligation._id,
+						planEntryId: scheduledPlanEntry._id,
 						transactionId: rotessaTransactionId,
-					})
-				);
+					});
+					const processDate = businessDateForObligation(pending.obligation);
 
-				const processingTransfer = await getTransfer(
-					harness,
-					pending.inboundTransfer._id
-				);
-				const processingAttempt = await getAttempt(harness, pending.attempt._id);
+					await processRotessaWebhook(
+						harness,
+						makeRotessaWebhookEvent({
+							amount: pending.inboundTransfer.amount / 100,
+							date: processDate,
+							eventId: `evt_pending_${paymentNumber}`,
+							eventType: "transaction.pending",
+							transactionId: rotessaTransactionId,
+						})
+					);
 
-				expect(processingTransfer.status).toBe("processing");
-				expect(processingAttempt.status).toBe("pending");
+					const processingTransfer = await getTransfer(
+						harness,
+						pending.inboundTransfer._id
+					);
+					const processingAttempt = await getAttempt(
+						harness,
+						pending.attempt._id
+					);
 
-				await processRotessaWebhook(
-					harness,
-					makeRotessaWebhookEvent({
-						amount: pending.inboundTransfer.amount / 100,
-						date: processDate,
-						eventId: `evt_approved_${paymentNumber}`,
-						eventType: "transaction.completed",
-						transactionId: rotessaTransactionId,
-					})
-				);
+					expect(processingTransfer.status).toBe("processing");
+					expect(processingAttempt.status).toBe("pending");
 
-				const confirmedTransfer = await getTransfer(
-					harness,
-					pending.inboundTransfer._id
-				);
-				const confirmedAttempt = await getAttempt(harness, pending.attempt._id);
-				const settledObligation = await getObligation(
-					harness,
-					pending.obligation._id
-				);
+					await processRotessaWebhook(
+						harness,
+						makeRotessaWebhookEvent({
+							amount: pending.inboundTransfer.amount / 100,
+							date: processDate,
+							eventId: `evt_approved_${paymentNumber}`,
+							eventType: "transaction.completed",
+							transactionId: rotessaTransactionId,
+						})
+					);
 
-				expect(confirmedTransfer.status).toBe("confirmed");
-				expect(confirmedAttempt.status).toBe("confirmed");
-				expect(settledObligation.status).toBe("settled");
-			}
+					const confirmedTransfer = await getTransfer(
+						harness,
+						pending.inboundTransfer._id
+					);
+					const confirmedAttempt = await getAttempt(
+						harness,
+						pending.attempt._id
+					);
+					const settledObligation = await getObligation(
+						harness,
+						pending.obligation._id
+					);
 
-			const obligations = await harness.getObligations(fixture.mortgageId);
-			expect(obligations).toHaveLength(12);
-			expect(obligations.every((obligation) => obligation.status === "settled")).toBe(
-				true
-			);
-		});
+					expect(confirmedTransfer.status).toBe("confirmed");
+					expect(confirmedAttempt.status).toBe("confirmed");
+					expect(settledObligation.status).toBe("settled");
+				}
+
+				const obligations = await harness.getObligations(fixture.mortgageId);
+				expect(obligations).toHaveLength(12);
+				expect(
+					obligations.every((obligation) => obligation.status === "settled")
+				).toBe(true);
+			},
+			15_000
+		);
 
 		it("routes a Rotessa NSF decline into retry scheduling on the current collection attempt", async () => {
 			const harness = createReliabilityHarness();

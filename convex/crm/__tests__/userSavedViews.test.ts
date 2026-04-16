@@ -244,6 +244,12 @@ describe("CRM user saved views", () => {
 				.filter((column) => column.isVisible)
 				.map((column) => column.name)
 		).toEqual(["status", "company_name"]);
+		expect(
+			result.columns
+				.filter((column) => !column.isVisible)
+				.map((column) => column.name)
+				.sort()
+		).toEqual(["deal_value", "is_active", "next_followup"].sort());
 		for (const row of result.rows) {
 			expect(Object.keys(row.fields).sort()).toEqual(
 				["company_name", "status"].sort()

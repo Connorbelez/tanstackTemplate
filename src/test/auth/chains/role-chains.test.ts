@@ -261,10 +261,10 @@ const CHAIN_TESTS: ChainTest[] = [
 		allowed: ["FAIRLEND_ADMIN"],
 	},
 	{
-		name: "cashLedgerMutation (cash_ledger:correct)",
+		name: "cashLedgerMutation (FairLend admin + cash_ledger:correct)",
 		mutationEndpoint: api.test.authTestEndpoints.testCashLedgerMutation,
 		type: "mutation",
-		allowed: ["FAIRLEND_ADMIN", "EXTERNAL_ORG_ADMIN"],
+		allowed: ["FAIRLEND_ADMIN"],
 	},
 	{
 		name: "onboardingManageQuery (FairLend admin + onboarding:manage)",
