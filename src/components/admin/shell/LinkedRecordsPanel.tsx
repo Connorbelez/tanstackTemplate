@@ -26,6 +26,7 @@ import {
 	CollapsibleContent,
 	CollapsibleTrigger,
 } from "#/components/ui/collapsible";
+import type { AdminRelationNavigationTarget } from "#/lib/admin-relation-navigation";
 import { cn } from "#/lib/utils";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
@@ -36,11 +37,7 @@ import { EntityIcon } from "./entity-icon";
 
 interface LinkedRecordsPanelProps {
 	objectDefId: Id<"objectDefs">;
-	onNavigate?: (
-		recordId: string,
-		recordKind: "record" | "native",
-		objectDefId: string
-	) => void;
+	onNavigate?: (target: AdminRelationNavigationTarget) => void;
 	recordId: string;
 	recordKind: "record" | "native";
 }
@@ -265,11 +262,7 @@ interface LinkGroupSectionProps {
 		}
 	>;
 	onAddLink: () => void;
-	onNavigate?: (
-		recordId: string,
-		recordKind: "record" | "native",
-		objectDefId: string
-	) => void;
+	onNavigate?: (target: AdminRelationNavigationTarget) => void;
 	onRemoveLink: (linkId: Id<"recordLinks">) => void;
 }
 
@@ -346,11 +339,7 @@ interface LinkedRecordItemProps {
 		singularLabel: string;
 	};
 	objectDefId: Id<"objectDefs">;
-	onNavigate?: (
-		recordId: string,
-		recordKind: "record" | "native",
-		objectDefId: string
-	) => void;
+	onNavigate?: (target: AdminRelationNavigationTarget) => void;
 	onRemove: (linkId: Id<"recordLinks">) => void;
 	recordId: string;
 	recordKind: "record" | "native";
@@ -371,7 +360,11 @@ function LinkedRecordItem({
 			<button
 				className="flex min-w-0 flex-1 items-center gap-2 text-left"
 				onClick={() =>
-					onNavigate?.(recordId, recordKind, objectDefId as string)
+					onNavigate?.({
+						objectDefId: String(objectDefId),
+						recordId,
+						recordKind,
+					})
 				}
 				type="button"
 			>

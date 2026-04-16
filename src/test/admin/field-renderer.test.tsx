@@ -1,5 +1,8 @@
 import type { Id } from "../../../convex/_generated/dataModel";
-import type { NormalizedFieldDefinition } from "../../../convex/crm/types";
+import type {
+	NormalizedFieldDefinition,
+	RelationCellDisplayValue,
+} from "../../../convex/crm/types";
 import { FieldRenderer } from "#/components/admin/shell/FieldRenderer";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
@@ -75,5 +78,40 @@ describe("FieldRenderer", () => {
 		expect(safeMarkup).toContain('href="https://fairlend.ca/"');
 		expect(unsafeMarkup).not.toContain("href=");
 		expect(unsafeMarkup).toContain("javascript:alert(&#x27;xss&#x27;)");
+	});
+
+	it("renders relation payloads as relation chips instead of raw json", () => {
+		const relationValue: RelationCellDisplayValue = {
+			cardinality: "many_to_many",
+			items: [
+				{
+					label: "12 Oak Street",
+					objectDefId: "object_property" as Id<"objectDefs">,
+					recordId: "property_1",
+					recordKind: "record",
+				},
+			],
+			kind: "relation",
+		};
+
+		const markup = renderToStaticMarkup(
+			<FieldRenderer
+				field={buildField({
+					fieldType: "text",
+					label: "Property",
+					name: "property",
+					relation: {
+						cardinality: "many_to_many",
+						targetObjectDefId: "object_property" as Id<"objectDefs">,
+					},
+					rendererHint: "relation",
+				})}
+				value={relationValue}
+			/>
+		);
+
+		expect(markup).toContain("12 Oak Street");
+		expect(markup).not.toContain("&quot;kind&quot;");
+		expect(markup).not.toContain("&quot;items&quot;");
 	});
 });

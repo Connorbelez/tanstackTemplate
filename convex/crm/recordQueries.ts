@@ -7,6 +7,7 @@ import {
 	buildNormalizedFieldDefinitions,
 	materializeRecordComputedFields,
 } from "./entityViewFields";
+import { materializeRelationFieldValues } from "./relationCellPayloads";
 import {
 	getNativeRecordById,
 	type NativeRecordPage,
@@ -1010,28 +1011,37 @@ export const getRecordDetailSurface = crmQuery
 			objectDef,
 			objectDefId: objectDef._id,
 		});
-		const record = materializeRecordComputedFields(
-			await loadReferencedRecord({
-				activeFieldDefs,
-				ctx,
-				objectDef,
-				orgId,
-				recordId: args.recordId,
-				recordKind: args.recordKind,
-			}),
-			adapterContract
-		);
+		const fields = buildNormalizedFieldDefinitions({
+			adapterContract,
+			applyLayoutVisibility: false,
+			currentLayout: "table",
+			fieldDefs: activeFieldDefs,
+			objectDefId: objectDef._id,
+			viewIsDefault: true,
+		});
+		const [record] = await materializeRelationFieldValues({
+			ctx,
+			fields,
+			objectDef,
+			orgId,
+			records: [
+				materializeRecordComputedFields(
+					await loadReferencedRecord({
+						activeFieldDefs,
+						ctx,
+						objectDef,
+						orgId,
+						recordId: args.recordId,
+						recordKind: args.recordKind,
+					}),
+					adapterContract
+				),
+			],
+		});
 
 		return {
 			adapterContract,
-			fields: buildNormalizedFieldDefinitions({
-				adapterContract,
-				applyLayoutVisibility: false,
-				currentLayout: "table",
-				fieldDefs: activeFieldDefs,
-				objectDefId: objectDef._id,
-				viewIsDefault: true,
-			}),
+			fields,
 			objectDef,
 			record,
 		};
