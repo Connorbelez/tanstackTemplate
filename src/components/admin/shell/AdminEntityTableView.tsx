@@ -29,7 +29,10 @@ import { isRelationCellDisplayValue, RelationCell } from "./RelationCell";
 type ObjectDef = Pick<Doc<"objectDefs">, "nativeTable" | "singularLabel">;
 
 interface AdminEntityTableViewProps {
-	readonly adapterContract: Pick<EntityViewAdapterContract, "titleFieldName">;
+	readonly adapterContract: Pick<
+		EntityViewAdapterContract,
+		"entityType" | "titleFieldName"
+	>;
 	readonly columns: readonly AdminViewColumn[];
 	readonly fields: readonly NormalizedFieldDefinition[];
 	readonly objectDef: ObjectDef;
@@ -120,7 +123,11 @@ export function AdminEntityTableView({
 										</Badge>
 									</div>
 									<p className="text-muted-foreground text-xs">
-										{getAdminRecordSupportingText(row.record, objectDef)}
+										{getAdminRecordSupportingText({
+											adapterContract,
+											objectDef,
+											record: row.record,
+										})}
 									</p>
 								</div>
 							</TableCell>

@@ -78,6 +78,10 @@ async function getNativeTableRecordById(
 			const normalizedId = ctx.db.normalizeId("obligations", recordId);
 			return normalizedId ? ctx.db.get(normalizedId) : null;
 		}
+		case "listings": {
+			const normalizedId = ctx.db.normalizeId("listings", recordId);
+			return normalizedId ? ctx.db.get(normalizedId) : null;
+		}
 		default: {
 			const exhaustiveCheck: never = tableName;
 			throw new ConvexError(`Unknown native table: ${String(exhaustiveCheck)}`);
@@ -122,6 +126,11 @@ async function paginateNativeTable(
 				.query("obligations")
 				.withIndex("by_org", (q) => q.eq("orgId", orgId))
 				.paginate(paginationOpts);
+		case "listings":
+			// Listings live on the FairLend marketplace surface and do not carry
+			// their own orgId. Admin access to this native table is already scoped
+			// to the FairLend staff org at the route/auth layer.
+			return ctx.db.query("listings").paginate(paginationOpts);
 		default:
 			throw new ConvexError(`Unknown native table: ${tableName}`);
 	}
@@ -134,7 +143,8 @@ export type NativeTableName =
 	| "lenders"
 	| "brokers"
 	| "deals"
-	| "obligations";
+	| "obligations"
+	| "listings";
 
 /**
  * Routes a runtime table name to a compile-time Convex query.

@@ -80,6 +80,7 @@ export interface EntityViewComputedFieldContract {
 	fieldType: Doc<"fieldDefs">["fieldType"];
 	isVisibleByDefault: boolean;
 	label: string;
+	materializationMode?: "hydrated" | "sync";
 	rendererHint: FieldRendererHint;
 	sourceFieldNames: string[];
 }

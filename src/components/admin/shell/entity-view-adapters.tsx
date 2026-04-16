@@ -8,6 +8,11 @@ import type {
 	UnifiedRecord,
 } from "../../../../convex/crm/types";
 import {
+	ListingsDedicatedDetails,
+	MortgagesDedicatedDetails,
+	ObligationsDedicatedDetails,
+} from "./dedicated-detail-panels";
+import {
 	type DetailSectionDefinition,
 	SectionedRecordDetails,
 } from "./detail-sections";
@@ -65,28 +70,76 @@ interface DedicatedDetailLayoutDefinition {
 }
 
 const DEDICATED_DETAIL_LAYOUTS = {
+	listings: {
+		highlightFieldNames: [
+			"title",
+			"propertySummary",
+			"principal",
+			"interestRate",
+		],
+		sections: [
+			{
+				title: "Marketplace",
+				description: "Marketplace publication state and operating flags.",
+				fieldNames: ["status", "publishedAt", "featured"],
+			},
+			{
+				title: "Economics",
+				description: "Core listing economics and pricing inputs.",
+				fieldNames: [
+					"propertyType",
+					"city",
+					"province",
+					"monthlyPayment",
+					"maturityDate",
+				],
+			},
+		],
+	},
 	mortgages: {
-		highlightFieldNames: ["principal", "paymentAmount", "maturityDate"],
+		highlightFieldNames: [
+			"propertySummary",
+			"principal",
+			"borrowerSummary",
+			"paymentSummary",
+		],
 		sections: [
 			{
 				title: "Loan Terms",
 				description: "Primary mortgage economics and pricing terms.",
-				fieldNames: ["interestRate", "loanType", "termMonths", "status"],
+				fieldNames: [
+					"interestRate",
+					"loanType",
+					"termMonths",
+					"maturityDate",
+					"status",
+				],
 			},
 			{
 				title: "Servicing",
 				description: "Payment cadence and downstream servicing status.",
-				fieldNames: ["paymentFrequency"],
+				fieldNames: ["paymentAmount", "paymentFrequency", "firstPaymentDate"],
 			},
 		],
 	},
 	obligations: {
-		highlightFieldNames: ["amount", "dueDate", "status"],
+		highlightFieldNames: [
+			"mortgageSummary",
+			"borrowerSummary",
+			"amount",
+			"paymentProgressSummary",
+		],
 		sections: [
 			{
 				title: "Obligation",
 				description: "Core obligation attributes and repayment state.",
-				fieldNames: ["type"],
+				fieldNames: [
+					"paymentNumber",
+					"type",
+					"dueDate",
+					"gracePeriodEnd",
+					"status",
+				],
 			},
 		],
 	},
@@ -101,12 +154,17 @@ const DEDICATED_DETAIL_LAYOUTS = {
 		],
 	},
 	borrowers: {
-		highlightFieldNames: ["status", "idvStatus", "verificationSummary"],
+		highlightFieldNames: [
+			"borrowerName",
+			"status",
+			"idvStatus",
+			"verificationSummary",
+		],
 		sections: [
 			{
 				title: "Verification",
 				description: "Identity status and the computed verification summary.",
-				fieldNames: ["verificationSummary"],
+				fieldNames: ["verificationSummary", "onboardedAt"],
 			},
 		],
 	},
@@ -154,6 +212,26 @@ const DEDICATED_RECORD_SIDEBAR_ADAPTERS = Object.fromEntries(
 	])
 ) satisfies Partial<Record<string, RecordSidebarEntityAdapter>>;
 
+const ROLLOUT_DETAIL_ADAPTERS: Partial<
+	Record<string, RecordSidebarEntityAdapter>
+> = {
+	listings: {
+		renderDetailsTab: ({ fields, record }) => (
+			<ListingsDedicatedDetails fields={fields} record={record} />
+		),
+	},
+	mortgages: {
+		renderDetailsTab: ({ fields, record }) => (
+			<MortgagesDedicatedDetails fields={fields} record={record} />
+		),
+	},
+	obligations: {
+		renderDetailsTab: ({ fields, record }) => (
+			<ObligationsDedicatedDetails fields={fields} record={record} />
+		),
+	},
+};
+
 export function resolveRecordSidebarEntityAdapter(args: {
 	detailSurfaceKey?: string;
 	entityType: string | undefined;
@@ -172,6 +250,7 @@ export function resolveRecordSidebarEntityAdapter(args: {
 	}
 
 	const dedicatedAdapter =
+		ROLLOUT_DETAIL_ADAPTERS[resolvedEntityType] ??
 		DEDICATED_RECORD_SIDEBAR_ADAPTERS[resolvedEntityType];
 	const overrideAdapter = args.overrides?.[resolvedEntityType];
 

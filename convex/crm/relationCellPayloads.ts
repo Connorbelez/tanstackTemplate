@@ -1,6 +1,7 @@
 import type { Doc, Id } from "../_generated/dataModel";
 import type { QueryCtx } from "../_generated/server";
 import { buildEntityViewAdapter } from "./entityViewFields";
+import { materializeEntityViewRecords } from "./entityViewHydration";
 import { getNativeRecordById } from "./systemAdapters/queryAdapter";
 import type {
 	EntityViewCellDisplayValue,
@@ -246,12 +247,24 @@ async function resolveRelationCellItem(args: {
 	if (!record) {
 		return null;
 	}
+	const [materializedRecord] = await materializeEntityViewRecords({
+		adapterContract: buildEntityViewAdapter({
+			currentLayout: "table",
+			fieldDefs: activeFieldDefs,
+			objectDef,
+			objectDefId: objectDef._id,
+		}),
+		ctx: args.ctx,
+		objectDef,
+		orgId: args.orgId,
+		records: [record],
+	});
 
 	return {
 		label: getRecordDisplayLabel({
 			activeFieldDefs,
 			objectDef,
-			record,
+			record: materializedRecord,
 		}),
 		objectDefId: args.reference.objectDefId,
 		recordId: args.reference.recordId,
