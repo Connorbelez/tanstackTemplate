@@ -42,7 +42,7 @@ export function ListingCurationStep({
 
 	return (
 		<OriginationStepCard
-			description="These are listing-owned curation overrides only. The future listing projector will derive economics and property facts elsewhere."
+			description="These are listing-owned curation overrides only. The projector will keep economics, property facts, appraisal summary, and public-doc compatibility canonical elsewhere."
 			errors={errors}
 			title="Listing curation"
 		>
@@ -152,7 +152,7 @@ export function ListingCurationStep({
 						<div className="space-y-1">
 							<Label htmlFor="featured">Feature this listing</Label>
 							<p className="text-muted-foreground text-sm">
-								Merchandising only. No listing projection is generated yet.
+								Merchandising only. Projection refreshes preserve this flag.
 							</p>
 						</div>
 					</div>
@@ -166,7 +166,7 @@ export function ListingCurationStep({
 									adminNotes: event.target.value,
 								})
 							}
-							placeholder="Internal notes for later listing projection work."
+							placeholder="Internal notes for listing curation and publishing."
 							rows={7}
 							value={nextDraft.adminNotes ?? ""}
 						/>

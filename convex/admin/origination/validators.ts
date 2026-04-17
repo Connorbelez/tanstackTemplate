@@ -122,6 +122,18 @@ export const originationCollectionsDraftValidator = v.object({
 	),
 	providerCode: v.optional(v.literal("pad_rotessa")),
 	selectedBankAccountId: v.optional(v.id("bankAccounts")),
+	activationStatus: v.optional(
+		v.union(
+			v.literal("pending"),
+			v.literal("activating"),
+			v.literal("active"),
+			v.literal("failed")
+		)
+	),
+	lastError: v.optional(v.string()),
+	retryCount: v.optional(v.number()),
+	lastAttemptAt: v.optional(v.number()),
+	externalCollectionScheduleId: v.optional(v.id("externalCollectionSchedules")),
 });
 
 export const originationListingOverridesValidator = v.object({
@@ -208,7 +220,7 @@ const PHASE_TWO_OWNED_STEP_KEYS = [
 export const ORIGINATION_COMMIT_REVIEW_WARNING =
 	"Resolve the required participant, property, and mortgage fields before committing this origination case.";
 export const ORIGINATION_PROVIDER_MANAGED_COLLECTIONS_WARNING =
-	"Provider-managed collections are deferred. Phase 2 activation always creates an app-owned mortgage.";
+	"Provider-managed now will attempt immediate Rotessa activation after canonical commit. The mortgage still commits even if activation fails, and the payment setup screen will surface status and retry.";
 
 function trimToUndefined(value: string | undefined) {
 	if (typeof value !== "string") {
@@ -549,8 +561,31 @@ function buildMortgageValidationErrors(values: OriginationCaseDraftState) {
 	]);
 }
 
-function buildCollectionsValidationErrors(_values: OriginationCaseDraftState) {
-	return [];
+function buildCollectionsValidationErrors(values: OriginationCaseDraftState) {
+	if (values.collectionsDraft?.mode !== "provider_managed_now") {
+		return [];
+	}
+
+	return collectMissingFieldErrors([
+		{
+			value:
+				values.collectionsDraft.providerCode ??
+				(values.collectionsDraft.mode === "provider_managed_now"
+					? "pad_rotessa"
+					: undefined),
+			message: "Provider-managed activation requires a provider selection.",
+		},
+		{
+			value: values.participantsDraft?.primaryBorrower,
+			message:
+				"Provider-managed activation requires a staged primary borrower.",
+		},
+		{
+			value: values.collectionsDraft.selectedBankAccountId,
+			message:
+				"Provider-managed activation requires selecting a primary borrower bank account.",
+		},
+	]);
 }
 
 function buildListingValidationErrors(_values: OriginationCaseDraftState) {
@@ -770,16 +805,49 @@ export function normalizeOriginationCollectionsDraft(
 		return undefined;
 	}
 
-	return pruneObject({
+	const normalized = pruneObject({
 		...pickUnknownFields(value as Record<string, unknown>, [
 			"mode",
 			"providerCode",
 			"selectedBankAccountId",
+			"activationStatus",
+			"lastError",
+			"retryCount",
+			"lastAttemptAt",
+			"externalCollectionScheduleId",
 		]),
 		mode: value.mode,
-		providerCode: value.providerCode,
+		providerCode:
+			value.mode === "provider_managed_now"
+				? (value.providerCode ?? "pad_rotessa")
+				: value.providerCode,
 		selectedBankAccountId: value.selectedBankAccountId,
+		activationStatus:
+			value.mode === "provider_managed_now"
+				? (value.activationStatus ?? "pending")
+				: undefined,
+		lastError: trimToUndefined(value.lastError),
+		retryCount: value.retryCount,
+		lastAttemptAt: value.lastAttemptAt,
+		externalCollectionScheduleId: value.externalCollectionScheduleId,
 	});
+
+	if (!normalized) {
+		return undefined;
+	}
+
+	if (normalized.mode !== "provider_managed_now") {
+		return pruneObject({
+			...normalized,
+			activationStatus: undefined,
+			lastError: undefined,
+			lastAttemptAt: undefined,
+			retryCount: undefined,
+			externalCollectionScheduleId: undefined,
+		});
+	}
+
+	return normalized;
 }
 
 export function normalizeOriginationListingOverridesDraft(

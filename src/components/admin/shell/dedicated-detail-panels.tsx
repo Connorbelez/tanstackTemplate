@@ -1,9 +1,17 @@
 "use client";
 
 import { Link } from "@tanstack/react-router";
-import { useQuery } from "convex/react";
+import { useAction, useMutation, useQuery } from "convex/react";
 import type { ReactNode } from "react";
+import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import { Badge } from "#/components/ui/badge";
+import { Button } from "#/components/ui/button";
+import { Checkbox } from "#/components/ui/checkbox";
+import { Input } from "#/components/ui/input";
+import { Label } from "#/components/ui/label";
+import { Textarea } from "#/components/ui/textarea";
+import { useCanDo } from "#/hooks/use-can-do";
 import { EMPTY_ADMIN_DETAIL_SEARCH } from "#/lib/admin-detail-search";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
@@ -13,6 +21,8 @@ import type {
 } from "../../../../convex/crm/types";
 import type { DetailSectionDefinition } from "./detail-sections";
 import { SectionedRecordDetails } from "./detail-sections";
+
+const HERO_IMAGE_SPLIT_RE = /\n+/;
 
 function formatCurrency(value: bigint | number, divisor = 1) {
 	const normalizedValue =
@@ -35,6 +45,19 @@ function formatDate(value: number | string | null | undefined) {
 	}
 
 	return date.toLocaleDateString();
+}
+
+function formatDateTime(value: number | string | null | undefined) {
+	if (value == null) {
+		return null;
+	}
+
+	const date = new Date(value);
+	if (Number.isNaN(date.getTime())) {
+		return String(value);
+	}
+
+	return date.toLocaleString();
 }
 
 function formatEnumLabel(value: string) {
@@ -120,30 +143,6 @@ function CompactList({
 	return <div className="space-y-2">{items.map(renderItem)}</div>;
 }
 
-const LISTING_BASE_SECTIONS = [
-	{
-		title: "Marketplace",
-		description: "Publication and merchandising state for the listing.",
-		fieldNames: ["status", "publishedAt", "featured"],
-	},
-	{
-		title: "Economics",
-		description: "Listing economics and mortgage-derived pricing inputs.",
-		fieldNames: [
-			"principal",
-			"interestRate",
-			"ltvRatio",
-			"monthlyPayment",
-			"loanType",
-			"lienPosition",
-			"termMonths",
-			"maturityDate",
-			"latestAppraisalValueAsIs",
-			"latestAppraisalDate",
-		],
-	},
-] as const satisfies readonly DetailSectionDefinition[];
-
 const MORTGAGE_BASE_SECTIONS = [
 	{
 		title: "Summary",
@@ -189,183 +188,544 @@ const BORROWER_BASE_SECTIONS = [
 	},
 ] as const satisfies readonly DetailSectionDefinition[];
 
+function heroImagesToStorageIdText(
+	heroImages: ReadonlyArray<{ storageId: Id<"_storage"> }> | undefined
+) {
+	return heroImages?.map((image) => String(image.storageId)).join("\n") ?? "";
+}
+
+function parseHeroImageStorageIds(value: string) {
+	return value
+		.split(HERO_IMAGE_SPLIT_RE)
+		.map((entry) => entry.trim())
+		.filter(Boolean)
+		.map((storageId) => ({ storageId: storageId as Id<"_storage"> }));
+}
+
+function parseDisplayOrder(value: string) {
+	if (!value.trim()) {
+		return undefined;
+	}
+
+	const parsed = Number.parseInt(value, 10);
+	return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function buildListingCurationFormState(listing: {
+	adminNotes: string | null;
+	description: string | null;
+	displayOrder: number | null;
+	featured: boolean;
+	heroImages: Array<{ storageId: Id<"_storage"> }>;
+	marketplaceCopy: string | null;
+	seoSlug: string | null;
+	title: string | null;
+}) {
+	return {
+		adminNotes: listing.adminNotes ?? "",
+		description: listing.description ?? "",
+		displayOrder:
+			typeof listing.displayOrder === "number"
+				? String(listing.displayOrder)
+				: "",
+		featured: listing.featured,
+		heroImages: heroImagesToStorageIdText(listing.heroImages),
+		marketplaceCopy: listing.marketplaceCopy ?? "",
+		seoSlug: listing.seoSlug ?? "",
+		title: listing.title ?? "",
+	};
+}
+
 export function ListingsDedicatedDetails({
-	fields,
 	record,
 }: {
 	readonly fields: readonly NormalizedFieldDefinition[];
 	readonly record: UnifiedRecord;
 }) {
 	const listingId = record._id as Id<"listings">;
-	const listingWithAvailability = useQuery(
-		api.listings.queries.getListingWithAvailability,
+	const detailContext = useQuery(
+		api.crm.detailContextQueries.getListingDetailContext,
 		{
 			listingId,
 		}
 	);
-	const propertyId = listingWithAvailability?.listing.propertyId;
-	const mortgageId = listingWithAvailability?.listing.mortgageId;
-	const appraisals = useQuery(
-		api.listings.queries.getListingAppraisals,
-		propertyId ? { propertyId } : "skip"
+	const refreshProjection = useMutation(
+		api.listings.projection.refreshListingProjection
 	);
-	const encumbrances = useQuery(
-		api.listings.queries.getListingEncumbrances,
-		propertyId ? { propertyId } : "skip"
+	const updateListingCuration = useMutation(
+		api.listings.curation.updateListingCuration
 	);
-	const history = useQuery(
-		api.listings.queries.getListingTransactionHistory,
-		mortgageId ? { mortgageId } : "skip"
+	const [isRefreshingProjection, setIsRefreshingProjection] = useState(false);
+	const [isSavingCuration, setIsSavingCuration] = useState(false);
+	const listing = detailContext?.listing;
+	const [curationForm, setCurationForm] = useState(() =>
+		buildListingCurationFormState({
+			adminNotes: null,
+			description: null,
+			displayOrder: null,
+			featured: false,
+			heroImages: [],
+			marketplaceCopy: null,
+			seoSlug: null,
+			title: null,
+		})
 	);
-	const detailFields = filterDetailFields(fields, ["mortgageId", "propertyId"]);
+
+	useEffect(() => {
+		if (!listing) {
+			return;
+		}
+
+		setCurationForm(buildListingCurationFormState(listing));
+	}, [listing]);
+
+	async function handleRefreshProjection() {
+		if (
+			!detailContext?.listing ||
+			detailContext.listing.dataSource !== "mortgage_pipeline"
+		) {
+			return;
+		}
+
+		setIsRefreshingProjection(true);
+		try {
+			await refreshProjection({ listingId });
+			toast.success("Listing projection refreshed.");
+		} catch (error) {
+			toast.error(
+				error instanceof Error
+					? error.message
+					: "Failed to refresh the listing projection."
+			);
+		} finally {
+			setIsRefreshingProjection(false);
+		}
+	}
+
+	async function handleSaveCuration() {
+		setIsSavingCuration(true);
+		try {
+			await updateListingCuration({
+				listingId,
+				patch: {
+					adminNotes: curationForm.adminNotes,
+					description: curationForm.description,
+					displayOrder: parseDisplayOrder(curationForm.displayOrder),
+					featured: curationForm.featured,
+					heroImages: parseHeroImageStorageIds(curationForm.heroImages),
+					marketplaceCopy: curationForm.marketplaceCopy,
+					seoSlug: curationForm.seoSlug,
+					title: curationForm.title,
+				},
+			});
+			toast.success("Curated listing fields saved.");
+		} catch (error) {
+			toast.error(
+				error instanceof Error
+					? error.message
+					: "Failed to save listing curation."
+			);
+		} finally {
+			setIsSavingCuration(false);
+		}
+	}
 
 	return (
 		<div className="space-y-6">
-			<SectionedRecordDetails
-				fields={detailFields}
-				highlightFieldNames={[
-					"title",
-					"propertySummary",
-					"principal",
-					"interestRate",
-					"ltvRatio",
-				]}
-				record={record}
-				sections={LISTING_BASE_SECTIONS}
-			/>
-
 			<DetailSectionShell
-				description="Live marketplace availability and document posture from the listing domain surface."
-				title="Availability"
+				description="Mortgage-backed listings are projector-owned for economics, property facts, appraisal summary, and public document compatibility. Only curated marketplace fields are editable here."
+				title="Projection Source"
 			>
-				{listingWithAvailability?.availability ? (
+				<div className="space-y-4">
+					<div className="flex flex-wrap items-center gap-2">
+						<Badge variant="outline">
+							{detailContext?.listing?.status ?? "draft"}
+						</Badge>
+						<Badge variant="outline">
+							{detailContext?.listing?.dataSource === "mortgage_pipeline"
+								? "Mortgage-backed projection"
+								: "Listing record"}
+						</Badge>
+					</div>
 					<MetricGrid
 						items={[
 							{
-								label: "Available Fractions",
-								value: listingWithAvailability.availability.availableFractions,
+								label: "Linked Mortgage",
+								value: detailContext?.mortgage ? (
+									<Link
+										className="text-primary underline-offset-4 hover:underline"
+										params={{
+											recordid: String(detailContext.mortgage.mortgageId),
+										}}
+										search={EMPTY_ADMIN_DETAIL_SEARCH}
+										to="/admin/mortgages/$recordid"
+									>
+										{String(detailContext.mortgage.mortgageId)}
+									</Link>
+								) : (
+									"Not linked"
+								),
 							},
 							{
-								label: "Total Fractions",
-								value: listingWithAvailability.availability.totalFractions,
+								label: "Projection Refreshed",
+								value:
+									formatDateTime(detailContext?.listing?.updatedAt) ??
+									"Unavailable",
 							},
 							{
-								label: "Sold",
-								value: `${listingWithAvailability.availability.percentageSold}%`,
+								label: "Linked Property",
+								value: detailContext?.property ? (
+									<Link
+										className="text-primary underline-offset-4 hover:underline"
+										params={{
+											recordid: String(detailContext.property.propertyId),
+										}}
+										search={EMPTY_ADMIN_DETAIL_SEARCH}
+										to="/admin/properties/$recordid"
+									>
+										{detailContext.property.streetAddress}
+									</Link>
+								) : (
+									"Unavailable"
+								),
 							},
 							{
-								label: "Investors",
-								value: listingWithAvailability.availability.totalInvestors,
+								label: "Location",
+								value: detailContext?.property
+									? `${detailContext.property.city}, ${detailContext.property.province}`
+									: "Unavailable",
 							},
 							{
-								label: "MIC Position",
-								value: listingWithAvailability.availability.micPosition
-									.hasPosition
-									? listingWithAvailability.availability.micPosition.balance
-									: "No",
-							},
-							{
-								label: "Public Documents",
-								value: listingWithAvailability.listing.publicDocumentIds.length,
+								label: "Draft Title",
+								value:
+									detailContext?.listing?.title ??
+									`${String(listingId)} (untitled listing)`,
 							},
 						]}
 					/>
-				) : (
-					<EmptyContext message="No live availability is attached to this listing yet." />
-				)}
-			</DetailSectionShell>
-
-			<DetailSectionShell
-				description="Appraisal and prior-encumbrance context reusing existing listing queries."
-				title="Property Context"
-			>
-				<div className="space-y-4">
-					<div>
-						<p className="mb-2 text-muted-foreground text-xs uppercase tracking-[0.08em]">
-							Appraisals
-						</p>
-						<CompactList
-							emptyMessage="No appraisal records found."
-							items={appraisals ?? []}
-							renderItem={(item) => {
-								const appraisal = item as NonNullable<
-									typeof appraisals
-								>[number];
-								return (
-									<div
-										className="rounded-lg border border-border/60 bg-background/80 px-3 py-3"
-										key={String(appraisal._id)}
-									>
-										<p className="font-medium text-sm">
-											{formatCurrency(appraisal.appraisedValue)}
-										</p>
-										<p className="text-muted-foreground text-sm">
-											{appraisal.appraiserName} • {appraisal.effectiveDate}
-										</p>
-									</div>
-								);
-							}}
-						/>
-					</div>
-					<div>
-						<p className="mb-2 text-muted-foreground text-xs uppercase tracking-[0.08em]">
-							Prior Encumbrances
-						</p>
-						<CompactList
-							emptyMessage="No prior encumbrances found."
-							items={encumbrances ?? []}
-							renderItem={(item) => {
-								const encumbrance = item as NonNullable<
-									typeof encumbrances
-								>[number];
-								return (
-									<div
-										className="rounded-lg border border-border/60 bg-background/80 px-3 py-3"
-										key={String(encumbrance._id)}
-									>
-										<p className="font-medium text-sm">{encumbrance.holder}</p>
-										<p className="text-muted-foreground text-sm">
-											Priority {encumbrance.priority}
-											{typeof encumbrance.outstandingBalance === "number"
-												? ` • ${formatCurrency(encumbrance.outstandingBalance)}`
-												: ""}
-										</p>
-									</div>
-								);
-							}}
-						/>
+					<div className="flex flex-wrap gap-3">
+						<Button
+							disabled={
+								isRefreshingProjection ||
+								detailContext?.listing?.dataSource !== "mortgage_pipeline"
+							}
+							onClick={() => void handleRefreshProjection()}
+							type="button"
+							variant="outline"
+						>
+							{isRefreshingProjection
+								? "Refreshing projection"
+								: "Refresh projection"}
+						</Button>
 					</div>
 				</div>
 			</DetailSectionShell>
 
-			<DetailSectionShell
-				description="Recent ledger transaction activity tied back to the mortgage-backed listing."
-				title="Transaction History"
-			>
-				<CompactList
-					emptyMessage="No listing transaction history is available."
-					items={(history ?? []).slice(0, 6)}
-					renderItem={(item) => {
-						const entry = item as NonNullable<typeof history>[number];
-						return (
-							<div
-								className="flex items-center justify-between rounded-lg border border-border/60 bg-background/80 px-3 py-3"
-								key={String(entry._id)}
-							>
-								<div>
-									<p className="font-medium text-sm">{entry.eventType}</p>
-									<p className="text-muted-foreground text-sm">
-										{entry.effectiveDate}
-									</p>
-								</div>
-								<Badge variant="outline">
-									{formatCurrency(entry.amount, 100)}
-								</Badge>
+			<div className="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.95fr)]">
+				<div className="space-y-6">
+					<DetailSectionShell
+						description="Canonical mortgage economics projected onto the listing. These values refresh from the mortgage aggregate."
+						title="Economics"
+					>
+						<MetricGrid
+							items={[
+								{
+									label: "Principal",
+									value: detailContext?.mortgage
+										? formatCurrency(detailContext.mortgage.principal)
+										: "Unavailable",
+								},
+								{
+									label: "Interest Rate",
+									value:
+										typeof detailContext?.mortgage?.interestRate === "number"
+											? `${detailContext.mortgage.interestRate}%`
+											: "Unavailable",
+								},
+								{
+									label: "LTV",
+									value:
+										typeof record.fields.ltvRatio === "number"
+											? `${record.fields.ltvRatio}%`
+											: "Unavailable",
+								},
+								{
+									label: "Payment Amount",
+									value: detailContext?.mortgage
+										? formatCurrency(detailContext.mortgage.paymentAmount)
+										: "Unavailable",
+								},
+								{
+									label: "Payment Cadence",
+									value: detailContext?.mortgage?.paymentFrequency
+										? formatEnumLabel(detailContext.mortgage.paymentFrequency)
+										: "Unavailable",
+								},
+								{
+									label: "Maturity",
+									value:
+										formatDate(detailContext?.mortgage?.maturityDate) ??
+										"Unavailable",
+								},
+							]}
+						/>
+					</DetailSectionShell>
+
+					<DetailSectionShell
+						description="Property facts are projection-owned and refresh from the canonical property record."
+						title="Property Facts"
+					>
+						<MetricGrid
+							items={[
+								{
+									label: "Address",
+									value: detailContext?.property
+										? `${detailContext.property.streetAddress}${detailContext.property.unit ? `, Unit ${detailContext.property.unit}` : ""}`
+										: "Unavailable",
+								},
+								{
+									label: "City",
+									value: detailContext?.property?.city ?? "Unavailable",
+								},
+								{
+									label: "Province",
+									value: detailContext?.property?.province ?? "Unavailable",
+								},
+								{
+									label: "Postal Code",
+									value: detailContext?.property?.postalCode ?? "Unavailable",
+								},
+								{
+									label: "Property Type",
+									value: detailContext?.property?.propertyType
+										? formatEnumLabel(detailContext.property.propertyType)
+										: "Unavailable",
+								},
+								{
+									label: "Coordinates",
+									value:
+										detailContext?.property?.latitude != null &&
+										detailContext.property.longitude != null
+											? `${detailContext.property.latitude}, ${detailContext.property.longitude}`
+											: "Unavailable",
+								},
+							]}
+						/>
+					</DetailSectionShell>
+
+					<DetailSectionShell
+						description="Appraisal summary always comes from the latest canonical valuation snapshot."
+						title="Appraisal Summary"
+					>
+						<MetricGrid
+							items={[
+								{
+									label: "As-Is Value",
+									value: detailContext?.latestValuationSnapshot
+										? formatCurrency(
+												detailContext.latestValuationSnapshot.valueAsIs
+											)
+										: "Unavailable",
+								},
+								{
+									label: "Valuation Date",
+									value:
+										detailContext?.latestValuationSnapshot?.valuationDate ??
+										"Unavailable",
+								},
+								{
+									label: "Source",
+									value: detailContext?.latestValuationSnapshot?.source
+										? formatEnumLabel(
+												detailContext.latestValuationSnapshot.source
+											)
+										: "Unavailable",
+								},
+								{
+									label: "Related Document Asset",
+									value:
+										detailContext?.latestValuationSnapshot
+											?.relatedDocumentAssetId ?? "Not attached",
+								},
+							]}
+						/>
+					</DetailSectionShell>
+
+					<DetailSectionShell
+						description="Compatibility cache only. Mortgage-owned public blueprints remain the source of truth in later phases."
+						title="Public Documents"
+					>
+						{detailContext?.publicDocuments?.length ? (
+							<CompactList
+								emptyMessage="No public origination docs projected yet."
+								items={detailContext.publicDocuments}
+								renderItem={(item) => {
+									const document = item as NonNullable<
+										typeof detailContext
+									>["publicDocuments"][number];
+									return (
+										<div
+											className="rounded-lg border border-border/60 bg-background/80 px-3 py-3"
+											key={String(document.fileRef)}
+										>
+											<p className="font-medium text-sm">
+												{document.name ?? String(document.fileRef)}
+											</p>
+											<p className="text-muted-foreground text-sm">
+												Compatibility file ref {String(document.fileRef)}
+											</p>
+										</div>
+									);
+								}}
+							/>
+						) : (
+							<EmptyContext message="No public origination docs projected yet." />
+						)}
+					</DetailSectionShell>
+				</div>
+
+				<DetailSectionShell
+					description="These marketplace fields remain listing-owned. Saving here never edits projected economics, property facts, appraisal summary, or public document compatibility."
+					title="Curated Fields"
+				>
+					<div className="space-y-4">
+						<div className="space-y-2">
+							<Label htmlFor="listing-curation-title">Title</Label>
+							<Input
+								id="listing-curation-title"
+								onChange={(event) =>
+									setCurationForm((current) => ({
+										...current,
+										title: event.target.value,
+									}))
+								}
+								value={curationForm.title}
+							/>
+						</div>
+						<div className="space-y-2">
+							<Label htmlFor="listing-curation-description">Description</Label>
+							<Textarea
+								id="listing-curation-description"
+								onChange={(event) =>
+									setCurationForm((current) => ({
+										...current,
+										description: event.target.value,
+									}))
+								}
+								rows={4}
+								value={curationForm.description}
+							/>
+						</div>
+						<div className="space-y-2">
+							<Label htmlFor="listing-curation-marketplace-copy">
+								Marketplace copy
+							</Label>
+							<Textarea
+								id="listing-curation-marketplace-copy"
+								onChange={(event) =>
+									setCurationForm((current) => ({
+										...current,
+										marketplaceCopy: event.target.value,
+									}))
+								}
+								rows={5}
+								value={curationForm.marketplaceCopy}
+							/>
+						</div>
+						<div className="space-y-2">
+							<Label htmlFor="listing-curation-hero-images">
+								Hero image storage IDs
+							</Label>
+							<Textarea
+								id="listing-curation-hero-images"
+								onChange={(event) =>
+									setCurationForm((current) => ({
+										...current,
+										heroImages: event.target.value,
+									}))
+								}
+								placeholder="One _storage id per line"
+								rows={4}
+								value={curationForm.heroImages}
+							/>
+						</div>
+						<div className="grid gap-4 md:grid-cols-2">
+							<div className="space-y-2">
+								<Label htmlFor="listing-curation-display-order">
+									Display order
+								</Label>
+								<Input
+									id="listing-curation-display-order"
+									onChange={(event) =>
+										setCurationForm((current) => ({
+											...current,
+											displayOrder: event.target.value,
+										}))
+									}
+									type="number"
+									value={curationForm.displayOrder}
+								/>
 							</div>
-						);
-					}}
-				/>
-			</DetailSectionShell>
+							<div className="space-y-2">
+								<Label htmlFor="listing-curation-seo-slug">SEO slug</Label>
+								<Input
+									id="listing-curation-seo-slug"
+									onChange={(event) =>
+										setCurationForm((current) => ({
+											...current,
+											seoSlug: event.target.value,
+										}))
+									}
+									value={curationForm.seoSlug}
+								/>
+							</div>
+						</div>
+						<div className="flex items-center gap-3 rounded-lg border border-border/60 bg-background/80 px-3 py-3">
+							<Checkbox
+								checked={curationForm.featured}
+								id="listing-curation-featured"
+								onCheckedChange={(checked) =>
+									setCurationForm((current) => ({
+										...current,
+										featured: checked === true,
+									}))
+								}
+							/>
+							<div className="space-y-1">
+								<Label htmlFor="listing-curation-featured">
+									Featured listing
+								</Label>
+								<p className="text-muted-foreground text-sm">
+									Merchandising only. Projection refreshes preserve this flag.
+								</p>
+							</div>
+						</div>
+						<div className="space-y-2">
+							<Label htmlFor="listing-curation-admin-notes">Admin notes</Label>
+							<Textarea
+								id="listing-curation-admin-notes"
+								onChange={(event) =>
+									setCurationForm((current) => ({
+										...current,
+										adminNotes: event.target.value,
+									}))
+								}
+								rows={4}
+								value={curationForm.adminNotes}
+							/>
+						</div>
+						<Button
+							disabled={isSavingCuration}
+							onClick={() => void handleSaveCuration()}
+							type="button"
+						>
+							{isSavingCuration
+								? "Saving curated fields"
+								: "Save curated fields"}
+						</Button>
+					</div>
+				</DetailSectionShell>
+			</div>
 		</div>
 	);
 }
@@ -378,29 +738,50 @@ export function MortgagesDedicatedDetails({
 	readonly record: UnifiedRecord;
 }) {
 	const mortgageId = record._id as Id<"mortgages">;
+	const canManagePaymentOperations = useCanDo("payment:manage");
 	const detailContext = useQuery(
 		api.crm.detailContextQueries.getMortgageDetailContext,
 		{
 			mortgageId,
 		}
 	);
-	const cashState = useQuery(
-		api.payments.cashLedger.queries.getMortgageCashState,
-		{
-			mortgageId,
-		}
-	);
-	const collectionSummary = useQuery(
-		api.payments.collectionPlan.admin.getMortgageCollectionOperationsSummary,
-		{
-			mortgageId,
-		}
+	const retryCollectionsActivation = useAction(
+		api.admin.origination.collections.retryCollectionsActivation
 	);
 	const mortgageHistory = useQuery(api.ledger.queries.getMortgageHistory, {
 		mortgageId: record._id,
 		limit: 6,
 	});
 	const detailFields = filterDetailFields(fields, ["propertyId"]);
+	const paymentSetup = detailContext?.paymentSetup;
+	const canRetryCollectionsActivation = Boolean(
+		canManagePaymentOperations &&
+			paymentSetup?.activationStatus === "failed" &&
+			paymentSetup.originationCaseId &&
+			paymentSetup.activationSelectedBankAccountId
+	);
+
+	async function handleRetryCollectionsActivation() {
+		const caseId = detailContext?.paymentSetup?.originationCaseId;
+		if (!caseId) {
+			return;
+		}
+
+		try {
+			const result = await retryCollectionsActivation({ caseId });
+			if (result.status === "failed") {
+				toast.error(result.message);
+				return;
+			}
+			toast.success("Provider-managed activation retried.");
+		} catch (error) {
+			toast.error(
+				error instanceof Error
+					? error.message
+					: "Unable to retry provider-managed activation."
+			);
+		}
+	}
 
 	return (
 		<div className="space-y-6">
@@ -455,12 +836,118 @@ export function MortgagesDedicatedDetails({
 			</DetailSectionShell>
 
 			<DetailSectionShell
-				description="Current servicing setup, cash posture, and next collection signals."
+				description="Canonical payment bootstrap generated during origination. Provider-managed-now cases keep this mortgage committed while the follow-up Rotessa activation moves through pending, activating, active, or failed states."
 				title="Payment Setup"
 			>
 				<div className="space-y-4">
+					<div className="flex flex-wrap items-center gap-2">
+						<Badge variant="outline">
+							{paymentSetup?.activationStatus
+								? formatEnumLabel(paymentSetup.activationStatus)
+								: "App-owned only"}
+						</Badge>
+						{paymentSetup?.externalSchedule ? (
+							<Badge variant="outline">
+								{formatEnumLabel(paymentSetup.externalSchedule.status)}
+							</Badge>
+						) : null}
+					</div>
+					{paymentSetup?.activationStatus === "failed" ? (
+						<div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-4 text-sm">
+							<p className="font-medium text-destructive">
+								Immediate Rotessa activation failed
+							</p>
+							<p className="mt-2 text-destructive/90 leading-6">
+								{paymentSetup.activationLastError ??
+									"Provider-managed activation failed after the mortgage committed."}
+							</p>
+							<div className="mt-3 flex flex-wrap gap-3">
+								<Button
+									disabled={!canRetryCollectionsActivation}
+									onClick={() => void handleRetryCollectionsActivation()}
+									type="button"
+									variant="outline"
+								>
+									Retry activation
+								</Button>
+								{paymentSetup.activationSelectedBankAccountId ? null : (
+									<p className="text-muted-foreground text-xs">
+										Retry stays disabled until a primary borrower bank account
+										is staged on the committed origination case.
+									</p>
+								)}
+							</div>
+						</div>
+					) : null}
+					{paymentSetup?.activationStatus === "activating" ? (
+						<div className="rounded-lg border border-sky-500/30 bg-sky-500/10 px-4 py-4 text-sm">
+							<p className="font-medium text-sky-900">
+								Immediate Rotessa activation is in progress
+							</p>
+							<p className="mt-2 text-sky-950/90 leading-6">
+								The mortgage is already committed. FairLend is finishing the
+								provider-managed schedule handoff now.
+							</p>
+						</div>
+					) : null}
 					<MetricGrid
 						items={[
+							{
+								label: "Activation Status",
+								value: paymentSetup?.activationStatus
+									? formatEnumLabel(paymentSetup.activationStatus)
+									: "App-owned only",
+							},
+							{
+								label: "Execution Mode",
+								value: detailContext?.paymentSetup?.collectionExecutionMode
+									? formatEnumLabel(
+											detailContext.paymentSetup.collectionExecutionMode
+										)
+									: "Unavailable",
+							},
+							{
+								label: "Provider",
+								value: detailContext?.paymentSetup
+									?.collectionExecutionProviderCode
+									? formatEnumLabel(
+											detailContext.paymentSetup.collectionExecutionProviderCode
+										)
+									: "App-owned only",
+							},
+							{
+								label: "Last Attempt",
+								value:
+									formatDateTime(paymentSetup?.activationLastAttemptAt) ??
+									"Not attempted",
+							},
+							{
+								label: "Retry Count",
+								value: paymentSetup?.activationRetryCount ?? 0,
+							},
+							{
+								label: "Obligations",
+								value:
+									detailContext?.paymentSetup?.obligationCount ?? "Unavailable",
+							},
+							{
+								label: "Plan Entries",
+								value:
+									detailContext?.paymentSetup?.collectionPlanEntryCount ??
+									"Unavailable",
+							},
+							{
+								label: "Collection Attempts",
+								value:
+									detailContext?.paymentSetup?.collectionAttemptCount ??
+									"Unavailable",
+							},
+							{
+								label: "Transfer Requests",
+								value:
+									detailContext?.paymentSetup?.transferRequestCount ??
+									"Unavailable",
+							},
 							{
 								label: "Property",
 								value: detailContext?.property ? (
@@ -482,6 +969,12 @@ export function MortgagesDedicatedDetails({
 								),
 							},
 							{
+								label: "Selected Bank Account",
+								value: paymentSetup?.activationSelectedBankAccountId
+									? String(paymentSetup.activationSelectedBankAccountId)
+									: "Not staged",
+							},
+							{
 								label: "Postal Code",
 								value: detailContext?.property?.postalCode ?? "Unavailable",
 							},
@@ -491,64 +984,200 @@ export function MortgagesDedicatedDetails({
 							},
 						]}
 					/>
-					{cashState ? (
-						<MetricGrid
-							items={Object.entries(cashState.balancesByFamily)
-								.slice(0, 6)
-								.map(([family, balance]) => ({
-									label: family,
-									value: formatCurrency(balance, 100),
-								}))}
-						/>
+					{paymentSetup?.externalSchedule ? (
+						<div className="rounded-lg border border-border/60 bg-background/80 px-4 py-4">
+							<div className="flex flex-wrap items-center gap-2">
+								<p className="font-medium text-sm">
+									External schedule{" "}
+									{String(paymentSetup.externalSchedule.scheduleId)}
+								</p>
+								<Badge variant="outline">
+									{formatEnumLabel(paymentSetup.externalSchedule.status)}
+								</Badge>
+							</div>
+							<div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+								<div>
+									<p className="text-muted-foreground text-xs uppercase tracking-[0.08em]">
+										Provider Ref
+									</p>
+									<p className="mt-1 text-sm">
+										{paymentSetup.externalSchedule.externalScheduleRef ??
+											"Unavailable"}
+									</p>
+								</div>
+								<div>
+									<p className="text-muted-foreground text-xs uppercase tracking-[0.08em]">
+										Activated
+									</p>
+									<p className="mt-1 text-sm">
+										{formatDateTime(
+											paymentSetup.externalSchedule.activatedAt
+										) ?? "Unavailable"}
+									</p>
+								</div>
+								<div>
+									<p className="text-muted-foreground text-xs uppercase tracking-[0.08em]">
+										Next Poll
+									</p>
+									<p className="mt-1 text-sm">
+										{formatDateTime(paymentSetup.externalSchedule.nextPollAt) ??
+											"Unavailable"}
+									</p>
+								</div>
+								<div>
+									<p className="text-muted-foreground text-xs uppercase tracking-[0.08em]">
+										Last Sync Error
+									</p>
+									<p className="mt-1 text-sm">
+										{paymentSetup.externalSchedule.lastSyncErrorMessage ??
+											"None"}
+									</p>
+								</div>
+							</div>
+						</div>
 					) : null}
-					{collectionSummary ? (
-						<MetricGrid
-							items={[
-								{ label: "Rules", value: collectionSummary.ruleCount },
-								{
-									label: "Recent Attempts",
-									value: collectionSummary.recentAttempts.length,
-								},
-								{
-									label: "Upcoming Entries",
-									value: collectionSummary.upcomingEntries.length,
-								},
-								{
-									label: "Active Workout",
-									value: collectionSummary.activeWorkoutPlan ? "Yes" : "No",
-								},
-							]}
-						/>
+					{detailContext?.paymentSetup?.scheduleRuleMissing ? (
+						<div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-4 text-sm">
+							<p className="font-medium text-amber-900">
+								Schedule rule fallback applied
+							</p>
+							<p className="mt-2 text-amber-950/90 leading-6">
+								No active collection schedule rule matched this mortgage at
+								bootstrap time. FairLend still created the initial app-owned
+								plan entries using the default scheduling delay.
+							</p>
+						</div>
 					) : null}
-					<div>
-						<p className="mb-2 text-muted-foreground text-xs uppercase tracking-[0.08em]">
-							Recent Obligations
+					<div className="space-y-2">
+						<p className="text-muted-foreground text-xs uppercase tracking-[0.08em]">
+							Obligations
 						</p>
-						<CompactList
-							emptyMessage="No obligations found for this mortgage."
-							items={detailContext?.recentObligations ?? []}
-							renderItem={(item) => {
-								const obligation = item as NonNullable<
-									typeof detailContext
-								>["recentObligations"][number];
-								return (
-									<div
-										className="flex items-center justify-between rounded-lg border border-border/60 bg-background/80 px-3 py-3"
-										key={String(obligation.obligationId)}
-									>
-										<div>
-											<p className="font-medium text-sm">{obligation.type}</p>
-											<p className="text-muted-foreground text-sm">
-												{formatDate(obligation.dueDate)} • {obligation.status}
-											</p>
-										</div>
-										<Badge variant="outline">
-											{formatCurrency(obligation.amount, 100)}
-										</Badge>
-									</div>
-								);
-							}}
-						/>
+						{detailContext?.paymentSetup?.obligations?.length ? (
+							<div className="overflow-x-auto rounded-lg border border-border/60 bg-background/80">
+								<table className="min-w-full text-left text-sm">
+									<thead className="bg-muted/40 text-muted-foreground text-xs uppercase tracking-[0.08em]">
+										<tr>
+											<th className="px-3 py-2 font-medium">Payment #</th>
+											<th className="px-3 py-2 font-medium">Type</th>
+											<th className="px-3 py-2 font-medium">Status</th>
+											<th className="px-3 py-2 font-medium">Due Date</th>
+											<th className="px-3 py-2 font-medium">Amount</th>
+										</tr>
+									</thead>
+									<tbody>
+										{detailContext.paymentSetup.obligations.map(
+											(obligation) => (
+												<tr
+													className="border-border/50 border-t"
+													key={String(obligation.obligationId)}
+												>
+													<td className="px-3 py-2 align-top">
+														<div className="space-y-1">
+															<div>{obligation.paymentNumber}</div>
+															<Link
+																className="text-primary text-xs underline-offset-4 hover:underline"
+																params={{
+																	recordid: String(obligation.obligationId),
+																}}
+																search={EMPTY_ADMIN_DETAIL_SEARCH}
+																to="/admin/obligations/$recordid"
+															>
+																Open obligation
+															</Link>
+														</div>
+													</td>
+													<td className="px-3 py-2 align-top">
+														{formatEnumLabel(obligation.type)}
+													</td>
+													<td className="px-3 py-2 align-top">
+														<Badge variant="outline">
+															{formatEnumLabel(obligation.status)}
+														</Badge>
+													</td>
+													<td className="px-3 py-2 align-top">
+														{formatDate(obligation.dueDate) ?? "Unavailable"}
+													</td>
+													<td className="px-3 py-2 align-top">
+														<div>{formatCurrency(obligation.amount, 100)}</div>
+														<p className="text-muted-foreground text-xs">
+															Settled{" "}
+															{formatCurrency(obligation.amountSettled, 100)}
+														</p>
+													</td>
+												</tr>
+											)
+										)}
+									</tbody>
+								</table>
+							</div>
+						) : (
+							<EmptyContext message="No obligations found for this mortgage." />
+						)}
+					</div>
+					<div className="space-y-2">
+						<p className="text-muted-foreground text-xs uppercase tracking-[0.08em]">
+							Collection Plan Entries
+						</p>
+						{detailContext?.paymentSetup?.collectionPlanEntries?.length ? (
+							<div className="overflow-x-auto rounded-lg border border-border/60 bg-background/80">
+								<table className="min-w-full text-left text-sm">
+									<thead className="bg-muted/40 text-muted-foreground text-xs uppercase tracking-[0.08em]">
+										<tr>
+											<th className="px-3 py-2 font-medium">Plan Entry</th>
+											<th className="px-3 py-2 font-medium">Status</th>
+											<th className="px-3 py-2 font-medium">Execution</th>
+											<th className="px-3 py-2 font-medium">Scheduled</th>
+											<th className="px-3 py-2 font-medium">Amount</th>
+											<th className="px-3 py-2 font-medium">Coverage</th>
+										</tr>
+									</thead>
+									<tbody>
+										{detailContext.paymentSetup.collectionPlanEntries.map(
+											(entry) => (
+												<tr
+													className="border-border/50 border-t"
+													key={String(entry.planEntryId)}
+												>
+													<td className="px-3 py-2 align-top">
+														<div className="space-y-1">
+															<div>{String(entry.planEntryId)}</div>
+															<p className="text-muted-foreground text-xs">
+																{formatEnumLabel(entry.source)}
+															</p>
+														</div>
+													</td>
+													<td className="px-3 py-2 align-top">
+														<Badge variant="outline">
+															{formatEnumLabel(entry.status)}
+														</Badge>
+													</td>
+													<td className="px-3 py-2 align-top">
+														{entry.executionMode
+															? formatEnumLabel(entry.executionMode)
+															: "Unavailable"}
+													</td>
+													<td className="px-3 py-2 align-top">
+														{formatDate(entry.scheduledDate) ?? "Unavailable"}
+													</td>
+													<td className="px-3 py-2 align-top">
+														<div>{formatCurrency(entry.amount, 100)}</div>
+														<p className="text-muted-foreground text-xs">
+															{formatEnumLabel(entry.method)}
+														</p>
+													</td>
+													<td className="px-3 py-2 align-top">
+														{entry.obligationIds.length} obligation
+														{entry.obligationIds.length === 1 ? "" : "s"}
+													</td>
+												</tr>
+											)
+										)}
+									</tbody>
+								</table>
+							</div>
+						) : (
+							<EmptyContext message="No collection plan entries found for this mortgage." />
+						)}
 					</div>
 				</div>
 			</DetailSectionShell>
@@ -558,18 +1187,72 @@ export function MortgagesDedicatedDetails({
 				title="Listing Projection"
 			>
 				<div className="space-y-4">
+					{detailContext?.listing ? (
+						<div className="rounded-lg border border-border/60 bg-background/80 px-4 py-4">
+							<div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+								<div className="space-y-2">
+									<div className="flex flex-wrap items-center gap-2">
+										<Badge variant="outline">
+											{detailContext.listing.status}
+										</Badge>
+										<Badge variant="outline">
+											{detailContext.listing.dataSource === "mortgage_pipeline"
+												? "Mortgage-backed projection"
+												: "Listing"}
+										</Badge>
+									</div>
+									<p className="font-medium text-sm">
+										{detailContext.listing.title ??
+											`${detailContext.listing.status} listing`}
+									</p>
+									<p className="text-muted-foreground text-sm">
+										Economics and property fields refresh from canonical
+										mortgage, property, and valuation records.
+									</p>
+								</div>
+								<Button asChild type="button" variant="outline">
+									<Link
+										params={{
+											recordid: String(detailContext.listing.listingId),
+										}}
+										search={EMPTY_ADMIN_DETAIL_SEARCH}
+										to="/admin/listings/$recordid"
+									>
+										Open listing
+									</Link>
+								</Button>
+							</div>
+						</div>
+					) : null}
 					<MetricGrid
 						items={[
 							{
 								label: "Listing",
-								value: detailContext?.listing
-									? (detailContext.listing.title ??
-										`${detailContext.listing.status} listing`)
-									: "No active listing",
+								value: detailContext?.listing ? (
+									<Link
+										className="text-primary underline-offset-4 hover:underline"
+										params={{
+											recordid: String(detailContext.listing.listingId),
+										}}
+										search={EMPTY_ADMIN_DETAIL_SEARCH}
+										to="/admin/listings/$recordid"
+									>
+										{detailContext.listing.title ??
+											`${detailContext.listing.status} listing`}
+									</Link>
+								) : (
+									"No active listing"
+								),
 							},
 							{
 								label: "Listing Status",
 								value: detailContext?.listing?.status ?? "Not projected",
+							},
+							{
+								label: "Projection Refreshed",
+								value:
+									formatDateTime(detailContext?.listing?.updatedAt) ??
+									"Unavailable",
 							},
 							{
 								label: "Projected LTV",

@@ -2,9 +2,9 @@
 
 ## Purpose
 
-The admin origination workspace lives under `/admin/originations` and stages every draft input in `adminOriginationCases`. Phase 2 keeps that staging aggregate as the source of truth, but the review step can now activate canonical borrower, property, `mortgageValuationSnapshots`, compatibility `appraisals`, mortgage, mortgageBorrower, ledger-genesis, and audit rows.
+The admin origination workspace lives under `/admin/originations` and stages every draft input in `adminOriginationCases`. The review step now activates canonical borrower, property, `mortgageValuationSnapshots`, compatibility `appraisals`, mortgage, mortgageBorrower, canonical obligations, planned app-owned `collectionPlanEntries`, the mortgage-backed listing projection, ledger-genesis, and audit rows from one persisted case.
 
-Listings, payment automation, provider-managed collections, and document projection are still future seams.
+When the collections step chooses `provider_managed_now`, canonical commit still finishes first and the same action immediately follows with Rotessa recurring-schedule activation against the staged primary borrower bank account. Blueprint-driven document projection remains a later seam.
 
 ## Route Contract
 
@@ -54,7 +54,7 @@ Validation is persisted, not inferred only in the browser.
 - The stepper surfaces saved validation status per step.
 - The review screen renders the same saved validation warnings and only commits the persisted case payload.
 
-Phase 2 commit blockers are limited to the participant, property, and mortgage surfaces that are required to activate a canonical mortgage. Collections and listing curation remain staged-but-non-blocking in this phase.
+Commit blockers are limited to the participant, property, and mortgage surfaces that are required to activate a canonical mortgage. Collections and listing curation remain staged-but-non-blocking so provider-managed-now can surface early preflight errors without preventing canonical commit.
 
 The browser still shows local unsaved edits in form controls, but the review screen is intentionally persisted-data-first so commit behavior and validation share the same backend source of truth.
 
@@ -72,10 +72,20 @@ That action:
 - records durable `failed` state with `lastCommitError` and `failedAt` when canonical activation aborts
 - reuses same-org borrowers and properties when possible
 - creates the canonical mortgage directly in `active`
+- bootstraps canonical obligations through the shared origination payment helper
+- creates planned app-owned `collectionPlanEntries` through `collectionPlan/initialScheduling`
+- persists `paymentBootstrapScheduleRuleMissing` on the mortgage when no active schedule rule matched and the default delay was used
+- leaves the mortgage committed even if the follow-up provider activation fails
 - creates the canonical `mortgageValuationSnapshots` row with `source`, `valuationDate`, `createdByUserId`, and optional `documentAssets` linkage, plus a compatibility `appraisals` projection
+- upserts exactly one `mortgage_pipeline` listing through `upsertMortgageListingProjection`
+- preserves curated listing fields while overwriting projection-owned economics, property facts, appraisal summary, and public-document compatibility values
+- clears stale `publicDocumentIds` compatibility values until the mortgage-owned public blueprint layer lands
 - mints the ownership-ledger genesis entry through the existing ledger primitive
 - writes an origination audit journal entry
-- patches the case to `committed` with `committedMortgageId`, `committedValuationSnapshotId`, and `committedAt`
+- patches the case to `committed` with `committedMortgageId`, `committedListingId`, `committedValuationSnapshotId`, and `committedAt`
+- persists collections activation state on `collectionsDraft` as `pending`, `activating`, `active`, or `failed`, plus `lastError`, `retryCount`, and `lastAttemptAt`
+- immediately calls the recurring-schedule activation seam for `provider_managed_now`
+- exposes retry from the mortgage detail payment setup screen through `payment:manage`
 
 The commit path is idempotent by workflow source. Mortgages and canonical borrowers store provenance fields so retries can detect previously committed work instead of creating duplicates.
 
@@ -102,7 +112,7 @@ The workspace owns a fixed seven-step shell:
 6. Listing curation
 7. Review + commit
 
-Collections and Documents are still staged shells in this phase. Their route position, step names, and persisted draft anchors are stable so later phases can extend them without redesigning the workflow.
+Documents remain a staged shell in this phase. Collections now own the provider-managed-now decision surface and durable activation state, but the route position, step names, and persisted draft anchors are still stable so later phases can extend them without redesigning the workflow.
 
 ## Extension Rules
 
@@ -111,8 +121,9 @@ Later phases may:
 - add fields inside existing draft subdocuments
 - extend `originationCaseDocumentDrafts`
 - enrich the review screen
-- project listings and document outputs from committed mortgages
-- add payment/bootstrap automation after mortgage activation
+- extend the listing projection and replace `publicDocumentIds` with blueprint-driven reads
+- project document outputs from committed mortgages
+- extend provider-managed collection activation beyond the immediate Rotessa bootstrap
 
 Later phases must not:
 

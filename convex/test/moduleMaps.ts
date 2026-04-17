@@ -62,6 +62,8 @@ export const convexModules: ModuleMap = withModuleAliases({
 		await import("./../admin/origination/access.ts"),
 	"/convex/admin/origination/cases.ts": async () =>
 		await import("./../admin/origination/cases.ts"),
+	"/convex/admin/origination/collections.ts": async () =>
+		await import("./../admin/origination/collections.ts"),
 	"/convex/admin/origination/commit.ts": async () =>
 		await import("./../admin/origination/commit.ts"),
 	"/convex/admin/origination/validators.ts": async () =>
@@ -344,6 +346,10 @@ export const convexModules: ModuleMap = withModuleAliases({
 		await import("./../ledger/validators.ts"),
 	"/convex/listings/create.ts": async () =>
 		await import("./../listings/create.ts"),
+	"/convex/listings/curation.ts": async () =>
+		await import("./../listings/curation.ts"),
+	"/convex/listings/projection.ts": async () =>
+		await import("./../listings/projection.ts"),
 	"/convex/listings/queries.ts": async () =>
 		await import("./../listings/queries.ts"),
 	"/convex/listings/validators.ts": async () =>
@@ -495,6 +501,10 @@ export const convexModules: ModuleMap = withModuleAliases({
 			),
 	"/convex/payments/recurringSchedules/queries.ts": async () =>
 		await import("./../payments/recurringSchedules/queries.ts"),
+	"/convex/payments/recurringSchedules/rotessaCustomerReference.ts": async () =>
+		await import(
+			"./../payments/recurringSchedules/rotessaCustomerReference.ts"
+		),
 	"/convex/payments/recurringSchedules/types.ts": async () =>
 		await import("./../payments/recurringSchedules/types.ts"),
 	"/convex/payments/rotessa/api.ts": async () =>

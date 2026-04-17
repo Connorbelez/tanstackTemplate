@@ -623,6 +623,7 @@ export default defineSchema({
 			v.id("externalCollectionSchedules")
 		),
 		collectionExecutionUpdatedAt: v.optional(v.number()),
+		paymentBootstrapScheduleRuleMissing: v.optional(v.boolean()),
 
 		// ─── Key dates ───
 		interestAdjustmentDate: v.string(),

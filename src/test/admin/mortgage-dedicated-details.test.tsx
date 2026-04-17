@@ -3,7 +3,7 @@
  */
 
 import { cleanup, render, screen } from "@testing-library/react";
-import { useQuery } from "convex/react";
+import { useAction, useQuery } from "convex/react";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Id } from "../../../convex/_generated/dataModel";
@@ -14,7 +14,12 @@ import type {
 import { MortgagesDedicatedDetails } from "#/components/admin/shell/dedicated-detail-panels";
 
 vi.mock("convex/react", () => ({
+	useAction: vi.fn(),
 	useQuery: vi.fn(),
+}));
+
+vi.mock("#/hooks/use-can-do", () => ({
+	useCanDo: vi.fn(() => true),
 }));
 
 vi.mock("@tanstack/react-router", () => ({
@@ -88,8 +93,9 @@ interface QueryMock {
 }
 
 describe("mortgage dedicated details", () => {
-	it("renders the phase-2 anchors and valuation snapshot context", () => {
+	it("renders the phase-4 payment bootstrap surface and valuation context", () => {
 		const useQueryMock = useQuery as unknown as QueryMock;
+		vi.mocked(useAction).mockReturnValue(vi.fn());
 		useQueryMock
 			.mockReturnValueOnce({
 				borrowers: [
@@ -117,6 +123,65 @@ describe("mortgage dedicated details", () => {
 					valueAsIs: 425_000,
 					valuationDate: "2026-05-01",
 				},
+				paymentSetup: {
+					activationLastAttemptAt: new Date(
+						"2026-05-01T12:00:00.000Z"
+					).getTime(),
+					activationLastError: "Rotessa provider timeout",
+					activationRetryCount: 2,
+					activationSelectedBankAccountId: "bank_account_1",
+					activationStatus: "failed",
+					collectionAttemptCount: 0,
+					collectionExecutionMode: "app_owned",
+					collectionExecutionProviderCode: null,
+					collectionPlanEntries: [
+						{
+							amount: 2_450,
+							balancePreCheck: {},
+							createdAt: Date.now(),
+							createdByRule: null,
+							executionMode: "app_owned",
+							lineage: {},
+							method: "manual",
+							mortgageId: "mortgage_1",
+							obligationIds: ["obligation_1"],
+							planEntryId: "plan_entry_1",
+							relatedAttempt: null,
+							reschedule: {},
+							scheduledDate: new Date("2026-05-27T12:00:00.000Z").getTime(),
+							source: "default_schedule",
+							status: "planned",
+							workoutPlan: null,
+						},
+					],
+					collectionPlanEntryCount: 1,
+					externalSchedule: {
+						activatedAt: null,
+						bankAccountId: "bank_account_1",
+						externalScheduleRef: null,
+						lastSyncErrorMessage: "Rotessa provider timeout",
+						lastSyncedAt: null,
+						nextPollAt: null,
+						providerCode: "pad_rotessa",
+						scheduleId: "schedule_1",
+						status: "activation_failed",
+					},
+					obligationCount: 1,
+					obligations: [
+						{
+							amount: 2_450,
+							amountSettled: 0,
+							dueDate: new Date("2026-06-01T12:00:00.000Z").getTime(),
+							obligationId: "obligation_1",
+							paymentNumber: 1,
+							status: "upcoming",
+							type: "regular_interest",
+						},
+					],
+					originationCaseId: "case_1",
+					scheduleRuleMissing: true,
+					transferRequestCount: 0,
+				},
 				obligationStats: {},
 				property: {
 					city: "Toronto",
@@ -138,17 +203,6 @@ describe("mortgage dedicated details", () => {
 					},
 				],
 				recentObligations: [],
-			})
-			.mockReturnValueOnce({
-				balancesByFamily: {
-					principal: 250_000,
-				},
-			})
-			.mockReturnValueOnce({
-				activeWorkoutPlan: null,
-				recentAttempts: [],
-				ruleCount: 0,
-				upcomingEntries: [],
 			})
 			.mockReturnValueOnce([]);
 
@@ -246,6 +300,20 @@ describe("mortgage dedicated details", () => {
 		expect(screen.getByText("Listing Projection")).toBeTruthy();
 		expect(screen.getByText("Documents")).toBeTruthy();
 		expect(screen.getByText("Audit")).toBeTruthy();
+		expect(screen.getByText("Schedule rule fallback applied")).toBeTruthy();
+		expect(
+			screen.getByText("Immediate Rotessa activation failed")
+		).toBeTruthy();
+		expect(screen.getByRole("button", { name: "Retry activation" })).toBeTruthy();
+		expect(screen.getByText("External schedule schedule_1")).toBeTruthy();
+		expect(screen.getByText("Open obligation")).toBeTruthy();
+		expect(screen.getByText("Plan Entries")).toBeTruthy();
+		const paymentSetupSection = screen
+			.getByRole("heading", { exact: true, name: "Payment Setup" })
+			.closest("section");
+		expect(paymentSetupSection?.textContent).toContain("App Owned");
+		expect(paymentSetupSection?.textContent).toContain("Failed");
+		expect(paymentSetupSection?.textContent).toContain("Planned");
 		expect(screen.getByText(/425,000/)).toBeTruthy();
 		expect(screen.getByText(/2026-05-01/)).toBeTruthy();
 		expect(screen.getByText("Admin Origination")).toBeTruthy();
@@ -257,5 +325,10 @@ describe("mortgage dedicated details", () => {
 				.getByRole("link", { name: "Open property record" })
 				.getAttribute("href")
 		).toBe("/admin/properties/property_1");
+		expect(
+			screen
+				.getByRole("link", { name: "Open obligation" })
+				.getAttribute("href")
+		).toBe("/admin/obligations/obligation_1");
 	});
 });

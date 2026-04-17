@@ -4,6 +4,11 @@ import type { MutationCtx } from "../_generated/server";
 import { appendAuditJournalEntry } from "../engine/auditJournal";
 import { mintMortgageHandler } from "../ledger/mutations";
 import {
+	toListingProjectionOverrides,
+	upsertMortgageListingProjection,
+} from "../listings/projection";
+import { bootstrapOriginationPayments } from "../payments/origination/bootstrap";
+import {
 	ensureMortgageBorrowerLink,
 	findPropertyByAddress,
 } from "../seed/seedHelpers";
@@ -151,50 +156,136 @@ function resolvePrimaryBorrowerId(
 	);
 }
 
+async function readMortgageBorrowerLinks(
+	ctx: Pick<MutationCtx, "db">,
+	mortgageId: Id<"mortgages">
+) {
+	return ctx.db
+		.query("mortgageBorrowers")
+		.withIndex("by_mortgage", (query) => query.eq("mortgageId", mortgageId))
+		.collect();
+}
+
 async function readExistingActivationResult(
 	ctx: Pick<MutationCtx, "db">,
 	existingMortgage: Doc<"mortgages">
 ): Promise<ActivateMortgageAggregateResult> {
-	const [borrowerLinks, listing, valuationSnapshot] = await Promise.all([
-		ctx.db
-			.query("mortgageBorrowers")
-			.withIndex("by_mortgage", (query) =>
-				query.eq("mortgageId", existingMortgage._id)
-			)
-			.collect(),
-		ctx.db
-			.query("listings")
-			.withIndex("by_mortgage", (query) =>
-				query.eq("mortgageId", existingMortgage._id)
-			)
-			.unique(),
-		ctx.db
-			.query("mortgageValuationSnapshots")
-			.withIndex("by_mortgage_created_at", (query) =>
-				query.eq("mortgageId", existingMortgage._id)
-			)
-			.order("desc")
-			.first(),
-	]);
+	const [borrowerLinks, listing, planEntries, obligations, valuationSnapshot] =
+		await Promise.all([
+			readMortgageBorrowerLinks(ctx, existingMortgage._id),
+			ctx.db
+				.query("listings")
+				.withIndex("by_mortgage", (query) =>
+					query.eq("mortgageId", existingMortgage._id)
+				)
+				.unique(),
+			ctx.db
+				.query("collectionPlanEntries")
+				.withIndex("by_mortgage_status_scheduled", (query) =>
+					query.eq("mortgageId", existingMortgage._id)
+				)
+				.collect(),
+			ctx.db
+				.query("obligations")
+				.withIndex("by_mortgage_and_date", (query) =>
+					query.eq("mortgageId", existingMortgage._id)
+				)
+				.collect(),
+			ctx.db
+				.query("mortgageValuationSnapshots")
+				.withIndex("by_mortgage_created_at", (query) =>
+					query.eq("mortgageId", existingMortgage._id)
+				)
+				.order("desc")
+				.first(),
+		]);
 
+	const sortedPlanEntryIds = [...planEntries]
+		.sort((left, right) => left.scheduledDate - right.scheduledDate)
+		.map((entry) => entry._id);
+	const sortedObligationIds = [...obligations]
+		.sort((left, right) => left.dueDate - right.dueDate)
+		.map((obligation) => obligation._id);
 	const borrowerIds = dedupeBorrowerIds(borrowerLinks);
 	const primaryBorrowerLink =
 		borrowerLinks.find((link) => link.role === "primary") ?? borrowerLinks[0];
 
 	return {
 		borrowerIds,
-		createdObligationIds: [],
-		createdPlanEntryIds: [],
+		createdObligationIds: sortedObligationIds,
+		createdPlanEntryIds: sortedPlanEntryIds,
 		dealBlueprintCount: 0,
 		listingId: listing?._id ?? null,
 		mortgageId: existingMortgage._id,
 		primaryBorrowerId: primaryBorrowerLink?.borrowerId ?? null,
 		propertyId: existingMortgage.propertyId,
 		publicBlueprintCount: 0,
-		scheduleRuleMissing: false,
+		scheduleRuleMissing:
+			existingMortgage.paymentBootstrapScheduleRuleMissing ?? false,
 		valuationSnapshotId: valuationSnapshot?._id ?? null,
 		wasAlreadyCommitted: true,
 	};
+}
+
+async function ensureReplaySafePaymentBootstrap(
+	ctx: MutationCtx,
+	args: Pick<ActivateMortgageAggregateInput, "now" | "orgId"> & {
+		existingMortgage: Doc<"mortgages">;
+	}
+) {
+	const borrowerLinks = await readMortgageBorrowerLinks(
+		ctx,
+		args.existingMortgage._id
+	);
+	const primaryBorrowerId = resolvePrimaryBorrowerId(borrowerLinks);
+	if (!primaryBorrowerId) {
+		throw new ConvexError(
+			`Mortgage ${args.existingMortgage._id} is missing a primary borrower link for payment bootstrap replay.`
+		);
+	}
+
+	const paymentBootstrap = await bootstrapOriginationPayments(ctx, {
+		firstPaymentDate: args.existingMortgage.firstPaymentDate,
+		maturityDate: args.existingMortgage.maturityDate,
+		mortgageId: args.existingMortgage._id,
+		now: args.now,
+		orgId: args.orgId,
+		paymentAmount: args.existingMortgage.paymentAmount,
+		paymentFrequency: args.existingMortgage.paymentFrequency,
+		primaryBorrowerId,
+		principal: args.existingMortgage.principal,
+	});
+
+	await ctx.db.patch(args.existingMortgage._id, {
+		paymentBootstrapScheduleRuleMissing: paymentBootstrap.scheduleRuleMissing,
+	});
+
+	return paymentBootstrap;
+}
+
+async function ensureReplaySafeListingProjection(
+	ctx: MutationCtx,
+	args: Pick<ActivateMortgageAggregateInput, "listingOverrides" | "now"> & {
+		existingMortgage: Doc<"mortgages">;
+	}
+) {
+	const existingListing = await ctx.db
+		.query("listings")
+		.withIndex("by_mortgage", (query) =>
+			query.eq("mortgageId", args.existingMortgage._id)
+		)
+		.unique();
+	if (existingListing) {
+		return existingListing._id;
+	}
+
+	const listingProjection = await upsertMortgageListingProjection(ctx, {
+		mortgageId: args.existingMortgage._id,
+		now: args.now,
+		overrides: toListingProjectionOverrides(args.listingOverrides),
+	});
+
+	return listingProjection.listingId;
 }
 
 export interface ActivateMortgageAggregateInput {
@@ -207,6 +298,7 @@ export interface ActivateMortgageAggregateInput {
 	}>;
 	brokerOfRecordId: Id<"brokers">;
 	collectionsDraft?: Doc<"adminOriginationCases">["collectionsDraft"];
+	listingOverrides?: Doc<"adminOriginationCases">["listingOverrides"];
 	mortgageDraft: NonNullable<Doc<"adminOriginationCases">["mortgageDraft"]>;
 	now: number;
 	orgId?: string;
@@ -243,7 +335,19 @@ export async function activateMortgageAggregate(
 		)
 		.unique();
 	if (existingMortgage) {
-		return readExistingActivationResult(ctx, existingMortgage);
+		await ensureReplaySafePaymentBootstrap(ctx, {
+			existingMortgage,
+			now: args.now,
+			orgId: args.orgId,
+		});
+		await ensureReplaySafeListingProjection(ctx, {
+			existingMortgage,
+			listingOverrides: args.listingOverrides,
+			now: args.now,
+		});
+		const refreshedMortgage =
+			(await ctx.db.get(existingMortgage._id)) ?? existingMortgage;
+		return readExistingActivationResult(ctx, refreshedMortgage);
 	}
 
 	const { propertyId } = await resolveCanonicalProperty(ctx, {
@@ -253,6 +357,11 @@ export async function activateMortgageAggregate(
 	const mortgageInputs = requireMortgageActivationInputs(args.mortgageDraft);
 	const borrowerIds = dedupeBorrowerIds(args.borrowerLinks);
 	const primaryBorrowerId = resolvePrimaryBorrowerId(args.borrowerLinks);
+	if (!primaryBorrowerId) {
+		throw new ConvexError(
+			"Mortgage activation requires a primary borrower before payment bootstrap."
+		);
+	}
 
 	const mortgageId = await ctx.db.insert("mortgages", {
 		activeExternalCollectionScheduleId: undefined,
@@ -316,8 +425,30 @@ export async function activateMortgageAggregate(
 		});
 	}
 
-	// Phase 2 stops after aggregate activation, but the constructor contract is
-	// locked now so later phases can append payment/listing work without reshaping it.
+	const paymentBootstrap = await bootstrapOriginationPayments(ctx, {
+		firstPaymentDate: mortgageInputs.firstPaymentDate,
+		maturityDate: mortgageInputs.maturityDate,
+		mortgageId,
+		now: args.now,
+		orgId: args.orgId,
+		paymentAmount: mortgageInputs.paymentAmount,
+		paymentFrequency: mortgageInputs.paymentFrequency,
+		primaryBorrowerId,
+		principal: mortgageInputs.principal,
+	});
+
+	await ctx.db.patch(mortgageId, {
+		paymentBootstrapScheduleRuleMissing: paymentBootstrap.scheduleRuleMissing,
+	});
+
+	const listingProjection = await upsertMortgageListingProjection(ctx, {
+		mortgageId,
+		now: args.now,
+		overrides: toListingProjectionOverrides(args.listingOverrides),
+	});
+
+	// The constructor contract is locked now so later phases can extend
+	// provider-managed collections and documents without reshaping activation.
 	await mintMortgageHandler(ctx, {
 		effectiveDate: mortgageInputs.termStartDate ?? toBusinessDate(args.now),
 		idempotencyKey: `${args.source.workflowSourceKey}:ledger-genesis`,
@@ -350,6 +481,9 @@ export async function activateMortgageAggregate(
 			borrowerIds: borrowerIds.map(String),
 			caseId: args.source.originatingWorkflowId,
 			entityId: String(mortgageId),
+			listingId: String(listingProjection.listingId),
+			obligationIds: paymentBootstrap.createdObligationIds.map(String),
+			planEntryIds: paymentBootstrap.createdPlanEntryIds.map(String),
 			propertyId: String(propertyId),
 			valuationSnapshotId: valuationSnapshot?.valuationSnapshotId
 				? String(valuationSnapshot.valuationSnapshotId)
@@ -365,12 +499,16 @@ export async function activateMortgageAggregate(
 				: null,
 			collectionExecutionMode: "app_owned",
 			creationSource: args.source.creationSource,
+			createdObligationCount: paymentBootstrap.createdObligationIds.length,
+			createdPlanEntryCount: paymentBootstrap.createdPlanEntryIds.length,
+			listingId: String(listingProjection.listingId),
 			mortgageId: String(mortgageId),
 			originationPath: args.source.originationPath,
 			originatedByUserId: args.source.originatedByUserId,
 			originatingWorkflowId: args.source.originatingWorkflowId,
 			originatingWorkflowType: args.source.originatingWorkflowType,
 			propertyId: String(propertyId),
+			scheduleRuleMissing: paymentBootstrap.scheduleRuleMissing,
 			stagedCaseStatus: args.stagedCaseStatus,
 			stagedCollectionMode: args.collectionsDraft?.mode,
 			valuationSnapshotId: valuationSnapshot?.valuationSnapshotId
@@ -383,15 +521,15 @@ export async function activateMortgageAggregate(
 
 	return {
 		borrowerIds,
-		createdObligationIds: [],
-		createdPlanEntryIds: [],
+		createdObligationIds: paymentBootstrap.createdObligationIds,
+		createdPlanEntryIds: paymentBootstrap.createdPlanEntryIds,
 		dealBlueprintCount: 0,
-		listingId: null,
+		listingId: listingProjection.listingId,
 		mortgageId,
 		primaryBorrowerId,
 		propertyId,
 		publicBlueprintCount: 0,
-		scheduleRuleMissing: false,
+		scheduleRuleMissing: paymentBootstrap.scheduleRuleMissing,
 		valuationSnapshotId: valuationSnapshot?.valuationSnapshotId ?? null,
 		wasAlreadyCommitted: false,
 	};

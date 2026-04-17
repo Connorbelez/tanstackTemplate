@@ -76,7 +76,7 @@ function resolveReviewFooterDescription(args: {
 		return "The review step only commits persisted data. Clear the participant, property, and mortgage validation blockers above, then try again.";
 	}
 
-	return "Commit will create canonical borrower, property, valuation, mortgage, mortgageBorrower, ledger genesis, and audit rows. Payment automation and listing projection remain later seams.";
+	return "Commit will create canonical borrower, property, valuation, mortgage, mortgageBorrower, obligations, planned app-owned collection entries, listing projection, ledger genesis, and audit rows. Provider-managed-now cases then immediately attempt Rotessa activation, while blueprint-driven document projection remains a later seam.";
 }
 
 function ReviewWarningsBanner({
@@ -284,7 +284,7 @@ export function ReviewStep({
 
 	return (
 		<OriginationStepCard
-			description="Review the exact staged payload currently persisted on the case before activating canonical borrower, property, mortgage, valuation, ledger, and audit rows."
+			description="Review the exact staged payload currently persisted on the case before activating canonical borrower, property, valuation, mortgage, payment bootstrap, listing, ledger, and audit rows."
 			errors={stepErrors}
 			title="Review + commit"
 		>

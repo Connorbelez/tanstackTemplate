@@ -276,6 +276,17 @@ const DEDICATED_ENTITY_VIEW_ADAPTERS = [
 			},
 			{
 				description:
+					"Payment amount paired with the actual cadence so mortgage-backed listings never imply a synthetic monthly-equivalent payment.",
+				expressionKey: "listingPaymentSummary",
+				fieldName: "paymentSummary",
+				fieldType: "text",
+				isVisibleByDefault: true,
+				label: "Payment",
+				rendererHint: "computed",
+				sourceFieldNames: ["monthlyPayment", "paymentFrequency"],
+			},
+			{
+				description:
 					"Hydrated mortgage summary when the listing is linked to a mortgage record.",
 				expressionKey: "listingMortgageSummary",
 				fieldName: "mortgageSummary",
@@ -309,7 +320,7 @@ const DEDICATED_ENTITY_VIEW_ADAPTERS = [
 				"principal",
 				"interestRate",
 				"ltvRatio",
-				"monthlyPayment",
+				"paymentSummary",
 				"latestAppraisalValueAsIs",
 				"maturityDate",
 			],

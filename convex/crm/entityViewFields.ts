@@ -296,6 +296,27 @@ function evaluateMortgagePaymentSummary(
 		.join(" • ");
 }
 
+function evaluateListingPaymentSummary(
+	fieldValues: Record<string, unknown>
+): string | undefined {
+	const paymentAmount =
+		typeof fieldValues.monthlyPayment === "number"
+			? formatCurrencyAmount(fieldValues.monthlyPayment)
+			: undefined;
+	const paymentFrequency =
+		typeof fieldValues.paymentFrequency === "string"
+			? formatTokenLabel(fieldValues.paymentFrequency)
+			: undefined;
+
+	if (!paymentAmount) {
+		return paymentFrequency;
+	}
+
+	return paymentFrequency
+		? `${paymentAmount} / ${paymentFrequency}`
+		: paymentAmount;
+}
+
 function evaluateObligationPaymentProgressSummary(
 	fieldValues: Record<string, unknown>
 ): string | undefined {
@@ -333,6 +354,8 @@ export function evaluateComputedFieldValue(args: {
 	switch (args.computedField.expressionKey) {
 		case "borrowerVerificationSummary":
 			return evaluateBorrowerVerificationSummary(args.fieldValues);
+		case "listingPaymentSummary":
+			return evaluateListingPaymentSummary(args.fieldValues);
 		case "mortgagePaymentSummary":
 			return evaluateMortgagePaymentSummary(args.fieldValues);
 		case "obligationPaymentProgressSummary":

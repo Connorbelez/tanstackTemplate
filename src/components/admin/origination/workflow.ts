@@ -136,7 +136,7 @@ export const ORIGINATION_DOCUMENT_SECTION_SHELLS = [
 		key: "private-signable",
 		title: "Private templated signable docs",
 		description:
-			"Signature-ready document packages are intentionally deferred beyond the phase-2 activation surface.",
+			"Signature-ready document packages are intentionally deferred beyond the phase-5 immediate Rotessa activation surface.",
 	},
 ] as const;
 

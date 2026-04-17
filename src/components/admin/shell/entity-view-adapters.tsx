@@ -40,7 +40,7 @@ export interface RecordDetailsRenderArgs {
 	readonly adapterContract: EntityViewAdapterContract | undefined;
 	readonly entity: AdminEntity | undefined;
 	readonly fields: readonly DetailField[];
-	readonly objectDef: ObjectDef;
+	readonly objectDef: ObjectDef | undefined;
 	readonly record: RecordDetailRecord;
 	readonly recordId: string;
 }
@@ -86,7 +86,7 @@ const DEDICATED_DETAIL_LAYOUTS = {
 			"principal",
 			"interestRate",
 			"ltvRatio",
-			"monthlyPayment",
+			"paymentSummary",
 		],
 		sections: [
 			{
@@ -101,7 +101,7 @@ const DEDICATED_DETAIL_LAYOUTS = {
 					"propertyType",
 					"city",
 					"province",
-					"monthlyPayment",
+					"paymentSummary",
 					"maturityDate",
 				],
 			},

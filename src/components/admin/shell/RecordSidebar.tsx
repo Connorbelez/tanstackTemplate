@@ -21,7 +21,7 @@ import { EMPTY_ADMIN_DETAIL_SEARCH } from "#/lib/admin-detail-search";
 import { resolveAdminRecordRouteTarget } from "#/lib/admin-relation-navigation";
 import { cn } from "#/lib/utils";
 import { api } from "../../../../convex/_generated/api";
-import type { Doc } from "../../../../convex/_generated/dataModel";
+import type { Doc, Id } from "../../../../convex/_generated/dataModel";
 import type {
 	EntityViewAdapterContract,
 	NormalizedFieldDefinition,
@@ -510,6 +510,31 @@ function DetailsTab({
 	readonly record: RecordDetailRecord | undefined;
 	readonly recordId: string;
 }) {
+	const fallbackAdapterRecord = useMemo<RecordDetailRecord>(
+		() => ({
+			_id: recordId,
+			_kind: "native",
+			createdAt: 0,
+			fields: {},
+			objectDefId: "fallback" as Id<"objectDefs">,
+			updatedAt: 0,
+		}),
+		[recordId]
+	);
+	const adapterRecord = record ?? fallbackAdapterRecord;
+	const adapterDetails = adapter?.renderDetailsTab?.({
+		adapterContract,
+		entity,
+		fields: fields ?? [],
+		objectDef,
+		record: adapterRecord,
+		recordId,
+	});
+
+	if (!objectDef && adapterDetails != null) {
+		return adapterDetails;
+	}
+
 	if (!objectDef) {
 		return (
 			<UnavailableTab
@@ -553,15 +578,6 @@ function DetailsTab({
 			</div>
 		);
 	}
-
-	const adapterDetails = adapter?.renderDetailsTab?.({
-		adapterContract,
-		entity,
-		fields: fields ?? [],
-		objectDef,
-		record,
-		recordId,
-	});
 	if (adapterDetails != null) {
 		return adapterDetails;
 	}

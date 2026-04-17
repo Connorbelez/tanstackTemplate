@@ -162,7 +162,7 @@ describe("origination workflow helpers", () => {
 				onCommit={() => undefined}
 				snapshot={{
 					reviewWarnings: [
-						"Provider-managed collections are deferred. Phase 2 activation always creates an app-owned mortgage.",
+						"Provider-managed now will attempt immediate Rotessa activation after canonical commit. The mortgage still commits even if activation fails, and the payment setup screen will surface status and retry.",
 					],
 				}}
 				values={{

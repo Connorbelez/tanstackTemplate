@@ -119,6 +119,7 @@ describe("origination validators", () => {
 				providerCode: "pad_rotessa",
 			})
 		).toEqual({
+			activationStatus: "pending",
 			mode: "provider_managed_now",
 			providerCode: "pad_rotessa",
 		});
@@ -165,11 +166,14 @@ describe("origination validators", () => {
 		expect(snapshot.stepErrors?.mortgageTerms).toContain(
 			"Interest rate is required."
 		);
+		expect(snapshot.stepErrors?.collections).toContain(
+			"Provider-managed activation requires selecting a primary borrower bank account."
+		);
 		expect(snapshot.reviewWarnings).toContain(
 			"Resolve the required participant, property, and mortgage fields before committing this origination case."
 		);
 		expect(snapshot.reviewWarnings).toContain(
-			"Provider-managed collections are deferred. Phase 2 activation always creates an app-owned mortgage."
+			"Provider-managed now will attempt immediate Rotessa activation after canonical commit. The mortgage still commits even if activation fails, and the payment setup screen will surface status and retry."
 		);
 	});
 

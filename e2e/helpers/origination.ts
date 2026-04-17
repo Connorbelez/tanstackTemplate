@@ -51,6 +51,16 @@ export function createOriginationE2eClient(accessToken: string) {
 				}
 			);
 		},
+		getMortgageDetailContext(mortgageId: string) {
+			return convex.query(api.crm.detailContextQueries.getMortgageDetailContext, {
+				mortgageId: mortgageId as Id<"mortgages">,
+			});
+		},
+		getListingByMortgage(mortgageId: string) {
+			return convex.query(api.listings.queries.getListingByMortgage, {
+				mortgageId: mortgageId as Id<"mortgages">,
+			});
+		},
 		ensureOriginationE2eContext() {
 			return convex.mutation(
 				api.test.originationE2e.ensureOriginationE2eContext,
