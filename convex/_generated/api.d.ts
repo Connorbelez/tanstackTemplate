@@ -306,6 +306,7 @@ import type * as seed_seedOnboardingRequest from "../seed/seedOnboardingRequest.
 import type * as seed_seedPaymentData from "../seed/seedPaymentData.js";
 import type * as test_authTestEndpoints from "../test/authTestEndpoints.js";
 import type * as test_moduleMaps from "../test/moduleMaps.js";
+import type * as test_originationE2e from "../test/originationE2e.js";
 import type * as test_packageSchemas from "../test/packageSchemas.js";
 import type * as todos from "../todos.js";
 
@@ -614,6 +615,7 @@ declare const fullApi: ApiFromModules<{
   "seed/seedPaymentData": typeof seed_seedPaymentData;
   "test/authTestEndpoints": typeof test_authTestEndpoints;
   "test/moduleMaps": typeof test_moduleMaps;
+  "test/originationE2e": typeof test_originationE2e;
   "test/packageSchemas": typeof test_packageSchemas;
   todos: typeof todos;
 }>;

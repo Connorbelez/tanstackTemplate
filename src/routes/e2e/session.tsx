@@ -10,23 +10,74 @@ export const Route = createFileRoute("/e2e/session")({
 	component: E2eSessionRoute,
 });
 
+interface ReadyTokenSnapshot {
+	accessToken: string;
+	organizationId: string | null;
+	permissions: string[];
+	role: string | null;
+	status: "ready";
+}
+
+interface ErrorTokenSnapshot {
+	error: string;
+	status: "error";
+}
+
+type TokenSnapshot = ErrorTokenSnapshot | ReadyTokenSnapshot;
+
+function buildSignedOutTokenSnapshot(): ReadyTokenSnapshot {
+	return {
+		accessToken: "",
+		status: "ready",
+		organizationId: null,
+		permissions: [],
+		role: null,
+	};
+}
+
+function buildTokenErrorSnapshot(): ErrorTokenSnapshot {
+	return {
+		status: "error",
+		error: "token_acquisition_failed",
+	};
+}
+
+async function loadTokenSnapshot(args: {
+	getAccessToken: () => Promise<string | undefined | null>;
+	refresh: () => Promise<string | undefined | null>;
+	user: { id: string } | null;
+}): Promise<TokenSnapshot> {
+	if (!args.user) {
+		return buildSignedOutTokenSnapshot();
+	}
+
+	try {
+		const token =
+			(await args.refresh()) ?? (await args.getAccessToken()) ?? null;
+		if (!token) {
+			return buildTokenErrorSnapshot();
+		}
+
+		const claims = decodeAccessToken(token);
+		return {
+			accessToken: token,
+			status: "ready",
+			organizationId: claims.orgId,
+			permissions: claims.permissions,
+			role: claims.role,
+		};
+	} catch {
+		return buildTokenErrorSnapshot();
+	}
+}
+
 function E2eSessionRoute() {
 	const isE2E = import.meta.env.VITE_E2E;
 	const auth = useAuth();
 	const { getAccessToken, refresh } = useAccessToken();
-	const [tokenSnapshot, setTokenSnapshot] = useState<
-		| {
-				status: "ready";
-				organizationId: string | null;
-				permissions: string[];
-				role: string | null;
-		  }
-		| {
-				status: "error";
-				error: string;
-		  }
-		| null
-	>(null);
+	const [tokenSnapshot, setTokenSnapshot] = useState<TokenSnapshot | null>(
+		null
+	);
 
 	useEffect(() => {
 		let cancelled = false;
@@ -37,50 +88,15 @@ function E2eSessionRoute() {
 			};
 		}
 
-		void (async () => {
-			if (!auth.user) {
-				if (!cancelled) {
-					setTokenSnapshot({
-						status: "ready",
-						organizationId: null,
-						permissions: [],
-						role: null,
-					});
-				}
-				return;
+		void loadTokenSnapshot({
+			getAccessToken,
+			refresh,
+			user: auth.user,
+		}).then((snapshot) => {
+			if (!cancelled) {
+				setTokenSnapshot(snapshot);
 			}
-
-			try {
-				const token = (await refresh()) ?? (await getAccessToken()) ?? null;
-				if (!token) {
-					if (!cancelled) {
-						setTokenSnapshot({
-							status: "error",
-							error: "token_acquisition_failed",
-						});
-					}
-					return;
-				}
-
-				const claims = decodeAccessToken(token);
-
-				if (!cancelled) {
-					setTokenSnapshot({
-						status: "ready",
-						organizationId: claims.orgId,
-						permissions: claims.permissions,
-						role: claims.role,
-					});
-				}
-			} catch {
-				if (!cancelled) {
-					setTokenSnapshot({
-						status: "error",
-						error: "token_acquisition_failed",
-					});
-				}
-			}
-		})();
+		});
 
 		return () => {
 			cancelled = true;
@@ -114,6 +130,7 @@ function E2eSessionRoute() {
 	return (
 		<pre data-testid="session-json">
 			{JSON.stringify({
+				accessToken: tokenSnapshot.accessToken,
 				authOrganizationId: auth.organizationId ?? null,
 				authPermissions: auth.permissions ?? [],
 				authRole: auth.role ?? null,
