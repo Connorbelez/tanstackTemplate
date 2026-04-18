@@ -286,9 +286,33 @@ type MortgageDetailContext = FunctionReturnType<
 	typeof api.crm.detailContextQueries.getMortgageDetailContext
 >;
 
+type DealDetailContext = FunctionReturnType<
+	typeof api.crm.detailContextQueries.getDealDetailContext
+>;
+
 type MortgageHistoryEntry = FunctionReturnType<
 	typeof api.ledger.queries.getMortgageHistory
 >[number];
+
+type DealDocumentInstanceListItem = NonNullable<
+	NonNullable<DealDetailContext>["documentInstances"]
+>[number];
+
+function groupDealDocumentInstances(
+	documentInstances: readonly DealDocumentInstanceListItem[]
+) {
+	return {
+		generatedReadOnly: documentInstances.filter(
+			(document) => document.class === "private_templated_non_signable"
+		),
+		privateStatic: documentInstances.filter(
+			(document) => document.class === "private_static"
+		),
+		signableReserved: documentInstances.filter(
+			(document) => document.class === "private_templated_signable"
+		),
+	};
+}
 
 function isStaticMortgageBlueprintClass(documentClass: string) {
 	return (
@@ -1038,6 +1062,329 @@ export function ListingsDedicatedDetails({
 					</div>
 				</DetailSectionShell>
 			</div>
+		</div>
+	);
+}
+
+export function DealsDedicatedDetails({
+	fields,
+	record,
+}: {
+	readonly fields: readonly NormalizedFieldDefinition[];
+	readonly record: UnifiedRecord;
+}) {
+	const dealId = record._id as Id<"deals">;
+	const canRetryPackage = useCanDo("deal:manage");
+	const detailContext = useQuery(
+		api.crm.detailContextQueries.getDealDetailContext,
+		{
+			dealId,
+		}
+	);
+	const groupedDocumentInstances = groupDealDocumentInstances(
+		detailContext?.documentInstances ?? []
+	);
+	const retryPackageGeneration = useAction(
+		api.documents.dealPackages.retryPackageGeneration
+	);
+	const detailFields = filterDetailFields(fields, []);
+	const packageStatus = detailContext?.documentPackage?.status ?? null;
+	const canRetry =
+		canRetryPackage &&
+		(packageStatus === "failed" || packageStatus === "partial_failure");
+
+	async function handleRetryPackageGeneration() {
+		try {
+			await retryPackageGeneration({ dealId });
+			toast.success("Deal package generation retried.");
+		} catch (error) {
+			toast.error(
+				error instanceof Error
+					? error.message
+					: "Unable to retry deal package generation."
+			);
+		}
+	}
+
+	return (
+		<div className="space-y-6">
+			<SectionedRecordDetails
+				fields={detailFields}
+				highlightFieldNames={["status", "closingDate", "fractionalShare"]}
+				record={record}
+				sections={[
+					{
+						title: "Summary",
+						description:
+							"Canonical deal terms and the immutable package header created at deal lock.",
+						fieldNames: [
+							"status",
+							"closingDate",
+							"fractionalShare",
+							"lockingFeeAmount",
+						],
+					},
+				]}
+			/>
+
+			<DetailSectionShell
+				description="The package is created once on DEAL_LOCKED and retains immutable document-instance rows for deal-time distribution."
+				title="Deal Package"
+			>
+				<div className="space-y-4">
+					<div className="flex flex-wrap items-center gap-2">
+						<Badge variant="outline">
+							{detailContext?.documentPackage?.status ?? "pending"}
+						</Badge>
+						{detailContext?.documentPackage?.lastError ? (
+							<Badge variant="secondary">Last error recorded</Badge>
+						) : null}
+					</div>
+					<MetricGrid
+						items={[
+							{
+								label: "Package ID",
+								value: detailContext?.documentPackage?.packageId
+									? String(detailContext.documentPackage.packageId)
+									: "Not created yet",
+							},
+							{
+								label: "Retry Count",
+								value: String(detailContext?.documentPackage?.retryCount ?? 0),
+							},
+							{
+								label: "Ready At",
+								value:
+									formatDateTime(detailContext?.documentPackage?.readyAt) ??
+									"Unavailable",
+							},
+							{
+								label: "Linked Mortgage",
+								value: detailContext?.mortgage ? (
+									<Link
+										className="text-primary underline-offset-4 hover:underline"
+										params={{
+											recordid: String(detailContext.mortgage.mortgageId),
+										}}
+										search={EMPTY_ADMIN_DETAIL_SEARCH}
+										to="/admin/mortgages/$recordid"
+									>
+										{String(detailContext.mortgage.mortgageId)}
+									</Link>
+								) : (
+									"Unavailable"
+								),
+							},
+							{
+								label: "Linked Property",
+								value: detailContext?.property ? (
+									<Link
+										className="text-primary underline-offset-4 hover:underline"
+										params={{
+											recordid: String(detailContext.property.propertyId),
+										}}
+										search={EMPTY_ADMIN_DETAIL_SEARCH}
+										to="/admin/properties/$recordid"
+									>
+										{detailContext.property.streetAddress}
+									</Link>
+								) : (
+									"Unavailable"
+								),
+							},
+							{
+								label: "Last Error",
+								value: detailContext?.documentPackage?.lastError ?? "None",
+							},
+						]}
+					/>
+					{canRetry ? (
+						<Button
+							onClick={() => void handleRetryPackageGeneration()}
+							type="button"
+						>
+							Retry package generation
+						</Button>
+					) : null}
+				</div>
+			</DetailSectionShell>
+
+			<DetailSectionShell
+				description="Immutable uploaded private package members frozen at deal lock. Failed retries archive the old instance and create a successor row."
+				title="Private Static Documents"
+			>
+				<CompactList
+					emptyMessage="No private static package documents exist yet."
+					items={groupedDocumentInstances.privateStatic}
+					renderItem={(item) => {
+						const document = item as DealDocumentInstanceListItem;
+						return (
+							<div
+								className="rounded-lg border border-border/60 bg-background/80 px-3 py-3"
+								key={document.instanceId}
+							>
+								<div className="flex flex-wrap items-start justify-between gap-3">
+									<div className="space-y-1">
+										<p className="font-medium text-sm">
+											{document.displayName}
+										</p>
+										<p className="text-muted-foreground text-sm">
+											{document.packageLabel ?? "Deal package"} •{" "}
+											{formatEnumLabel(document.status)}
+										</p>
+										{document.lastError ? (
+											<p className="text-destructive text-sm">
+												{document.lastError}
+											</p>
+										) : null}
+									</div>
+									{document.url ? (
+										<Button asChild size="sm" type="button" variant="outline">
+											<a href={document.url} rel="noreferrer" target="_blank">
+												Open PDF
+											</a>
+										</Button>
+									) : null}
+								</div>
+							</div>
+						);
+					}}
+				/>
+			</DetailSectionShell>
+
+			<DetailSectionShell
+				description="Generated non-signable template outputs materialized from the lock-time blueprint snapshot."
+				title="Generated Read-only Documents"
+			>
+				<CompactList
+					emptyMessage="No generated read-only documents exist yet."
+					items={groupedDocumentInstances.generatedReadOnly}
+					renderItem={(item) => {
+						const document = item as DealDocumentInstanceListItem;
+						return (
+							<div
+								className="rounded-lg border border-border/60 bg-background/80 px-3 py-3"
+								key={document.instanceId}
+							>
+								<div className="flex flex-wrap items-start justify-between gap-3">
+									<div className="space-y-1">
+										<p className="font-medium text-sm">
+											{document.displayName}
+										</p>
+										<p className="text-muted-foreground text-sm">
+											{document.packageLabel ?? "Deal package"} •{" "}
+											{formatEnumLabel(document.kind)} •{" "}
+											{formatEnumLabel(document.status)}
+										</p>
+										{document.lastError ? (
+											<p className="text-destructive text-sm">
+												{document.lastError}
+											</p>
+										) : null}
+									</div>
+									{document.url ? (
+										<Button asChild size="sm" type="button" variant="outline">
+											<a href={document.url} rel="noreferrer" target="_blank">
+												Open PDF
+											</a>
+										</Button>
+									) : null}
+								</div>
+							</div>
+						);
+					}}
+				/>
+			</DetailSectionShell>
+
+			<DetailSectionShell
+				description="Signable package members are reserved here for the next signing phase and remain non-downloadable placeholders."
+				title="Reserved Signable Documents"
+			>
+				{groupedDocumentInstances.signableReserved.length > 0 ? (
+					<CompactList
+						emptyMessage="No signable package placeholders exist yet."
+						items={groupedDocumentInstances.signableReserved}
+						renderItem={(item) => {
+							const document = item as DealDocumentInstanceListItem;
+							return (
+								<div
+									className="rounded-lg border border-border/60 bg-background/80 px-3 py-3"
+									key={document.instanceId}
+								>
+									<div className="space-y-1">
+										<p className="font-medium text-sm">
+											{document.displayName}
+										</p>
+										<p className="text-muted-foreground text-sm">
+											{document.packageLabel ?? "Deal package"} •{" "}
+											{formatEnumLabel(document.status)}
+										</p>
+									</div>
+								</div>
+							);
+						}}
+					/>
+				) : (
+					<EmptyContext message="No signable package placeholders exist yet." />
+				)}
+			</DetailSectionShell>
+
+			<DetailSectionShell
+				description="Deal participants resolved from canonical lender, seller, and lawyer references."
+				title="Parties"
+			>
+				<MetricGrid
+					items={[
+						{
+							label: "Lender",
+							value: detailContext?.parties.lender.email
+								? `${detailContext.parties.lender.name} (${detailContext.parties.lender.email})`
+								: (detailContext?.parties.lender.name ?? "Unavailable"),
+						},
+						{
+							label: "Seller",
+							value: detailContext?.parties.seller.email
+								? `${detailContext.parties.seller.name} (${detailContext.parties.seller.email})`
+								: (detailContext?.parties.seller.name ?? "Unavailable"),
+						},
+						{
+							label: "Lawyer",
+							value: detailContext?.parties.lawyer
+								? `${detailContext.parties.lawyer.lawyerId} • ${detailContext.parties.lawyer.lawyerType ?? "unknown"}`
+								: "Not assigned",
+						},
+					]}
+				/>
+			</DetailSectionShell>
+
+			<DetailSectionShell
+				description="Recent deal state changes and package-related audit signals."
+				title="Audit"
+			>
+				<CompactList
+					emptyMessage="No recent audit events found."
+					items={detailContext?.recentAuditEvents ?? []}
+					renderItem={(item) => {
+						const event =
+							item as NonNullable<DealDetailContext>["recentAuditEvents"][number];
+						return (
+							<div
+								className="rounded-lg border border-border/60 bg-background/80 px-3 py-3"
+								key={event.eventId}
+							>
+								<p className="font-medium text-sm">{event.eventType}</p>
+								<p className="text-muted-foreground text-sm">
+									{event.previousState ?? "unknown"} →{" "}
+									{event.newState ?? "unknown"} • {event.outcome}
+								</p>
+								<p className="text-muted-foreground text-xs">
+									{formatDateTime(event.timestamp)}
+								</p>
+							</div>
+						);
+					}}
+				/>
+			</DetailSectionShell>
 		</div>
 	);
 }

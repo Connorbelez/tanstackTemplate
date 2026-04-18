@@ -35,15 +35,15 @@ export const notifyCancellation = internalAction({
 	},
 });
 
-/**
- * Stub: creates a Documenso document package for the deal.
- * // TODO: Phase 2 — replace with real implementation (Documenso API)
- */
 export const createDocumentPackage = internalAction({
 	args: dealEffectPayloadValidator,
-	handler: async (_ctx, args) => {
-		console.info(
-			`[stub] createDocumentPackage: Would create Documenso document package for ${args.entityType} ${args.entityId}`
+	handler: async (ctx, args) => {
+		await ctx.runAction(
+			internal.documents.dealPackages.runCreateDocumentPackageInternal,
+			{
+				dealId: args.entityId,
+				retry: false,
+			}
 		);
 	},
 });

@@ -54,6 +54,68 @@ export type MortgageDocumentValidationSummary = Infer<
 	typeof mortgageDocumentValidationSummaryValidator
 >;
 
+export const dealDocumentPackageStatusValidator = v.union(
+	v.literal("pending"),
+	v.literal("ready"),
+	v.literal("partial_failure"),
+	v.literal("failed"),
+	v.literal("archived")
+);
+
+export const dealDocumentInstanceKindValidator = v.union(
+	v.literal("static_reference"),
+	v.literal("generated")
+);
+
+export const dealDocumentInstanceStatusValidator = v.union(
+	v.literal("available"),
+	v.literal("generation_failed"),
+	v.literal("signature_pending_recipient_resolution"),
+	v.literal("signature_draft"),
+	v.literal("signature_sent"),
+	v.literal("signature_partially_signed"),
+	v.literal("signed"),
+	v.literal("archived")
+);
+
+export const dealDocumentSourceBlueprintSnapshotValidator = v.object({
+	category: v.optional(v.string()),
+	class: mortgageDocumentBlueprintClassValidator,
+	description: v.optional(v.string()),
+	displayName: v.string(),
+	displayOrder: v.number(),
+	packageKey: v.optional(v.string()),
+	packageLabel: v.optional(v.string()),
+	templateId: v.optional(v.id("documentTemplates")),
+	templateVersion: v.optional(v.number()),
+});
+
+export const dealPackageBlueprintSnapshotValidator = v.object({
+	assetId: v.optional(v.id("documentAssets")),
+	sourceBlueprintId: v.optional(v.id("mortgageDocumentBlueprints")),
+	sourceBlueprintSnapshot: dealDocumentSourceBlueprintSnapshotValidator,
+});
+
+export type DealDocumentPackageStatus = Infer<
+	typeof dealDocumentPackageStatusValidator
+>;
+
+export type DealDocumentInstanceKind = Infer<
+	typeof dealDocumentInstanceKindValidator
+>;
+
+export type DealDocumentInstanceStatus = Infer<
+	typeof dealDocumentInstanceStatusValidator
+>;
+
+export type DealDocumentSourceBlueprintSnapshot = Infer<
+	typeof dealDocumentSourceBlueprintSnapshotValidator
+>;
+
+export type DealPackageBlueprintSnapshot = Infer<
+	typeof dealPackageBlueprintSnapshotValidator
+>;
+
 export const ALLOWED_MORTGAGE_SIGNATORY_PLATFORM_ROLES =
 	MORTGAGE_DOCUMENT_SIGNATORY_ROLES;
 

@@ -126,6 +126,7 @@ import type * as documentEngine_templates from "../documentEngine/templates.js";
 import type * as documentEngine_validators from "../documentEngine/validators.js";
 import type * as documents_assets from "../documents/assets.js";
 import type * as documents_contracts from "../documents/contracts.js";
+import type * as documents_dealPackages from "../documents/dealPackages.js";
 import type * as documents_mortgageBlueprints from "../documents/mortgageBlueprints.js";
 import type * as documents_templateValidation from "../documents/templateValidation.js";
 import type * as engine_auditJournal from "../engine/auditJournal.js";
@@ -319,6 +320,7 @@ import type * as seed_seedObligationStates from "../seed/seedObligationStates.js
 import type * as seed_seedOnboardingRequest from "../seed/seedOnboardingRequest.js";
 import type * as seed_seedPaymentData from "../seed/seedPaymentData.js";
 import type * as test_authTestEndpoints from "../test/authTestEndpoints.js";
+import type * as test_dealPackageE2e from "../test/dealPackageE2e.js";
 import type * as test_moduleMaps from "../test/moduleMaps.js";
 import type * as test_originationE2e from "../test/originationE2e.js";
 import type * as test_packageSchemas from "../test/packageSchemas.js";
@@ -449,6 +451,7 @@ declare const fullApi: ApiFromModules<{
   "documentEngine/validators": typeof documentEngine_validators;
   "documents/assets": typeof documents_assets;
   "documents/contracts": typeof documents_contracts;
+  "documents/dealPackages": typeof documents_dealPackages;
   "documents/mortgageBlueprints": typeof documents_mortgageBlueprints;
   "documents/templateValidation": typeof documents_templateValidation;
   "engine/auditJournal": typeof engine_auditJournal;
@@ -642,6 +645,7 @@ declare const fullApi: ApiFromModules<{
   "seed/seedOnboardingRequest": typeof seed_seedOnboardingRequest;
   "seed/seedPaymentData": typeof seed_seedPaymentData;
   "test/authTestEndpoints": typeof test_authTestEndpoints;
+  "test/dealPackageE2e": typeof test_dealPackageE2e;
   "test/moduleMaps": typeof test_moduleMaps;
   "test/originationE2e": typeof test_originationE2e;
   "test/packageSchemas": typeof test_packageSchemas;
