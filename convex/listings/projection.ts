@@ -2,6 +2,7 @@ import { ConvexError, v } from "convex/values";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 import type { OriginationListingOverridesDraftValue } from "../admin/origination/validators";
+import { listActivePublicStaticBlueprintAssets } from "../documents/mortgageBlueprints";
 import { adminMutation, requirePermission } from "../fluent";
 import { insertListingRecord, type ListingInsert } from "./create";
 
@@ -270,14 +271,14 @@ function buildCuratedFieldPatch(args: {
 }
 
 async function resolveProjectedPublicDocumentIds(
-	_ctx: Pick<MutationCtx, "db">,
-	_args: { mortgageId: Id<"mortgages"> }
+	ctx: Pick<MutationCtx, "db">,
+	args: { mortgageId: Id<"mortgages"> }
 ) {
-	// Phase 3 intentionally keeps this as a compatibility seam. Until the
-	// mortgage-owned public blueprint table lands, the projector must clear
-	// stale listing cache values instead of pretending a different source of
-	// truth exists.
-	return [] as Id<"_storage">[];
+	const publicAssets = await listActivePublicStaticBlueprintAssets(
+		ctx,
+		args.mortgageId
+	);
+	return publicAssets.map(({ asset }) => asset.fileRef);
 }
 
 export async function syncListingPublicDocumentsProjection(

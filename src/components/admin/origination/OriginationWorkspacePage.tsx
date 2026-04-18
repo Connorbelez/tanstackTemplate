@@ -156,7 +156,12 @@ function renderOriginationStepContent(args: {
 				/>
 			);
 		case "documents":
-			return <DocumentsStep errors={args.currentStepErrors} />;
+			return (
+				<DocumentsStep
+					caseId={args.caseRecord._id}
+					errors={args.currentStepErrors}
+				/>
+			);
 		case "listingCuration":
 			return (
 				<ListingCurationStep

@@ -307,6 +307,123 @@ async function stageCommitReadyCase(
 	return caseId;
 }
 
+async function stageStaticDocumentDrafts(
+	t: ReturnType<typeof createTestConvex>,
+	args: {
+		caseId: Id<"adminOriginationCases">;
+	}
+) {
+	return t.run(async (ctx) => {
+		const adminUser = await ctx.db
+			.query("users")
+			.withIndex("authId", (query) => query.eq("authId", FAIRLEND_ADMIN.subject))
+			.unique();
+		if (!adminUser) {
+			throw new Error("Admin user was not seeded");
+		}
+
+		const publicFileRef = await (
+			ctx.storage as unknown as {
+				store: (blob: Blob) => Promise<Id<"_storage">>;
+			}
+		).store(new Blob(["public static pdf"]));
+		const privateFileRef = await (
+			ctx.storage as unknown as {
+				store: (blob: Blob) => Promise<Id<"_storage">>;
+			}
+		).store(new Blob(["private static pdf"]));
+		const publicAssetId = await ctx.db.insert("documentAssets", {
+			description: "Public teaser",
+			fileHash: `public-${Date.now()}`,
+			fileRef: publicFileRef,
+			fileSize: 101,
+			mimeType: "application/pdf",
+			name: "Public teaser",
+			originalFilename: "public-teaser.pdf",
+			pageCount: 1,
+			source: "admin_upload",
+			uploadedAt: Date.now(),
+			uploadedByUserId: adminUser._id,
+		});
+		const privateAssetId = await ctx.db.insert("documentAssets", {
+			description: "Internal title binder",
+			fileHash: `private-${Date.now()}`,
+			fileRef: privateFileRef,
+			fileSize: 102,
+			mimeType: "application/pdf",
+			name: "Internal title binder",
+			originalFilename: "private-binder.pdf",
+			pageCount: 1,
+			source: "admin_upload",
+			uploadedAt: Date.now(),
+			uploadedByUserId: adminUser._id,
+		});
+
+		await ctx.db.insert("originationCaseDocumentDrafts", {
+			archivedAt: undefined,
+			archivedByUserId: undefined,
+			assetId: publicAssetId,
+			caseId: args.caseId,
+			category: "marketing",
+			class: "public_static",
+			createdAt: Date.now(),
+			createdByUserId: adminUser._id,
+			description: "Visible to listing viewers",
+			displayName: "Public teaser",
+			displayOrder: 0,
+			packageKey: "public",
+			packageLabel: "Public docs",
+			selectedFromGroupId: undefined,
+			sourceKind: "asset",
+			status: "active",
+			supersededByDraftId: undefined,
+			templateId: undefined,
+			templateVersion: undefined,
+			updatedAt: Date.now(),
+			updatedByUserId: adminUser._id,
+			validationSummary: {
+				containsSignableFields: false,
+				requiredPlatformRoles: [],
+				requiredVariableKeys: [],
+				unsupportedPlatformRoles: [],
+				unsupportedVariableKeys: [],
+			},
+		});
+		await ctx.db.insert("originationCaseDocumentDrafts", {
+			archivedAt: undefined,
+			archivedByUserId: undefined,
+			assetId: privateAssetId,
+			caseId: args.caseId,
+			category: "internal",
+			class: "private_static",
+			createdAt: Date.now(),
+			createdByUserId: adminUser._id,
+			description: "Visible only in internal/deal surfaces",
+			displayName: "Internal title binder",
+			displayOrder: 1,
+			packageKey: "private",
+			packageLabel: "Private docs",
+			selectedFromGroupId: undefined,
+			sourceKind: "asset",
+			status: "active",
+			supersededByDraftId: undefined,
+			templateId: undefined,
+			templateVersion: undefined,
+			updatedAt: Date.now(),
+			updatedByUserId: adminUser._id,
+			validationSummary: {
+				containsSignableFields: false,
+				requiredPlatformRoles: [],
+				requiredVariableKeys: [],
+				unsupportedPlatformRoles: [],
+				unsupportedVariableKeys: [],
+			},
+		});
+
+		return { privateAssetId, publicAssetId, publicFileRef };
+	});
+}
+
 async function countCanonicalRows(t: ReturnType<typeof createTestConvex>) {
 	return t.run(async (ctx) => {
 			const [
@@ -318,6 +435,7 @@ async function countCanonicalRows(t: ReturnType<typeof createTestConvex>) {
 				ledgerAccounts,
 				ledgerEntries,
 				listings,
+				mortgageDocumentBlueprints,
 				mortgageValuationSnapshots,
 				mortgageBorrowers,
 				mortgages,
@@ -333,6 +451,7 @@ async function countCanonicalRows(t: ReturnType<typeof createTestConvex>) {
 				ctx.db.query("ledger_accounts").collect(),
 				ctx.db.query("ledger_journal_entries").collect(),
 				ctx.db.query("listings").collect(),
+				ctx.db.query("mortgageDocumentBlueprints").collect(),
 				ctx.db.query("mortgageValuationSnapshots").collect(),
 				ctx.db.query("mortgageBorrowers").collect(),
 				ctx.db.query("mortgages").collect(),
@@ -350,6 +469,7 @@ async function countCanonicalRows(t: ReturnType<typeof createTestConvex>) {
 			ledgerAccounts: ledgerAccounts.length,
 			ledgerEntries: ledgerEntries.length,
 			listings: listings.length,
+			mortgageDocumentBlueprints: mortgageDocumentBlueprints.length,
 			mortgageValuationSnapshots: mortgageValuationSnapshots.length,
 			mortgageBorrowers: mortgageBorrowers.length,
 			mortgages: mortgages.length,
@@ -390,6 +510,7 @@ describe("admin origination commit", () => {
 			primaryBorrowerEmail: borrowerIdentity.user_email,
 			primaryBorrowerName: "Ada Borrower",
 		});
+		const stagedDocuments = await stageStaticDocumentDrafts(t, { caseId });
 
 		const firstResult = await t.withIdentity(FAIRLEND_ADMIN).action(
 			api.admin.origination.commit.commitCase,
@@ -418,6 +539,9 @@ describe("admin origination commit", () => {
 			const properties = await ctx.db.query("properties").collect();
 			const appraisals = await ctx.db.query("appraisals").collect();
 			const listings = await ctx.db.query("listings").collect();
+			const mortgageDocumentBlueprints = await ctx.db
+				.query("mortgageDocumentBlueprints")
+				.collect();
 			const mortgageValuationSnapshots = await ctx.db
 				.query("mortgageValuationSnapshots")
 				.collect();
@@ -471,6 +595,7 @@ describe("admin origination commit", () => {
 				ledgerAccounts,
 				ledgerEntries,
 				listings,
+				mortgageDocumentBlueprints,
 				mortgageValuationSnapshots,
 				mortgageBorrowers,
 				mortgages,
@@ -490,6 +615,7 @@ describe("admin origination commit", () => {
 		expect(artifacts.properties).toHaveLength(1);
 		expect(artifacts.appraisals).toHaveLength(1);
 		expect(artifacts.listings).toHaveLength(1);
+		expect(artifacts.mortgageDocumentBlueprints).toHaveLength(2);
 		expect(artifacts.mortgageValuationSnapshots).toHaveLength(1);
 		expect(artifacts.mortgages).toHaveLength(1);
 		expect(artifacts.mortgageBorrowers).toHaveLength(1);
@@ -518,6 +644,25 @@ describe("admin origination commit", () => {
 			status: "active",
 			workflowSourceType: "admin_origination_case",
 		});
+		expect(artifacts.mortgageDocumentBlueprints).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					assetId: stagedDocuments.publicAssetId,
+					class: "public_static",
+					displayName: "Public teaser",
+					status: "active",
+				}),
+				expect.objectContaining({
+					assetId: stagedDocuments.privateAssetId,
+					class: "private_static",
+					displayName: "Internal title binder",
+					status: "active",
+				}),
+			])
+		);
+		expect(artifacts.listings[0]?.publicDocumentIds).toEqual([
+			stagedDocuments.publicFileRef,
+		]);
 		expect(artifacts.obligations[0]).toMatchObject({
 			amount: 2_450,
 			amountSettled: 0,

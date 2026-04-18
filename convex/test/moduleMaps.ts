@@ -60,6 +60,8 @@ export const convexModules: ModuleMap = withModuleAliases({
 		await import("./../auth/resourceChecks.ts"),
 	"/convex/admin/origination/access.ts": async () =>
 		await import("./../admin/origination/access.ts"),
+	"/convex/admin/origination/caseDocuments.ts": async () =>
+		await import("./../admin/origination/caseDocuments.ts"),
 	"/convex/admin/origination/cases.ts": async () =>
 		await import("./../admin/origination/cases.ts"),
 	"/convex/admin/origination/collections.ts": async () =>
@@ -231,6 +233,12 @@ export const convexModules: ModuleMap = withModuleAliases({
 		await import("./../documentEngine/basePdfs.ts"),
 	"/convex/documentEngine/dataModelEntities.ts": async () =>
 		await import("./../documentEngine/dataModelEntities.ts"),
+	"/convex/documents/assets.ts": async () =>
+		await import("./../documents/assets.ts"),
+	"/convex/documents/contracts.ts": async () =>
+		await import("./../documents/contracts.ts"),
+	"/convex/documents/mortgageBlueprints.ts": async () =>
+		await import("./../documents/mortgageBlueprints.ts"),
 	"/convex/documentEngine/generation.ts": async () =>
 		await import("./../documentEngine/generation.ts"),
 	"/convex/documentEngine/generationHelpers.ts": async () =>
@@ -352,6 +360,8 @@ export const convexModules: ModuleMap = withModuleAliases({
 		await import("./../listings/curation.ts"),
 	"/convex/listings/projection.ts": async () =>
 		await import("./../listings/projection.ts"),
+	"/convex/listings/publicDocuments.ts": async () =>
+		await import("./../listings/publicDocuments.ts"),
 	"/convex/listings/queries.ts": async () =>
 		await import("./../listings/queries.ts"),
 	"/convex/listings/validators.ts": async () =>

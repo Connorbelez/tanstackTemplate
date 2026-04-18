@@ -45,6 +45,13 @@ import {
 	variableTypeValidator,
 } from "./documentEngine/validators";
 import {
+	mortgageDocumentBlueprintClassValidator,
+	mortgageDocumentBlueprintStatusValidator,
+	mortgageDocumentSourceKindValidator,
+	mortgageDocumentTemplateSnapshotMetaValidator,
+	mortgageDocumentValidationSummaryValidator,
+} from "./documents/contracts";
+import {
 	actorTypeValidator,
 	channelValidator,
 	entityTypeValidator,
@@ -572,13 +579,63 @@ export default defineSchema({
 
 	originationCaseDocumentDrafts: defineTable({
 		caseId: v.id("adminOriginationCases"),
+		class: mortgageDocumentBlueprintClassValidator,
+		status: mortgageDocumentBlueprintStatusValidator,
+		sourceKind: mortgageDocumentSourceKindValidator,
+		displayName: v.string(),
+		description: v.optional(v.string()),
+		category: v.optional(v.string()),
+		displayOrder: v.number(),
+		assetId: v.optional(v.id("documentAssets")),
+		templateId: v.optional(v.id("documentTemplates")),
+		templateVersion: v.optional(v.number()),
+		packageKey: v.optional(v.string()),
+		packageLabel: v.optional(v.string()),
+		selectedFromGroupId: v.optional(v.id("documentTemplateGroups")),
+		validationSummary: v.optional(mortgageDocumentValidationSummaryValidator),
+		archivedAt: v.optional(v.number()),
+		archivedByUserId: v.optional(v.id("users")),
+		supersededByDraftId: v.optional(v.id("originationCaseDocumentDrafts")),
 		createdByUserId: v.optional(v.id("users")),
 		updatedByUserId: v.optional(v.id("users")),
 		createdAt: v.number(),
 		updatedAt: v.number(),
 	})
 		.index("by_case", ["caseId"])
+		.index("by_case_status_display_order", ["caseId", "status", "displayOrder"])
 		.index("by_case_updated_at", ["caseId", "updatedAt"]),
+
+	mortgageDocumentBlueprints: defineTable({
+		mortgageId: v.id("mortgages"),
+		sourceDraftId: v.optional(v.id("originationCaseDocumentDrafts")),
+		class: mortgageDocumentBlueprintClassValidator,
+		sourceKind: mortgageDocumentSourceKindValidator,
+		status: mortgageDocumentBlueprintStatusValidator,
+		displayName: v.string(),
+		description: v.optional(v.string()),
+		category: v.optional(v.string()),
+		displayOrder: v.number(),
+		packageKey: v.optional(v.string()),
+		packageLabel: v.optional(v.string()),
+		assetId: v.optional(v.id("documentAssets")),
+		templateId: v.optional(v.id("documentTemplates")),
+		templateVersion: v.optional(v.number()),
+		templateSnapshotMeta: v.optional(
+			mortgageDocumentTemplateSnapshotMetaValidator
+		),
+		createdByUserId: v.id("users"),
+		createdAt: v.number(),
+		archivedAt: v.optional(v.number()),
+		archivedByUserId: v.optional(v.id("users")),
+	})
+		.index("by_mortgage_status_class", [
+			"mortgageId",
+			"status",
+			"class",
+			"displayOrder",
+		])
+		.index("by_mortgage_created_at", ["mortgageId", "createdAt"])
+		.index("by_source_draft", ["sourceDraftId"]),
 
 	mortgages: defineTable({
 		/** WorkOS organization id — denormalized from broker of record. */
@@ -1832,6 +1889,7 @@ export default defineSchema({
 		),
 	})
 		.index("by_hash", ["fileHash"])
+		.index("by_file_ref", ["fileRef"])
 		.index("by_uploaded_by", ["uploadedByUserId"]),
 
 	documentBasePdfs: defineTable({
