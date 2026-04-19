@@ -122,7 +122,7 @@ describe("origination workflow helpers", () => {
 			name: /Commit origination/i,
 		});
 
-		expect(button).toHaveAttribute("disabled");
+		expect(button.hasAttribute("disabled")).toBe(true);
 	});
 
 	it("prefers persisted case values over optimistic local edits on the review step", () => {

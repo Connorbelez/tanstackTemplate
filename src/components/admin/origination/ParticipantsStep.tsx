@@ -1,5 +1,4 @@
 import { Plus, Trash2 } from "lucide-react";
-import { useId } from "react";
 import { Button } from "#/components/ui/button";
 import {
 	Card,
@@ -23,21 +22,26 @@ interface ParticipantsStepProps {
 	onChange: (nextDraft: OriginationParticipantsDraft | undefined) => void;
 }
 
+function buildParticipantFieldId(idPrefix: string, fieldName: string) {
+	return `${idPrefix}-${fieldName}`;
+}
+
 function ParticipantFields({
 	description,
 	draft,
+	idPrefix,
 	onChange,
 	onRemove,
 	title,
 }: {
 	description: string;
 	draft?: OriginationParticipantDraft;
+	idPrefix: string;
 	onChange: (nextDraft: OriginationParticipantDraft | undefined) => void;
 	onRemove?: () => void;
 	title: string;
 }) {
 	const nextDraft = draft ?? {};
-	const idPrefix = useId();
 
 	return (
 		<Card className="border-border/70">
@@ -55,11 +59,13 @@ function ParticipantFields({
 			</CardHeader>
 			<CardContent className="grid gap-4 md:grid-cols-2">
 				<div className="space-y-2">
-					<Label htmlFor={`${idPrefix}-existingBorrowerId`}>
+					<Label
+						htmlFor={buildParticipantFieldId(idPrefix, "existingBorrowerId")}
+					>
 						Existing borrower ID
 					</Label>
 					<Input
-						id={`${idPrefix}-existingBorrowerId`}
+						id={buildParticipantFieldId(idPrefix, "existingBorrowerId")}
 						onChange={(event) =>
 							onChange({
 								...nextDraft,
@@ -71,9 +77,11 @@ function ParticipantFields({
 					/>
 				</div>
 				<div className="space-y-2">
-					<Label htmlFor={`${idPrefix}-fullName`}>Full name</Label>
+					<Label htmlFor={buildParticipantFieldId(idPrefix, "fullName")}>
+						Full name
+					</Label>
 					<Input
-						id={`${idPrefix}-fullName`}
+						id={buildParticipantFieldId(idPrefix, "fullName")}
 						onChange={(event) =>
 							onChange({
 								...nextDraft,
@@ -85,9 +93,11 @@ function ParticipantFields({
 					/>
 				</div>
 				<div className="space-y-2">
-					<Label htmlFor={`${idPrefix}-email`}>Email</Label>
+					<Label htmlFor={buildParticipantFieldId(idPrefix, "email")}>
+						Email
+					</Label>
 					<Input
-						id={`${idPrefix}-email`}
+						id={buildParticipantFieldId(idPrefix, "email")}
 						onChange={(event) =>
 							onChange({
 								...nextDraft,
@@ -100,9 +110,11 @@ function ParticipantFields({
 					/>
 				</div>
 				<div className="space-y-2">
-					<Label htmlFor={`${idPrefix}-phone`}>Phone</Label>
+					<Label htmlFor={buildParticipantFieldId(idPrefix, "phone")}>
+						Phone
+					</Label>
 					<Input
-						id={`${idPrefix}-phone`}
+						id={buildParticipantFieldId(idPrefix, "phone")}
 						onChange={(event) =>
 							onChange({
 								...nextDraft,
@@ -154,6 +166,7 @@ export function ParticipantsStep({
 			<ParticipantFields
 				description="This borrower label drives the case name until canonical identity sync exists."
 				draft={currentDraft.primaryBorrower}
+				idPrefix="primary-borrower"
 				onChange={(primaryBorrower) =>
 					onChange({
 						...currentDraft,
@@ -195,6 +208,7 @@ export function ParticipantsStep({
 							<ParticipantFields
 								description="Optional supporting borrower for the staged mortgage."
 								draft={coBorrower}
+								idPrefix={coBorrower.draftId ?? `co-borrower-${index + 1}`}
 								key={
 									coBorrower.draftId ??
 									coBorrower.existingBorrowerId ??
@@ -266,6 +280,7 @@ export function ParticipantsStep({
 							<ParticipantFields
 								description="Optional guarantor draft staged for later commitment logic."
 								draft={guarantor}
+								idPrefix={guarantor.draftId ?? `guarantor-${index + 1}`}
 								key={
 									guarantor.draftId ??
 									guarantor.existingBorrowerId ??
