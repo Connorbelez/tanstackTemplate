@@ -1,11 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { api } from "../../../../../convex/_generated/api";
 import type { Id } from "../../../../../convex/_generated/dataModel";
+import type { MutationCtx } from "../../../../../convex/_generated/server";
 import { FAIRLEND_STAFF_ORG_ID } from "../../../../../convex/constants";
 import {
 	setWorkosProvisioningForTests,
 	type WorkosProvisioning,
 } from "../../../../../convex/engine/effects/workosProvisioning";
+import { activateMortgageAggregate } from "../../../../../convex/mortgages/activateMortgageAggregate";
+import { buildAdminDirectMortgageActivationSource } from "../../../../../convex/mortgages/provenance";
 import { createMockViewer, createTestConvex, ensureSeededIdentity } from "../../../auth/helpers";
 import { FAIRLEND_ADMIN } from "../../../auth/identities";
 
@@ -640,9 +643,9 @@ describe("admin origination commit", () => {
 		expect(artifacts.caseRecord?.collectionsDraft).toMatchObject({
 			activationStatus: "active",
 			providerCode: "pad_rotessa",
-			retryCount: 1,
 			selectedBankAccountId: bankAccountId,
 		});
+		expect(artifacts.caseRecord?.collectionsDraft?.retryCount).toBeUndefined();
 		expect(artifacts.caseRecord?.collectionsDraft?.lastAttemptAt).toBeTypeOf(
 			"number"
 		);
@@ -727,8 +730,8 @@ describe("admin origination commit", () => {
 		expect(artifacts.caseRecord?.collectionsDraft).toMatchObject({
 			activationStatus: "failed",
 			providerCode: "pad_rotessa",
-			retryCount: 1,
 		});
+		expect(artifacts.caseRecord?.collectionsDraft?.retryCount).toBeUndefined();
 		expect(artifacts.caseRecord?.collectionsDraft?.lastError).toContain(
 			"Select a primary borrower bank account"
 		);
@@ -813,7 +816,7 @@ describe("admin origination commit", () => {
 
 		expect(artifacts.caseRecord?.collectionsDraft).toMatchObject({
 			activationStatus: "active",
-			retryCount: 2,
+			retryCount: 1,
 			selectedBankAccountId: bankAccountId,
 		});
 		expect(artifacts.caseRecord?.collectionsDraft?.lastError).toBeUndefined();
@@ -1061,6 +1064,133 @@ describe("admin origination commit", () => {
 		expect(replayArtifacts.mortgage?.paymentBootstrapScheduleRuleMissing).toBe(
 			true
 		);
+	});
+
+	it("reports only replay-created payment artifact ids for already committed mortgages", async () => {
+		const t = createTestConvex();
+		await ensureSeededIdentity(t, FAIRLEND_ADMIN);
+		const brokerOfRecordId = await seedBrokerRecord(t);
+		const { identity: borrowerIdentity } = await seedBorrowerUser(t, {
+			email: "created-ids.borrower@test.fairlend.ca",
+			subject: "user_created_ids_borrower",
+		});
+		setWorkosProvisioningForTests(createProvisioningMock());
+
+		const caseId = await stageCommitReadyCase(t, {
+			brokerOfRecordId,
+			primaryBorrowerEmail: borrowerIdentity.user_email,
+			primaryBorrowerName: "Created Ids Borrower",
+		});
+
+		const firstResult = await t.withIdentity(FAIRLEND_ADMIN).action(
+			api.admin.origination.commit.commitCase,
+			{ caseId }
+		);
+		if (firstResult.status !== "committed") {
+			throw new Error("Expected initial commit to finish before replay checks");
+		}
+
+		const replayBase = await t.run(async (ctx) => {
+			const caseRecord = await ctx.db.get(caseId);
+			const viewer = await ctx.db
+				.query("users")
+				.filter((query) => query.eq(query.field("authId"), FAIRLEND_ADMIN.subject))
+				.first();
+			const mortgageId = firstResult.committedMortgageId as Id<"mortgages">;
+			const mortgage = await ctx.db.get(mortgageId);
+			const borrowerLinks = await ctx.db
+				.query("mortgageBorrowers")
+				.withIndex("by_mortgage", (query) => query.eq("mortgageId", mortgageId))
+				.collect();
+
+			if (!caseRecord?.mortgageDraft || !caseRecord.propertyDraft) {
+				throw new Error("Expected staged mortgage and property drafts");
+			}
+			if (!viewer) {
+				throw new Error("Expected seeded admin viewer");
+			}
+			if (!mortgage) {
+				throw new Error("Expected committed mortgage");
+			}
+
+			return {
+				borrowerLinks: borrowerLinks.map((link) => ({
+					borrowerId: link.borrowerId,
+					role: link.role,
+				})),
+				caseRecord,
+				mortgageId,
+				viewerUserId: viewer._id,
+				brokerOfRecordId: mortgage.brokerOfRecordId,
+			};
+		});
+
+		const buildReplayArgs = () => ({
+			actorAuthId: FAIRLEND_ADMIN.subject,
+			actorType: "admin" as const,
+			borrowerLinks: replayBase.borrowerLinks,
+			brokerOfRecordId: replayBase.brokerOfRecordId,
+			collectionsDraft: replayBase.caseRecord.collectionsDraft,
+			listingOverrides: replayBase.caseRecord.listingOverrides,
+			mortgageDraft: replayBase.caseRecord.mortgageDraft,
+			now: Date.now(),
+			orgId: replayBase.caseRecord.orgId,
+			propertyDraft: replayBase.caseRecord.propertyDraft,
+			source: buildAdminDirectMortgageActivationSource({
+				caseId,
+				viewerUserId: replayBase.viewerUserId,
+			}),
+			stagedCaseStatus: replayBase.caseRecord.status,
+			valuationDraft: replayBase.caseRecord.valuationDraft,
+			viewerUserId: replayBase.viewerUserId,
+		});
+
+		const noOpReplayResult = await t.run(async (ctx) =>
+			activateMortgageAggregate(ctx as unknown as MutationCtx, buildReplayArgs())
+		);
+
+		expect(noOpReplayResult.wasAlreadyCommitted).toBe(true);
+		expect(noOpReplayResult.createdObligationIds).toEqual([]);
+		expect(noOpReplayResult.createdPlanEntryIds).toEqual([]);
+
+		await t.run(async (ctx) => {
+			const entries = await ctx.db
+				.query("collectionPlanEntries")
+				.withIndex("by_mortgage_status_scheduled", (query) =>
+					query.eq("mortgageId", replayBase.mortgageId)
+				)
+				.collect();
+			const firstEntryId = entries[0]?._id;
+			if (!firstEntryId) {
+				throw new Error("Expected an existing collection plan entry");
+			}
+			await ctx.db.delete(firstEntryId);
+		});
+
+		const replayAfterDeletion = await t.run(async (ctx) =>
+			activateMortgageAggregate(ctx as unknown as MutationCtx, buildReplayArgs())
+		);
+
+		expect(replayAfterDeletion.wasAlreadyCommitted).toBe(true);
+		expect(replayAfterDeletion.createdObligationIds).toEqual([]);
+		expect(replayAfterDeletion.createdPlanEntryIds).toHaveLength(1);
+
+		const replayArtifacts = await t.run(async (ctx) => {
+			const collectionPlanEntries = await ctx.db
+				.query("collectionPlanEntries")
+				.withIndex("by_mortgage_status_scheduled", (query) =>
+					query.eq("mortgageId", replayBase.mortgageId)
+				)
+				.collect();
+			return { collectionPlanEntries };
+		});
+
+		expect(replayArtifacts.collectionPlanEntries).toHaveLength(12);
+		expect(
+			replayArtifacts.collectionPlanEntries.some(
+				(entry) => entry._id === replayAfterDeletion.createdPlanEntryIds[0]
+			)
+		).toBe(true);
 	});
 
 	it("reuses an existing same-org borrower and matching property", async () => {

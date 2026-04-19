@@ -516,13 +516,14 @@ export const activateCommittedCaseCollections = convex
 		}
 
 		const providerCode = collectionsDraft.providerCode ?? "pad_rotessa";
+		const isRetryActivation = collectionsDraft.activationStatus === "failed";
 		const lastAttemptAt = Date.now();
 		await ctx.runMutation(patchCollectionsActivationStateRef, {
 			caseId: args.caseId,
 			activationStatus: "activating",
 			clearError: true,
 			clearExternalCollectionScheduleId: true,
-			incrementRetryCount: true,
+			incrementRetryCount: isRetryActivation,
 			lastAttemptAt,
 			viewerUserId: args.viewerUserId,
 		});
