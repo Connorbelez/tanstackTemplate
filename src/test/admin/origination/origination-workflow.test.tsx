@@ -118,11 +118,11 @@ describe("origination workflow helpers", () => {
 		expect(screen.getAllByText(/Commit stays disabled/i).length).toBeGreaterThan(
 			0
 		);
-		expect(
-			screen.getByRole("button", { name: /Commit origination/i }).hasAttribute(
-				"disabled"
-			)
-			).toBe(true);
+		const button = screen.getByRole("button", {
+			name: /Commit origination/i,
+		});
+
+		expect(button).toHaveAttribute("disabled");
 	});
 
 	it("prefers persisted case values over optimistic local edits on the review step", () => {
