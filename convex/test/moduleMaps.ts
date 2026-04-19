@@ -100,6 +100,8 @@ export const convexModules: ModuleMap = withModuleAliases({
 		await import("./../crm/activityQueries.ts"),
 	"/convex/crm/calendarQuery.ts": async () =>
 		await import("./../crm/calendarQuery.ts"),
+	"/convex/crm/detailContextQueries.ts": async () =>
+		await import("./../crm/detailContextQueries.ts"),
 	"/convex/crm/fieldDefs.ts": async () => await import("./../crm/fieldDefs.ts"),
 	"/convex/crm/fieldValidation.ts": async () =>
 		await import("./../crm/fieldValidation.ts"),

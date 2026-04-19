@@ -32,10 +32,12 @@ async function requireListingForDetailContext(
 		throw new ConvexError("Listing not found");
 	}
 
-	const mortgage = listing.mortgageId
-		? await ctx.db.get(listing.mortgageId)
-		: null;
-	if (mortgage && mortgage.orgId !== orgId) {
+	if (!listing.mortgageId) {
+		throw new ConvexError("Listing not found or access denied");
+	}
+
+	const mortgage = await ctx.db.get(listing.mortgageId);
+	if (!mortgage?.orgId || mortgage.orgId !== orgId) {
 		throw new ConvexError("Listing not found or access denied");
 	}
 
@@ -46,48 +48,27 @@ async function loadListingDetailProjectionContext(
 	ctx: CrmDetailQueryCtx,
 	args: {
 		listing: Doc<"listings">;
-		mortgage: Doc<"mortgages"> | null;
+		mortgage: Doc<"mortgages">;
 	}
 ) {
-	let latestValuationSnapshotPromise: Promise<Doc<"mortgageValuationSnapshots"> | null>;
-	if (args.mortgage) {
-		const mortgageId = args.mortgage._id;
-		latestValuationSnapshotPromise = ctx.db
-			.query("mortgageValuationSnapshots")
-			.withIndex("by_mortgage_created_at", (query) =>
-				query.eq("mortgageId", mortgageId)
-			)
-			.order("desc")
-			.first();
-	} else {
-		latestValuationSnapshotPromise = Promise.resolve(null);
-	}
-
 	return Promise.all([
 		args.listing.propertyId ? ctx.db.get(args.listing.propertyId) : null,
-		latestValuationSnapshotPromise,
-		args.listing.publicDocumentIds.length > 0
-			? ctx.db.query("documentAssets").collect()
-			: Promise.resolve([]),
+		ctx.db
+			.query("mortgageValuationSnapshots")
+			.withIndex("by_mortgage_created_at", (query) =>
+				query.eq("mortgageId", args.mortgage._id)
+			)
+			.order("desc")
+			.first(),
 	]);
 }
 
-function buildListingPublicDocumentContext(args: {
-	listing: Doc<"listings">;
-	linkedDocumentAssets: Doc<"documentAssets">[];
-}) {
-	return args.listing.publicDocumentIds.map((fileRef) => {
-		const linkedAsset =
-			args.linkedDocumentAssets.find(
-				(asset) => String(asset.fileRef) === String(fileRef)
-			) ?? null;
-
-		return {
-			assetId: linkedAsset?._id ?? null,
-			fileRef,
-			name: linkedAsset?.name ?? null,
-		};
-	});
+function buildListingPublicDocumentContext(args: { listing: Doc<"listings"> }) {
+	return args.listing.publicDocumentIds.map((fileRef) => ({
+		assetId: null,
+		fileRef,
+		name: null,
+	}));
 }
 
 export const getMortgageDetailContext = crmQuery
@@ -343,13 +324,12 @@ export const getListingDetailContext = crmQuery
 			ctx,
 			args.listingId
 		);
-		const [property, latestValuationSnapshot, linkedDocumentAssets] =
+		const [property, latestValuationSnapshot] =
 			await loadListingDetailProjectionContext(ctx, {
 				listing,
 				mortgage,
 			});
 		const publicDocuments = buildListingPublicDocumentContext({
-			linkedDocumentAssets,
 			listing,
 		});
 
@@ -379,22 +359,20 @@ export const getListingDetailContext = crmQuery
 				title: listing.title ?? null,
 				updatedAt: listing.updatedAt,
 			},
-			mortgage: mortgage
-				? {
-						interestRate: mortgage.interestRate,
-						lienPosition: mortgage.lienPosition,
-						listingId: listing._id,
-						loanType: mortgage.loanType,
-						maturityDate: mortgage.maturityDate,
-						mortgageId: mortgage._id,
-						paymentAmount: mortgage.paymentAmount,
-						paymentFrequency: mortgage.paymentFrequency,
-						principal: mortgage.principal,
-						rateType: mortgage.rateType,
-						status: mortgage.status,
-						termMonths: mortgage.termMonths,
-					}
-				: null,
+			mortgage: {
+				interestRate: mortgage.interestRate,
+				lienPosition: mortgage.lienPosition,
+				listingId: listing._id,
+				loanType: mortgage.loanType,
+				maturityDate: mortgage.maturityDate,
+				mortgageId: mortgage._id,
+				paymentAmount: mortgage.paymentAmount,
+				paymentFrequency: mortgage.paymentFrequency,
+				principal: mortgage.principal,
+				rateType: mortgage.rateType,
+				status: mortgage.status,
+				termMonths: mortgage.termMonths,
+			},
 			property: property
 				? {
 						city: property.city,
