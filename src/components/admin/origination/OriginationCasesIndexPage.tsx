@@ -178,7 +178,7 @@ export function OriginationCasesIndexPage() {
 							<p className="mt-2 text-muted-foreground text-sm">
 								{search.trim()
 									? "Try another borrower name, address, or case identifier."
-									: "Create the first draft to establish the phase-1 workflow shell."}
+									: "Create the first draft to stage an origination case and activate it from review when it is ready."}
 							</p>
 							{search.trim() ? null : (
 								<Button asChild className="mt-4">

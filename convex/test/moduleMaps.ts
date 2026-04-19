@@ -58,12 +58,18 @@ export const convexModules: ModuleMap = withModuleAliases({
 	"/convex/auth/internal.ts": async () => await import("./../auth/internal.ts"),
 	"/convex/auth/resourceChecks.ts": async () =>
 		await import("./../auth/resourceChecks.ts"),
+	"/convex/admin/origination/access.ts": async () =>
+		await import("./../admin/origination/access.ts"),
 	"/convex/admin/origination/cases.ts": async () =>
 		await import("./../admin/origination/cases.ts"),
+	"/convex/admin/origination/commit.ts": async () =>
+		await import("./../admin/origination/commit.ts"),
 	"/convex/admin/origination/validators.ts": async () =>
 		await import("./../admin/origination/validators.ts"),
 	"/convex/brokers/migrations.ts": async () =>
 		await import("./../brokers/migrations.ts"),
+	"/convex/borrowers/resolveOrProvisionForOrigination.ts": async () =>
+		await import("./../borrowers/resolveOrProvisionForOrigination.ts"),
 	"/convex/_generated/api.js": async () =>
 		await import("./../_generated/api.js"),
 	"/convex/_generated/server.js": async () =>
@@ -347,10 +353,16 @@ export const convexModules: ModuleMap = withModuleAliases({
 	"/convex/lib/businessDays.ts": async () =>
 		await import("./../lib/businessDays.ts"),
 	"/convex/lib/orgScope.ts": async () => await import("./../lib/orgScope.ts"),
+	"/convex/mortgages/activateMortgageAggregate.ts": async () =>
+		await import("./../mortgages/activateMortgageAggregate.ts"),
 	"/convex/mortgages/paymentFrequency.ts": async () =>
 		await import("./../mortgages/paymentFrequency.ts"),
+	"/convex/mortgages/provenance.ts": async () =>
+		await import("./../mortgages/provenance.ts"),
 	"/convex/mortgages/queries.ts": async () =>
 		await import("./../mortgages/queries.ts"),
+	"/convex/mortgages/valuation.ts": async () =>
+		await import("./../mortgages/valuation.ts"),
 	"/convex/numbers.ts": async () => await import("./../numbers.ts"),
 	"/convex/obligations/mutations.ts": async () =>
 		await import("./../obligations/mutations.ts"),

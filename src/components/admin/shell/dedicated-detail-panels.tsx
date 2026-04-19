@@ -1,8 +1,10 @@
 "use client";
 
+import { Link } from "@tanstack/react-router";
 import { useQuery } from "convex/react";
 import type { ReactNode } from "react";
 import { Badge } from "#/components/ui/badge";
+import { EMPTY_ADMIN_DETAIL_SEARCH } from "#/lib/admin-detail-search";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import type {
@@ -33,6 +35,17 @@ function formatDate(value: number | string | null | undefined) {
 	}
 
 	return date.toLocaleDateString();
+}
+
+function formatEnumLabel(value: string) {
+	return value
+		.split("_")
+		.map((segment) =>
+			segment.length > 0
+				? `${segment.slice(0, 1).toUpperCase()}${segment.slice(1)}`
+				: segment
+		)
+		.join(" ");
 }
 
 function filterDetailFields(
@@ -133,33 +146,20 @@ const LISTING_BASE_SECTIONS = [
 
 const MORTGAGE_BASE_SECTIONS = [
 	{
-		title: "Loan Terms",
-		description: "Primary mortgage economics and closing dates.",
+		title: "Summary",
+		description: "Primary mortgage economics, parties, and lifecycle state.",
 		fieldNames: [
+			"principal",
+			"propertySummary",
+			"borrowerSummary",
 			"interestRate",
 			"loanType",
 			"termMonths",
 			"maturityDate",
 			"lienPosition",
 			"status",
-		],
-	},
-	{
-		title: "Servicing",
-		description: "Payment setup and timing used by servicing operations.",
-		fieldNames: [
-			"paymentAmount",
-			"paymentFrequency",
 			"paymentSummary",
-			"firstPaymentDate",
-			"rateType",
 		],
-	},
-	{
-		title: "Marketplace Projection",
-		description:
-			"If the mortgage is listed, keep the listing projection close by.",
-		fieldNames: ["listingSummary"],
 	},
 ] as const satisfies readonly DetailSectionDefinition[];
 
@@ -417,71 +417,80 @@ export function MortgagesDedicatedDetails({
 			/>
 
 			<DetailSectionShell
-				description="Borrower, property, and listing relationships for this mortgage."
-				title="Linked Context"
+				description="Canonical borrower relationships attached to this mortgage."
+				title="Borrowers"
 			>
 				<div className="space-y-4">
-					{detailContext?.property ? (
-						<MetricGrid
-							items={[
-								{
-									label: "Property",
-									value: `${detailContext.property.streetAddress}, ${detailContext.property.city}, ${detailContext.property.province}`,
-								},
-								{
-									label: "Postal Code",
-									value: detailContext.property.postalCode,
-								},
-								{
-									label: "Type",
-									value: detailContext.property.propertyType,
-								},
-								{
-									label: "Listing",
-									value: detailContext.listing
-										? (detailContext.listing.title ??
-											`${detailContext.listing.status} listing`)
-										: "No active listing",
-								},
-							]}
-						/>
-					) : (
-						<EmptyContext message="No property context is attached to this mortgage." />
-					)}
-					<div>
-						<p className="mb-2 text-muted-foreground text-xs uppercase tracking-[0.08em]">
-							Borrowers
-						</p>
-						<CompactList
-							emptyMessage="No borrower links found."
-							items={detailContext?.borrowers ?? []}
-							renderItem={(item) => {
-								const borrower = item as NonNullable<
-									typeof detailContext
-								>["borrowers"][number];
-								return (
-									<div
-										className="rounded-lg border border-border/60 bg-background/80 px-3 py-3"
-										key={String(borrower.borrowerId)}
+					<CompactList
+						emptyMessage="No borrower links found."
+						items={detailContext?.borrowers ?? []}
+						renderItem={(item) => {
+							const borrower = item as NonNullable<
+								typeof detailContext
+							>["borrowers"][number];
+							return (
+								<div
+									className="rounded-lg border border-border/60 bg-background/80 px-3 py-3"
+									key={String(borrower.borrowerId)}
+								>
+									<Link
+										className="font-medium text-primary text-sm underline-offset-4 hover:underline"
+										params={{
+											recordid: String(borrower.borrowerId),
+										}}
+										search={EMPTY_ADMIN_DETAIL_SEARCH}
+										to="/admin/borrowers/$recordid"
 									>
-										<p className="font-medium text-sm">{borrower.name}</p>
-										<p className="text-muted-foreground text-sm">
-											{borrower.role} • {borrower.status}
-											{borrower.idvStatus ? ` • ${borrower.idvStatus}` : ""}
-										</p>
-									</div>
-								);
-							}}
-						/>
-					</div>
+										{borrower.name}
+									</Link>
+									<p className="text-muted-foreground text-sm">
+										{borrower.role} • {borrower.status}
+										{borrower.idvStatus ? ` • ${borrower.idvStatus}` : ""}
+									</p>
+								</div>
+							);
+						}}
+					/>
 				</div>
 			</DetailSectionShell>
 
 			<DetailSectionShell
-				description="Operational signals from collection planning, obligations, and cash state."
-				title="Operations"
+				description="Current servicing setup, cash posture, and next collection signals."
+				title="Payment Setup"
 			>
 				<div className="space-y-4">
+					<MetricGrid
+						items={[
+							{
+								label: "Property",
+								value: detailContext?.property ? (
+									<div className="space-y-1">
+										<div>{`${detailContext.property.streetAddress}, ${detailContext.property.city}, ${detailContext.property.province}`}</div>
+										<Link
+											className="text-primary text-xs underline-offset-4 hover:underline"
+											params={{
+												recordid: String(detailContext.property.propertyId),
+											}}
+											search={EMPTY_ADMIN_DETAIL_SEARCH}
+											to="/admin/properties/$recordid"
+										>
+											Open property record
+										</Link>
+									</div>
+								) : (
+									"No property context"
+								),
+							},
+							{
+								label: "Postal Code",
+								value: detailContext?.property?.postalCode ?? "Unavailable",
+							},
+							{
+								label: "Type",
+								value: detailContext?.property?.propertyType ?? "Unavailable",
+							},
+						]}
+					/>
 					{cashState ? (
 						<MetricGrid
 							items={Object.entries(cashState.balancesByFamily)
@@ -545,8 +554,73 @@ export function MortgagesDedicatedDetails({
 			</DetailSectionShell>
 
 			<DetailSectionShell
+				description="Listing projection and latest canonical valuation snapshot for this mortgage."
+				title="Listing Projection"
+			>
+				<div className="space-y-4">
+					<MetricGrid
+						items={[
+							{
+								label: "Listing",
+								value: detailContext?.listing
+									? (detailContext.listing.title ??
+										`${detailContext.listing.status} listing`)
+									: "No active listing",
+							},
+							{
+								label: "Listing Status",
+								value: detailContext?.listing?.status ?? "Not projected",
+							},
+							{
+								label: "Projected LTV",
+								value:
+									typeof detailContext?.listing?.ltvRatio === "number"
+										? `${detailContext.listing.ltvRatio}%`
+										: "Unavailable",
+							},
+							{
+								label: "Valuation",
+								value: detailContext?.latestValuationSnapshot
+									? formatCurrency(
+											detailContext.latestValuationSnapshot.valueAsIs
+										)
+									: "No valuation snapshot",
+							},
+							{
+								label: "Valuation Date",
+								value:
+									detailContext?.latestValuationSnapshot?.valuationDate ??
+									"Unavailable",
+							},
+							{
+								label: "Source",
+								value: detailContext?.latestValuationSnapshot?.source
+									? formatEnumLabel(
+											detailContext.latestValuationSnapshot.source
+										)
+									: "Unavailable",
+							},
+							{
+								label: "Document Asset",
+								value:
+									detailContext?.latestValuationSnapshot
+										?.relatedDocumentAssetId ?? "Not attached",
+							},
+						]}
+					/>
+				</div>
+			</DetailSectionShell>
+
+			<DetailSectionShell
+				description="Reserved anchor for later-phase document package and signing projections."
+				title="Documents"
+			>
+				<EmptyContext message="Document package projection has not landed yet. Later phases will attach public and private origination artifacts here without redesigning this page." />
+			</DetailSectionShell>
+
+			<DetailSectionShell
 				description="Recent journal and audit evidence tied to this mortgage."
-				title="Audit Trail"
+				title="Audit"
 			>
 				<CompactList
 					emptyMessage="No recent audit or journal activity was found."

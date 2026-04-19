@@ -25,6 +25,10 @@ function createProvisioningSuccessMock() {
 			.fn()
 			.mockResolvedValue({ id: "org_provisioned_test" }),
 		createOrganizationMembership: vi.fn().mockResolvedValue({}),
+		createUser: vi
+			.fn()
+			.mockResolvedValue({ email: "provisioned@test.fairlend.ca", id: "user_new" }),
+		listUsers: vi.fn().mockResolvedValue([]),
 	};
 }
 

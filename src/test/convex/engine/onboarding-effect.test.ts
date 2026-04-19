@@ -30,6 +30,8 @@ interface AuditHistoryEvent {
 function createProvisioningMock(overrides?: {
 	createOrganization?: WorkosProvisioning["createOrganization"];
 	createOrganizationMembership?: WorkosProvisioning["createOrganizationMembership"];
+	createUser?: WorkosProvisioning["createUser"];
+	listUsers?: WorkosProvisioning["listUsers"];
 }): WorkosProvisioning {
 	return {
 		createOrganization:
@@ -37,6 +39,12 @@ function createProvisioningMock(overrides?: {
 			vi.fn().mockResolvedValue({ id: "org_provisioned_test" }),
 		createOrganizationMembership:
 			overrides?.createOrganizationMembership ?? vi.fn().mockResolvedValue({}),
+		createUser:
+			overrides?.createUser ??
+			vi
+				.fn()
+				.mockResolvedValue({ email: "provisioned@test.fairlend.ca", id: "user_new" }),
+		listUsers: overrides?.listUsers ?? vi.fn().mockResolvedValue([]),
 	};
 }
 

@@ -145,6 +145,7 @@ describe("origination validators", () => {
 				termMonths: 12,
 			},
 			participantsDraft: {
+				brokerOfRecordId: "broker_123",
 				primaryBorrower: {
 					fullName: "Ada Lovelace",
 				},
@@ -164,11 +165,11 @@ describe("origination validators", () => {
 		expect(snapshot.stepErrors?.mortgageTerms).toContain(
 			"Interest rate is required."
 		);
-		expect(snapshot.stepErrors?.listingCuration).toContain(
-			"Listing description is required."
+		expect(snapshot.reviewWarnings).toContain(
+			"Resolve the required participant, property, and mortgage fields before committing this origination case."
 		);
 		expect(snapshot.reviewWarnings).toContain(
-			"Commit stays disabled until every required phase-1 field is staged."
+			"Provider-managed collections are deferred. Phase 2 activation always creates an app-owned mortgage."
 		);
 	});
 
@@ -176,6 +177,7 @@ describe("origination validators", () => {
 		const snapshot = computeOriginationValidationSnapshot({
 			currentStep: "review",
 			participantsDraft: {
+				brokerOfRecordId: "broker_123",
 				primaryBorrower: {
 					email: "ada@example.com",
 					fullName: "Ada Lovelace",
@@ -198,7 +200,7 @@ describe("origination validators", () => {
 			"Future document review is still pending."
 		);
 		expect(snapshot.reviewWarnings).toContain(
-			"Commit stays disabled until every required phase-1 field is staged."
+			"Resolve the required participant, property, and mortgage fields before committing this origination case."
 		);
 	});
 
@@ -215,8 +217,12 @@ describe("origination validators", () => {
 				mortgageDraft: {
 					amortizationMonths: 300,
 					firstPaymentDate: "2026-06-01",
+					interestAdjustmentDate: "2026-05-01",
 					interestRate: 9.5,
+					lienPosition: 1,
 					loanType: "conventional",
+					maturityDate: "2027-04-30",
+					paymentAmount: 2_450,
 					paymentFrequency: "monthly",
 					principal: 250_000,
 					rateType: "fixed",
@@ -224,6 +230,7 @@ describe("origination validators", () => {
 					termStartDate: "2026-05-01",
 				},
 				participantsDraft: {
+					brokerOfRecordId: "broker_123",
 					primaryBorrower: {
 						email: "ada@example.com",
 						fullName: "Ada Lovelace",
@@ -241,8 +248,8 @@ describe("origination validators", () => {
 				valuationDraft: {
 					valueAsIs: 400_000,
 				},
-				})
-			).toBe("collections");
+			})
+		).toBe("review");
 	});
 
 	it("recommends preserved document validation when phase-1 steps are already complete", () => {
@@ -259,8 +266,12 @@ describe("origination validators", () => {
 				mortgageDraft: {
 					amortizationMonths: 300,
 					firstPaymentDate: "2026-06-01",
+					interestAdjustmentDate: "2026-05-01",
 					interestRate: 9.5,
+					lienPosition: 1,
 					loanType: "conventional",
+					maturityDate: "2027-04-30",
+					paymentAmount: 2_450,
 					paymentFrequency: "monthly",
 					principal: 250_000,
 					rateType: "fixed",
@@ -268,6 +279,7 @@ describe("origination validators", () => {
 					termStartDate: "2026-05-01",
 				},
 				participantsDraft: {
+					brokerOfRecordId: "broker_123",
 					primaryBorrower: {
 						email: "ada@example.com",
 						fullName: "Ada Lovelace",
