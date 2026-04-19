@@ -27,4 +27,3 @@ coverage
 .auth/
 # reviews/
 src/routeTree.gen.ts
-.gitnexus/
