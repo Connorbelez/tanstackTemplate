@@ -21,6 +21,15 @@ const OBLIGATION_ACCRUAL_SOURCE = {
 	actorType: "system" as const,
 };
 
+const BOOTSTRAP_PAYMENT_FREQUENCIES = [
+	"monthly",
+	"bi_weekly",
+	"accelerated_bi_weekly",
+	"weekly",
+] as const;
+
+type BootstrapPaymentFrequency = (typeof BOOTSTRAP_PAYMENT_FREQUENCIES)[number];
+
 type BootstrapObligationStatus = "due" | "overdue" | "upcoming";
 
 interface ExpectedObligationSpec {
@@ -79,6 +88,14 @@ function resolveBootstrapObligationStatus(args: {
 	return "overdue";
 }
 
+function isBootstrapPaymentFrequency(
+	value: PaymentFrequency
+): value is BootstrapPaymentFrequency {
+	return BOOTSTRAP_PAYMENT_FREQUENCIES.includes(
+		value as BootstrapPaymentFrequency
+	);
+}
+
 function buildRecurringDueDates(args: {
 	firstPaymentDate: string;
 	maturityDate: string;
@@ -98,20 +115,30 @@ function buildRecurringDueDates(args: {
 
 	while (currentDate.getTime() <= maturityTs) {
 		dueDates.push(currentDate.getTime());
-		if (args.paymentFrequency === "monthly") {
-			currentDate = advanceMonth(currentDate);
-			continue;
+		if (!isBootstrapPaymentFrequency(args.paymentFrequency)) {
+			throw new ConvexError(
+				`Unknown payment frequency: ${args.paymentFrequency}`
+			);
 		}
 
-		if (
-			args.paymentFrequency === "bi_weekly" ||
-			args.paymentFrequency === "accelerated_bi_weekly"
-		) {
-			currentDate = new Date(currentDate.getTime() + 14 * MS_PER_DAY);
-			continue;
+		switch (args.paymentFrequency) {
+			case "monthly":
+				currentDate = advanceMonth(currentDate);
+				break;
+			case "bi_weekly":
+			case "accelerated_bi_weekly":
+				currentDate = new Date(currentDate.getTime() + 14 * MS_PER_DAY);
+				break;
+			case "weekly":
+				currentDate = new Date(currentDate.getTime() + 7 * MS_PER_DAY);
+				break;
+			default: {
+				const exhaustiveFrequency: never = args.paymentFrequency;
+				throw new ConvexError(
+					`Unknown payment frequency: ${exhaustiveFrequency}`
+				);
+			}
 		}
-
-		currentDate = new Date(currentDate.getTime() + 7 * MS_PER_DAY);
 	}
 
 	return { dueDates, maturityTs };
