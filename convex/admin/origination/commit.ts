@@ -15,6 +15,7 @@ import { authedAction, convex, requirePermissionAction } from "../../fluent";
 import { activateMortgageAggregate } from "../../mortgages/activateMortgageAggregate";
 import { buildAdminDirectMortgageActivationSource } from "../../mortgages/provenance";
 import { assertOriginationCaseAccess } from "./access";
+import { runPostCommitCollectionsActivation } from "./postCommitCollectionsActivation";
 import { normalizeOriginationCollectionsDraft } from "./validators";
 
 function collectOriginationParticipants(
@@ -685,19 +686,21 @@ export const commitCase = originationAction
 				}
 			)) as OriginationCommitResult;
 
-			if (
-				input.collectionsDraft?.mode === "provider_managed_now" &&
-				input.collectionsDraft.activationStatus !== "active"
-			) {
-				await ctx.runAction(
-					internal.admin.origination.collections
-						.activateCommittedCaseCollections,
-					{
-						caseId: args.caseId,
-						viewerUserId: input.viewerUserId,
-					}
-				);
-			}
+			await runPostCommitCollectionsActivation(
+				{
+					caseId: args.caseId,
+					collectionsDraft: input.collectionsDraft,
+					viewerUserId: input.viewerUserId,
+				},
+				{
+					runActivation: (activationArgs) =>
+						ctx.runAction(
+							internal.admin.origination.collections
+								.activateCommittedCaseCollections,
+							activationArgs
+						),
+				}
+			);
 
 			return committedResult;
 		};
