@@ -1,7 +1,8 @@
 import { ConvexError, v } from "convex/values";
 import type { Id } from "../_generated/dataModel";
 import { internalMutation, internalQuery } from "../_generated/server";
-import { adminQuery, authedQuery } from "../fluent";
+import { readDealDocumentPackageSurface } from "../documents/dealPackages";
+import { adminQuery, authedQuery, dealQuery } from "../fluent";
 import { assertDealAccess } from "./accessCheck";
 
 // ── Phase mapping ──────────────────────────────────────────────────────
@@ -195,5 +196,94 @@ export const getDealsByPhase = adminQuery
 export const closingTeamAssignments = adminQuery
 	.handler(async (ctx) => {
 		return await ctx.db.query("closingTeamAssignments").collect();
+	})
+	.public();
+
+export const getPortalDealDetail = dealQuery
+	.input({
+		dealId: v.id("deals"),
+	})
+	.handler(async (ctx, args) => {
+		await assertDealAccess(ctx, ctx.viewer, args.dealId);
+
+		const deal = await ctx.db.get(args.dealId);
+		if (!deal) {
+			throw new ConvexError("Deal not found");
+		}
+
+		const [mortgage, property, lenderUser, sellerUser, packageSurface] =
+			await Promise.all([
+				ctx.db.get(deal.mortgageId),
+				ctx.db
+					.get(deal.mortgageId)
+					.then((mortgageRow) =>
+						mortgageRow ? ctx.db.get(mortgageRow.propertyId) : null
+					),
+				ctx.db
+					.query("users")
+					.withIndex("authId", (query) => query.eq("authId", deal.buyerId))
+					.unique(),
+				ctx.db
+					.query("users")
+					.withIndex("authId", (query) => query.eq("authId", deal.sellerId))
+					.unique(),
+				readDealDocumentPackageSurface(ctx, args.dealId),
+			]);
+
+		if (!mortgage) {
+			throw new ConvexError("Deal mortgage not found");
+		}
+
+		return {
+			deal: {
+				closingDate: deal.closingDate ?? null,
+				dealId: deal._id,
+				fractionalShare: deal.fractionalShare,
+				lockingFeeAmount: deal.lockingFeeAmount ?? null,
+				status: deal.status,
+			},
+			mortgage: {
+				interestRate: mortgage.interestRate,
+				maturityDate: mortgage.maturityDate,
+				mortgageId: mortgage._id,
+				paymentAmount: mortgage.paymentAmount,
+				paymentFrequency: mortgage.paymentFrequency,
+				principal: mortgage.principal,
+				status: mortgage.status,
+			},
+			property: property
+				? {
+						city: property.city,
+						propertyType: property.propertyType,
+						province: property.province,
+						streetAddress: property.streetAddress,
+						unit: property.unit ?? null,
+					}
+				: null,
+			parties: {
+				lender: {
+					email: lenderUser?.email ?? null,
+					name:
+						[lenderUser?.firstName, lenderUser?.lastName]
+							.filter(Boolean)
+							.join(" ")
+							.trim() ||
+						lenderUser?.email ||
+						deal.buyerId,
+				},
+				seller: {
+					email: sellerUser?.email ?? null,
+					name:
+						[sellerUser?.firstName, sellerUser?.lastName]
+							.filter(Boolean)
+							.join(" ")
+							.trim() ||
+						sellerUser?.email ||
+						deal.sellerId,
+				},
+			},
+			documentPackage: packageSurface.package,
+			documentInstances: packageSurface.instances,
+		};
 	})
 	.public();

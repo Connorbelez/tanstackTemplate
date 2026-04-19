@@ -23,6 +23,7 @@ import { Route as BorrowerRouteRouteImport } from './routes/borrower/route'
 import { Route as AdminRouteRouteImport } from './routes/admin/route'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as LenderListingsRouteImport } from './routes/lender.listings'
+import { Route as LenderDealsRouteImport } from './routes/lender.deals'
 import { Route as E2eSwitchOrgRouteImport } from './routes/e2e/switch-org'
 import { Route as E2eSessionRouteImport } from './routes/e2e/session'
 import { Route as DemoWorkosRouteImport } from './routes/demo/workos'
@@ -83,6 +84,7 @@ import { Route as DemoAuditTraceabilityIndexRouteImport } from './routes/demo/au
 import { Route as DemoAmpsIndexRouteImport } from './routes/demo/amps/index'
 import { Route as AdminDocumentEngineIndexRouteImport } from './routes/admin.document-engine.index'
 import { Route as LenderListingsListingIdRouteImport } from './routes/lender.listings.$listingId'
+import { Route as LenderDealsDealIdRouteImport } from './routes/lender.deals.$dealId'
 import { Route as DemoRbacAuthRolesRouteImport } from './routes/demo/rbac-auth/roles'
 import { Route as DemoRbacAuthOnboardingRouteImport } from './routes/demo/rbac-auth/onboarding'
 import { Route as DemoRbacAuthAuditRouteImport } from './routes/demo/rbac-auth/audit'
@@ -205,6 +207,11 @@ const IndexRoute = IndexRouteImport.update({
 const LenderListingsRoute = LenderListingsRouteImport.update({
   id: '/listings',
   path: '/listings',
+  getParentRoute: () => LenderRouteRoute,
+} as any)
+const LenderDealsRoute = LenderDealsRouteImport.update({
+  id: '/deals',
+  path: '/deals',
   getParentRoute: () => LenderRouteRoute,
 } as any)
 const E2eSwitchOrgRoute = E2eSwitchOrgRouteImport.update({
@@ -517,6 +524,11 @@ const LenderListingsListingIdRoute = LenderListingsListingIdRouteImport.update({
   id: '/$listingId',
   path: '/$listingId',
   getParentRoute: () => LenderListingsRoute,
+} as any)
+const LenderDealsDealIdRoute = LenderDealsDealIdRouteImport.update({
+  id: '/$dealId',
+  path: '/$dealId',
+  getParentRoute: () => LenderDealsRoute,
 } as any)
 const DemoRbacAuthRolesRoute = DemoRbacAuthRolesRouteImport.update({
   id: '/roles',
@@ -876,6 +888,7 @@ export interface FileRoutesByFullPath {
   '/demo/workos': typeof DemoWorkosRoute
   '/e2e/session': typeof E2eSessionRoute
   '/e2e/switch-org': typeof E2eSwitchOrgRoute
+  '/lender/deals': typeof LenderDealsRouteWithChildren
   '/lender/listings': typeof LenderListingsRouteWithChildren
   '/demo/broker-whitelabel/listings': typeof DemoBrokerWhitelabelListingsRouteRouteWithChildren
   '/demo/rbac/admin': typeof DemoRbacAdminRouteRouteWithChildren
@@ -923,6 +936,7 @@ export interface FileRoutesByFullPath {
   '/demo/rbac-auth/audit': typeof DemoRbacAuthAuditRoute
   '/demo/rbac-auth/onboarding': typeof DemoRbacAuthOnboardingRoute
   '/demo/rbac-auth/roles': typeof DemoRbacAuthRolesRoute
+  '/lender/deals/$dealId': typeof LenderDealsDealIdRoute
   '/lender/listings/$listingId': typeof LenderListingsListingIdRoute
   '/admin/document-engine/': typeof AdminDocumentEngineIndexRoute
   '/demo/amps/': typeof DemoAmpsIndexRoute
@@ -995,6 +1009,7 @@ export interface FileRoutesByTo {
   '/demo/workos': typeof DemoWorkosRoute
   '/e2e/session': typeof E2eSessionRoute
   '/e2e/switch-org': typeof E2eSwitchOrgRoute
+  '/lender/deals': typeof LenderDealsRouteWithChildren
   '/lender/listings': typeof LenderListingsRouteWithChildren
   '/demo/rbac/admin': typeof DemoRbacAdminRouteRouteWithChildren
   '/demo/rbac/borrower': typeof DemoRbacBorrowerRouteRoute
@@ -1041,6 +1056,7 @@ export interface FileRoutesByTo {
   '/demo/rbac-auth/audit': typeof DemoRbacAuthAuditRoute
   '/demo/rbac-auth/onboarding': typeof DemoRbacAuthOnboardingRoute
   '/demo/rbac-auth/roles': typeof DemoRbacAuthRolesRoute
+  '/lender/deals/$dealId': typeof LenderDealsDealIdRoute
   '/lender/listings/$listingId': typeof LenderListingsListingIdRoute
   '/admin/document-engine': typeof AdminDocumentEngineIndexRoute
   '/demo/amps': typeof DemoAmpsIndexRoute
@@ -1124,6 +1140,7 @@ export interface FileRoutesById {
   '/demo/workos': typeof DemoWorkosRoute
   '/e2e/session': typeof E2eSessionRoute
   '/e2e/switch-org': typeof E2eSwitchOrgRoute
+  '/lender/deals': typeof LenderDealsRouteWithChildren
   '/lender/listings': typeof LenderListingsRouteWithChildren
   '/demo/broker-whitelabel/listings': typeof DemoBrokerWhitelabelListingsRouteRouteWithChildren
   '/demo/rbac/admin': typeof DemoRbacAdminRouteRouteWithChildren
@@ -1171,6 +1188,7 @@ export interface FileRoutesById {
   '/demo/rbac-auth/audit': typeof DemoRbacAuthAuditRoute
   '/demo/rbac-auth/onboarding': typeof DemoRbacAuthOnboardingRoute
   '/demo/rbac-auth/roles': typeof DemoRbacAuthRolesRoute
+  '/lender/deals/$dealId': typeof LenderDealsDealIdRoute
   '/lender/listings/$listingId': typeof LenderListingsListingIdRoute
   '/admin/document-engine/': typeof AdminDocumentEngineIndexRoute
   '/demo/amps/': typeof DemoAmpsIndexRoute
@@ -1255,6 +1273,7 @@ export interface FileRouteTypes {
     | '/demo/workos'
     | '/e2e/session'
     | '/e2e/switch-org'
+    | '/lender/deals'
     | '/lender/listings'
     | '/demo/broker-whitelabel/listings'
     | '/demo/rbac/admin'
@@ -1302,6 +1321,7 @@ export interface FileRouteTypes {
     | '/demo/rbac-auth/audit'
     | '/demo/rbac-auth/onboarding'
     | '/demo/rbac-auth/roles'
+    | '/lender/deals/$dealId'
     | '/lender/listings/$listingId'
     | '/admin/document-engine/'
     | '/demo/amps/'
@@ -1374,6 +1394,7 @@ export interface FileRouteTypes {
     | '/demo/workos'
     | '/e2e/session'
     | '/e2e/switch-org'
+    | '/lender/deals'
     | '/lender/listings'
     | '/demo/rbac/admin'
     | '/demo/rbac/borrower'
@@ -1420,6 +1441,7 @@ export interface FileRouteTypes {
     | '/demo/rbac-auth/audit'
     | '/demo/rbac-auth/onboarding'
     | '/demo/rbac-auth/roles'
+    | '/lender/deals/$dealId'
     | '/lender/listings/$listingId'
     | '/admin/document-engine'
     | '/demo/amps'
@@ -1502,6 +1524,7 @@ export interface FileRouteTypes {
     | '/demo/workos'
     | '/e2e/session'
     | '/e2e/switch-org'
+    | '/lender/deals'
     | '/lender/listings'
     | '/demo/broker-whitelabel/listings'
     | '/demo/rbac/admin'
@@ -1549,6 +1572,7 @@ export interface FileRouteTypes {
     | '/demo/rbac-auth/audit'
     | '/demo/rbac-auth/onboarding'
     | '/demo/rbac-auth/roles'
+    | '/lender/deals/$dealId'
     | '/lender/listings/$listingId'
     | '/admin/document-engine/'
     | '/demo/amps/'
@@ -1722,6 +1746,13 @@ declare module '@tanstack/react-router' {
       path: '/listings'
       fullPath: '/lender/listings'
       preLoaderRoute: typeof LenderListingsRouteImport
+      parentRoute: typeof LenderRouteRoute
+    }
+    '/lender/deals': {
+      id: '/lender/deals'
+      path: '/deals'
+      fullPath: '/lender/deals'
+      preLoaderRoute: typeof LenderDealsRouteImport
       parentRoute: typeof LenderRouteRoute
     }
     '/e2e/switch-org': {
@@ -2143,6 +2174,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/lender/listings/$listingId'
       preLoaderRoute: typeof LenderListingsListingIdRouteImport
       parentRoute: typeof LenderListingsRoute
+    }
+    '/lender/deals/$dealId': {
+      id: '/lender/deals/$dealId'
+      path: '/$dealId'
+      fullPath: '/lender/deals/$dealId'
+      preLoaderRoute: typeof LenderDealsDealIdRouteImport
+      parentRoute: typeof LenderDealsRoute
     }
     '/demo/rbac-auth/roles': {
       id: '/demo/rbac-auth/roles'
@@ -2668,6 +2706,18 @@ const AdminRouteRouteWithChildren = AdminRouteRoute._addFileChildren(
   AdminRouteRouteChildren,
 )
 
+interface LenderDealsRouteChildren {
+  LenderDealsDealIdRoute: typeof LenderDealsDealIdRoute
+}
+
+const LenderDealsRouteChildren: LenderDealsRouteChildren = {
+  LenderDealsDealIdRoute: LenderDealsDealIdRoute,
+}
+
+const LenderDealsRouteWithChildren = LenderDealsRoute._addFileChildren(
+  LenderDealsRouteChildren,
+)
+
 interface LenderListingsRouteChildren {
   LenderListingsListingIdRoute: typeof LenderListingsListingIdRoute
 }
@@ -2681,10 +2731,12 @@ const LenderListingsRouteWithChildren = LenderListingsRoute._addFileChildren(
 )
 
 interface LenderRouteRouteChildren {
+  LenderDealsRoute: typeof LenderDealsRouteWithChildren
   LenderListingsRoute: typeof LenderListingsRouteWithChildren
 }
 
 const LenderRouteRouteChildren: LenderRouteRouteChildren = {
+  LenderDealsRoute: LenderDealsRouteWithChildren,
   LenderListingsRoute: LenderListingsRouteWithChildren,
 }
 

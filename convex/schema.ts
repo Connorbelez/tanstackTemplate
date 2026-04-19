@@ -45,6 +45,11 @@ import {
 	variableTypeValidator,
 } from "./documentEngine/validators";
 import {
+	dealDocumentInstanceKindValidator,
+	dealDocumentInstanceStatusValidator,
+	dealDocumentPackageStatusValidator,
+	dealDocumentSourceBlueprintSnapshotValidator,
+	dealPackageBlueprintSnapshotValidator,
 	mortgageDocumentBlueprintClassValidator,
 	mortgageDocumentBlueprintStatusValidator,
 	mortgageDocumentSourceKindValidator,
@@ -636,6 +641,45 @@ export default defineSchema({
 		])
 		.index("by_mortgage_created_at", ["mortgageId", "createdAt"])
 		.index("by_source_draft", ["sourceDraftId"]),
+
+	dealDocumentPackages: defineTable({
+		dealId: v.id("deals"),
+		mortgageId: v.id("mortgages"),
+		status: dealDocumentPackageStatusValidator,
+		lastError: v.optional(v.string()),
+		blueprintSnapshots: v.optional(
+			v.array(dealPackageBlueprintSnapshotValidator)
+		),
+		retryCount: v.number(),
+		createdAt: v.number(),
+		updatedAt: v.number(),
+		readyAt: v.optional(v.number()),
+		archivedAt: v.optional(v.number()),
+	})
+		.index("by_deal", ["dealId"])
+		.index("by_mortgage", ["mortgageId"])
+		.index("by_status", ["status"]),
+
+	dealDocumentInstances: defineTable({
+		packageId: v.id("dealDocumentPackages"),
+		dealId: v.id("deals"),
+		mortgageId: v.id("mortgages"),
+		sourceBlueprintId: v.optional(v.id("mortgageDocumentBlueprints")),
+		sourceBlueprintSnapshot: dealDocumentSourceBlueprintSnapshotValidator,
+		kind: dealDocumentInstanceKindValidator,
+		status: dealDocumentInstanceStatusValidator,
+		assetId: v.optional(v.id("documentAssets")),
+		generatedDocumentId: v.optional(v.id("generatedDocuments")),
+		lastError: v.optional(v.string()),
+		createdAt: v.number(),
+		updatedAt: v.number(),
+		archivedAt: v.optional(v.number()),
+	})
+		.index("by_package", ["packageId", "createdAt"])
+		.index("by_deal", ["dealId", "createdAt"])
+		.index("by_mortgage", ["mortgageId", "createdAt"])
+		.index("by_source_blueprint", ["sourceBlueprintId", "createdAt"])
+		.index("by_package_status", ["packageId", "status", "createdAt"]),
 
 	mortgages: defineTable({
 		/** WorkOS organization id — denormalized from broker of record. */

@@ -8,6 +8,7 @@ import type {
 	UnifiedRecord,
 } from "../../../../convex/crm/types";
 import {
+	DealsDedicatedDetails,
 	ListingsDedicatedDetails,
 	MortgagesDedicatedDetails,
 	ObligationsDedicatedDetails,
@@ -246,6 +247,11 @@ const ROLLOUT_DETAIL_ADAPTERS: Partial<
 	mortgages: {
 		renderDetailsTab: ({ fields, record }) => (
 			<MortgagesDedicatedDetails fields={fields} record={record} />
+		),
+	},
+	deals: {
+		renderDetailsTab: ({ fields, record }) => (
+			<DealsDedicatedDetails fields={fields} record={record} />
 		),
 	},
 	obligations: {

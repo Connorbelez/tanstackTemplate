@@ -1,6 +1,7 @@
 import { ConvexError, v } from "convex/values";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { QueryCtx } from "../_generated/server";
+import { readDealDocumentPackageSurface } from "../documents/dealPackages";
 import { listMortgageBlueprintRows } from "../documents/mortgageBlueprints";
 import { crmQuery } from "../fluent";
 import { readListingPublicDocuments } from "../listings/publicDocuments";
@@ -12,6 +13,20 @@ function toBorrowerName(args: {
 }): string | null {
 	const name = [args.firstName, args.lastName].filter(Boolean).join(" ").trim();
 	return name.length > 0 ? name : null;
+}
+
+async function getUserByAuthId(
+	ctx: Pick<QueryCtx, "db">,
+	authId: string | undefined
+) {
+	if (!authId) {
+		return null;
+	}
+
+	return ctx.db
+		.query("users")
+		.withIndex("authId", (query) => query.eq("authId", authId))
+		.unique();
 }
 
 type CrmDetailQueryCtx = Pick<QueryCtx, "db" | "storage"> & {
@@ -414,6 +429,124 @@ export const getListingDetailContext = crmQuery
 					}
 				: null,
 			publicDocuments,
+		};
+	})
+	.public();
+
+export const getDealDetailContext = crmQuery
+	.input({
+		dealId: v.id("deals"),
+	})
+	.handler(async (ctx, args) => {
+		const orgId = ctx.viewer.orgId;
+		if (!orgId) {
+			throw new ConvexError("Org context required");
+		}
+
+		const deal = await ctx.db.get(args.dealId);
+		if (!deal) {
+			throw new ConvexError("Deal not found");
+		}
+
+		const mortgage = await ctx.db.get(deal.mortgageId);
+		if (!mortgage || mortgage.orgId !== orgId) {
+			throw new ConvexError("Deal not found or access denied");
+		}
+
+		const [
+			property,
+			lenderUser,
+			sellerUser,
+			recentAuditEvents,
+			packageSurface,
+		] = await Promise.all([
+			ctx.db.get(mortgage.propertyId),
+			getUserByAuthId(ctx, deal.buyerId),
+			getUserByAuthId(ctx, deal.sellerId),
+			ctx.db
+				.query("auditJournal")
+				.withIndex("by_entity", (query) =>
+					query.eq("entityType", "deal").eq("entityId", String(args.dealId))
+				)
+				.collect(),
+			readDealDocumentPackageSurface(ctx, args.dealId),
+		]);
+
+		const lender = lenderUser
+			? {
+					email: lenderUser.email ?? null,
+					name:
+						toBorrowerName({
+							firstName: lenderUser.firstName,
+							lastName: lenderUser.lastName,
+						}) ??
+						lenderUser.email ??
+						deal.buyerId,
+					userId: lenderUser._id,
+				}
+			: {
+					email: deal.buyerId.includes("@") ? deal.buyerId : null,
+					name: deal.buyerId,
+					userId: null,
+				};
+		const seller = sellerUser
+			? {
+					email: sellerUser.email ?? null,
+					name:
+						toBorrowerName({
+							firstName: sellerUser.firstName,
+							lastName: sellerUser.lastName,
+						}) ??
+						sellerUser.email ??
+						deal.sellerId,
+					userId: sellerUser._id,
+				}
+			: {
+					email: deal.sellerId.includes("@") ? deal.sellerId : null,
+					name: deal.sellerId,
+					userId: null,
+				};
+
+		return {
+			mortgage: {
+				interestRate: mortgage.interestRate,
+				mortgageId: mortgage._id,
+				principal: mortgage.principal,
+				status: mortgage.status,
+			},
+			property: property
+				? {
+						city: property.city,
+						propertyId: property._id,
+						propertyType: property.propertyType,
+						province: property.province,
+						streetAddress: property.streetAddress,
+						unit: property.unit ?? null,
+					}
+				: null,
+			parties: {
+				lawyer: deal.lawyerId
+					? {
+							lawyerId: deal.lawyerId,
+							lawyerType: deal.lawyerType ?? null,
+						}
+					: null,
+				lender,
+				seller,
+			},
+			documentPackage: packageSurface.package,
+			documentInstances: packageSurface.instances,
+			recentAuditEvents: [...recentAuditEvents]
+				.sort((left, right) => right.timestamp - left.timestamp)
+				.slice(0, 6)
+				.map((event) => ({
+					eventId: event.eventId,
+					eventType: event.eventType,
+					newState: event.newState,
+					outcome: event.outcome,
+					previousState: event.previousState,
+					timestamp: event.timestamp,
+				})),
 		};
 	})
 	.public();

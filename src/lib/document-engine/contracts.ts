@@ -93,15 +93,23 @@ export const MORTGAGE_DOCUMENT_SIGNATORY_ROLES =
 	MORTGAGE_DOCUMENT_SIGNATORY_ROLE_OPTIONS.map((role) => role.value);
 
 export const SUPPORTED_DEAL_DOCUMENT_VARIABLE_KEYS = [
+	"assigned_broker_email",
 	"assigned_broker_full_name",
+	"borrower_co_1_email",
 	"borrower_co_1_full_name",
+	"borrower_co_2_email",
 	"borrower_co_2_full_name",
 	"borrower_primary_email",
 	"borrower_primary_full_name",
+	"broker_of_record_email",
 	"broker_of_record_full_name",
+	"lawyer_primary_email",
 	"lawyer_primary_full_name",
 	"listing_description",
+	"listing_marketplace_copy",
 	"listing_title",
+	"lender_primary_email",
+	"lender_primary_full_name",
 	"mortgage_amortization_months",
 	"mortgage_amount",
 	"mortgage_first_payment_date",

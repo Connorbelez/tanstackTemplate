@@ -4,7 +4,7 @@
 
 The admin origination workspace lives under `/admin/originations` and stages every draft input in `adminOriginationCases`. The review step now activates canonical borrower, property, `mortgageValuationSnapshots`, compatibility `appraisals`, mortgage, mortgageBorrower, canonical obligations, planned app-owned `collectionPlanEntries`, the mortgage-backed listing projection, ledger-genesis, and audit rows from one persisted case.
 
-When the collections step chooses `provider_managed_now`, canonical commit still finishes first and the same action immediately follows with Rotessa recurring-schedule activation against the staged primary borrower bank account. Phase 6 extends the same workflow with immutable staged document assets, pinned origination document drafts, mortgage-owned blueprint rows, and listing-facing public static document projection.
+When the collections step chooses `provider_managed_now`, canonical commit still finishes first and the same action immediately follows with Rotessa recurring-schedule activation against the staged primary borrower bank account. Phase 6 extends the same workflow with immutable staged document assets, pinned origination document drafts, mortgage-owned blueprint rows, and listing-facing public static document projection. Phase 7 consumes those mortgage blueprints at deal lock and materializes immutable deal-time packages for private static and private templated non-signable documents.
 
 ## Route Contract
 
@@ -123,6 +123,33 @@ Phase 6 owns the origination-to-mortgage document handoff.
 - Private static and templated blueprint rows remain mortgage-owned and are only surfaced through admin mortgage detail screens in this phase.
 - Blueprint rows can be archived from the mortgage detail page without mutating the underlying immutable `documentAssets` row.
 
+## Deal Package Contract
+
+Phase 7 owns the mortgage-to-deal package materialization seam.
+
+- `DEAL_LOCKED` now triggers `createDocumentPackage` through the deal closing effect registry.
+- `dealDocumentPackages` stores one immutable package header per `dealId`.
+- `dealDocumentInstances` stores immutable package members linked back to the source mortgage blueprint snapshot used at generation time.
+- `private_static` blueprints become `static_reference` package instances that point at the original `documentAssets` row.
+- `private_templated_non_signable` blueprints generate a new `generatedDocuments` row plus a `generated` package instance.
+- `private_templated_signable` blueprints do not fake-complete generation in this phase. They materialize placeholder package instances with `signature_pending_recipient_resolution` so phase 8 can extend the same immutable package surface.
+- Package retries never mutate old instance rows in place. Failed instances are archived and replaced by successor rows.
+- Package summary status is derived from immutable instance rows:
+  - `pending`
+  - `ready`
+  - `partial_failure`
+  - `failed`
+- Public listing reads continue to ignore deal packages entirely. Deal packages are private deal-time surfaces only.
+
+## Deal Portal Surface
+
+Phase 7 introduces a lender-facing authenticated deal detail route under `/lender/deals/$dealId`.
+
+- Access is enforced through the existing deal resource check.
+- The portal only exposes package instances whose status is `available` and have a resolvable signed URL.
+- Signable placeholders and failed instances remain admin-visible on the deal detail surface but are not presented as downloadable lender documents.
+- The admin deal detail page now shows the immutable package header, package instances, and retry controls for `failed` and `partial_failure` packages.
+
 ## Step Ownership
 
 The workspace owns a fixed seven-step shell:
@@ -151,10 +178,12 @@ Later phases may:
 - add fields inside existing draft subdocuments
 - extend `originationCaseDocumentDrafts`
 - add new mortgage blueprint classes or later package metadata to `mortgageDocumentBlueprints`
+- add richer participant snapshots and package metadata to `dealDocumentPackages` / `dealDocumentInstances`
 - enrich the review screen
 - extend the listing projection and eventually replace `publicDocumentIds` with blueprint-native listing reads
-- project document outputs from committed mortgages
+- project document outputs from committed mortgages and locked deals
 - extend provider-managed collection activation beyond the immediate Rotessa bootstrap
+- materialize signable envelopes from the existing placeholder package rows
 
 Later phases must not:
 
@@ -162,3 +191,4 @@ Later phases must not:
 - rename the seven steps
 - bypass `adminOriginationCases` with alternate canonical activation flows
 - replace additive patching with wholesale draft replacement
+- treat deal package retries as in-place mutation of previously materialized package rows
