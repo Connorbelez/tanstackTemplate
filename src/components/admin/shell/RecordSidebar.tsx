@@ -21,7 +21,7 @@ import { EMPTY_ADMIN_DETAIL_SEARCH } from "#/lib/admin-detail-search";
 import { resolveAdminRecordRouteTarget } from "#/lib/admin-relation-navigation";
 import { cn } from "#/lib/utils";
 import { api } from "../../../../convex/_generated/api";
-import type { Doc, Id } from "../../../../convex/_generated/dataModel";
+import type { Doc } from "../../../../convex/_generated/dataModel";
 import type {
 	EntityViewAdapterContract,
 	NormalizedFieldDefinition,
@@ -510,41 +510,6 @@ function DetailsTab({
 	readonly record: RecordDetailRecord | undefined;
 	readonly recordId: string;
 }) {
-	const fallbackAdapterRecord = useMemo<RecordDetailRecord>(
-		() => ({
-			_id: recordId,
-			_kind: "native",
-			createdAt: 0,
-			fields: {},
-			objectDefId: "fallback" as Id<"objectDefs">,
-			updatedAt: 0,
-		}),
-		[recordId]
-	);
-	const adapterRecord = record ?? fallbackAdapterRecord;
-	const adapterDetails = adapter?.renderDetailsTab?.({
-		adapterContract,
-		entity,
-		fields: fields ?? [],
-		objectDef,
-		record: adapterRecord,
-		recordId,
-	});
-
-	if (!objectDef && adapterDetails != null) {
-		return adapterDetails;
-	}
-
-	if (!objectDef) {
-		return (
-			<UnavailableTab
-				description="This entity is not mapped to a CRM object definition yet, so the detail surface can only show route-level context."
-				icon={<FileText className="h-5 w-5" />}
-				title="Object definition unavailable"
-			/>
-		);
-	}
-
 	if (isLoading) {
 		return (
 			<div className="space-y-3">
@@ -559,6 +524,16 @@ function DetailsTab({
 	}
 
 	if (!record) {
+		if (!objectDef) {
+			return (
+				<UnavailableTab
+					description="This entity is not mapped to a CRM object definition yet, so the detail surface can only show route-level context."
+					icon={<FileText className="h-5 w-5" />}
+					title="Object definition unavailable"
+				/>
+			);
+		}
+
 		return (
 			<div className="space-y-4">
 				<UnavailableTab
@@ -578,6 +553,30 @@ function DetailsTab({
 			</div>
 		);
 	}
+
+	const adapterDetails = adapter?.renderDetailsTab?.({
+		adapterContract,
+		entity,
+		fields: fields ?? [],
+		objectDef,
+		record,
+		recordId,
+	});
+
+	if (!objectDef && adapterDetails != null) {
+		return adapterDetails;
+	}
+
+	if (!objectDef) {
+		return (
+			<UnavailableTab
+				description="This entity is not mapped to a CRM object definition yet, so the detail surface can only show route-level context."
+				icon={<FileText className="h-5 w-5" />}
+				title="Object definition unavailable"
+			/>
+		);
+	}
+
 	if (adapterDetails != null) {
 		return adapterDetails;
 	}
