@@ -876,14 +876,12 @@ async function bootstrapForOrg(
 			];
 		});
 
-		if (existingDefaultTableView) {
-			await ctx.db.patch(existingDefaultTableView._id, {
-				name: `All ${config.pluralLabel}`,
-				aggregatePresets,
-				needsRepair: false,
-				updatedAt: now,
-			});
-		}
+		await ctx.db.patch(viewDefId, {
+			name: `All ${config.pluralLabel}`,
+			aggregatePresets,
+			needsRepair: false,
+			updatedAt: now,
+		});
 
 		const existingViewFields = await ctx.db
 			.query("viewFields")

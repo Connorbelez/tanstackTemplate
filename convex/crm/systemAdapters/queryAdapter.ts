@@ -1,11 +1,13 @@
 import { ConvexError } from "convex/values";
 import type { Doc } from "../../_generated/dataModel";
 import type { QueryCtx } from "../../_generated/server";
+import type { Viewer } from "../../fluent";
 import type { UnifiedRecord } from "../types";
 import { resolveColumnPath } from "./columnResolver";
 
 type FieldDef = Doc<"fieldDefs">;
 type ObjectDef = Doc<"objectDefs">;
+type ViewerAwareQueryCtx = QueryCtx & { viewer?: Viewer };
 
 interface NativePaginationOptions {
 	cursor: string | null;
@@ -22,6 +24,13 @@ export interface NativeRecordPage {
 	continueCursor: string | null;
 	isDone: boolean;
 	records: UnifiedRecord[];
+}
+
+function assertNativeTableReadAccess(ctx: QueryCtx, tableName: string): void {
+	const viewer = (ctx as ViewerAwareQueryCtx).viewer;
+	if (tableName === "listings" && !viewer?.isFairLendAdmin) {
+		throw new ConvexError("Forbidden: fair lend admin role required");
+	}
 }
 
 function assembleNativeDoc(
@@ -95,6 +104,8 @@ async function paginateNativeTable(
 	orgId: string,
 	paginationOpts: NativePaginationOptions
 ): Promise<NativeTablePage> {
+	assertNativeTableReadAccess(ctx, tableName);
+
 	switch (tableName) {
 		case "mortgages":
 			return ctx.db

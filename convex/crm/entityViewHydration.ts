@@ -19,6 +19,7 @@ interface EntityViewHydrationArgs {
 	objectDef: ObjectDef;
 	orgId: string;
 	records: readonly UnifiedRecord[];
+	requestedFieldNames?: ReadonlySet<string>;
 }
 
 function formatCurrencyAmount(value: number, divisor = 1): string {
@@ -272,26 +273,49 @@ function mergeHydratedFields(
 	};
 }
 
+function shouldHydrateField(
+	args: EntityViewHydrationArgs,
+	fieldName: string
+): boolean {
+	return args.requestedFieldNames?.has(fieldName) ?? true;
+}
+
 async function hydrateListingRecords(
 	args: EntityViewHydrationArgs
 ): Promise<UnifiedRecord[]> {
-	const propertyIds = args.records.flatMap((record) =>
-		typeof record.fields.propertyId === "string"
-			? [record.fields.propertyId]
-			: []
+	const shouldHydratePropertySummary = shouldHydrateField(
+		args,
+		"propertySummary"
 	);
-	const mortgageIds = args.records.flatMap((record) =>
-		typeof record.fields.mortgageId === "string"
-			? [record.fields.mortgageId]
-			: []
+	const shouldHydrateMortgageSummary = shouldHydrateField(
+		args,
+		"mortgageSummary"
 	);
+	const propertyIds = shouldHydratePropertySummary
+		? args.records.flatMap((record) =>
+				typeof record.fields.propertyId === "string"
+					? [record.fields.propertyId]
+					: []
+			)
+		: [];
+	const mortgageIds = shouldHydrateMortgageSummary
+		? args.records.flatMap((record) =>
+				typeof record.fields.mortgageId === "string"
+					? [record.fields.mortgageId]
+					: []
+			)
+		: [];
 	const [propertiesById, mortgagesById] = await Promise.all([
-		loadPropertiesById(args.ctx, propertyIds),
-		loadMortgagesById({
-			ctx: args.ctx,
-			orgId: args.orgId,
-			recordIds: mortgageIds,
-		}),
+		shouldHydratePropertySummary
+			? loadPropertiesById(args.ctx, propertyIds)
+			: Promise.resolve(new Map<string, PropertyDoc>()),
+		shouldHydrateMortgageSummary
+			? loadMortgagesById({
+					ctx: args.ctx,
+					orgId: args.orgId,
+					recordIds: mortgageIds,
+				})
+			: Promise.resolve(new Map<string, MortgageDoc>()),
 	]);
 
 	return args.records.map((record) => {
@@ -305,13 +329,21 @@ async function hydrateListingRecords(
 				: undefined;
 
 		return mergeHydratedFields(record, {
-			propertySummary: buildPropertySummary(
-				propertyId ? propertiesById.get(propertyId) : undefined,
-				record.fields
-			),
-			mortgageSummary: buildListingMortgageSummary(
-				mortgageId ? mortgagesById.get(mortgageId) : undefined
-			),
+			...(shouldHydratePropertySummary
+				? {
+						propertySummary: buildPropertySummary(
+							propertyId ? propertiesById.get(propertyId) : undefined,
+							record.fields
+						),
+					}
+				: {}),
+			...(shouldHydrateMortgageSummary
+				? {
+						mortgageSummary: buildListingMortgageSummary(
+							mortgageId ? mortgagesById.get(mortgageId) : undefined
+						),
+					}
+				: {}),
 		});
 	});
 }
@@ -319,71 +351,110 @@ async function hydrateListingRecords(
 async function hydrateMortgageRecords(
 	args: EntityViewHydrationArgs
 ): Promise<UnifiedRecord[]> {
-	const propertyIds = args.records.flatMap((record) =>
-		typeof record.fields.propertyId === "string"
-			? [record.fields.propertyId]
-			: []
+	const shouldHydratePropertySummary = shouldHydrateField(
+		args,
+		"propertySummary"
 	);
-	const propertiesById = await loadPropertiesById(args.ctx, propertyIds);
+	const shouldHydrateBorrowerSummary = shouldHydrateField(
+		args,
+		"borrowerSummary"
+	);
+	const shouldHydrateListingSummary = shouldHydrateField(
+		args,
+		"listingSummary"
+	);
+	const propertyIds = shouldHydratePropertySummary
+		? args.records.flatMap((record) =>
+				typeof record.fields.propertyId === "string"
+					? [record.fields.propertyId]
+					: []
+			)
+		: [];
+	const propertiesById = shouldHydratePropertySummary
+		? await loadPropertiesById(args.ctx, propertyIds)
+		: new Map<string, PropertyDoc>();
 	const mortgageIds = args.records.map((record) => record._id);
 	const [borrowerLinksByMortgageId, listingsByMortgageId] = await Promise.all([
-		Promise.all(
-			mortgageIds.map(
-				async (
-					mortgageId
-				): Promise<readonly [string, MortgageBorrowerDoc[]]> => {
-					const normalizedMortgageId = args.ctx.db.normalizeId(
-						"mortgages",
-						mortgageId
-					);
-					if (!normalizedMortgageId) {
-						return [mortgageId, []];
-					}
+		shouldHydrateBorrowerSummary
+			? Promise.all(
+					mortgageIds.map(
+						async (
+							mortgageId
+						): Promise<readonly [string, MortgageBorrowerDoc[]]> => {
+							const normalizedMortgageId = args.ctx.db.normalizeId(
+								"mortgages",
+								mortgageId
+							);
+							if (!normalizedMortgageId) {
+								return [mortgageId, []];
+							}
 
-					const links = await args.ctx.db
-						.query("mortgageBorrowers")
-						.withIndex("by_mortgage", (q) =>
-							q.eq("mortgageId", normalizedMortgageId)
-						)
-						.collect();
+							const links = await args.ctx.db
+								.query("mortgageBorrowers")
+								.withIndex("by_mortgage", (q) =>
+									q.eq("mortgageId", normalizedMortgageId)
+								)
+								.collect();
 
-					return [mortgageId, links];
-				}
-			)
-		).then((entries) => new Map<string, MortgageBorrowerDoc[]>(entries)),
-		loadListingsByMortgageId(args.ctx, mortgageIds),
+							return [mortgageId, links];
+						}
+					)
+				).then((entries) => new Map<string, MortgageBorrowerDoc[]>(entries))
+			: Promise.resolve(new Map<string, MortgageBorrowerDoc[]>()),
+		shouldHydrateListingSummary
+			? loadListingsByMortgageId(args.ctx, mortgageIds)
+			: Promise.resolve(new Map<string, ListingDoc>()),
 	]);
-	const borrowersById = await loadBorrowersById({
-		ctx: args.ctx,
-		orgId: args.orgId,
-		recordIds: [...borrowerLinksByMortgageId.values()].flatMap((links) =>
-			links.map((link) => String(link.borrowerId))
-		),
-	});
-	const usersById = await loadUsersById(
-		args.ctx,
-		[...borrowersById.values()].map((borrower) => String(borrower.userId))
-	);
+	const borrowersById = shouldHydrateBorrowerSummary
+		? await loadBorrowersById({
+				ctx: args.ctx,
+				orgId: args.orgId,
+				recordIds: [...borrowerLinksByMortgageId.values()].flatMap((links) =>
+					links.map((link) => String(link.borrowerId))
+				),
+			})
+		: new Map<string, BorrowerDoc>();
+	const usersById = shouldHydrateBorrowerSummary
+		? await loadUsersById(
+				args.ctx,
+				[...borrowersById.values()].map((borrower) => String(borrower.userId))
+			)
+		: new Map<string, UserDoc>();
 
 	return args.records.map((record) => {
 		const propertyId =
 			typeof record.fields.propertyId === "string"
 				? record.fields.propertyId
 				: undefined;
-		const borrowerNames =
-			borrowerLinksByMortgageId.get(record._id)?.flatMap((link) => {
-				const borrower = borrowersById.get(String(link.borrowerId));
-				const user = borrower ? usersById.get(String(borrower.userId)) : null;
-				const name = buildUserDisplayName(user);
-				return name ? [name] : [];
-			}) ?? [];
+		const borrowerNames = shouldHydrateBorrowerSummary
+			? (borrowerLinksByMortgageId.get(record._id)?.flatMap((link) => {
+					const borrower = borrowersById.get(String(link.borrowerId));
+					const user = borrower ? usersById.get(String(borrower.userId)) : null;
+					const name = buildUserDisplayName(user);
+					return name ? [name] : [];
+				}) ?? [])
+			: [];
 
 		return mergeHydratedFields(record, {
-			propertySummary: buildPropertySummary(
-				propertyId ? propertiesById.get(propertyId) : undefined
-			),
-			borrowerSummary: buildBorrowerSummary(borrowerNames),
-			listingSummary: buildListingSummary(listingsByMortgageId.get(record._id)),
+			...(shouldHydratePropertySummary
+				? {
+						propertySummary: buildPropertySummary(
+							propertyId ? propertiesById.get(propertyId) : undefined
+						),
+					}
+				: {}),
+			...(shouldHydrateBorrowerSummary
+				? {
+						borrowerSummary: buildBorrowerSummary(borrowerNames),
+					}
+				: {}),
+			...(shouldHydrateListingSummary
+				? {
+						listingSummary: buildListingSummary(
+							listingsByMortgageId.get(record._id)
+						),
+					}
+				: {}),
 		});
 	});
 }
@@ -391,36 +462,58 @@ async function hydrateMortgageRecords(
 async function hydrateObligationRecords(
 	args: EntityViewHydrationArgs
 ): Promise<UnifiedRecord[]> {
-	const mortgageIds = args.records.flatMap((record) =>
-		typeof record.fields.mortgageId === "string"
-			? [record.fields.mortgageId]
-			: []
+	const shouldHydrateMortgageSummary = shouldHydrateField(
+		args,
+		"mortgageSummary"
 	);
-	const borrowerIds = args.records.flatMap((record) =>
-		typeof record.fields.borrowerId === "string"
-			? [record.fields.borrowerId]
-			: []
+	const shouldHydrateBorrowerSummary = shouldHydrateField(
+		args,
+		"borrowerSummary"
 	);
+	const mortgageIds = shouldHydrateMortgageSummary
+		? args.records.flatMap((record) =>
+				typeof record.fields.mortgageId === "string"
+					? [record.fields.mortgageId]
+					: []
+			)
+		: [];
+	const borrowerIds = shouldHydrateBorrowerSummary
+		? args.records.flatMap((record) =>
+				typeof record.fields.borrowerId === "string"
+					? [record.fields.borrowerId]
+					: []
+			)
+		: [];
 	const [mortgagesById, borrowersById] = await Promise.all([
-		loadMortgagesById({
-			ctx: args.ctx,
-			orgId: args.orgId,
-			recordIds: mortgageIds,
-		}),
-		loadBorrowersById({
-			ctx: args.ctx,
-			orgId: args.orgId,
-			recordIds: borrowerIds,
-		}),
+		shouldHydrateMortgageSummary
+			? loadMortgagesById({
+					ctx: args.ctx,
+					orgId: args.orgId,
+					recordIds: mortgageIds,
+				})
+			: Promise.resolve(new Map<string, MortgageDoc>()),
+		shouldHydrateBorrowerSummary
+			? loadBorrowersById({
+					ctx: args.ctx,
+					orgId: args.orgId,
+					recordIds: borrowerIds,
+				})
+			: Promise.resolve(new Map<string, BorrowerDoc>()),
 	]);
-	const propertiesById = await loadPropertiesById(
-		args.ctx,
-		[...mortgagesById.values()].map((mortgage) => String(mortgage.propertyId))
-	);
-	const usersById = await loadUsersById(
-		args.ctx,
-		[...borrowersById.values()].map((borrower) => String(borrower.userId))
-	);
+	const propertiesById = shouldHydrateMortgageSummary
+		? await loadPropertiesById(
+				args.ctx,
+				[...mortgagesById.values()].map((mortgage) =>
+					String(mortgage.propertyId)
+				)
+			)
+		: new Map<string, PropertyDoc>();
+	const usersById = shouldHydrateBorrowerSummary
+		? await loadUsersById(
+				args.ctx,
+				[...borrowersById.values()].map((borrower) => String(borrower.userId))
+			)
+		: new Map<string, UserDoc>();
 
 	return args.records.map((record) => {
 		const mortgageId =
@@ -435,15 +528,23 @@ async function hydrateObligationRecords(
 		const borrower = borrowerId ? borrowersById.get(borrowerId) : undefined;
 
 		return mergeHydratedFields(record, {
-			mortgageSummary: buildMortgageSummary({
-				mortgage,
-				property: mortgage
-					? propertiesById.get(String(mortgage.propertyId))
-					: undefined,
-			}),
-			borrowerSummary: buildUserDisplayName(
-				borrower ? usersById.get(String(borrower.userId)) : undefined
-			),
+			...(shouldHydrateMortgageSummary
+				? {
+						mortgageSummary: buildMortgageSummary({
+							mortgage,
+							property: mortgage
+								? propertiesById.get(String(mortgage.propertyId))
+								: undefined,
+						}),
+					}
+				: {}),
+			...(shouldHydrateBorrowerSummary
+				? {
+						borrowerSummary: buildUserDisplayName(
+							borrower ? usersById.get(String(borrower.userId)) : undefined
+						),
+					}
+				: {}),
 		});
 	});
 }
@@ -451,10 +552,15 @@ async function hydrateObligationRecords(
 async function hydrateBorrowerRecords(
 	args: EntityViewHydrationArgs
 ): Promise<UnifiedRecord[]> {
-	const userIds = args.records.flatMap((record) =>
-		typeof record.fields.userId === "string" ? [record.fields.userId] : []
-	);
-	const usersById = await loadUsersById(args.ctx, userIds);
+	const shouldHydrateBorrowerName = shouldHydrateField(args, "borrowerName");
+	const userIds = shouldHydrateBorrowerName
+		? args.records.flatMap((record) =>
+				typeof record.fields.userId === "string" ? [record.fields.userId] : []
+			)
+		: [];
+	const usersById = shouldHydrateBorrowerName
+		? await loadUsersById(args.ctx, userIds)
+		: new Map<string, UserDoc>();
 
 	return args.records.map((record) => {
 		const userId =
@@ -463,9 +569,13 @@ async function hydrateBorrowerRecords(
 				: undefined;
 
 		return mergeHydratedFields(record, {
-			borrowerName: buildUserDisplayName(
-				userId ? usersById.get(userId) : undefined
-			),
+			...(shouldHydrateBorrowerName
+				? {
+						borrowerName: buildUserDisplayName(
+							userId ? usersById.get(userId) : undefined
+						),
+					}
+				: {}),
 		});
 	});
 }

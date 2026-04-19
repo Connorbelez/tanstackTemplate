@@ -58,6 +58,7 @@ interface NativeTablePage {
 const OFFSET_CURSOR_PATTERN = /^[0-9]+$/;
 const NATIVE_CURSOR_PREFIX = "native:";
 const COUNT_PAGE_SIZE = 256;
+const KANBAN_PREVIEW_COLUMN_LIMIT = 3;
 const UNFILTERED_TOTAL_COUNT_CAP = 1000;
 
 // ── Types ────────────────────────────────────────────────────────────
@@ -190,6 +191,30 @@ function sanitizeQueryLimit(limit: number | undefined): number {
 
 	return Math.min(flooredLimit, FILTERED_QUERY_CAP);
 }
+
+function getKanbanPreviewColumns(
+	columns: readonly ViewColumnDefinition[]
+): ViewColumnDefinition[] {
+	return [...columns]
+		.filter((column) => column.isVisible)
+		.sort((left, right) => left.displayOrder - right.displayOrder)
+		.slice(0, KANBAN_PREVIEW_COLUMN_LIMIT);
+}
+
+function getRequestedFieldNames(args: {
+	columns: readonly ViewColumnDefinition[];
+	titleFieldName?: string;
+}): Set<string> {
+	const requestedFieldNames = new Set(
+		args.columns.map((column) => column.name)
+	);
+	if (args.titleFieldName) {
+		requestedFieldNames.add(args.titleFieldName);
+	}
+
+	return requestedFieldNames;
+}
+
 async function loadOrderedKanbanGroups(
 	ctx: QueryCtx,
 	viewDefId: Id<"viewDefs">
@@ -599,6 +624,9 @@ async function queryTableView(
 	const recordFilters = convertViewFiltersToRecordFilters(state.view.filters);
 	const hasWindowedViewRequirements =
 		recordFilters.length > 0 || state.view.aggregatePresets.length > 0;
+	const requestedFieldNames = getRequestedFieldNames({
+		columns: state.columns.filter((column) => column.isVisible),
+	});
 
 	if (!hasWindowedViewRequirements) {
 		const [pagedRecords, totalCountSummary] = await Promise.all([
@@ -611,6 +639,7 @@ async function queryTableView(
 			objectDef: state.objectDef,
 			orgId: state.viewDef.orgId,
 			records: pagedRecords.records,
+			requestedFieldNames,
 		});
 		const relationDisplayValuesByRecordId =
 			await buildRelationCellDisplayValueMap({
@@ -663,6 +692,7 @@ async function queryTableView(
 		objectDef: state.objectDef,
 		orgId: state.viewDef.orgId,
 		records: page,
+		requestedFieldNames,
 	});
 	const nextOffset = offset + limit;
 	const isDone = nextOffset >= filtered.length;
@@ -716,6 +746,11 @@ async function queryKanbanView(
 	const recordFilters = convertViewFiltersToRecordFilters(state.view.filters);
 	const kanbanGroups = await loadOrderedKanbanGroups(ctx, state.viewDef._id);
 	const boundFieldDef = await requireKanbanBoundField(ctx, state.viewDef);
+	const kanbanColumns = getKanbanPreviewColumns(state.columns);
+	const requestedFieldNames = getRequestedFieldNames({
+		columns: kanbanColumns,
+		titleFieldName: state.adapterContract.titleFieldName,
+	});
 	const assembled = await loadViewRecords(ctx, state);
 	const filtered = applyFilters(
 		assembled.records,
@@ -728,6 +763,7 @@ async function queryKanbanView(
 		objectDef: state.objectDef,
 		orgId: state.viewDef.orgId,
 		records: filtered,
+		requestedFieldNames,
 	});
 	const relationDisplayValuesByRecordId =
 		await buildRelationCellDisplayValueMap({
@@ -755,7 +791,7 @@ async function queryKanbanView(
 			kanbanGroups,
 			groupRecordMap,
 			optionsLookup,
-			state.columns,
+			kanbanColumns,
 			buildEntityViewCellDisplayValueMap({
 				records: materializedFiltered,
 				relationDisplayValuesByRecordId,

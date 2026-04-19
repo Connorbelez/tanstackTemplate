@@ -9,6 +9,10 @@
  */
 import { beforeEach, describe, expect, it } from "vitest";
 import {
+	EXTERNAL_ORG_ADMIN,
+	FAIRLEND_ADMIN,
+} from "../../../src/test/auth/identities";
+import {
 	asAdmin,
 	CRM_ADMIN_IDENTITY,
 	type CrmTestHarness,
@@ -363,7 +367,7 @@ describe("queryNativeTable", () => {
 		expect(result.records[0]._kind).toBe("native");
 	});
 
-	it("returns documents from listings table via queryRecords", async () => {
+	it("rejects listing system-object reads for external org admins", async () => {
 		const { mortgageId, propertyId } = await t.run(async (ctx) => {
 			const userId = await ctx.db.insert("users", {
 				authId: "test-user-listing",
@@ -442,14 +446,14 @@ describe("queryNativeTable", () => {
 
 		await t.mutation(
 			internal.crm.systemAdapters.bootstrap.bootstrapSystemObjects,
-			{ orgId: ORG_ID }
+			{ orgId: EXTERNAL_ORG_ADMIN.org_id ?? "" }
 		);
 
 		const listingObjDef = await t.run(async (ctx) => {
 			return ctx.db
 				.query("objectDefs")
 				.withIndex("by_org_name", (q) =>
-					q.eq("orgId", ORG_ID).eq("name", "listing")
+					q.eq("orgId", EXTERNAL_ORG_ADMIN.org_id ?? "").eq("name", "listing")
 				)
 				.first();
 		});
@@ -458,20 +462,127 @@ describe("queryNativeTable", () => {
 			throw new Error("unreachable");
 		}
 
-		const result = await asAdmin(t).query(api.crm.recordQueries.queryRecords, {
-			objectDefId: listingObjDef._id,
-			paginationOpts: { numItems: 10, cursor: null },
+		await expect(
+			t
+				.withIdentity(EXTERNAL_ORG_ADMIN)
+				.query(api.crm.recordQueries.queryRecords, {
+					objectDefId: listingObjDef._id,
+					paginationOpts: { numItems: 10, cursor: null },
+				})
+		).rejects.toThrow("Forbidden: fair lend admin role required");
+	});
+
+	it("returns listing system-object records for FairLend staff admins", async () => {
+		const { mortgageId, propertyId } = await t.run(async (ctx) => {
+			const userId = await ctx.db.insert("users", {
+				authId: "test-user-staff-listing",
+				email: "staff-listing-broker@test.ca",
+				firstName: "Staff",
+				lastName: "Listing",
+			});
+			const brokerId = await ctx.db.insert("brokers", {
+				status: "active",
+				userId,
+				orgId: ORG_ID,
+				createdAt: Date.now(),
+			});
+			const propertyId = await ctx.db.insert("properties", {
+				streetAddress: "321 Queen St W",
+				city: "Toronto",
+				province: "ON",
+				postalCode: "M5V2A9",
+				propertyType: "condo",
+				createdAt: Date.now(),
+			});
+			const mortgageId = await ctx.db.insert("mortgages", {
+				orgId: ORG_ID,
+				status: "active",
+				propertyId,
+				principal: 510_000,
+				interestRate: 4.9,
+				rateType: "fixed",
+				termMonths: 36,
+				amortizationMonths: 300,
+				paymentAmount: 2890,
+				paymentFrequency: "monthly",
+				loanType: "conventional",
+				lienPosition: 1,
+				interestAdjustmentDate: "2026-09-01",
+				termStartDate: "2026-09-01",
+				maturityDate: "2029-08-31",
+				firstPaymentDate: "2026-10-01",
+				brokerOfRecordId: brokerId,
+				createdAt: Date.now(),
+			});
+
+			return { mortgageId, propertyId };
 		});
+
+		await t.run(async (ctx) => {
+			await ctx.db.insert("listings", {
+				mortgageId,
+				propertyId,
+				dataSource: "mortgage_pipeline",
+				status: "published",
+				principal: 510_000,
+				interestRate: 4.9,
+				ltvRatio: 64.2,
+				termMonths: 36,
+				maturityDate: "2029-08-31",
+				monthlyPayment: 2890,
+				rateType: "fixed",
+				paymentFrequency: "monthly",
+				loanType: "conventional",
+				lienPosition: 1,
+				propertyType: "condo",
+				city: "Toronto",
+				province: "ON",
+				latestAppraisalValueAsIs: 795_000,
+				latestAppraisalDate: "2026-08-15",
+				title: "Staff Listing Access",
+				heroImages: [],
+				featured: false,
+				publicDocumentIds: [],
+				viewCount: 4,
+				createdAt: Date.now(),
+				updatedAt: Date.now(),
+			});
+		});
+
+		await t.mutation(
+			internal.crm.systemAdapters.bootstrap.bootstrapSystemObjects,
+			{ orgId: FAIRLEND_ADMIN.org_id ?? "" }
+		);
+
+		const listingObjDef = await t.run(async (ctx) => {
+			return ctx.db
+				.query("objectDefs")
+				.withIndex("by_org_name", (q) =>
+					q.eq("orgId", FAIRLEND_ADMIN.org_id ?? "").eq("name", "listing")
+				)
+				.first();
+		});
+		expect(listingObjDef).not.toBeNull();
+		if (!listingObjDef) {
+			throw new Error("unreachable");
+		}
+
+		const result = await t
+			.withIdentity(FAIRLEND_ADMIN)
+			.query(api.crm.recordQueries.queryRecords, {
+				objectDefId: listingObjDef._id,
+				paginationOpts: { numItems: 10, cursor: null },
+			});
 
 		expect(result.records).toHaveLength(1);
 		expect(result.records[0]).toMatchObject({
 			_kind: "native",
 			fields: {
 				city: "Toronto",
-				interestRate: 5.1,
-				principal: 425_000,
-				status: "draft",
-				title: "Downtown First Mortgage",
+				interestRate: 4.9,
+				principal: 510_000,
+				status: "published",
+				title: "Staff Listing Access",
 			},
 		});
 	});
@@ -502,6 +613,78 @@ describe("queryNativeTable", () => {
 				paginationOpts: { numItems: 5, cursor: null },
 			})
 		).rejects.toThrow();
+	});
+});
+
+describe("bootstrapSystemObjects", () => {
+	let t: CrmTestHarness;
+	const ORG_ID = CRM_ADMIN_IDENTITY.org_id;
+
+	beforeEach(() => {
+		t = createCrmTestHarness();
+	});
+
+	it("applies configured aggregate presets to newly inserted default table views", async () => {
+		await t.mutation(
+			internal.crm.systemAdapters.bootstrap.bootstrapSystemObjects,
+			{ orgId: ORG_ID }
+		);
+
+		const mortgageDefaultView = await t.run(async (ctx) => {
+			const mortgageObjectDef = await ctx.db
+				.query("objectDefs")
+				.withIndex("by_org_name", (q) =>
+					q.eq("orgId", ORG_ID).eq("name", "mortgage")
+				)
+				.first();
+			if (!mortgageObjectDef) {
+				throw new Error("Mortgage system object not found");
+			}
+
+			const [defaultView, fieldDefs] = await Promise.all([
+				ctx.db
+					.query("viewDefs")
+					.withIndex("by_object", (q) =>
+						q.eq("objectDefId", mortgageObjectDef._id)
+					)
+					.first(),
+				ctx.db
+					.query("fieldDefs")
+					.withIndex("by_object", (q) =>
+						q.eq("objectDefId", mortgageObjectDef._id)
+					)
+					.collect(),
+			]);
+
+			if (!defaultView) {
+				throw new Error("Mortgage default view not found");
+			}
+
+			const fieldNameById = new Map(
+				fieldDefs.map(
+					(fieldDef) => [fieldDef._id.toString(), fieldDef.name] as const
+				)
+			);
+
+			return (defaultView.aggregatePresets ?? []).map((preset) => ({
+				fieldName: fieldNameById.get(preset.fieldDefId.toString()),
+				fn: preset.fn,
+				label: preset.label,
+			}));
+		});
+
+		expect(mortgageDefaultView).toEqual([
+			{
+				fieldName: "principal",
+				fn: "sum",
+				label: "Principal",
+			},
+			{
+				fieldName: "paymentAmount",
+				fn: "sum",
+				label: "Payment Amount",
+			},
+		]);
 	});
 });
 

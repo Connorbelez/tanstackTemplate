@@ -100,6 +100,137 @@ async function seedRelationFixture(t: CrmTestHarness) {
 	};
 }
 
+async function seedMortgageViewFixture(t: CrmTestHarness) {
+	const orgId = CRM_ADMIN_IDENTITY.org_id;
+
+	await t.mutation(
+		internal.crm.systemAdapters.bootstrap.bootstrapSystemObjects,
+		{ orgId }
+	);
+
+	const seeded = await t.run(async (ctx) => {
+		const brokerUserId = await ctx.db.insert("users", {
+			authId: "test-mortgage-broker-user",
+			email: "broker+view@test.fairlend.ca",
+			firstName: "Morgan",
+			lastName: "Broker",
+		});
+		const borrowerUserId = await ctx.db.insert("users", {
+			authId: "test-mortgage-borrower-user",
+			email: "borrower+view@test.fairlend.ca",
+			firstName: "Avery",
+			lastName: "Borrower",
+		});
+		const brokerId = await ctx.db.insert("brokers", {
+			status: "active",
+			userId: brokerUserId,
+			orgId,
+			createdAt: Date.now(),
+		});
+		const borrowerId = await ctx.db.insert("borrowers", {
+			status: "active",
+			orgId,
+			userId: borrowerUserId,
+			createdAt: Date.now(),
+		});
+		const propertyId = await ctx.db.insert("properties", {
+			streetAddress: "789 King St W",
+			city: "Toronto",
+			province: "ON",
+			postalCode: "M5V1M5",
+			propertyType: "condo",
+			createdAt: Date.now(),
+		});
+		const mortgageId = await ctx.db.insert("mortgages", {
+			orgId,
+			status: "active",
+			propertyId,
+			principal: 425_000,
+			interestRate: 5.1,
+			rateType: "fixed",
+			termMonths: 48,
+			amortizationMonths: 300,
+			paymentAmount: 2460,
+			paymentFrequency: "monthly",
+			loanType: "conventional",
+			lienPosition: 1,
+			interestAdjustmentDate: "2026-06-01",
+			termStartDate: "2026-06-01",
+			maturityDate: "2030-05-31",
+			firstPaymentDate: "2026-07-01",
+			brokerOfRecordId: brokerId,
+			createdAt: Date.now(),
+		});
+
+		await ctx.db.insert("mortgageBorrowers", {
+			mortgageId,
+			borrowerId,
+			role: "primary",
+			addedAt: Date.now(),
+		});
+
+		await ctx.db.insert("listings", {
+			mortgageId,
+			propertyId,
+			dataSource: "mortgage_pipeline",
+			status: "draft",
+			principal: 425_000,
+			interestRate: 5.1,
+			ltvRatio: 67.5,
+			termMonths: 48,
+			maturityDate: "2030-05-31",
+			monthlyPayment: 2460,
+			rateType: "fixed",
+			paymentFrequency: "monthly",
+			loanType: "conventional",
+			lienPosition: 1,
+			propertyType: "condo",
+			city: "Toronto",
+			province: "ON",
+			latestAppraisalValueAsIs: 630_000,
+			latestAppraisalDate: "2026-05-15",
+			title: "Downtown First Mortgage",
+			heroImages: [],
+			featured: true,
+			publicDocumentIds: [],
+			viewCount: 12,
+			createdAt: Date.now(),
+			updatedAt: Date.now(),
+		});
+
+		const mortgageObjDef = await ctx.db
+			.query("objectDefs")
+			.withIndex("by_org_name", (q) =>
+				q.eq("orgId", orgId).eq("name", "mortgage")
+			)
+			.first();
+		if (!mortgageObjDef) {
+			throw new Error("Mortgage system object not found");
+		}
+
+		const fieldDefs = await ctx.db
+			.query("fieldDefs")
+			.withIndex("by_object", (q) => q.eq("objectDefId", mortgageObjDef._id))
+			.collect();
+
+		return {
+			fieldDefs,
+			mortgageId,
+			mortgageObjDef,
+		};
+	});
+
+	const fieldDefsByName = Object.fromEntries(
+		seeded.fieldDefs.map((fieldDef) => [fieldDef.name, fieldDef._id] as const)
+	);
+
+	return {
+		fieldDefsByName,
+		mortgageId: seeded.mortgageId,
+		objectDefId: seeded.mortgageObjDef._id,
+	};
+}
+
 // ═══════════════════════════════════════════════════════════════════════
 // View Engine
 // ═══════════════════════════════════════════════════════════════════════
@@ -191,6 +322,46 @@ describe("View Engine", () => {
 					expect(visibleNames.has(key)).toBe(true);
 				}
 			}
+		});
+
+		it("skips hidden mortgage listing hydration in the table payload", async () => {
+			const fixture = await seedMortgageViewFixture(t);
+			const tableViewId = await asAdmin(t).mutation(
+				api.crm.viewDefs.createView,
+				{
+					objectDefId: fixture.objectDefId,
+					name: "Mortgage Table",
+					viewType: "table",
+				}
+			);
+
+			const result = await asAdmin(t).query(
+				api.crm.viewQueries.queryViewRecords,
+				{
+					viewDefId: tableViewId,
+					limit: 25,
+				}
+			);
+
+			const tableResult = result as {
+				page: {
+					rows: Array<{
+						record: {
+							_id: string;
+							fields: Record<string, unknown>;
+						};
+					}>;
+				};
+			};
+			const mortgageRow = tableResult.page.rows.find(
+				(row) => row.record._id === String(fixture.mortgageId)
+			);
+
+			expect(mortgageRow?.record.fields.propertySummary).toBe(
+				"789 King St W, Toronto, ON"
+			);
+			expect(mortgageRow?.record.fields.borrowerSummary).toBe("Avery Borrower");
+			expect(mortgageRow?.record.fields).not.toHaveProperty("listingSummary");
 		});
 
 		it("pagination with cursor returns next page", async () => {
@@ -602,6 +773,46 @@ describe("View Engine", () => {
 			const noValueGroup = groups.find((g) => g.label === "No Value");
 			expect(noValueGroup).toBeDefined();
 			expect(noValueGroup?.count).toBe(1);
+		});
+
+		it("only materializes mortgage fields needed by kanban cards", async () => {
+			const fixture = await seedMortgageViewFixture(t);
+			const kanbanViewId = await asAdmin(t).mutation(
+				api.crm.viewDefs.createView,
+				{
+					objectDefId: fixture.objectDefId,
+					name: "Mortgage Board",
+					viewType: "kanban",
+					boundFieldId: fixture.fieldDefsByName.status,
+				}
+			);
+
+			const result = await asAdmin(t).query(
+				api.crm.viewQueries.queryViewRecords,
+				{
+					viewDefId: kanbanViewId,
+				}
+			);
+
+			const kanbanResult = result as {
+				groups: Array<{
+					records: Array<{
+						_id: string;
+						fields: Record<string, unknown>;
+					}>;
+				}>;
+			};
+			const mortgageRecord = kanbanResult.groups
+				.flatMap((group) => group.records)
+				.find((record) => record._id === String(fixture.mortgageId));
+
+			expect(mortgageRecord?.fields.propertySummary).toBe(
+				"789 King St W, Toronto, ON"
+			);
+			expect(mortgageRecord?.fields.principal).toBe(425_000);
+			expect(mortgageRecord?.fields.interestRate).toBe(5.1);
+			expect(mortgageRecord?.fields).not.toHaveProperty("borrowerSummary");
+			expect(mortgageRecord?.fields).not.toHaveProperty("listingSummary");
 		});
 	});
 
