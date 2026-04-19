@@ -12,6 +12,7 @@ import type {
 	AggregatePreset,
 	EffectiveViewDefinition,
 	EntityViewAdapterContract,
+	EntityViewCellDisplayValue,
 	EntityViewRow,
 	NormalizedFieldDefinition,
 	RecordFilter,
@@ -939,13 +940,18 @@ export function buildEntityViewRows(
 		_id: string;
 		_kind: "record" | "native";
 	}>,
-	columns: ViewColumnDefinition[]
+	columns: ViewColumnDefinition[],
+	displayValuesByRecordId?: ReadonlyMap<
+		string,
+		ReadonlyMap<string, EntityViewCellDisplayValue>
+	>
 ): EntityViewRow[] {
 	const visibleColumns = columns.filter((column) => column.isVisible);
 
 	return records.map((record) => ({
 		record,
 		cells: visibleColumns.map((column) => ({
+			displayValue: displayValuesByRecordId?.get(record._id)?.get(column.name),
 			fieldDefId: column.fieldDefId,
 			fieldName: column.name,
 			label: column.label,

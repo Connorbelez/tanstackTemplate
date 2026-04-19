@@ -16,11 +16,9 @@ import { Badge } from "#/components/ui/badge";
 import { Button } from "#/components/ui/button";
 import { Sheet, SheetContent, SheetHeader } from "#/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "#/components/ui/tabs";
+import { useAdminRelationNavigation } from "#/hooks/useAdminRelationNavigation";
 import { EMPTY_ADMIN_DETAIL_SEARCH } from "#/lib/admin-detail-search";
-import {
-	getDedicatedAdminRecordRoute,
-	isDedicatedAdminEntityType,
-} from "#/lib/admin-entity-routes";
+import { resolveAdminRecordRouteTarget } from "#/lib/admin-relation-navigation";
 import { cn } from "#/lib/utils";
 import { api } from "../../../../convex/_generated/api";
 import type { Doc } from "../../../../convex/_generated/dataModel";
@@ -117,7 +115,6 @@ export function AdminRecordDetailSurface({
 	reference,
 	variant,
 }: RecordDetailSurfaceProps) {
-	const { push } = useRecordSidebar();
 	const objectDefs = useQuery(api.crm.objectDefs.listObjects);
 
 	const fallbackObjectDef = useMemo(
@@ -162,28 +159,19 @@ export function AdminRecordDetailSurface({
 			}),
 		[adapters, adapterContract?.detailSurfaceKey, objectDef, resolvedEntityType]
 	);
-	const fullPageTarget = useMemo(() => {
-		if (!resolvedEntityType) {
-			return null;
-		}
-
-		if (isDedicatedAdminEntityType(resolvedEntityType)) {
-			return {
-				to: getDedicatedAdminRecordRoute(resolvedEntityType),
-				params: {
-					recordid: reference.recordId,
-				},
-			} as const;
-		}
-
-		return {
-			to: "/admin/$entitytype/$recordid" as const,
-			params: {
-				entitytype: resolvedEntityType,
-				recordid: reference.recordId,
-			},
-		} as const;
-	}, [reference.recordId, resolvedEntityType]);
+	const fullPageTarget = useMemo(
+		() =>
+			resolvedEntityType
+				? resolveAdminRecordRouteTarget({
+						entityType: resolvedEntityType,
+						recordId: reference.recordId,
+					})
+				: null,
+		[reference.recordId, resolvedEntityType]
+	);
+	const navigateRelation = useAdminRelationNavigation({
+		presentation: variant === "sheet" ? "sheet" : "page",
+	});
 
 	const title =
 		adapter?.getRecordTitle?.({
@@ -320,6 +308,7 @@ export function AdminRecordDetailSurface({
 							fields={detailFields}
 							isLoading={shouldLoadLiveRecord && detailSurface === undefined}
 							objectDef={objectDef}
+							onNavigateRelation={navigateRelation}
 							record={record}
 							recordId={reference.recordId}
 						/>
@@ -329,21 +318,7 @@ export function AdminRecordDetailSurface({
 						{objectDef && record ? (
 							<LinkedRecordsPanel
 								objectDefId={objectDef._id}
-								onNavigate={(recordId, linkedRecordKind, linkedObjectDefId) => {
-									push({
-										entityType: objectDefs
-											? getAdminEntityForObjectDef(
-													objectDefs.find(
-														(candidate) =>
-															String(candidate._id) === linkedObjectDefId
-													) ?? {}
-												)?.entityType
-											: undefined,
-										objectDefId: linkedObjectDefId,
-										recordId,
-										recordKind: linkedRecordKind,
-									});
-								}}
+								onNavigate={navigateRelation}
 								recordId={record._id}
 								recordKind={record._kind}
 							/>
@@ -435,6 +410,7 @@ function DetailsTab({
 	entity,
 	fields,
 	isLoading,
+	onNavigateRelation,
 	objectDef,
 	record,
 	recordId,
@@ -444,6 +420,9 @@ function DetailsTab({
 	readonly entity: ReturnType<typeof getAdminEntityByType> | undefined;
 	readonly fields: readonly DetailField[] | undefined;
 	readonly isLoading: boolean;
+	readonly onNavigateRelation: Parameters<
+		typeof FieldRenderer
+	>[0]["onNavigateRelation"];
 	readonly objectDef: ObjectDef | undefined;
 	readonly record: RecordDetailRecord | undefined;
 	readonly recordId: string;
@@ -524,6 +503,7 @@ function DetailsTab({
 				<FieldRenderer
 					field={field}
 					key={field.name}
+					onNavigateRelation={onNavigateRelation}
 					value={record.fields[field.name]}
 				/>
 			))}
@@ -571,7 +551,16 @@ function resolveObjectDef(
 	const entity = reference.entityType
 		? getAdminEntityByType(reference.entityType)
 		: undefined;
-	if (!entity) {
+	const entityCandidates = entity
+		? normalizeCandidateStrings([
+				entity.entityType,
+				entity.tableName,
+				entity.singularLabel,
+				entity.pluralLabel,
+			])
+		: normalizeCandidateStrings([reference.entityType]);
+
+	if (entityCandidates.length === 0) {
 		return undefined;
 	}
 
@@ -581,13 +570,6 @@ function resolveObjectDef(
 			objectDef.nativeTable,
 			objectDef.singularLabel,
 			objectDef.pluralLabel,
-		]);
-
-		const entityCandidates = normalizeCandidateStrings([
-			entity.entityType,
-			entity.tableName,
-			entity.singularLabel,
-			entity.pluralLabel,
 		]);
 
 		return entityCandidates.some((candidate) => candidates.includes(candidate));

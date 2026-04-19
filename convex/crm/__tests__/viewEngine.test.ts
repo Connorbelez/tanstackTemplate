@@ -44,6 +44,62 @@ async function seedLeadFixture(t: CrmTestHarness): Promise<CrmTestFixture> {
 	});
 }
 
+async function seedRelationFixture(t: CrmTestHarness) {
+	const sourceFixture = await seedObjectWithFields(t, {
+		name: "deal_relation",
+		fields: [{ name: "name", fieldType: "text", isRequired: true }],
+	});
+	const targetFixture = await seedObjectWithFields(t, {
+		name: "property_relation",
+		fields: [{ name: "address", fieldType: "text", isRequired: true }],
+	});
+	const relationFieldId = await asAdmin(t).mutation(
+		api.crm.fieldDefs.createField,
+		{
+			fieldType: "text",
+			label: "Property",
+			name: "property",
+			objectDefId: sourceFixture.objectDefId,
+			relation: {
+				cardinality: "many_to_many",
+				relationName: "Property",
+				targetObjectDefId: targetFixture.objectDefId,
+			},
+		}
+	);
+	const linkTypeDefId = await asAdmin(t).mutation(
+		api.crm.linkTypes.createLinkType,
+		{
+			cardinality: "many_to_many",
+			name: "Property",
+			sourceObjectDefId: sourceFixture.objectDefId,
+			targetObjectDefId: targetFixture.objectDefId,
+		}
+	);
+	const dealRecordId = await seedRecord(t, sourceFixture.objectDefId, {
+		name: "Loan Alpha",
+	});
+	const propertyRecordId = await seedRecord(t, targetFixture.objectDefId, {
+		address: "12 Oak Street",
+	});
+
+	await asAdmin(t).mutation(api.crm.recordLinks.createLink, {
+		linkTypeDefId,
+		sourceId: dealRecordId as string,
+		sourceKind: "record",
+		targetId: propertyRecordId as string,
+		targetKind: "record",
+	});
+
+	return {
+		dealRecordId,
+		propertyRecordId,
+		relationFieldId,
+		sourceFixture,
+		targetFixture,
+	};
+}
+
 // ═══════════════════════════════════════════════════════════════════════
 // View Engine
 // ═══════════════════════════════════════════════════════════════════════
@@ -323,6 +379,104 @@ describe("View Engine", () => {
 					value: 500_000,
 				})
 			);
+		});
+
+		it("hydrates relation cell payloads for normalized table rows and record detail surfaces", async () => {
+			const fixture = await seedRelationFixture(t);
+			const unlinkedDealRecordId = await seedRecord(
+				t,
+				fixture.sourceFixture.objectDefId,
+				{
+					name: "Loan Beta",
+				}
+			);
+
+			const result = await asAdmin(t).query(
+				api.crm.viewQueries.queryViewRecords,
+				{
+					viewDefId: fixture.sourceFixture.defaultViewId,
+					limit: 25,
+				}
+			);
+
+			const relationRow = result.page.rows.find(
+				(row) => row.record._id === (fixture.dealRecordId as string)
+			);
+			expect(relationRow).toBeDefined();
+			const scalarCell = relationRow?.cells.find(
+				(cell) => cell.fieldName === "name"
+			);
+			expect(scalarCell?.displayValue).toBeUndefined();
+			expect(scalarCell?.value).toBe("Loan Alpha");
+
+			const relationCell = relationRow?.cells.find(
+				(cell) => cell.fieldName === "property"
+			);
+			expect(relationCell?.fieldDefId).toBe(fixture.relationFieldId);
+			expect(relationCell?.displayValue).toEqual({
+				cardinality: "many_to_many",
+				items: [
+					{
+						label: "12 Oak Street",
+						objectDefId: fixture.targetFixture.objectDefId,
+						recordId: fixture.propertyRecordId as string,
+						recordKind: "record",
+					},
+				],
+				kind: "relation",
+			});
+			expect(relationCell?.value).toBeUndefined();
+
+			const detailSurface = await asAdmin(t).query(
+				api.crm.recordQueries.getRecordDetailSurface,
+				{
+					objectDefId: fixture.sourceFixture.objectDefId,
+					recordId: fixture.dealRecordId as string,
+					recordKind: "record",
+				}
+			);
+
+			expect(detailSurface.record.fields.property).toEqual({
+				cardinality: "many_to_many",
+				items: [
+					{
+						label: "12 Oak Street",
+						objectDefId: fixture.targetFixture.objectDefId,
+						recordId: fixture.propertyRecordId as string,
+						recordKind: "record",
+					},
+				],
+				kind: "relation",
+			});
+
+			const unlinkedRelationRow = result.page.rows.find(
+				(row) => row.record._id === (unlinkedDealRecordId as string)
+			);
+			expect(unlinkedRelationRow).toBeDefined();
+
+			const emptyRelationCell = unlinkedRelationRow?.cells.find(
+				(cell) => cell.fieldName === "property"
+			);
+			expect(emptyRelationCell?.displayValue).toEqual({
+				cardinality: "many_to_many",
+				items: [],
+				kind: "relation",
+			});
+			expect(emptyRelationCell?.value).toBeUndefined();
+
+			const emptyDetailSurface = await asAdmin(t).query(
+				api.crm.recordQueries.getRecordDetailSurface,
+				{
+					objectDefId: fixture.sourceFixture.objectDefId,
+					recordId: unlinkedDealRecordId as string,
+					recordKind: "record",
+				}
+			);
+			expect(emptyDetailSurface.record.fields.property).toEqual({
+				cardinality: "many_to_many",
+				items: [],
+				kind: "relation",
+			});
 		});
 	});
 

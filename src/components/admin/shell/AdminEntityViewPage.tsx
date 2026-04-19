@@ -478,8 +478,8 @@ export function AdminEntityViewPage({
 			: (tableResult?.totalCountExact ?? true);
 	const activeRows =
 		activeViewMode === "kanban"
-			? (kanbanResult?.groups.flatMap((group) => group.records) ?? [])
-			: (tableResult?.rows ?? []);
+			? (kanbanResult?.groups.flatMap((group) => group.rows) ?? [])
+			: (tableResult?.page.rows ?? []);
 	const activeCountLabel =
 		activeViewMode === "kanban"
 			? `${activeTotalCount}${activeCountExact ? "" : "+"} grouped records`
@@ -537,7 +537,7 @@ export function AdminEntityViewPage({
 						fields={schema.fields}
 						objectDef={objectDef}
 						onSelectRecord={(recordId) => open(recordId)}
-						rows={tableResult.rows}
+						rows={tableResult.page.rows}
 					/>
 					{tableResult.totalCount > RECORD_PAGE_SIZE ? (
 						<div className="flex flex-col gap-3 rounded-2xl border border-border/70 bg-muted/10 px-4 py-3 text-sm lg:flex-row lg:items-center lg:justify-between">
@@ -549,7 +549,7 @@ export function AdminEntityViewPage({
 									Showing records{" "}
 									{tablePagination.pageIndex * RECORD_PAGE_SIZE + 1}-
 									{tablePagination.pageIndex * RECORD_PAGE_SIZE +
-										tableResult.rows.length}{" "}
+										tableResult.page.rows.length}{" "}
 									of {tableResult.totalCount}
 									{tableResult.totalCountExact ? "." : "+."}
 								</p>

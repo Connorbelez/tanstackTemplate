@@ -2,6 +2,7 @@ import {
 	type AdminEntity,
 	getAdminEntityByType,
 	getAdminEntityForObjectDef,
+	resolveAdminEntityTypeForObjectDef,
 } from "#/components/admin/shell/entity-registry";
 import type { Doc } from "../../convex/_generated/dataModel";
 import type { UserSavedViewDefinition } from "../../convex/crm/types";
@@ -48,10 +49,33 @@ export function resolveAdminObjectDef(
 	entityType: string,
 	objectDefs: readonly ObjectDef[]
 ): ObjectDef | undefined {
-	return objectDefs.find(
-		(objectDef) =>
-			getAdminEntityForObjectDef(objectDef)?.entityType === entityType
-	);
+	const normalizedEntityType = entityType.trim().toLowerCase();
+
+	return objectDefs.find((objectDef) => {
+		if (
+			getAdminEntityForObjectDef(objectDef)?.entityType === normalizedEntityType
+		) {
+			return true;
+		}
+
+		const fallbackEntityType = resolveAdminEntityTypeForObjectDef(objectDef);
+		if (fallbackEntityType === normalizedEntityType) {
+			return true;
+		}
+
+		return [
+			objectDef.name,
+			objectDef.nativeTable,
+			objectDef.pluralLabel,
+			objectDef.singularLabel,
+		]
+			.flatMap((candidate) =>
+				typeof candidate === "string" && candidate.trim().length > 0
+					? [candidate.trim().toLowerCase()]
+					: []
+			)
+			.includes(normalizedEntityType);
+	});
 }
 
 export function findDefaultUserSavedView(

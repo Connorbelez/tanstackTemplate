@@ -5,7 +5,7 @@ import type {
 } from "../../../../convex/crm/types";
 import { isValidElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { FAIRLEND_STAFF_ORG_ID } from "../../../convex/constants";
 import {
 	buildAdminPreviewRecords,
@@ -16,6 +16,12 @@ import {
 	getAdminNavigationSections,
 	isAdminRouteActive,
 } from "#/components/admin/shell/entity-registry";
+import {
+	navigateToAdminRelation,
+	resolveAdminRecordRouteTarget,
+	resolveAdminRelationReference,
+} from "#/lib/admin-relation-navigation";
+import { EMPTY_ADMIN_DETAIL_SEARCH } from "#/lib/admin-detail-search";
 import { canAccessAdminPath } from "#/lib/auth";
 import { isAdminPathname } from "#/lib/admin-routes";
 
@@ -91,6 +97,25 @@ function buildBorrowerRecord(): UnifiedRecord {
 			status: "active",
 		},
 		objectDefId: "object_borrower" as Id<"objectDefs">,
+		updatedAt: 0,
+	};
+}
+
+function buildLeadObjectDef(): Doc<"objectDefs"> {
+	return {
+		_id: "object_lead" as Id<"objectDefs">,
+		_creationTime: 0,
+		createdAt: 0,
+		createdBy: "user_test",
+		description: "Test lead object",
+		icon: "briefcase",
+		isActive: true,
+		isSystem: false,
+		name: "lead",
+		nativeTable: undefined,
+		orgId: "org_test",
+		pluralLabel: "Leads",
+		singularLabel: "Lead",
 		updatedAt: 0,
 	};
 }
@@ -310,5 +335,160 @@ describe("admin shell helpers", () => {
 		expect(markup).toContain("Notes");
 		expect(markup.indexOf("Status")).toBeLessThan(markup.indexOf("IDV Status"));
 		expect(markup.indexOf("IDV Status")).toBeLessThan(markup.indexOf("Notes"));
+	});
+
+	it("resolves relation references from object metadata", () => {
+		const objectDef = buildBorrowerObjectDef();
+
+		expect(
+			resolveAdminRelationReference({
+				objectDefs: [objectDef],
+				target: {
+					objectDefId: String(objectDef._id),
+					recordId: "borrower_1",
+					recordKind: "native",
+				},
+			})
+		).toEqual({
+			entityType: "borrowers",
+			objectDefId: String(objectDef._id),
+			recordId: "borrower_1",
+			recordKind: "native",
+		});
+	});
+
+	it("resolves fallback relation references from object metadata", () => {
+		const objectDef = buildLeadObjectDef();
+
+		expect(
+			resolveAdminRelationReference({
+				objectDefs: [objectDef],
+				target: {
+					objectDefId: String(objectDef._id),
+					recordId: "lead_1",
+					recordKind: "record",
+				},
+			})
+		).toEqual({
+			entityType: "lead",
+			objectDefId: String(objectDef._id),
+			recordId: "lead_1",
+			recordKind: "record",
+		});
+	});
+
+	it("builds dedicated admin detail routes for related records", () => {
+		expect(
+			resolveAdminRecordRouteTarget({
+				entityType: "borrowers",
+				recordId: "borrower_1",
+			})
+		).toEqual({
+			params: {
+				recordid: "borrower_1",
+			},
+			search: EMPTY_ADMIN_DETAIL_SEARCH,
+			to: "/admin/borrowers/$recordid",
+		});
+	});
+
+	it("builds generic admin detail routes for metadata-fallback related records", () => {
+		expect(
+			resolveAdminRecordRouteTarget({
+				entityType: "lead",
+				recordId: "lead_1",
+			})
+		).toEqual({
+			params: {
+				entitytype: "lead",
+				recordid: "lead_1",
+			},
+			search: EMPTY_ADMIN_DETAIL_SEARCH,
+			to: "/admin/$entitytype/$recordid",
+		});
+	});
+
+	it("returns null when the related record id is blank", () => {
+		expect(
+			resolveAdminRecordRouteTarget({
+				entityType: "borrowers",
+				recordId: "   ",
+			})
+		).toBeNull();
+	});
+
+	it("prefers sidebar navigation for sheet-presented relation clicks", () => {
+		const navigate = vi.fn();
+		const pushToSidebar = vi.fn();
+		const objectDef = buildBorrowerObjectDef();
+
+		navigateToAdminRelation({
+			navigate,
+			objectDefs: [objectDef],
+			presentation: "sheet",
+			pushToSidebar,
+			target: {
+				objectDefId: String(objectDef._id),
+				recordId: "borrower_1",
+				recordKind: "native",
+			},
+		});
+
+		expect(pushToSidebar).toHaveBeenCalledWith({
+			entityType: "borrowers",
+			objectDefId: String(objectDef._id),
+			recordId: "borrower_1",
+			recordKind: "native",
+		});
+		expect(navigate).not.toHaveBeenCalled();
+	});
+
+	it("falls back to full-page navigation when sidebar state is unavailable", () => {
+		const navigate = vi.fn();
+		const objectDef = buildBorrowerObjectDef();
+
+		navigateToAdminRelation({
+			navigate,
+			objectDefs: [objectDef],
+			presentation: "sheet",
+			target: {
+				objectDefId: String(objectDef._id),
+				recordId: "borrower_1",
+				recordKind: "native",
+			},
+		});
+
+		expect(navigate).toHaveBeenCalledWith({
+			params: {
+				recordid: "borrower_1",
+			},
+			search: EMPTY_ADMIN_DETAIL_SEARCH,
+			to: "/admin/borrowers/$recordid",
+		});
+	});
+
+	it("falls back to generic full-page navigation for metadata-fallback relations", () => {
+		const navigate = vi.fn();
+		const objectDef = buildLeadObjectDef();
+
+		navigateToAdminRelation({
+			navigate,
+			objectDefs: [objectDef],
+			presentation: "sheet",
+			target: {
+				objectDefId: String(objectDef._id),
+				recordId: "lead_1",
+				recordKind: "record",
+			},
+		});
+
+		expect(navigate).toHaveBeenCalledWith({
+			params: {
+				entitytype: "lead",
+				recordid: "lead_1",
+			},
+			search: EMPTY_ADMIN_DETAIL_SEARCH,
+			to: "/admin/$entitytype/$recordid",
+		});
 	});
 });
