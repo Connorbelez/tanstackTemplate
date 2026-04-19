@@ -1,4 +1,5 @@
 import { Plus, Trash2 } from "lucide-react";
+import { useId } from "react";
 import { Button } from "#/components/ui/button";
 import {
 	Card,
@@ -36,6 +37,7 @@ function ParticipantFields({
 	title: string;
 }) {
 	const nextDraft = draft ?? {};
+	const idPrefix = useId();
 
 	return (
 		<Card className="border-border/70">
@@ -53,11 +55,11 @@ function ParticipantFields({
 			</CardHeader>
 			<CardContent className="grid gap-4 md:grid-cols-2">
 				<div className="space-y-2">
-					<Label htmlFor={`${title}-existingBorrowerId`}>
+					<Label htmlFor={`${idPrefix}-existingBorrowerId`}>
 						Existing borrower ID
 					</Label>
 					<Input
-						id={`${title}-existingBorrowerId`}
+						id={`${idPrefix}-existingBorrowerId`}
 						onChange={(event) =>
 							onChange({
 								...nextDraft,
@@ -69,9 +71,9 @@ function ParticipantFields({
 					/>
 				</div>
 				<div className="space-y-2">
-					<Label htmlFor={`${title}-fullName`}>Full name</Label>
+					<Label htmlFor={`${idPrefix}-fullName`}>Full name</Label>
 					<Input
-						id={`${title}-fullName`}
+						id={`${idPrefix}-fullName`}
 						onChange={(event) =>
 							onChange({
 								...nextDraft,
@@ -83,9 +85,9 @@ function ParticipantFields({
 					/>
 				</div>
 				<div className="space-y-2">
-					<Label htmlFor={`${title}-email`}>Email</Label>
+					<Label htmlFor={`${idPrefix}-email`}>Email</Label>
 					<Input
-						id={`${title}-email`}
+						id={`${idPrefix}-email`}
 						onChange={(event) =>
 							onChange({
 								...nextDraft,
@@ -98,9 +100,9 @@ function ParticipantFields({
 					/>
 				</div>
 				<div className="space-y-2">
-					<Label htmlFor={`${title}-phone`}>Phone</Label>
+					<Label htmlFor={`${idPrefix}-phone`}>Phone</Label>
 					<Input
-						id={`${title}-phone`}
+						id={`${idPrefix}-phone`}
 						onChange={(event) =>
 							onChange({
 								...nextDraft,
