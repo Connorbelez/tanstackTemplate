@@ -17,9 +17,9 @@ import {
 	buildRelationCellDisplayValueMap,
 } from "./relationCellPayloads";
 import {
+	countNativeTable,
 	type NativeRecordPage,
 	queryNativeRecords,
-	queryNativeTable,
 } from "./systemAdapters/queryAdapter";
 import type {
 	EffectiveViewDefinition,
@@ -50,14 +50,8 @@ import {
 // in this release, but the query contract is shared with future interactive boards.
 
 type FieldDef = Doc<"fieldDefs">;
-interface NativeTablePage {
-	continueCursor: string | null;
-	isDone: boolean;
-	page: Record<string, unknown>[];
-}
 const OFFSET_CURSOR_PATTERN = /^[0-9]+$/;
 const NATIVE_CURSOR_PREFIX = "native:";
-const COUNT_PAGE_SIZE = 256;
 const UNFILTERED_TOTAL_COUNT_CAP = 1000;
 
 // ── Types ────────────────────────────────────────────────────────────
@@ -347,66 +341,45 @@ async function countUnfilteredRecords(
 	ctx: QueryCtx,
 	state: ResolvedViewState
 ): Promise<{ totalCount: number; totalCountExact: boolean }> {
-	let total = 0;
-	let cursor: string | null = null;
-	let isDone = false;
+	// Convex only allows a single `.paginate()` call per query function, and the
+	// caller (`queryTableView`) already paginates the record page. We therefore
+	// count with `.take(cap + 1)` and treat overflow as "cap reached, not exact".
+	const takeLimit = UNFILTERED_TOTAL_COUNT_CAP + 1;
 
-	while (!isDone) {
-		const remainingCapacity = UNFILTERED_TOTAL_COUNT_CAP - total;
-		if (remainingCapacity <= 0) {
+	if (state.objectDef.isSystem && state.objectDef.nativeTable) {
+		const counted = await countNativeTable(
+			ctx,
+			state.objectDef.nativeTable,
+			state.viewDef.orgId,
+			takeLimit
+		);
+		if (counted > UNFILTERED_TOTAL_COUNT_CAP) {
 			return {
 				totalCount: UNFILTERED_TOTAL_COUNT_CAP,
 				totalCountExact: false,
 			};
 		}
-		const pageSize = Math.min(COUNT_PAGE_SIZE, remainingCapacity + 1);
-
-		if (state.objectDef.isSystem && state.objectDef.nativeTable) {
-			const page: NativeTablePage = await queryNativeTable(
-				ctx,
-				state.objectDef.nativeTable,
-				state.viewDef.orgId,
-				{
-					cursor,
-					numItems: pageSize,
-				}
-			);
-			total += page.page.length;
-			if (total > UNFILTERED_TOTAL_COUNT_CAP) {
-				return {
-					totalCount: UNFILTERED_TOTAL_COUNT_CAP,
-					totalCountExact: false,
-				};
-			}
-			cursor = page.continueCursor;
-			isDone = page.isDone;
-			continue;
-		}
-
-		const page = await ctx.db
-			.query("records")
-			.withIndex("by_org_object", (q) =>
-				q
-					.eq("orgId", state.viewDef.orgId)
-					.eq("objectDefId", state.viewDef.objectDefId)
-			)
-			.filter((q) => q.eq(q.field("isDeleted"), false))
-			.paginate({
-				cursor,
-				numItems: pageSize,
-			});
-		total += page.page.length;
-		if (total > UNFILTERED_TOTAL_COUNT_CAP) {
-			return {
-				totalCount: UNFILTERED_TOTAL_COUNT_CAP,
-				totalCountExact: false,
-			};
-		}
-		cursor = page.continueCursor;
-		isDone = page.isDone;
+		return { totalCount: counted, totalCountExact: true };
 	}
 
-	return { totalCount: total, totalCountExact: true };
+	const recordsSample = await ctx.db
+		.query("records")
+		.withIndex("by_org_object", (q) =>
+			q
+				.eq("orgId", state.viewDef.orgId)
+				.eq("objectDefId", state.viewDef.objectDefId)
+		)
+		.filter((q) => q.eq(q.field("isDeleted"), false))
+		.take(takeLimit);
+
+	if (recordsSample.length > UNFILTERED_TOTAL_COUNT_CAP) {
+		return {
+			totalCount: UNFILTERED_TOTAL_COUNT_CAP,
+			totalCountExact: false,
+		};
+	}
+
+	return { totalCount: recordsSample.length, totalCountExact: true };
 }
 
 async function paginateUnfilteredTableRecords(

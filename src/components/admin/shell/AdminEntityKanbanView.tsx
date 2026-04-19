@@ -160,7 +160,8 @@ export function AdminEntityKanbanView({
 																field,
 																cell.displayValue?.kind === "scalar"
 																	? cell.displayValue.value
-																	: cell.value
+																	: cell.value,
+																row.record
 															)}
 														</div>
 													);

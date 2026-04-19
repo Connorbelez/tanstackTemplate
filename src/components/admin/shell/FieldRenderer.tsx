@@ -1,10 +1,18 @@
 "use client";
 
 import { Badge } from "#/components/ui/badge";
+import { resolveAdminComputedFieldNavigationTarget } from "#/lib/admin-computed-field-navigation";
 import type { AdminRelationNavigationTarget } from "#/lib/admin-relation-navigation";
+import {
+	annualNominalPercentPointsForDisplay,
+	isNativeCentCurrencyField,
+} from "#/lib/adminNativeFieldFormat";
 import { cn } from "#/lib/utils";
 import type { Doc } from "../../../../convex/_generated/dataModel";
-import type { NormalizedFieldDefinition } from "../../../../convex/crm/types";
+import type {
+	NormalizedFieldDefinition,
+	UnifiedRecord,
+} from "../../../../convex/crm/types";
 import {
 	CurrencyCell,
 	DateCell,
@@ -22,7 +30,9 @@ export interface FieldRendererProps {
 	readonly field?: NormalizedFieldDefinition;
 	readonly fieldType?: FieldType;
 	readonly label?: string;
+	readonly objectDefs?: readonly Doc<"objectDefs">[];
 	readonly onNavigateRelation?: (target: AdminRelationNavigationTarget) => void;
+	readonly record?: Pick<UnifiedRecord, "_kind" | "nativeTable" | "fields">;
 	readonly value: unknown;
 }
 
@@ -31,7 +41,9 @@ export function FieldRenderer({
 	field,
 	fieldType,
 	label,
+	objectDefs,
 	onNavigateRelation,
+	record,
 	value,
 }: FieldRendererProps) {
 	const resolvedFieldType = field?.fieldType ?? fieldType;
@@ -54,7 +66,9 @@ export function FieldRenderer({
 				{renderFieldValue({
 					field,
 					fieldType: resolvedFieldType,
+					objectDefs,
 					onNavigateRelation,
+					record,
 					value,
 				})}
 			</div>
@@ -113,7 +127,9 @@ function getArrayItemKey(item: unknown, seenKeys: Map<string, number>): string {
 function renderFieldValue(args: {
 	field: NormalizedFieldDefinition | undefined;
 	fieldType: FieldType | undefined;
+	objectDefs: readonly Doc<"objectDefs">[] | undefined;
 	onNavigateRelation?: (target: AdminRelationNavigationTarget) => void;
+	record?: Pick<UnifiedRecord, "_kind" | "nativeTable" | "fields">;
 	value: unknown;
 }) {
 	if (isRelationCellDisplayValue(args.value)) {
@@ -132,16 +148,70 @@ function renderFieldValue(args: {
 		return <p className="text-muted-foreground text-sm">No value</p>;
 	}
 
+	if (
+		args.onNavigateRelation &&
+		args.record &&
+		typeof args.value === "string" &&
+		args.value.length > 0 &&
+		args.field?.name
+	) {
+		const navTarget = resolveAdminComputedFieldNavigationTarget({
+			fieldName: args.field.name,
+			objectDefs: args.objectDefs,
+			record: args.record,
+		});
+		if (navTarget) {
+			return (
+				<button
+					className="inline-block max-w-full truncate text-left font-medium text-primary text-sm underline-offset-4 hover:underline"
+					onClick={(event) => {
+						event.preventDefault();
+						event.stopPropagation();
+						args.onNavigateRelation?.(navTarget);
+					}}
+					type="button"
+				>
+					{args.value}
+				</button>
+			);
+		}
+	}
+
 	switch (args.field?.rendererHint ?? args.fieldType) {
 		case "currency":
 			return typeof args.value === "number" ? (
-				<CurrencyCell currency="CAD" locale="en-CA" value={args.value} />
+				<CurrencyCell
+					currency="CAD"
+					isCents={
+						args.record?._kind === "native" &&
+						Boolean(args.field?.name) &&
+						isNativeCentCurrencyField(
+							args.record.nativeTable,
+							args.field?.name ?? ""
+						)
+					}
+					locale="en-CA"
+					value={args.value}
+				/>
 			) : (
 				<TextCell value={String(args.value)} />
 			);
 		case "percentage":
 			return typeof args.value === "number" ? (
-				<PercentCell decimals={2} value={args.value} />
+				<PercentCell
+					decimals={2}
+					value={
+						args.record?._kind === "native" &&
+						(args.record.nativeTable === "mortgages" ||
+							args.record.nativeTable === "listings") &&
+						args.field?.name
+							? annualNominalPercentPointsForDisplay({
+									fieldName: args.field.name,
+									value: args.value,
+								})
+							: args.value
+					}
+				/>
 			) : (
 				<TextCell value={String(args.value)} />
 			);

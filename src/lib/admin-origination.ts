@@ -72,7 +72,9 @@ export interface OriginationParticipantDraft {
 
 export interface OriginationParticipantsDraft {
 	assignedBrokerId?: string;
+	assignedBrokerLabel?: string;
 	brokerOfRecordId?: string;
+	brokerOfRecordLabel?: string;
 	coBorrowers?: OriginationParticipantDraft[];
 	guarantors?: OriginationParticipantDraft[];
 	primaryBorrower?: OriginationParticipantDraft;
@@ -84,10 +86,34 @@ export type OriginationPropertyType =
 	| "multi_unit"
 	| "residential";
 
+export interface OriginationGooglePlaceData {
+	addressComponents?: Array<{
+		longText?: string;
+		shortText?: string;
+		types?: string[];
+	}>;
+	formattedAddress?: string;
+	location?: {
+		latitude?: number;
+		longitude?: number;
+	};
+	placeId: string;
+	postalAddress?: {
+		addressLines?: string[];
+		administrativeArea?: string;
+		languageCode?: string;
+		locality?: string;
+		postalCode?: string;
+		regionCode?: string;
+	};
+	types?: string[];
+}
+
 export interface OriginationPropertyCreateDraft {
 	approximateLatitude?: number;
 	approximateLongitude?: number;
 	city?: string;
+	googlePlaceData?: OriginationGooglePlaceData;
 	postalCode?: string;
 	propertyType?: OriginationPropertyType;
 	province?: string;
@@ -106,6 +132,13 @@ export interface OriginationValuationDraft {
 	valueAsIs?: number;
 	visibilityHint?: "private" | "public";
 }
+
+export interface OriginationHeroImageDraft {
+	caption?: string;
+	storageId: string;
+}
+
+export type OriginationHeroImageDraftInput = OriginationHeroImageDraft | string;
 
 export type OriginationRateType = "fixed" | "variable";
 
@@ -139,13 +172,28 @@ export interface OriginationMortgageDraft {
 
 export interface OriginationCollectionsDraft {
 	activationStatus?: "active" | "activating" | "failed" | "pending";
+	borrowerSource?: "create" | "existing";
+	executionIntent?: "app_owned" | "provider_managed_now";
+	executionStrategy?: "manual";
 	externalCollectionScheduleId?: string;
 	lastAttemptAt?: number;
 	lastError?: string;
-	mode?: "app_owned_only" | "none" | "provider_managed_now";
+	mode?: "app_owned_only" | "provider_managed_now";
+	padAuthorizationAssetId?: string;
+	padAuthorizationOverrideReason?: string;
+	padAuthorizationSource?: "admin_override" | "uploaded";
 	providerCode?: "pad_rotessa";
+	providerManagedActivationStatus?:
+		| "active"
+		| "activating"
+		| "failed"
+		| "pending";
 	retryCount?: number;
+	scheduleSource?: "create" | "existing";
 	selectedBankAccountId?: string;
+	selectedBorrowerId?: string;
+	selectedExistingExternalScheduleId?: string;
+	selectedProviderScheduleId?: string;
 }
 
 export interface OriginationListingOverridesDraft {
@@ -153,7 +201,7 @@ export interface OriginationListingOverridesDraft {
 	description?: string;
 	displayOrder?: number;
 	featured?: boolean;
-	heroImages?: string[];
+	heroImages?: OriginationHeroImageDraftInput[];
 	marketplaceCopy?: string;
 	seoSlug?: string;
 	title?: string;

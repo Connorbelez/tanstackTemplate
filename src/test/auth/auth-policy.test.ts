@@ -27,6 +27,17 @@ describe("auth policy", () => {
 		).toBe(true);
 	});
 
+	it("recognizes a FairLend staff admin from admin:access without an admin role", () => {
+		expect(
+			isFairLendStaffAdmin({
+				orgId: FAIRLEND_STAFF_ORG_ID,
+				permissions: ["admin:access"],
+				role: "member",
+				roles: JSON.stringify(["member"]),
+			})
+		).toBe(true);
+	});
+
 	it("grants effective permission overrides to FairLend staff admins", () => {
 		expect(
 			hasEffectivePermission(

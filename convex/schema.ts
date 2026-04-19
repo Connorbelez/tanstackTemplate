@@ -6,6 +6,7 @@ import {
 	originationListingOverridesValidator,
 	originationMortgageDraftValidator,
 	originationParticipantsDraftValidator,
+	originationPaymentFrequencyValidator,
 	originationPropertyDraftValidator,
 	originationStepValidator,
 	originationValidationSnapshotValidator,
@@ -100,7 +101,9 @@ import { payoutFrequencyValidator } from "./payments/payout/validators";
 import {
 	collectionExecutionModeValidator,
 	externalCollectionScheduleStatusValidator,
+	externalCustomerProfileMatchStatusValidator,
 	externalOccurrenceChannelValidator,
+	externalProviderScheduleLinkStatusValidator,
 } from "./payments/recurringSchedules/validators";
 import {
 	counterpartyTypeValidator,
@@ -1234,6 +1237,118 @@ export default defineSchema({
 		.index("by_status", ["status", "createdAt"])
 		.index("by_status_and_next_poll", ["status", "nextPollAt"]),
 
+	externalCustomerProfiles: defineTable({
+		providerCode: providerCodeValidator,
+		externalCustomerRef: v.string(),
+		externalCustomerCustomIdentifier: v.optional(v.string()),
+		borrowerId: v.optional(v.id("borrowers")),
+		bankAccountId: v.optional(v.id("bankAccounts")),
+		orgId: v.optional(v.string()),
+		matchStatus: externalCustomerProfileMatchStatusValidator,
+		fullName: v.string(),
+		email: v.optional(v.string()),
+		phone: v.optional(v.string()),
+		customerType: v.optional(v.string()),
+		authorizationType: v.optional(v.string()),
+		bankAccountType: v.optional(v.string()),
+		bankName: v.optional(v.string()),
+		institutionNumber: v.optional(v.string()),
+		transitNumber: v.optional(v.string()),
+		accountNumber: v.optional(v.string()),
+		accountLast4: v.optional(v.string()),
+		providerData: v.optional(v.record(v.string(), v.any())),
+		source: v.union(
+			v.literal("sync"),
+			v.literal("origination_create"),
+			v.literal("admin_link")
+		),
+		suppressionReason: v.optional(v.string()),
+		lastSyncedAt: v.number(),
+		createdAt: v.number(),
+		updatedAt: v.number(),
+	})
+		.index("by_provider_ref", ["providerCode", "externalCustomerRef"])
+		.index("by_provider_custom_identifier", [
+			"providerCode",
+			"externalCustomerCustomIdentifier",
+		])
+		.index("by_borrower", ["borrowerId", "updatedAt"])
+		.index("by_match_status", ["matchStatus", "updatedAt"]),
+
+	externalProviderSchedules: defineTable({
+		providerCode: providerCodeValidator,
+		externalScheduleRef: v.string(),
+		externalCustomerProfileId: v.id("externalCustomerProfiles"),
+		borrowerId: v.optional(v.id("borrowers")),
+		bankAccountId: v.optional(v.id("bankAccounts")),
+		reservedForCaseId: v.optional(v.id("adminOriginationCases")),
+		linkedMortgageId: v.optional(v.id("mortgages")),
+		linkedExternalCollectionScheduleId: v.optional(
+			v.id("externalCollectionSchedules")
+		),
+		linkStatus: externalProviderScheduleLinkStatusValidator,
+		providerScheduleStatus: v.optional(v.string()),
+		amountCents: v.optional(v.number()),
+		frequency: v.string(),
+		originationPaymentFrequency: v.optional(
+			originationPaymentFrequencyValidator
+		),
+		processDate: v.string(),
+		nextProcessDate: v.optional(v.string()),
+		installments: v.optional(v.number()),
+		comment: v.optional(v.string()),
+		providerData: v.optional(v.record(v.string(), v.any())),
+		source: v.union(v.literal("sync"), v.literal("origination_create")),
+		suppressionReason: v.optional(v.string()),
+		lastSyncedAt: v.number(),
+		createdAt: v.number(),
+		updatedAt: v.number(),
+	})
+		.index("by_provider_ref", ["providerCode", "externalScheduleRef"])
+		.index("by_customer", ["externalCustomerProfileId", "updatedAt"])
+		.index("by_borrower", ["borrowerId", "updatedAt"])
+		.index("by_link_status", ["linkStatus", "updatedAt"])
+		.index("by_case", ["reservedForCaseId", "updatedAt"])
+		.index("by_mortgage", ["linkedMortgageId", "updatedAt"]),
+
+	rotessaReconciliationActions: defineTable({
+		entityType: v.union(
+			v.literal("customer"),
+			v.literal("schedule"),
+			v.literal("sync")
+		),
+		entityId: v.string(),
+		actionType: v.string(),
+		actorUserId: v.optional(v.id("users")),
+		note: v.optional(v.string()),
+		metadata: v.optional(v.record(v.string(), v.any())),
+		createdAt: v.number(),
+	})
+		.index("by_entity", ["entityType", "entityId", "createdAt"])
+		.index("by_created_at", ["createdAt"]),
+
+	rotessaSyncRuns: defineTable({
+		status: v.union(
+			v.literal("running"),
+			v.literal("success"),
+			v.literal("failed")
+		),
+		trigger: v.union(v.literal("cron"), v.literal("manual")),
+		startedAt: v.number(),
+		finishedAt: v.optional(v.number()),
+		customerCount: v.number(),
+		scheduleCount: v.number(),
+		matchedCustomerCount: v.number(),
+		unmatchedCustomerCount: v.number(),
+		conflictCustomerCount: v.number(),
+		availableScheduleCount: v.number(),
+		linkedScheduleCount: v.number(),
+		conflictScheduleCount: v.number(),
+		errorMessage: v.optional(v.string()),
+	})
+		.index("by_started_at", ["startedAt"])
+		.index("by_status", ["status", "startedAt"]),
+
 	// ══════════════════════════════════════════════════════════
 	// PROVISIONAL FLOW
 	// ══════════════════════════════════════════════════════════
@@ -1431,6 +1546,7 @@ export default defineSchema({
 	})
 		.index("by_status", ["status"])
 		.index("by_mortgage", ["mortgageId"])
+		.index("by_lender", ["lenderId"])
 		.index("by_buyer", ["buyerId"])
 		.index("by_seller", ["sellerId"])
 		.index("by_org", ["orgId"])
@@ -2802,5 +2918,49 @@ export default defineSchema({
 		.index("by_link_type", ["linkTypeDefId"])
 		.index("by_org_source", ["orgId", "sourceKind", "sourceId"])
 		.index("by_org_target", ["orgId", "targetKind", "targetId"])
+		.index("by_org", ["orgId"]),
+
+	/**
+	 * Free-form notes attached to any CRM record (native or EAV).
+	 *
+	 * Scoped by (orgId, objectDefId, recordKind, recordId) so the same identifier
+	 * can coexist across tenants and adapter modes without collision. Access is
+	 * gated through `crmMutation`/`crmQuery`, which enforce org context + admin
+	 * role — additional per-record checks live in the handlers.
+	 */
+	recordNotes: defineTable({
+		orgId: v.string(),
+		objectDefId: v.id("objectDefs"),
+		recordKind: entityKindValidator,
+		recordId: v.string(),
+		body: v.string(),
+		authorAuthId: v.string(),
+		createdAt: v.number(),
+		updatedAt: v.number(),
+	})
+		.index("by_record", ["objectDefId", "recordKind", "recordId"])
+		.index("by_org_record", ["orgId", "objectDefId", "recordKind", "recordId"])
+		.index("by_org", ["orgId"]),
+
+	/**
+	 * Binary/file attachments associated with a CRM record. The underlying blob
+	 * lives in `ctx.storage`; this row holds the metadata (file name, size,
+	 * content type, uploader) and scoping that the admin shell needs to render
+	 * the Files tab.
+	 */
+	recordAttachments: defineTable({
+		orgId: v.string(),
+		objectDefId: v.id("objectDefs"),
+		recordKind: entityKindValidator,
+		recordId: v.string(),
+		storageId: v.id("_storage"),
+		fileName: v.string(),
+		contentType: v.optional(v.string()),
+		sizeBytes: v.optional(v.number()),
+		uploaderAuthId: v.string(),
+		createdAt: v.number(),
+	})
+		.index("by_record", ["objectDefId", "recordKind", "recordId"])
+		.index("by_org_record", ["orgId", "objectDefId", "recordKind", "recordId"])
 		.index("by_org", ["orgId"]),
 });

@@ -19,8 +19,16 @@ vi.mock("convex/react", () => ({
 	useQuery: vi.fn(),
 }));
 
-vi.mock("#/hooks/use-can-do", () => ({
-	useCanDo: vi.fn(() => true),
+vi.mock("#/hooks/use-app-auth", () => ({
+	useAppAuth: vi.fn(() => ({
+		loading: false,
+		orgId: "org_staff",
+		permissions: ["document:review", "deal:manage", "mortgage:originate", "payment:manage"],
+		role: "admin",
+		roles: ["admin"],
+		signOut: vi.fn(),
+		user: { id: "user_123" },
+	})),
 }));
 
 vi.mock("sonner", () => ({

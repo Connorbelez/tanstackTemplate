@@ -58,8 +58,6 @@ export const convexModules: ModuleMap = withModuleAliases({
 	"/convex/auth/internal.ts": async () => await import("./../auth/internal.ts"),
 	"/convex/auth/resourceChecks.ts": async () =>
 		await import("./../auth/resourceChecks.ts"),
-	"/convex/admin/origination/access.ts": async () =>
-		await import("./../admin/origination/access.ts"),
 	"/convex/admin/origination/caseDocuments.ts": async () =>
 		await import("./../admin/origination/caseDocuments.ts"),
 	"/convex/admin/origination/cases.ts": async () =>
@@ -153,8 +151,6 @@ export const convexModules: ModuleMap = withModuleAliases({
 		await import("./../dealReroutes/mutations.ts"),
 	"/convex/dealReroutes/queries.ts": async () =>
 		await import("./../dealReroutes/queries.ts"),
-	"/convex/deals/accessCheck.ts": async () =>
-		await import("./../deals/accessCheck.ts"),
 	"/convex/deals/mutations.ts": async () =>
 		await import("./../deals/mutations.ts"),
 	"/convex/deals/queries.ts": async () => await import("./../deals/queries.ts"),
@@ -377,6 +373,8 @@ export const convexModules: ModuleMap = withModuleAliases({
 		await import("./../mortgages/activateMortgageAggregate.ts"),
 	"/convex/mortgages/paymentFrequency.ts": async () =>
 		await import("./../mortgages/paymentFrequency.ts"),
+	"/convex/mortgages/nominalAnnualRate.ts": async () =>
+		await import("./../mortgages/nominalAnnualRate.ts"),
 	"/convex/mortgages/provenance.ts": async () =>
 		await import("./../mortgages/provenance.ts"),
 	"/convex/mortgages/queries.ts": async () =>

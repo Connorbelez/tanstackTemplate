@@ -3,6 +3,10 @@
 import { CheckCheck, ExternalLink, UserRound } from "lucide-react";
 import type { ReactNode } from "react";
 import { Badge } from "#/components/ui/badge";
+import {
+	annualNominalPercentPointsForDisplay,
+	isNativeCentCurrencyField,
+} from "#/lib/adminNativeFieldFormat";
 import type { Doc } from "../../../../convex/_generated/dataModel";
 import type {
 	EntityViewAdapterContract,
@@ -101,7 +105,12 @@ function formatRecordSummaryByEntity(args: {
 					? formatTokenLabel(args.record.fields.propertyType)
 					: undefined,
 				typeof args.record.fields.interestRate === "number"
-					? formatCompactPercentage(args.record.fields.interestRate)
+					? formatCompactPercentage(
+							annualNominalPercentPointsForDisplay({
+								fieldName: "interestRate",
+								value: args.record.fields.interestRate,
+							})
+						)
 					: undefined,
 				typeof args.record.fields.ltvRatio === "number"
 					? `LTV ${formatCompactPercentage(args.record.fields.ltvRatio)}`
@@ -116,7 +125,10 @@ function formatRecordSummaryByEntity(args: {
 					? args.record.fields.paymentSummary
 					: undefined,
 				typeof args.record.fields.principal === "number"
-					? formatCompactCurrency(args.record.fields.principal)
+					? formatCompactCurrency(
+							args.record.fields.principal,
+							args.record._kind === "native" ? 100 : 1
+						)
 					: undefined,
 			]);
 		case "obligations":
@@ -264,7 +276,8 @@ function renderLinkValue(
 
 export function renderAdminFieldValue(
 	field: NormalizedFieldDefinition,
-	value: unknown
+	value: unknown,
+	record?: Pick<UnifiedRecord, "_kind" | "nativeTable">
 ): ReactNode {
 	if (value === undefined || value === null || value === "") {
 		return renderEmptyValue();
@@ -289,18 +302,36 @@ export function renderAdminFieldValue(
 			if (typeof value !== "number") {
 				return renderEmptyValue();
 			}
-			return value.toLocaleString("en-US", {
-				style: "currency",
-				currency: "USD",
-				maximumFractionDigits: 2,
-			});
+			{
+				const divisor =
+					record?._kind === "native" &&
+					isNativeCentCurrencyField(record.nativeTable, field.name)
+						? 100
+						: 1;
+				return (value / divisor).toLocaleString("en-CA", {
+					style: "currency",
+					currency: "CAD",
+					maximumFractionDigits: 2,
+				});
+			}
 		case "percentage":
 			if (typeof value !== "number") {
 				return renderEmptyValue();
 			}
-			return `${value.toLocaleString("en-US", {
-				maximumFractionDigits: 2,
-			})}%`;
+			{
+				const displayPercentPoints =
+					record?._kind === "native" &&
+					(record.nativeTable === "mortgages" ||
+						record.nativeTable === "listings")
+						? annualNominalPercentPointsForDisplay({
+								fieldName: field.name,
+								value,
+							})
+						: value;
+				return `${displayPercentPoints.toLocaleString("en-CA", {
+					maximumFractionDigits: 2,
+				})}%`;
+			}
 		case "date":
 		case "datetime": {
 			const date = new Date(String(value));

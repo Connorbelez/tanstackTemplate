@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
+import type { AdminRelationNavigationTarget } from "#/lib/admin-relation-navigation";
 import type { Doc } from "../../../../convex/_generated/dataModel";
 import type {
 	EntityViewAdapterContract,
@@ -8,7 +9,10 @@ import type {
 	UnifiedRecord,
 } from "../../../../convex/crm/types";
 import {
+	BorrowersDedicatedDetails,
+	BrokersDedicatedDetails,
 	DealsDedicatedDetails,
+	LendersDedicatedDetails,
 	ListingsDedicatedDetails,
 	MortgagesDedicatedDetails,
 	ObligationsDedicatedDetails,
@@ -21,6 +25,8 @@ import {
 	type getAdminEntityByType,
 	getAdminEntityForObjectDef,
 } from "./entity-registry";
+import { RecordAttachmentsPanel } from "./RecordAttachmentsPanel";
+import { RecordNotesPanel } from "./RecordNotesPanel";
 import type { SidebarRecordRef } from "./RecordSidebarProvider";
 
 type ObjectDef = Doc<"objectDefs">;
@@ -42,6 +48,8 @@ export interface RecordDetailsRenderArgs {
 	readonly entity: AdminEntity | undefined;
 	readonly fields: readonly DetailField[];
 	readonly objectDef: ObjectDef | undefined;
+	readonly objectDefs?: readonly ObjectDef[];
+	readonly onNavigateRelation?: (target: AdminRelationNavigationTarget) => void;
 	readonly record: RecordDetailRecord;
 	readonly recordId: string;
 }
@@ -190,24 +198,96 @@ const DEDICATED_DETAIL_LAYOUTS = {
 		],
 	},
 	lenders: {
-		highlightFieldNames: ["status", "accreditationStatus", "payoutFrequency"],
-		pageSummaryFieldNames: ["status", "accreditationStatus", "payoutFrequency"],
+		highlightFieldNames: [
+			"lenderName",
+			"contactEmail",
+			"brokerSummary",
+			"organizationName",
+			"status",
+			"accreditationStatus",
+		],
+		pageSummaryFieldNames: [
+			"lenderName",
+			"contactEmail",
+			"brokerSummary",
+			"status",
+			"accreditationStatus",
+			"payoutFrequency",
+		],
 		sections: [
 			{
-				title: "Payout Preferences",
+				title: "Contact",
+				description: "Linked user profile and organization context.",
+				fieldNames: [
+					"lenderName",
+					"contactEmail",
+					"contactPhone",
+					"organizationName",
+				],
+			},
+			{
+				title: "Broker relationship",
+				description: "Sponsoring broker record.",
+				fieldNames: ["brokerSummary", "brokerId"],
+			},
+			{
+				title: "Compliance & onboarding",
+				description: "Accreditation, identity, and onboarding references.",
+				fieldNames: [
+					"accreditationStatus",
+					"idvStatus",
+					"kycStatus",
+					"onboardingEntryPath",
+					"onboardingId",
+				],
+			},
+			{
+				title: "Payout preferences",
 				description: "Operational status and payout cadence.",
-				fieldNames: ["payoutFrequency"],
+				fieldNames: [
+					"status",
+					"payoutFrequency",
+					"lastPayoutDate",
+					"minimumPayoutCents",
+				],
 			},
 		],
 	},
 	brokers: {
-		highlightFieldNames: ["status", "brokerageName", "licenseId"],
-		pageSummaryFieldNames: ["status", "brokerageName", "licenseId"],
+		highlightFieldNames: [
+			"brokerContactName",
+			"contactEmail",
+			"brokerageName",
+			"organizationName",
+			"status",
+		],
+		pageSummaryFieldNames: [
+			"brokerContactName",
+			"contactEmail",
+			"brokerageName",
+			"status",
+			"licenseId",
+		],
 		sections: [
 			{
+				title: "Contact",
+				description: "Linked user profile and organization context.",
+				fieldNames: [
+					"brokerContactName",
+					"contactEmail",
+					"contactPhone",
+					"organizationName",
+				],
+			},
+			{
 				title: "Brokerage",
-				description: "Broker identity and licensing details.",
-				fieldNames: ["brokerageName", "licenseId"],
+				description: "Licensing and registered business name.",
+				fieldNames: ["brokerageName", "licenseId", "licenseProvince"],
+			},
+			{
+				title: "Lifecycle",
+				description: "Onboarding and record timestamps.",
+				fieldNames: ["status", "onboardedAt", "createdAt", "lastTransitionAt"],
 			},
 		],
 	},
@@ -218,10 +298,12 @@ function buildDedicatedDetailsAdapter(
 ): RecordSidebarEntityAdapter {
 	return {
 		pageSummaryFieldNames: layout.pageSummaryFieldNames,
-		renderDetailsTab: ({ fields, record }) => (
+		renderDetailsTab: ({ fields, objectDefs, onNavigateRelation, record }) => (
 			<SectionedRecordDetails
 				fields={fields}
 				highlightFieldNames={layout.highlightFieldNames}
+				objectDefs={objectDefs}
+				onNavigateRelation={onNavigateRelation}
 				record={record}
 				sections={layout.sections}
 			/>
@@ -240,24 +322,111 @@ const ROLLOUT_DETAIL_ADAPTERS: Partial<
 	Record<string, RecordSidebarEntityAdapter>
 > = {
 	listings: {
-		renderDetailsTab: ({ fields, record }) => (
-			<ListingsDedicatedDetails fields={fields} record={record} />
+		renderDetailsTab: ({ fields, objectDefs, onNavigateRelation, record }) => (
+			<ListingsDedicatedDetails
+				fields={fields}
+				objectDefs={objectDefs}
+				onNavigateRelation={onNavigateRelation}
+				record={record}
+			/>
 		),
 	},
 	mortgages: {
-		renderDetailsTab: ({ fields, record }) => (
-			<MortgagesDedicatedDetails fields={fields} record={record} />
+		renderDetailsTab: ({ fields, objectDefs, onNavigateRelation, record }) => (
+			<MortgagesDedicatedDetails
+				fields={fields}
+				objectDefs={objectDefs}
+				onNavigateRelation={onNavigateRelation}
+				record={record}
+			/>
 		),
 	},
 	deals: {
-		renderDetailsTab: ({ fields, record }) => (
-			<DealsDedicatedDetails fields={fields} record={record} />
+		renderDetailsTab: ({ fields, objectDefs, onNavigateRelation, record }) => (
+			<DealsDedicatedDetails
+				fields={fields}
+				objectDefs={objectDefs}
+				onNavigateRelation={onNavigateRelation}
+				record={record}
+			/>
 		),
 	},
 	obligations: {
-		renderDetailsTab: ({ fields, record }) => (
-			<ObligationsDedicatedDetails fields={fields} record={record} />
+		renderDetailsTab: ({ fields, objectDefs, onNavigateRelation, record }) => (
+			<ObligationsDedicatedDetails
+				fields={fields}
+				objectDefs={objectDefs}
+				onNavigateRelation={onNavigateRelation}
+				record={record}
+			/>
 		),
+	},
+	borrowers: {
+		renderDetailsTab: ({ fields, objectDefs, onNavigateRelation, record }) => (
+			<BorrowersDedicatedDetails
+				fields={fields}
+				objectDefs={objectDefs}
+				onNavigateRelation={onNavigateRelation}
+				record={record}
+			/>
+		),
+	},
+	lenders: {
+		renderDetailsTab: ({ fields, objectDefs, onNavigateRelation, record }) => (
+			<LendersDedicatedDetails
+				fields={fields}
+				objectDefs={objectDefs}
+				onNavigateRelation={onNavigateRelation}
+				record={record}
+			/>
+		),
+	},
+	brokers: {
+		renderDetailsTab: ({ fields, objectDefs, onNavigateRelation, record }) => (
+			<BrokersDedicatedDetails
+				fields={fields}
+				objectDefs={objectDefs}
+				onNavigateRelation={onNavigateRelation}
+				record={record}
+			/>
+		),
+	},
+};
+
+/**
+ * Default notes + files adapter — applied to every record that resolves to a
+ * live `objectDef`. Entity-specific adapters can still override these by
+ * supplying their own `renderNotesTab` / `renderFilesTab` implementations.
+ *
+ * We intentionally only emit these when `objectDef` and a concrete `record` are
+ * available: the underlying panels issue Convex mutations keyed on
+ * `(objectDefId, recordKind, recordId)`, so we cannot render them for
+ * placeholder/demo rows that lack a real object definition.
+ */
+const DEFAULT_RECORD_SIDEBAR_ADAPTER: RecordSidebarEntityAdapter = {
+	renderNotesTab: ({ objectDef, record, reference }) => {
+		if (!(objectDef && record)) {
+			return null;
+		}
+		return (
+			<RecordNotesPanel
+				objectDefId={objectDef._id}
+				recordId={reference.recordId}
+				recordKind={record._kind}
+			/>
+		);
+	},
+	renderFilesTab: ({ objectDef, record, reference }) => {
+		if (!(objectDef && record)) {
+			return null;
+		}
+		return (
+			<RecordAttachmentsPanel
+				objectDefId={objectDef._id}
+				recordId={reference.recordId}
+				recordKind={record._kind}
+			/>
+		);
 	},
 };
 
@@ -275,20 +444,19 @@ export function resolveRecordSidebarEntityAdapter(args: {
 			: undefined);
 
 	if (!resolvedEntityType) {
-		return undefined;
+		// Still provide notes/files when we at least have an objectDef — this keeps
+		// the tabs usable for orgs whose admin registry hasn't been updated yet.
+		return args.objectDef ? { ...DEFAULT_RECORD_SIDEBAR_ADAPTER } : undefined;
 	}
 
-	const dedicatedAdapter =
-		ROLLOUT_DETAIL_ADAPTERS[resolvedEntityType] ??
-		DEDICATED_RECORD_SIDEBAR_ADAPTERS[resolvedEntityType];
+	const baseAdapter = DEDICATED_RECORD_SIDEBAR_ADAPTERS[resolvedEntityType];
+	const rolloutAdapter = ROLLOUT_DETAIL_ADAPTERS[resolvedEntityType];
 	const overrideAdapter = args.overrides?.[resolvedEntityType];
 
-	if (!(dedicatedAdapter || overrideAdapter)) {
-		return undefined;
-	}
-
 	return {
-		...dedicatedAdapter,
+		...DEFAULT_RECORD_SIDEBAR_ADAPTER,
+		...baseAdapter,
+		...rolloutAdapter,
 		...overrideAdapter,
 	};
 }

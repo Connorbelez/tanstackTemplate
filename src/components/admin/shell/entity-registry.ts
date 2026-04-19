@@ -167,10 +167,24 @@ export const STATIC_ADMIN_NAV_ITEMS = [
 	},
 	{
 		kind: "route",
+		label: "Rotessa Reconciliation",
+		route: "/admin/rotessa-reconciliation",
+		domain: "payments",
+		iconName: "repeat",
+	},
+	{
+		kind: "route",
 		label: "Financial Ledger",
 		route: "/admin/financial-ledger",
 		domain: "ledger",
 		iconName: "landmark",
+	},
+	{
+		kind: "route",
+		label: "Settings",
+		route: "/admin/settings",
+		domain: "system",
+		iconName: "settings",
 	},
 ] as const satisfies readonly StaticAdminNavigationItem[];
 

@@ -1,6 +1,5 @@
 import {
 	buildOriginationCaseLabel,
-	buildOriginationCaseShortId,
 	ensureOriginationParticipantDraftIds,
 	INITIAL_ORIGINATION_STEP,
 	ORIGINATION_COMMIT_BLOCKING_STEP_KEYS,
@@ -286,10 +285,6 @@ export function buildOriginationWorkspaceTitle(input: {
 		participantsDraft: input.values.participantsDraft,
 		propertyDraft: input.values.propertyDraft,
 	});
-}
-
-export function buildOriginationWorkspaceSubtitle(caseId: string) {
-	return `Origination case ${buildOriginationCaseShortId(caseId)}`;
 }
 
 export function formatOriginationCurrency(value: number | undefined) {

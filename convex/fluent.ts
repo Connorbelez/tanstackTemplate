@@ -13,15 +13,16 @@ import type {
 	FunctionType,
 } from "fluent-convex";
 import { ConvexBuilderWithFunctionKind, createBuilder } from "fluent-convex";
+import type { DataModel } from "./_generated/dataModel";
+import { auditAuthFailure } from "./auth/auditAuth";
 import {
+	hasAdminAccessPermission,
 	hasEffectivePermission,
 	isFairLendStaffAdmin,
 	normalizePermissions,
 	normalizeRoles,
 	resolvePrimaryRole,
-} from "../src/lib/auth-policy";
-import type { DataModel } from "./_generated/dataModel";
-import { auditAuthFailure } from "./auth/auditAuth";
+} from "./authz/policy";
 
 // ── Builder ─────────────────────────────────────────────────────────
 export const convex = createBuilder<DataModel>();
@@ -30,7 +31,7 @@ export interface Viewer {
 	authId: string;
 	email: string | undefined;
 	firstName: string | undefined;
-	isFairLendAdmin: boolean; // role === "admin" && orgId === FAIRLEND_STAFF_ORG_ID
+	isFairLendAdmin: boolean; // FairLend org + admin master-key holder
 	lastName: string | undefined;
 	orgId: string | undefined;
 	orgName: string | undefined;
@@ -95,6 +96,7 @@ export const authMiddleware = convex
 				permissions: permissionsSet,
 				isFairLendAdmin: isFairLendStaffAdmin({
 					orgId: viewerOrgId ?? null,
+					permissions: normalizedPermissions,
 					role: viewerRole,
 					roles: normalizedRoles,
 				}),
@@ -164,7 +166,9 @@ export const requireAdmin = convex
 		viewer: Viewer;
 	}>()
 	.createMiddleware(async (context, next) => {
-		const isAdmin = context.viewer.roles.has("admin");
+		const isAdmin =
+			context.viewer.roles.has("admin") ||
+			hasAdminAccessPermission(context.viewer.permissions);
 		if (!isAdmin) {
 			await auditAuthFailure(context, context.viewer, {
 				middleware: "requireAdmin",
@@ -371,6 +375,7 @@ export const actionAuthMiddleware = convex
 				permissions: permissionsSet,
 				isFairLendAdmin: isFairLendStaffAdmin({
 					orgId: viewerOrgId ?? null,
+					permissions: normalizedPermissions,
 					role: viewerRole,
 					roles: normalizedRoles,
 				}),

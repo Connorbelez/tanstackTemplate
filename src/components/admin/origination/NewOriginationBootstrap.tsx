@@ -4,13 +4,7 @@ import { LoaderCircle, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAdminBreadcrumbLabel } from "#/components/admin/shell/AdminPageMetadataContext";
 import { Button } from "#/components/ui/button";
-import {
-	Card,
-	CardContent,
-	CardDescription,
-	CardHeader,
-	CardTitle,
-} from "#/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "#/components/ui/card";
 import { EMPTY_ADMIN_DETAIL_SEARCH } from "#/lib/admin-detail-search";
 import {
 	registerOriginationBootstrapCase,
@@ -70,10 +64,6 @@ export function NewOriginationBootstrap() {
 			<Card className="w-full border-border/70 shadow-sm">
 				<CardHeader className="text-center">
 					<CardTitle className="text-2xl">New origination</CardTitle>
-					<CardDescription className="text-sm leading-6">
-						Create a durable draft case, then redirect into the seven-step
-						workspace so refresh and deep links stay stable.
-					</CardDescription>
 				</CardHeader>
 				<CardContent className="space-y-5">
 					{bootstrapState === "pending" ? (
@@ -81,10 +71,7 @@ export function NewOriginationBootstrap() {
 							<LoaderCircle className="size-8 animate-spin text-sky-600" />
 							<div className="space-y-1">
 								<p className="font-medium">Allocating draft case</p>
-								<p className="text-muted-foreground text-sm">
-									The system is creating the staging aggregate and redirecting
-									to its canonical route.
-								</p>
+								<p className="text-muted-foreground text-sm">Redirecting…</p>
 							</div>
 						</div>
 					) : (

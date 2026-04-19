@@ -14,8 +14,10 @@ When the collections step chooses `provider_managed_now`, canonical commit still
   - Bootstrap-only route. Creates a durable case and immediately redirects to the canonical case URL.
 - `/admin/originations/$caseId`
   - Seven-step workflow shell backed by a single `adminOriginationCases` row.
+- `/admin/rotessa-reconciliation`
+  - Admin reconciliation surface for imported Rotessa customers, schedules, conflicts, broken links, and PAD exceptions.
 
-All three routes are guarded by `mortgage:originate` for non-admin operators. FairLend staff admins still retain structural admin access through the shared admin shell.
+All four routes are guarded by their respective admin permissions. `mortgage:originate` continues to protect the origination workspace for non-admin operators, while `payment:manage` protects the Rotessa reconciliation surface. FairLend staff admins still retain structural admin access through the shared admin shell.
 
 ## Persisted Aggregate
 
@@ -53,6 +55,70 @@ Document staging is now split across three persisted surfaces:
 
 This means downstream phases can add fields to the case subdocuments without rewriting the transport contract or risking whole-object overwrite behavior.
 
+## Participant Identity Staging
+
+The `Participants` step no longer exposes raw borrower IDs as free text. Each participant card now supports:
+
+- canonical borrower autocomplete against the current org-scoped borrower search surface
+- manual fallback when no canonical borrower is selected
+- automatic name/email hydration when an existing canonical borrower is chosen
+
+This keeps the first visible origination step aligned with the Rotessa collections workflow instead of forcing operators to type opaque `borrower_...` identifiers before they can reach the collections rail.
+
+Broker assignment now follows the same rule:
+
+- broker of record uses canonical broker autocomplete
+- assigned broker uses canonical broker autocomplete
+- the saved draft keeps human broker labels alongside canonical ids so the review step does not fall back to raw identifiers
+
+## Property Staging
+
+The `Property + valuation` step now has two explicit property paths:
+
+- `Use existing property`
+  - canonical property autocomplete by address
+  - properties with existing mortgages remain visible and are flagged instead of being hidden
+- `Create new property`
+  - Google Maps Places Autocomplete (New) drives address search
+  - Google Geocoding API resolves the selected place into:
+    - `streetAddress`
+    - `unit` when Google returns `subpremise`
+    - `city`
+    - `province`
+    - `postalCode`
+    - `latitude`
+    - `longitude`
+    - `googlePlaceData`
+  - the UI surfaces the raw Google geocoding result separately from the staged draft so operators can review:
+    - `formattedAddress`
+    - `placeId`
+    - returned result `types`
+    - returned coordinates
+  - operators can manually edit every staged property field after import, including coordinates
+  - manual entry remains first-class when Google cannot return a clean result or the address is not discoverable
+  - operators still choose the FairLend `propertyType`
+
+The UI no longer exposes raw property ids or raw valuation document ids.
+
+### Google Maps configuration
+
+The Google-backed property create flow requires:
+
+- `GOOGLE_MAPS_API_KEY`
+
+The implementation keeps the key server-side through Convex actions and renders the required Google attribution beside the predictions list.
+
+## Collections Model
+
+Collections now support exactly two exposed strategies in origination:
+
+- `App managed via manual`
+  - explicit `executionStrategy = "manual"`
+- `Provider managed via Rotessa payment schedule`
+  - borrower-first two-column borrower + schedule linkage, PAD authorization, read-model sync, and post-commit activation state
+
+The detailed collections and reconciliation contract lives in [origination-collections-rotessa.md](./origination-collections-rotessa.md).
+
 ## Validation Model
 
 Validation is persisted, not inferred only in the browser.
@@ -66,6 +132,17 @@ Commit blockers are limited to the participant, property, and mortgage surfaces 
 Document staging is intentionally non-blocking in phase 6. Operators can commit without staged docs, but when they do stage them the review step and post-commit surfaces read the persisted rows rather than optimistic browser state.
 
 The browser still shows local unsaved edits in form controls, but the review screen is intentionally persisted-data-first so commit behavior and validation share the same backend source of truth.
+
+## Listing Curation
+
+Listing curation no longer relies on pasted hero-image URLs or storage ids. Operators now:
+
+- upload hero images directly
+- rename each image for the listing
+- reorder gallery sequence before commit
+- remove staged images prior to commit
+
+Origination hero image drafts now align with canonical listing hero image objects so listing projection preserves captions and ordering during refreshes.
 
 ## Commit Contract
 

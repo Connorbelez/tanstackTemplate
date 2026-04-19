@@ -85,6 +85,10 @@ describe("origination validators", () => {
 			normalizeOriginationPropertyDraft({
 				create: {
 					city: " Toronto ",
+					googlePlaceData: {
+						formattedAddress: "123 King St W, Toronto, ON M5H 1J9, Canada",
+						placeId: "google-place-1",
+					},
 					postalCode: " ",
 					streetAddress: " 123 King St W ",
 				},
@@ -92,6 +96,10 @@ describe("origination validators", () => {
 		).toEqual({
 			create: {
 				city: "Toronto",
+				googlePlaceData: {
+					formattedAddress: "123 King St W, Toronto, ON M5H 1J9, Canada",
+					placeId: "google-place-1",
+				},
 				streetAddress: "123 King St W",
 			},
 		});
@@ -115,30 +123,49 @@ describe("origination validators", () => {
 
 		expect(
 			normalizeOriginationCollectionsDraft({
-				mode: "provider_managed_now",
+				executionIntent: "provider_managed_now",
+				borrowerSource: "existing",
 				providerCode: "pad_rotessa",
+				scheduleSource: "create",
 			})
 		).toEqual({
 			activationStatus: "pending",
+			borrowerSource: "existing",
+			executionIntent: "provider_managed_now",
 			mode: "provider_managed_now",
 			providerCode: "pad_rotessa",
+			providerManagedActivationStatus: "pending",
+			scheduleSource: "create",
 		});
 
 		expect(
 			normalizeOriginationListingOverridesDraft({
 				description: " ",
-				heroImages: [" https://cdn.example.com/hero.jpg ", " "],
+				heroImages: [
+					{
+						caption: " Front elevation ",
+						storageId: " storage_hero_1 ",
+					},
+					" ",
+				],
 				title: " Featured bridge loan ",
 			})
 		).toEqual({
-			heroImages: ["https://cdn.example.com/hero.jpg"],
+			heroImages: [
+				{
+					caption: "Front elevation",
+					storageId: "storage_hero_1",
+				},
+			],
 			title: "Featured bridge loan",
 		});
 	});
 
 	it("produces step validation errors and review warnings for incomplete drafts", () => {
 		const snapshot = computeOriginationValidationSnapshot({
-			collectionsDraft: { mode: "provider_managed_now" },
+			collectionsDraft: {
+				executionIntent: "provider_managed_now",
+			},
 			listingOverrides: { title: "Bridge Loan Opportunity" },
 			mortgageDraft: {
 				principal: 250_000,
@@ -167,13 +194,47 @@ describe("origination validators", () => {
 			"Interest rate is required."
 		);
 		expect(snapshot.stepErrors?.collections).toContain(
-			"Provider-managed activation requires selecting a primary borrower bank account."
+			"Immediate Rotessa activation requires a borrower source."
+		);
+		expect(snapshot.stepErrors?.collections).toContain(
+			"Immediate Rotessa activation requires a schedule source."
+		);
+		expect(snapshot.stepErrors?.collections).toContain(
+			"Immediate Rotessa activation requires PAD authorization evidence or an audited override."
 		);
 		expect(snapshot.reviewWarnings).toContain(
 			"Resolve the required participant, property, and mortgage fields before committing this origination case."
 		);
 		expect(snapshot.reviewWarnings).toContain(
 			"Provider-managed now will attempt immediate Rotessa activation after canonical commit. The mortgage still commits even if activation fails, and the payment setup screen will surface status and retry."
+		);
+	});
+
+	it("requires an execution strategy for app-owned collections", () => {
+		const snapshot = computeOriginationValidationSnapshot({
+			collectionsDraft: {
+				executionIntent: "app_owned",
+			},
+		});
+
+		expect(snapshot.stepErrors?.collections).toContain(
+			"App-owned collections require an execution strategy."
+		);
+	});
+
+	it("requires PAD authorization before immediate Rotessa activation", () => {
+		const snapshot = computeOriginationValidationSnapshot({
+			collectionsDraft: {
+				borrowerSource: "existing",
+				executionIntent: "provider_managed_now",
+				providerCode: "pad_rotessa",
+				scheduleSource: "existing",
+				selectedBorrowerId: "borrower_1",
+			},
+		});
+
+		expect(snapshot.stepErrors?.collections).toContain(
+			"Immediate Rotessa activation requires PAD authorization evidence or an audited override."
 		);
 	});
 
@@ -261,6 +322,8 @@ describe("origination validators", () => {
 			determineRecommendedOriginationStep({
 				currentStep: "review",
 				collectionsDraft: {
+					executionIntent: "app_owned",
+					executionStrategy: "manual",
 					mode: "app_owned_only",
 				},
 				listingOverrides: {

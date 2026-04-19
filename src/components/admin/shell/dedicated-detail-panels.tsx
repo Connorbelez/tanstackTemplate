@@ -26,20 +26,25 @@ import {
 	SelectValue,
 } from "#/components/ui/select";
 import { Textarea } from "#/components/ui/textarea";
-import { useCanDo } from "#/hooks/use-can-do";
 import { EMPTY_ADMIN_DETAIL_SEARCH } from "#/lib/admin-detail-search";
+import type { AdminRelationNavigationTarget } from "#/lib/admin-relation-navigation";
+import { useAuthorization } from "#/lib/auth";
 import {
 	defaultDocumentAssetName,
 	uploadDocumentAsset,
 } from "#/lib/documents/uploadDocumentAsset";
 import { api } from "../../../../convex/_generated/api";
-import type { Id } from "../../../../convex/_generated/dataModel";
+import type { Doc, Id } from "../../../../convex/_generated/dataModel";
 import type {
 	NormalizedFieldDefinition,
 	UnifiedRecord,
 } from "../../../../convex/crm/types";
 import type { DetailSectionDefinition } from "./detail-sections";
 import { SectionedRecordDetails } from "./detail-sections";
+import {
+	RelatedEntityExplorer,
+	type RelatedEntityGroup,
+} from "./RelatedEntityExplorer";
 
 const HERO_IMAGE_SPLIT_RE = /\n+/;
 
@@ -160,6 +165,25 @@ function CompactList({
 	}
 
 	return <div className="space-y-2">{items.map(renderItem)}</div>;
+}
+
+function formatPropertyLabel(
+	property:
+		| {
+				city: string;
+				province: string;
+				streetAddress: string;
+		  }
+		| null
+		| undefined
+) {
+	if (!property) {
+		return null;
+	}
+
+	return [property.streetAddress, property.city, property.province]
+		.filter(Boolean)
+		.join(", ");
 }
 
 const MORTGAGE_BASE_SECTIONS = [
@@ -290,6 +314,14 @@ type DealDetailContext = FunctionReturnType<
 	typeof api.crm.detailContextQueries.getDealDetailContext
 >;
 
+type LenderDetailContext = FunctionReturnType<
+	typeof api.crm.detailContextQueries.getLenderDetailContext
+>;
+
+type BrokerDetailContext = FunctionReturnType<
+	typeof api.crm.detailContextQueries.getBrokerDetailContext
+>;
+
 type MortgageHistoryEntry = FunctionReturnType<
 	typeof api.ledger.queries.getMortgageHistory
 >[number];
@@ -329,7 +361,10 @@ function MortgageBlueprintReplaceDialog({
 	onOpenChange: (open: boolean) => void;
 	open: boolean;
 }) {
-	const canReviewDocumentEngine = useCanDo("document:review");
+	const canReviewDocumentEngine = useAuthorization({
+		kind: "permission",
+		permission: "document:review",
+	}).allowed;
 	const attachableTemplates = useQuery(
 		api.admin.origination.caseDocuments.listAttachableTemplates,
 		open && blueprint && !isStaticMortgageBlueprintClass(blueprint.class)
@@ -544,9 +579,14 @@ function MortgageBlueprintReplaceDialog({
 }
 
 export function ListingsDedicatedDetails({
+	fields: _fields,
+	objectDefs: _objectDefs,
+	onNavigateRelation: _onNavigateRelation,
 	record,
 }: {
 	readonly fields: readonly NormalizedFieldDefinition[];
+	readonly objectDefs?: readonly Doc<"objectDefs">[];
+	readonly onNavigateRelation?: (target: AdminRelationNavigationTarget) => void;
 	readonly record: UnifiedRecord;
 }) {
 	const listingId = record._id as Id<"listings">;
@@ -1068,13 +1108,20 @@ export function ListingsDedicatedDetails({
 
 export function DealsDedicatedDetails({
 	fields,
+	objectDefs,
+	onNavigateRelation,
 	record,
 }: {
 	readonly fields: readonly NormalizedFieldDefinition[];
+	readonly objectDefs?: readonly Doc<"objectDefs">[];
+	readonly onNavigateRelation?: (target: AdminRelationNavigationTarget) => void;
 	readonly record: UnifiedRecord;
 }) {
 	const dealId = record._id as Id<"deals">;
-	const canRetryPackage = useCanDo("deal:manage");
+	const canRetryPackage = useAuthorization({
+		kind: "permission",
+		permission: "deal:manage",
+	}).allowed;
 	const detailContext = useQuery(
 		api.crm.detailContextQueries.getDealDetailContext,
 		{
@@ -1111,6 +1158,8 @@ export function DealsDedicatedDetails({
 			<SectionedRecordDetails
 				fields={detailFields}
 				highlightFieldNames={["status", "closingDate", "fractionalShare"]}
+				objectDefs={objectDefs}
+				onNavigateRelation={onNavigateRelation}
 				record={record}
 				sections={[
 					{
@@ -1391,14 +1440,24 @@ export function DealsDedicatedDetails({
 
 export function MortgagesDedicatedDetails({
 	fields,
+	objectDefs,
+	onNavigateRelation,
 	record,
 }: {
 	readonly fields: readonly NormalizedFieldDefinition[];
+	readonly objectDefs?: readonly Doc<"objectDefs">[];
+	readonly onNavigateRelation?: (target: AdminRelationNavigationTarget) => void;
 	readonly record: UnifiedRecord;
 }) {
 	const mortgageId = record._id as Id<"mortgages">;
-	const canManageMortgageDocuments = useCanDo("mortgage:originate");
-	const canManagePaymentOperations = useCanDo("payment:manage");
+	const canManageMortgageDocuments = useAuthorization({
+		kind: "permission",
+		permission: "mortgage:originate",
+	}).allowed;
+	const canManagePaymentOperations = useAuthorization({
+		kind: "permission",
+		permission: "payment:manage",
+	}).allowed;
 	const detailContext = useQuery(
 		api.crm.detailContextQueries.getMortgageDetailContext,
 		{
@@ -1480,7 +1539,9 @@ export function MortgagesDedicatedDetails({
 				detailContext={detailContext}
 				detailFields={detailFields}
 				mortgageHistory={mortgageHistory}
+				objectDefs={objectDefs}
 				onArchiveBlueprint={handleArchiveBlueprint}
+				onNavigateRelation={onNavigateRelation}
 				onReplaceBlueprint={setBlueprintToReplace}
 				onRetryCollectionsActivation={handleRetryCollectionsActivation}
 				paymentSetup={paymentSetup}
@@ -1497,6 +1558,8 @@ export function MortgagesDedicatedDetailsContent({
 	detailFields,
 	mortgageHistory,
 	onArchiveBlueprint,
+	objectDefs,
+	onNavigateRelation,
 	onReplaceBlueprint,
 	onRetryCollectionsActivation,
 	paymentSetup,
@@ -1508,6 +1571,8 @@ export function MortgagesDedicatedDetailsContent({
 	readonly detailFields: readonly NormalizedFieldDefinition[];
 	readonly mortgageHistory: readonly MortgageHistoryEntry[] | undefined;
 	readonly onArchiveBlueprint: (blueprintId: string) => Promise<void>;
+	readonly objectDefs?: readonly Doc<"objectDefs">[];
+	readonly onNavigateRelation?: (target: AdminRelationNavigationTarget) => void;
 	readonly onReplaceBlueprint: (document: MortgageDocumentListItem) => void;
 	readonly onRetryCollectionsActivation: () => Promise<void>;
 	readonly paymentSetup: MortgageDetailContext["paymentSetup"] | undefined;
@@ -1523,6 +1588,8 @@ export function MortgagesDedicatedDetailsContent({
 					"borrowerSummary",
 					"paymentSummary",
 				]}
+				objectDefs={objectDefs}
+				onNavigateRelation={onNavigateRelation}
 				record={record}
 				sections={MORTGAGE_BASE_SECTIONS}
 			/>
@@ -2182,9 +2249,13 @@ export function MortgagesDedicatedDetailsContent({
 
 export function ObligationsDedicatedDetails({
 	fields,
+	objectDefs,
+	onNavigateRelation,
 	record,
 }: {
 	readonly fields: readonly NormalizedFieldDefinition[];
+	readonly objectDefs?: readonly Doc<"objectDefs">[];
+	readonly onNavigateRelation?: (target: AdminRelationNavigationTarget) => void;
 	readonly record: UnifiedRecord;
 }) {
 	const obligationId = record._id as Id<"obligations">;
@@ -2218,6 +2289,8 @@ export function ObligationsDedicatedDetails({
 					"amount",
 					"paymentProgressSummary",
 				]}
+				objectDefs={objectDefs}
+				onNavigateRelation={onNavigateRelation}
 				record={record}
 				sections={OBLIGATION_BASE_SECTIONS}
 			/>
@@ -2351,9 +2424,13 @@ export function ObligationsDedicatedDetails({
 
 export function BorrowersDedicatedDetails({
 	fields,
+	objectDefs,
+	onNavigateRelation,
 	record,
 }: {
 	readonly fields: readonly NormalizedFieldDefinition[];
+	readonly objectDefs?: readonly Doc<"objectDefs">[];
+	readonly onNavigateRelation?: (target: AdminRelationNavigationTarget) => void;
 	readonly record: UnifiedRecord;
 }) {
 	const borrowerId = record._id as Id<"borrowers">;
@@ -2370,6 +2447,109 @@ export function BorrowersDedicatedDetails({
 		}
 	);
 	const detailFields = filterDetailFields(fields, ["userId"]);
+	const relatedGroups: RelatedEntityGroup[] = [
+		{
+			description:
+				"All mortgage records linked to this borrower, including the broker of record and any projected listing.",
+			emptyMessage: "No mortgage participation was found.",
+			items: (detailContext?.mortgages ?? []).map((mortgage) => ({
+				badges: mortgage.listing
+					? [formatEnumLabel(mortgage.listing.status)]
+					: [],
+				id: String(mortgage.mortgageId),
+				label:
+					formatPropertyLabel(mortgage.property) ??
+					`Mortgage ${String(mortgage.mortgageId)}`,
+				metadata: [
+					formatEnumLabel(mortgage.role),
+					formatEnumLabel(mortgage.status),
+					formatCurrency(mortgage.principal),
+					mortgage.broker
+						? `Broker: ${mortgage.broker.brokerageName ?? mortgage.broker.name}`
+						: null,
+				]
+					.filter(Boolean)
+					.join(" • "),
+				searchText: [
+					mortgage.property?.streetAddress,
+					mortgage.property?.city,
+					mortgage.property?.province,
+					mortgage.listing?.title,
+					mortgage.broker?.name,
+					mortgage.broker?.brokerageName,
+				]
+					.filter(Boolean)
+					.join(" "),
+				target: {
+					entityType: "mortgages",
+					recordId: String(mortgage.mortgageId),
+				},
+			})),
+			searchPlaceholder: "Search linked mortgages",
+			title: "Mortgages",
+		},
+		{
+			description:
+				"Broker relationships inferred from the borrower's linked mortgages.",
+			emptyMessage: "No broker connections were found.",
+			items: (detailContext?.brokers ?? []).map((broker) => ({
+				badges: [formatEnumLabel(broker.status)],
+				id: String(broker.brokerId),
+				label: broker.brokerageName ?? broker.name,
+				metadata: [
+					broker.brokerageName ? broker.name : null,
+					broker.email ?? null,
+					`${broker.mortgageCount} mortgage${broker.mortgageCount === 1 ? "" : "s"}`,
+				]
+					.filter(Boolean)
+					.join(" • "),
+				searchText: [broker.name, broker.email, broker.brokerageName]
+					.filter(Boolean)
+					.join(" "),
+				target: {
+					entityType: "brokers",
+					recordId: String(broker.brokerId),
+				},
+			})),
+			searchPlaceholder: "Search connected brokers",
+			title: "Brokers",
+		},
+		{
+			description:
+				"Deal activity attached to this borrower's mortgage positions.",
+			emptyMessage: "No connected deals were found.",
+			items: (detailContext?.deals ?? []).map((deal) => ({
+				badges: [formatEnumLabel(deal.status)],
+				id: String(deal.dealId),
+				label: `Deal ${String(deal.dealId)}`,
+				metadata: [
+					formatPropertyLabel(deal.property) ??
+						`Mortgage ${String(deal.mortgageId)}`,
+					deal.closingDate
+						? formatDateTime(deal.closingDate)
+						: "Closing date TBD",
+					deal.lender ? `Lender: ${deal.lender.name}` : null,
+				]
+					.filter(Boolean)
+					.join(" • "),
+				searchText: [
+					deal.lender?.name,
+					deal.lender?.email,
+					deal.property?.streetAddress,
+					deal.property?.city,
+					deal.property?.province,
+				]
+					.filter(Boolean)
+					.join(" "),
+				target: {
+					entityType: "deals",
+					recordId: String(deal.dealId),
+				},
+			})),
+			searchPlaceholder: "Search connected deals",
+			title: "Deals",
+		},
+	];
 
 	return (
 		<div className="space-y-6">
@@ -2381,6 +2561,8 @@ export function BorrowersDedicatedDetails({
 					"idvStatus",
 					"verificationSummary",
 				]}
+				objectDefs={objectDefs}
+				onNavigateRelation={onNavigateRelation}
 				record={record}
 				sections={BORROWER_BASE_SECTIONS}
 			/>
@@ -2411,38 +2593,11 @@ export function BorrowersDedicatedDetails({
 							]}
 						/>
 					) : null}
-					<div>
-						<p className="mb-2 text-muted-foreground text-xs uppercase tracking-[0.08em]">
-							Linked Mortgages
-						</p>
-						<CompactList
-							emptyMessage="No mortgage participation was found."
-							items={detailContext?.mortgages ?? []}
-							renderItem={(item) => {
-								const mortgage = item as NonNullable<
-									typeof detailContext
-								>["mortgages"][number];
-								return (
-									<div
-										className="rounded-lg border border-border/60 bg-background/80 px-3 py-3"
-										key={String(mortgage.mortgageId)}
-									>
-										<p className="font-medium text-sm">
-											{mortgage.property?.streetAddress ??
-												`Mortgage ${String(mortgage.mortgageId)}`}
-										</p>
-										<p className="text-muted-foreground text-sm">
-											{mortgage.role} • {mortgage.status} •{" "}
-											{formatCurrency(mortgage.principal)}
-											{mortgage.listing
-												? ` • ${mortgage.listing.status} listing`
-												: ""}
-										</p>
-									</div>
-								);
-							}}
-						/>
-					</div>
+					<RelatedEntityExplorer
+						groups={relatedGroups}
+						objectDefs={objectDefs}
+						onNavigateRelation={onNavigateRelation}
+					/>
 				</div>
 			</DetailSectionShell>
 
@@ -2457,6 +2612,510 @@ export function BorrowersDedicatedDetails({
 						const event = item as NonNullable<
 							typeof detailContext
 						>["recentAuditEvents"][number];
+						return (
+							<div
+								className="rounded-lg border border-border/60 bg-background/80 px-3 py-3"
+								key={event.eventId}
+							>
+								<p className="font-medium text-sm">{event.eventType}</p>
+								<p className="text-muted-foreground text-sm">
+									{new Date(event.timestamp).toLocaleString()} • {event.outcome}
+									{event.previousState && event.newState
+										? ` • ${event.previousState} -> ${event.newState}`
+										: ""}
+								</p>
+							</div>
+						);
+					}}
+				/>
+			</DetailSectionShell>
+		</div>
+	);
+}
+
+export function LendersDedicatedDetails({
+	fields,
+	objectDefs,
+	onNavigateRelation,
+	record,
+}: {
+	readonly fields: readonly NormalizedFieldDefinition[];
+	readonly objectDefs?: readonly Doc<"objectDefs">[];
+	readonly onNavigateRelation?: (target: AdminRelationNavigationTarget) => void;
+	readonly record: UnifiedRecord;
+}) {
+	const lenderId = record._id as Id<"lenders">;
+	const detailContext = useQuery(
+		api.crm.detailContextQueries.getLenderDetailContext,
+		{
+			lenderId,
+		}
+	);
+	const detailFields = filterDetailFields(fields, ["brokerId", "userId"]);
+	const relatedGroups: RelatedEntityGroup[] = [
+		{
+			description: "The sponsoring broker record for this lender.",
+			emptyMessage: "No sponsoring broker is linked to this lender.",
+			items: detailContext?.broker
+				? [
+						{
+							badges: [formatEnumLabel(detailContext.broker.status)],
+							id: String(detailContext.broker.brokerId),
+							label:
+								detailContext.broker.brokerageName ?? detailContext.broker.name,
+							metadata: [
+								detailContext.broker.brokerageName
+									? detailContext.broker.name
+									: null,
+								detailContext.broker.email ?? null,
+								detailContext.broker.licenseId
+									? `License ${detailContext.broker.licenseId}`
+									: null,
+							]
+								.filter(Boolean)
+								.join(" • "),
+							searchText: [
+								detailContext.broker.name,
+								detailContext.broker.email,
+								detailContext.broker.brokerageName,
+								detailContext.broker.licenseId,
+							]
+								.filter(Boolean)
+								.join(" "),
+							target: {
+								entityType: "brokers",
+								recordId: String(detailContext.broker.brokerId),
+							},
+						},
+					]
+				: [],
+			searchPlaceholder: "Search sponsoring broker",
+			title: "Broker",
+		},
+		{
+			description:
+				"Deals where this lender has been resolved as the participating buyer.",
+			emptyMessage: "No deals are registered for this lender.",
+			items: (detailContext?.deals ?? []).map((deal) => ({
+				badges: [formatEnumLabel(deal.status)],
+				id: String(deal.dealId),
+				label: `Deal ${String(deal.dealId)}`,
+				metadata: [
+					formatPropertyLabel(deal.mortgage.property) ??
+						`Mortgage ${String(deal.mortgage.mortgageId)}`,
+					deal.closingDate
+						? formatDateTime(deal.closingDate)
+						: "Closing date TBD",
+					formatCurrency(deal.mortgage.principal),
+				]
+					.filter(Boolean)
+					.join(" • "),
+				searchText: [
+					deal.mortgage.property?.streetAddress,
+					deal.mortgage.property?.city,
+					deal.mortgage.property?.province,
+				]
+					.filter(Boolean)
+					.join(" "),
+				target: {
+					entityType: "deals",
+					recordId: String(deal.dealId),
+				},
+			})),
+			searchPlaceholder: "Search lender deals",
+			title: "Deals",
+		},
+		{
+			description:
+				"Mortgages attached to this lender's current and historical deal participation.",
+			emptyMessage: "No connected mortgages were found.",
+			items: (detailContext?.mortgages ?? []).map((mortgage) => ({
+				badges: [formatEnumLabel(mortgage.status)],
+				id: String(mortgage.mortgageId),
+				label:
+					formatPropertyLabel(mortgage.property) ??
+					`Mortgage ${String(mortgage.mortgageId)}`,
+				metadata: [
+					formatCurrency(mortgage.principal),
+					formatDate(mortgage.maturityDate) ?? "Maturity unavailable",
+				]
+					.filter(Boolean)
+					.join(" • "),
+				searchText: [
+					mortgage.property?.streetAddress,
+					mortgage.property?.city,
+					mortgage.property?.province,
+				]
+					.filter(Boolean)
+					.join(" "),
+				target: {
+					entityType: "mortgages",
+					recordId: String(mortgage.mortgageId),
+				},
+			})),
+			searchPlaceholder: "Search connected mortgages",
+			title: "Mortgages",
+		},
+	];
+
+	return (
+		<div className="space-y-6">
+			<SectionedRecordDetails
+				fields={detailFields}
+				highlightFieldNames={[
+					"lenderName",
+					"contactEmail",
+					"brokerSummary",
+					"organizationName",
+					"status",
+					"accreditationStatus",
+				]}
+				objectDefs={objectDefs}
+				onNavigateRelation={onNavigateRelation}
+				record={record}
+				sections={[
+					{
+						title: "Contact",
+						description: "Linked user profile and organization context.",
+						fieldNames: [
+							"lenderName",
+							"contactEmail",
+							"contactPhone",
+							"organizationName",
+						],
+					},
+					{
+						title: "Broker relationship",
+						description: "Sponsoring broker record.",
+						fieldNames: ["brokerSummary"],
+					},
+					{
+						title: "Compliance & onboarding",
+						description: "Accreditation, identity, and onboarding references.",
+						fieldNames: [
+							"accreditationStatus",
+							"idvStatus",
+							"kycStatus",
+							"onboardingEntryPath",
+							"onboardingId",
+						],
+					},
+					{
+						title: "Payout preferences",
+						description: "Operational status and payout cadence.",
+						fieldNames: [
+							"status",
+							"payoutFrequency",
+							"lastPayoutDate",
+							"minimumPayoutCents",
+						],
+					},
+				]}
+			/>
+
+			<DetailSectionShell
+				description="Connected broker, deal, and mortgage records for this lender."
+				title="Connected Records"
+			>
+				<div className="space-y-4">
+					{detailContext?.profile ? (
+						<MetricGrid
+							items={[
+								{
+									label: "Email",
+									value: detailContext.profile.email ?? "Unavailable",
+								},
+								{
+									label: "Activated",
+									value:
+										formatDate(detailContext.profile.activatedAt) ?? "Not set",
+								},
+								{
+									label: "Payout Frequency",
+									value: detailContext.profile.payoutFrequency
+										? formatEnumLabel(detailContext.profile.payoutFrequency)
+										: "Default",
+								},
+								{
+									label: "Accreditation",
+									value: formatEnumLabel(
+										detailContext.profile.accreditationStatus
+									),
+								},
+							]}
+						/>
+					) : null}
+					<RelatedEntityExplorer
+						groups={relatedGroups}
+						objectDefs={objectDefs}
+						onNavigateRelation={onNavigateRelation}
+					/>
+				</div>
+			</DetailSectionShell>
+
+			<DetailSectionShell
+				description="Recent lender audit events from the journal."
+				title="Recent Audit Events"
+			>
+				<CompactList
+					emptyMessage="No recent lender audit events were found."
+					items={detailContext?.recentAuditEvents ?? []}
+					renderItem={(item) => {
+						const event =
+							item as NonNullable<LenderDetailContext>["recentAuditEvents"][number];
+						return (
+							<div
+								className="rounded-lg border border-border/60 bg-background/80 px-3 py-3"
+								key={event.eventId}
+							>
+								<p className="font-medium text-sm">{event.eventType}</p>
+								<p className="text-muted-foreground text-sm">
+									{new Date(event.timestamp).toLocaleString()} • {event.outcome}
+									{event.previousState && event.newState
+										? ` • ${event.previousState} -> ${event.newState}`
+										: ""}
+								</p>
+							</div>
+						);
+					}}
+				/>
+			</DetailSectionShell>
+		</div>
+	);
+}
+
+export function BrokersDedicatedDetails({
+	fields,
+	objectDefs,
+	onNavigateRelation,
+	record,
+}: {
+	readonly fields: readonly NormalizedFieldDefinition[];
+	readonly objectDefs?: readonly Doc<"objectDefs">[];
+	readonly onNavigateRelation?: (target: AdminRelationNavigationTarget) => void;
+	readonly record: UnifiedRecord;
+}) {
+	const brokerId = record._id as Id<"brokers">;
+	const detailContext = useQuery(
+		api.crm.detailContextQueries.getBrokerDetailContext,
+		{
+			brokerId,
+		}
+	);
+	const detailFields = filterDetailFields(fields, ["userId"]);
+	const relatedGroups: RelatedEntityGroup[] = [
+		{
+			description: "Lenders registered under this broker.",
+			emptyMessage: "No lenders are registered under this broker yet.",
+			items: (detailContext?.lenders ?? []).map((lender) => ({
+				badges: [
+					formatEnumLabel(lender.status),
+					formatEnumLabel(lender.accreditationStatus),
+				],
+				id: String(lender.lenderId),
+				label: lender.name,
+				metadata: [
+					lender.email ?? null,
+					lender.activatedAt ? formatDate(lender.activatedAt) : "Not activated",
+					lender.payoutFrequency
+						? `Payout ${formatEnumLabel(lender.payoutFrequency)}`
+						: null,
+				]
+					.filter(Boolean)
+					.join(" • "),
+				searchText: [lender.name, lender.email].filter(Boolean).join(" "),
+				target: {
+					entityType: "lenders",
+					recordId: String(lender.lenderId),
+				},
+			})),
+			searchPlaceholder: "Search broker lenders",
+			title: "Lenders",
+		},
+		{
+			description:
+				"Mortgages tied to this broker as broker of record or assigned broker.",
+			emptyMessage: "No mortgages are linked to this broker.",
+			items: (detailContext?.mortgages ?? []).map((mortgage) => ({
+				badges: [
+					formatEnumLabel(mortgage.status),
+					...mortgage.relationshipRoles.map((role) => formatEnumLabel(role)),
+				],
+				id: String(mortgage.mortgageId),
+				label:
+					formatPropertyLabel(mortgage.property) ??
+					`Mortgage ${String(mortgage.mortgageId)}`,
+				metadata: [
+					formatCurrency(mortgage.principal),
+					`${mortgage.borrowerCount} borrower${mortgage.borrowerCount === 1 ? "" : "s"}`,
+					`${mortgage.activeDealCount} deal${mortgage.activeDealCount === 1 ? "" : "s"}`,
+				]
+					.filter(Boolean)
+					.join(" • "),
+				searchText: [
+					mortgage.property?.streetAddress,
+					mortgage.property?.city,
+					mortgage.property?.province,
+				]
+					.filter(Boolean)
+					.join(" "),
+				target: {
+					entityType: "mortgages",
+					recordId: String(mortgage.mortgageId),
+				},
+			})),
+			searchPlaceholder: "Search broker mortgages",
+			title: "Mortgages",
+		},
+		{
+			description:
+				"Borrowers participating in this broker's mortgage portfolio.",
+			emptyMessage: "No borrower relationships were found for this broker.",
+			items: (detailContext?.borrowers ?? []).map((borrower) => ({
+				badges: [formatEnumLabel(borrower.status)],
+				id: String(borrower.borrowerId),
+				label: borrower.name,
+				metadata: [
+					borrower.email ?? null,
+					borrower.idvStatus ? formatEnumLabel(borrower.idvStatus) : null,
+					`${borrower.mortgageCount} mortgage${borrower.mortgageCount === 1 ? "" : "s"}`,
+				]
+					.filter(Boolean)
+					.join(" • "),
+				searchText: [borrower.name, borrower.email].filter(Boolean).join(" "),
+				target: {
+					entityType: "borrowers",
+					recordId: String(borrower.borrowerId),
+				},
+			})),
+			searchPlaceholder: "Search broker borrowers",
+			title: "Borrowers",
+		},
+		{
+			description: "Deals running across this broker's mortgage book.",
+			emptyMessage: "No deals are linked to this broker.",
+			items: (detailContext?.deals ?? []).map((deal) => ({
+				badges: [formatEnumLabel(deal.status)],
+				id: String(deal.dealId),
+				label: `Deal ${String(deal.dealId)}`,
+				metadata: [
+					formatPropertyLabel(deal.property) ??
+						`Mortgage ${String(deal.mortgageId)}`,
+					deal.closingDate
+						? formatDateTime(deal.closingDate)
+						: "Closing date TBD",
+					deal.lender ? `Lender: ${deal.lender.name}` : null,
+				]
+					.filter(Boolean)
+					.join(" • "),
+				searchText: [
+					deal.property?.streetAddress,
+					deal.property?.city,
+					deal.property?.province,
+					deal.lender?.name,
+					deal.lender?.email,
+				]
+					.filter(Boolean)
+					.join(" "),
+				target: {
+					entityType: "deals",
+					recordId: String(deal.dealId),
+				},
+			})),
+			searchPlaceholder: "Search broker deals",
+			title: "Deals",
+		},
+	];
+
+	return (
+		<div className="space-y-6">
+			<SectionedRecordDetails
+				fields={detailFields}
+				highlightFieldNames={[
+					"brokerContactName",
+					"contactEmail",
+					"brokerageName",
+					"organizationName",
+					"status",
+				]}
+				objectDefs={objectDefs}
+				onNavigateRelation={onNavigateRelation}
+				record={record}
+				sections={[
+					{
+						title: "Contact",
+						description: "Linked user profile and organization context.",
+						fieldNames: [
+							"brokerContactName",
+							"contactEmail",
+							"contactPhone",
+							"organizationName",
+						],
+					},
+					{
+						title: "Brokerage",
+						description: "Licensing and registered business name.",
+						fieldNames: ["brokerageName", "licenseId", "licenseProvince"],
+					},
+					{
+						title: "Lifecycle",
+						description: "Onboarding and record timestamps.",
+						fieldNames: [
+							"status",
+							"onboardedAt",
+							"createdAt",
+							"lastTransitionAt",
+						],
+					},
+				]}
+			/>
+
+			<DetailSectionShell
+				description="All connected lenders, mortgages, borrowers, and deals under this broker."
+				title="Connected Records"
+			>
+				<div className="space-y-4">
+					{detailContext?.profile ? (
+						<MetricGrid
+							items={[
+								{
+									label: "Email",
+									value: detailContext.profile.email ?? "Unavailable",
+								},
+								{
+									label: "Onboarded",
+									value:
+										formatDate(detailContext.profile.onboardedAt) ?? "Not set",
+								},
+								{
+									label: "Lenders",
+									value: detailContext?.lenders.length ?? 0,
+								},
+								{
+									label: "Mortgages",
+									value: detailContext?.mortgages.length ?? 0,
+								},
+							]}
+						/>
+					) : null}
+					<RelatedEntityExplorer
+						groups={relatedGroups}
+						objectDefs={objectDefs}
+						onNavigateRelation={onNavigateRelation}
+					/>
+				</div>
+			</DetailSectionShell>
+
+			<DetailSectionShell
+				description="Recent broker audit events from the state machine journal."
+				title="Recent Audit Events"
+			>
+				<CompactList
+					emptyMessage="No recent broker audit events were found."
+					items={detailContext?.recentAuditEvents ?? []}
+					renderItem={(item) => {
+						const event =
+							item as NonNullable<BrokerDetailContext>["recentAuditEvents"][number];
 						return (
 							<div
 								className="rounded-lg border border-border/60 bg-background/80 px-3 py-3"

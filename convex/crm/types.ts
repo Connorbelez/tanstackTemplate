@@ -110,6 +110,11 @@ export interface UnifiedRecord {
 	_kind: "record" | "native";
 	createdAt: number;
 	fields: Record<string, unknown>;
+	/**
+	 * Native Convex table for `_kind: "native"` rows; `null` for EAV (`_kind: "record"`).
+	 * Always set to a JSON-serializable value so the key is not dropped (`undefined` omits).
+	 */
+	nativeTable: string | null;
 	objectDefId: Id<"objectDefs">;
 	updatedAt: number;
 }

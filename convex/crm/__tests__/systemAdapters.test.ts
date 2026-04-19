@@ -466,6 +466,7 @@ describe("queryNativeTable", () => {
 		expect(result.records).toHaveLength(1);
 		expect(result.records[0]).toMatchObject({
 			_kind: "native",
+			nativeTable: "listings",
 			fields: {
 				city: "Toronto",
 				interestRate: 5.1,
@@ -627,6 +628,7 @@ describe("UnifiedRecord contract", () => {
 			"_kind",
 			"createdAt",
 			"fields",
+			"nativeTable",
 			"objectDefId",
 			"updatedAt",
 		]);

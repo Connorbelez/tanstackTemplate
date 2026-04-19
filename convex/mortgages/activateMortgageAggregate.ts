@@ -132,6 +132,7 @@ async function resolveCanonicalProperty(
 		city: createDraft.city,
 		province: createDraft.province,
 		postalCode: createDraft.postalCode,
+		googlePlaceData: createDraft.googlePlaceData,
 		propertyType: createDraft.propertyType,
 		latitude: createDraft.approximateLatitude,
 		longitude: createDraft.approximateLongitude,

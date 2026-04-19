@@ -5,8 +5,8 @@ import {
 	INITIAL_ORIGINATION_STEP,
 } from "../../../src/lib/admin-origination";
 import type { Doc } from "../../_generated/dataModel";
+import { assertOriginationCaseAccess } from "../../authz/origination";
 import { authedMutation, authedQuery, requirePermission } from "../../fluent";
-import { assertOriginationCaseAccess } from "./access";
 import {
 	adminOriginationCasePatchValidator,
 	computeOriginationValidationSnapshot,

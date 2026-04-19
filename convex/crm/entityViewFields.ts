@@ -280,7 +280,7 @@ function evaluateMortgagePaymentSummary(
 ): string | undefined {
 	const paymentAmount =
 		typeof fieldValues.paymentAmount === "number"
-			? formatCurrencyAmount(fieldValues.paymentAmount)
+			? formatCurrencyAmount(fieldValues.paymentAmount, 100)
 			: undefined;
 	const paymentFrequency =
 		typeof fieldValues.paymentFrequency === "string"
@@ -301,7 +301,7 @@ function evaluateListingPaymentSummary(
 ): string | undefined {
 	const paymentAmount =
 		typeof fieldValues.monthlyPayment === "number"
-			? formatCurrencyAmount(fieldValues.monthlyPayment)
+			? formatCurrencyAmount(fieldValues.monthlyPayment, 100)
 			: undefined;
 	const paymentFrequency =
 		typeof fieldValues.paymentFrequency === "string"

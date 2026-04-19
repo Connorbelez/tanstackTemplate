@@ -24,6 +24,12 @@ export interface NativeRecordPage {
 	records: UnifiedRecord[];
 }
 
+interface NativeViewerContext {
+	viewer?: {
+		isFairLendAdmin?: boolean;
+	};
+}
+
 function assembleNativeDoc(
 	objectDef: ObjectDef,
 	fieldDefs: FieldDef[],
@@ -37,6 +43,7 @@ function assembleNativeDoc(
 	return {
 		_id: String(doc._id),
 		_kind: "native",
+		nativeTable: objectDef.nativeTable ?? null,
 		objectDefId: objectDef._id,
 		fields,
 		createdAt: (doc.createdAt as number) ?? (doc._creationTime as number),
@@ -82,6 +89,10 @@ async function getNativeTableRecordById(
 			const normalizedId = ctx.db.normalizeId("listings", recordId);
 			return normalizedId ? ctx.db.get(normalizedId) : null;
 		}
+		case "properties": {
+			const normalizedId = ctx.db.normalizeId("properties", recordId);
+			return normalizedId ? ctx.db.get(normalizedId) : null;
+		}
 		default: {
 			const exhaustiveCheck: never = tableName;
 			throw new ConvexError(`Unknown native table: ${String(exhaustiveCheck)}`);
@@ -95,42 +106,124 @@ async function paginateNativeTable(
 	orgId: string,
 	paginationOpts: NativePaginationOptions
 ): Promise<NativeTablePage> {
+	const canReadAcrossOrgs =
+		(ctx as QueryCtx & NativeViewerContext).viewer?.isFairLendAdmin === true;
+
 	switch (tableName) {
 		case "mortgages":
-			return ctx.db
-				.query("mortgages")
-				.withIndex("by_org", (q) => q.eq("orgId", orgId))
-				.paginate(paginationOpts);
+			return canReadAcrossOrgs
+				? ctx.db.query("mortgages").paginate(paginationOpts)
+				: ctx.db
+						.query("mortgages")
+						.withIndex("by_org", (q) => q.eq("orgId", orgId))
+						.paginate(paginationOpts);
 		case "borrowers":
-			return ctx.db
-				.query("borrowers")
-				.withIndex("by_org", (q) => q.eq("orgId", orgId))
-				.paginate(paginationOpts);
+			return canReadAcrossOrgs
+				? ctx.db.query("borrowers").paginate(paginationOpts)
+				: ctx.db
+						.query("borrowers")
+						.withIndex("by_org", (q) => q.eq("orgId", orgId))
+						.paginate(paginationOpts);
 		case "lenders":
-			return ctx.db
-				.query("lenders")
-				.withIndex("by_org", (q) => q.eq("orgId", orgId))
-				.paginate(paginationOpts);
+			return canReadAcrossOrgs
+				? ctx.db.query("lenders").paginate(paginationOpts)
+				: ctx.db
+						.query("lenders")
+						.withIndex("by_org", (q) => q.eq("orgId", orgId))
+						.paginate(paginationOpts);
 		case "brokers":
-			return ctx.db
-				.query("brokers")
-				.withIndex("by_org", (q) => q.eq("orgId", orgId))
-				.paginate(paginationOpts);
+			return canReadAcrossOrgs
+				? ctx.db.query("brokers").paginate(paginationOpts)
+				: ctx.db
+						.query("brokers")
+						.withIndex("by_org", (q) => q.eq("orgId", orgId))
+						.paginate(paginationOpts);
 		case "deals":
-			return ctx.db
-				.query("deals")
-				.withIndex("by_org", (q) => q.eq("orgId", orgId))
-				.paginate(paginationOpts);
+			return canReadAcrossOrgs
+				? ctx.db.query("deals").paginate(paginationOpts)
+				: ctx.db
+						.query("deals")
+						.withIndex("by_org", (q) => q.eq("orgId", orgId))
+						.paginate(paginationOpts);
 		case "obligations":
-			return ctx.db
-				.query("obligations")
-				.withIndex("by_org", (q) => q.eq("orgId", orgId))
-				.paginate(paginationOpts);
+			return canReadAcrossOrgs
+				? ctx.db.query("obligations").paginate(paginationOpts)
+				: ctx.db
+						.query("obligations")
+						.withIndex("by_org", (q) => q.eq("orgId", orgId))
+						.paginate(paginationOpts);
 		case "listings":
 			// Listings live on the FairLend marketplace surface and do not carry
 			// their own orgId. Admin access to this native table is already scoped
 			// to the FairLend staff org at the route/auth layer.
 			return ctx.db.query("listings").paginate(paginationOpts);
+		case "properties":
+			// Properties are shared across the FairLend marketplace (same shape as
+			// listings — no per-row orgId). The FairLend staff admin route is the
+			// only consumer, gated at the route/auth layer.
+			return ctx.db.query("properties").paginate(paginationOpts);
+		default:
+			throw new ConvexError(`Unknown native table: ${tableName}`);
+	}
+}
+
+async function takeNativeTable(
+	ctx: QueryCtx,
+	tableName: string,
+	orgId: string,
+	limit: number
+): Promise<Record<string, unknown>[]> {
+	const canReadAcrossOrgs =
+		(ctx as QueryCtx & NativeViewerContext).viewer?.isFairLendAdmin === true;
+
+	switch (tableName) {
+		case "mortgages":
+			return canReadAcrossOrgs
+				? ctx.db.query("mortgages").take(limit)
+				: ctx.db
+						.query("mortgages")
+						.withIndex("by_org", (q) => q.eq("orgId", orgId))
+						.take(limit);
+		case "borrowers":
+			return canReadAcrossOrgs
+				? ctx.db.query("borrowers").take(limit)
+				: ctx.db
+						.query("borrowers")
+						.withIndex("by_org", (q) => q.eq("orgId", orgId))
+						.take(limit);
+		case "lenders":
+			return canReadAcrossOrgs
+				? ctx.db.query("lenders").take(limit)
+				: ctx.db
+						.query("lenders")
+						.withIndex("by_org", (q) => q.eq("orgId", orgId))
+						.take(limit);
+		case "brokers":
+			return canReadAcrossOrgs
+				? ctx.db.query("brokers").take(limit)
+				: ctx.db
+						.query("brokers")
+						.withIndex("by_org", (q) => q.eq("orgId", orgId))
+						.take(limit);
+		case "deals":
+			return canReadAcrossOrgs
+				? ctx.db.query("deals").take(limit)
+				: ctx.db
+						.query("deals")
+						.withIndex("by_org", (q) => q.eq("orgId", orgId))
+						.take(limit);
+		case "obligations":
+			return canReadAcrossOrgs
+				? ctx.db.query("obligations").take(limit)
+				: ctx.db
+						.query("obligations")
+						.withIndex("by_org", (q) => q.eq("orgId", orgId))
+						.take(limit);
+		case "listings":
+			return ctx.db.query("listings").take(limit);
+		case "properties":
+			// See paginateNativeTable — properties are not org-scoped.
+			return ctx.db.query("properties").take(limit);
 		default:
 			throw new ConvexError(`Unknown native table: ${tableName}`);
 	}
@@ -144,7 +237,25 @@ export type NativeTableName =
 	| "brokers"
 	| "deals"
 	| "obligations"
-	| "listings";
+	| "listings"
+	| "properties";
+
+/**
+ * Counts rows in a native system table using `.take()` rather than `.paginate()`.
+ *
+ * Convex only allows a single paginated query per function invocation, so the
+ * count path must avoid `.paginate()` when the same function is already using
+ * pagination to load a page of records. Callers pass `limit` as the cap + 1
+ * and check `result.length > cap` to detect truncation.
+ */
+export async function countNativeTable(
+	ctx: QueryCtx,
+	tableName: string,
+	orgId: string,
+	limit: number
+): Promise<number> {
+	return (await takeNativeTable(ctx, tableName, orgId, limit)).length;
+}
 
 /**
  * Routes a runtime table name to a compile-time Convex query.
@@ -173,26 +284,11 @@ export async function queryNativeTable(
 	orgId: string,
 	paginationOptsOrLimit: NativePaginationOptions | number
 ): Promise<Record<string, unknown>[] | NativeTablePage> {
-	const paginationOpts =
-		typeof paginationOptsOrLimit === "number"
-			? {
-					cursor: null,
-					numItems: paginationOptsOrLimit,
-				}
-			: paginationOptsOrLimit;
-
-	const nativePage = await paginateNativeTable(
-		ctx,
-		tableName,
-		orgId,
-		paginationOpts
-	);
-
 	if (typeof paginationOptsOrLimit === "number") {
-		return nativePage.page;
+		return takeNativeTable(ctx, tableName, orgId, paginationOptsOrLimit);
 	}
 
-	return nativePage;
+	return paginateNativeTable(ctx, tableName, orgId, paginationOptsOrLimit);
 }
 
 /**
@@ -227,29 +323,27 @@ export async function queryNativeRecords(
 		throw new ConvexError("System object missing nativeTable");
 	}
 
-	const paginationOpts =
-		typeof paginationOptsOrLimit === "number"
-			? {
-					cursor: null,
-					numItems: paginationOptsOrLimit,
-				}
-			: paginationOptsOrLimit;
+	if (typeof paginationOptsOrLimit === "number") {
+		const docs = await takeNativeTable(
+			ctx,
+			objectDef.nativeTable,
+			orgId,
+			paginationOptsOrLimit
+		);
+		return docs.map((doc) => assembleNativeDoc(objectDef, fieldDefs, doc));
+	}
 
 	const nativePage = await paginateNativeTable(
 		ctx,
 		objectDef.nativeTable,
 		orgId,
-		paginationOpts
+		paginationOptsOrLimit
 	);
 
 	// Only iterate fieldDefs with nativeColumnPath (skip EAV-only fields)
 	const records = nativePage.page.map((doc) =>
 		assembleNativeDoc(objectDef, fieldDefs, doc)
 	);
-
-	if (typeof paginationOptsOrLimit === "number") {
-		return records;
-	}
 
 	return {
 		records,
@@ -275,7 +369,16 @@ export async function getNativeRecordById(
 		recordId
 	);
 
-	if (!nativeDoc || nativeDoc.orgId !== orgId) {
+	const canReadAcrossOrgs =
+		(ctx as QueryCtx & NativeViewerContext).viewer?.isFairLendAdmin === true;
+	const isCrossOrgNativeTable =
+		objectDef.nativeTable === "listings" ||
+		objectDef.nativeTable === "properties";
+
+	if (
+		!nativeDoc ||
+		(!canReadAcrossOrgs && (isCrossOrgNativeTable || nativeDoc.orgId !== orgId))
+	) {
 		return null;
 	}
 

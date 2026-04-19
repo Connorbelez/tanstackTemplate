@@ -3,12 +3,10 @@ import {
 	AdminPageSkeleton,
 	AdminRouteErrorBoundary,
 } from "#/components/admin/shell/AdminRouteStates";
-import { guardAnyPermission } from "#/lib/auth";
+import { guardRouteAccess } from "#/lib/auth";
 
 export const Route = createFileRoute("/admin/underwriting")({
-	beforeLoad: guardAnyPermission(["admin:access", "underwriter:access"], {
-		allowAdminOverride: false,
-	}),
+	beforeLoad: guardRouteAccess("adminUnderwriting"),
 	component: () => <Outlet />,
 	errorComponent: AdminRouteErrorBoundary,
 	pendingComponent: UnderwritingPendingPage,

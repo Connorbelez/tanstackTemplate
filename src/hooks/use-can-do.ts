@@ -1,19 +1,12 @@
-import { useAuth } from "@workos/authkit-tanstack-react-start/client";
-import { hasEffectivePermission } from "#/lib/auth-policy";
+import { useAuthorization } from "#/lib/auth";
 
 /**
- * Returns true if the current user has the given permission.
- * Uses WorkOS JWT claims — no server round-trip.
+ * Legacy convenience wrapper for component-level permission checks.
+ * New code should prefer `useAuthorization(...)` directly.
  */
 export function useCanDo(permission: string): boolean {
-	const auth = useAuth();
-	return hasEffectivePermission(
-		{
-			orgId: auth.organizationId ?? null,
-			permissions: auth.permissions,
-			role: auth.role,
-			roles: auth.roles,
-		},
-		permission
-	);
+	return useAuthorization({
+		kind: "permission",
+		permission,
+	}).allowed;
 }

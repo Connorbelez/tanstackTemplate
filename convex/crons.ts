@@ -8,6 +8,12 @@ const providerManagedSchedulePollingRef = makeFunctionReference<
 	Promise<unknown>
 >("payments/recurringSchedules/poller:pollProviderManagedSchedules");
 
+const rotessaReadModelSyncRef = makeFunctionReference<
+	"action",
+	{ trigger: "cron" | "manual" },
+	Promise<unknown>
+>("admin/origination/collections:runRotessaReadModelSync");
+
 // Audit trail crons (outbox processor + retention) are managed by the
 // auditTrail component — see convex/components/auditTrail/crons.ts
 
@@ -49,6 +55,16 @@ crons.interval(
 	{ minutes: 15 },
 	providerManagedSchedulePollingRef,
 	{}
+);
+
+// Rotessa reconciliation sync: imports sandbox customers and recurring schedules
+// into canonical read-model tables so origination and admin reconciliation screens
+// stay aligned with provider state. Runs four times per day.
+crons.interval(
+	"rotessa read-model sync",
+	{ minutes: 360 },
+	rotessaReadModelSyncRef,
+	{ trigger: "cron" }
 );
 
 // Dispersal self-healing: detect settled obligations missing dispersal entries.

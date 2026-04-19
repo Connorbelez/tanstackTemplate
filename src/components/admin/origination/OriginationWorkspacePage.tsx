@@ -1,26 +1,14 @@
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useAction, useMutation, useQuery } from "convex/react";
-import {
-	ChevronLeft,
-	ChevronRight,
-	FileClock,
-	FolderKanban,
-} from "lucide-react";
+import { ChevronLeft, ChevronRight, FolderKanban } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAdminBreadcrumbLabel } from "#/components/admin/shell/AdminPageMetadataContext";
 import {
 	AdminNotFoundState,
 	AdminPageSkeleton,
 } from "#/components/admin/shell/AdminRouteStates";
-import { Badge } from "#/components/ui/badge";
 import { Button } from "#/components/ui/button";
-import {
-	Card,
-	CardContent,
-	CardDescription,
-	CardHeader,
-	CardTitle,
-} from "#/components/ui/card";
+import { Card } from "#/components/ui/card";
 import { EMPTY_ADMIN_DETAIL_SEARCH } from "#/lib/admin-detail-search";
 import {
 	INITIAL_ORIGINATION_STEP,
@@ -35,17 +23,15 @@ import { DocumentsStep } from "./DocumentsStep";
 import { ListingCurationStep } from "./ListingCurationStep";
 import { MortgageTermsStep } from "./MortgageTermsStep";
 import { OriginationStepper } from "./OriginationStepper";
+import { OriginationWorkspaceHero } from "./OriginationWorkspaceHero";
 import { ParticipantsStep } from "./ParticipantsStep";
 import { PropertyStep } from "./PropertyStep";
 import { ReviewStep } from "./ReviewStep";
-import { SaveStateIndicator } from "./SaveStateIndicator";
 import {
 	buildOriginationStepperItems,
-	buildOriginationWorkspaceSubtitle,
 	buildOriginationWorkspaceTitle,
 	createOriginationDraftPatch,
 	extractOriginationDraft,
-	formatOriginationDateTime,
 	getOriginationCommitBlockingErrors,
 	getOriginationStepErrors,
 	type OriginationCasePatch,
@@ -103,6 +89,7 @@ function renderOriginationStepContent(args: {
 		case "participants":
 			return (
 				<ParticipantsStep
+					caseId={args.caseRecord._id}
 					draft={args.draft.participantsDraft}
 					errors={args.currentStepErrors}
 					onChange={(participantsDraft) =>
@@ -116,6 +103,7 @@ function renderOriginationStepContent(args: {
 		case "property":
 			return (
 				<PropertyStep
+					caseId={args.caseRecord._id}
 					errors={args.currentStepErrors}
 					onChange={({ propertyDraft, valuationDraft }) =>
 						args.applyDraftUpdate((current) => ({
@@ -147,12 +135,22 @@ function renderOriginationStepContent(args: {
 					caseId={args.caseRecord._id}
 					draft={args.draft.collectionsDraft}
 					errors={args.currentStepErrors}
+					mortgageDraft={args.draft.mortgageDraft}
 					onChange={(collectionsDraft) =>
 						args.applyDraftUpdate((current) => ({
 							...current,
 							collectionsDraft,
 						}))
 					}
+					onDraftHydration={(patch) =>
+						args.applyDraftUpdate((current) => ({
+							...current,
+							mortgageDraft: patch.mortgageDraft ?? current.mortgageDraft,
+							participantsDraft:
+								patch.participantsDraft ?? current.participantsDraft,
+						}))
+					}
+					participantsDraft={args.draft.participantsDraft}
 				/>
 			);
 		case "documents":
@@ -506,72 +504,26 @@ export function OriginationWorkspacePage({
 			? ORIGINATION_STEPS[currentStepIndex + 1]?.key
 			: null;
 
-	const commonStepDescription = (
-		<div className="grid gap-4 sm:grid-cols-2">
-			<div className="rounded-2xl border border-border/70 px-4 py-4">
-				<p className="font-medium text-muted-foreground text-sm uppercase tracking-[0.16em]">
-					Case ID
-				</p>
-				<p className="mt-2 font-semibold">
-					{buildOriginationWorkspaceSubtitle(caseId)}
-				</p>
-			</div>
-			<div className="rounded-2xl border border-border/70 px-4 py-4">
-				<p className="font-medium text-muted-foreground text-sm uppercase tracking-[0.16em]">
-					Last persisted
-				</p>
-				<p className="mt-2 font-semibold">
-					{formatOriginationDateTime(lastSavedAt)}
-				</p>
-			</div>
-		</div>
-	);
-
 	return (
 		<div className="space-y-6">
-			<div className="rounded-[2rem] border border-border/70 bg-card px-6 py-6 shadow-sm">
-				<div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
-					<div className="space-y-3">
-						<div className="flex flex-wrap items-center gap-2">
-							<Badge className="border border-border/70" variant="outline">
-								{caseRecord.status}
-							</Badge>
-							<Badge className="border border-border/70" variant="outline">
-								{ORIGINATION_STEPS[currentStepIndex]?.label ?? "Participants"}
-							</Badge>
-						</div>
-						<div className="space-y-2">
-							<p className="font-semibold text-muted-foreground text-sm uppercase tracking-[0.18em]">
-								Phase 5 workspace
-							</p>
-							<h1 className="font-semibold text-3xl tracking-tight">
-								{pageTitle}
-							</h1>
-							<p className="max-w-3xl text-muted-foreground text-sm leading-6">
-								Stage every origination input in one backoffice aggregate, then
-								activate canonical borrower, property, valuation, mortgage,
-								payment bootstrap, listing projection, ledger, and audit rows
-								from this exact review surface. Provider-managed-now cases then
-								immediately attempt Rotessa schedule activation against the
-								staged primary borrower bank account.
-							</p>
-						</div>
-					</div>
-					<div className="flex flex-col items-start gap-3 xl:items-end">
-						<SaveStateIndicator
-							errorMessage={saveError}
-							lastSavedAt={lastSavedAt}
-							state={saveState}
-						/>
-						<Button asChild type="button" variant="outline">
-							<Link search={EMPTY_ADMIN_DETAIL_SEARCH} to="/admin/originations">
-								<FolderKanban className="mr-2 size-4" />
-								Back to drafts
-							</Link>
-						</Button>
-					</div>
-				</div>
-			</div>
+			<OriginationWorkspaceHero
+				actions={
+					<Button asChild type="button" variant="outline">
+						<Link search={EMPTY_ADMIN_DETAIL_SEARCH} to="/admin/originations">
+							<FolderKanban className="mr-2 size-4" />
+							Back to drafts
+						</Link>
+					</Button>
+				}
+				caseStatus={caseRecord.status}
+				currentStepLabel={
+					ORIGINATION_STEPS[currentStepIndex]?.label ?? "Participants"
+				}
+				lastSavedAt={lastSavedAt}
+				pageTitle={pageTitle}
+				saveError={saveError}
+				saveState={saveState}
+			/>
 
 			<div className="grid gap-6 xl:grid-cols-[300px_minmax(0,1fr)]">
 				<div className="space-y-4 xl:sticky xl:top-24 xl:self-start">
@@ -580,40 +532,9 @@ export function OriginationWorkspacePage({
 						items={stepperItems}
 						onSelectStep={goToStep}
 					/>
-					<Card className="border-border/70">
-						<CardHeader>
-							<CardTitle className="text-base">Draft contract</CardTitle>
-							<CardDescription>
-								Draft edits always land in staging first; canonical rows are
-								created only from the review-step commit action.
-							</CardDescription>
-						</CardHeader>
-						<CardContent className="space-y-3 text-sm leading-6">
-							<div className="flex items-start gap-3">
-								<FileClock className="mt-0.5 size-4 text-muted-foreground" />
-								<p>
-									Refresh restores the saved draft exactly from{" "}
-									<code>adminOriginationCases</code>.
-								</p>
-							</div>
-							<div className="flex items-start gap-3">
-								<FileClock className="mt-0.5 size-4 text-muted-foreground" />
-								<p>
-									Phase 5 commit writes borrower, property, appraisal,
-									mortgageBorrower, mortgage, obligations, planned app-owned
-									collection entries, listing projection, ledger-genesis, and
-									origination audit rows in one path. Phase 5 then follows with
-									immediate Rotessa activation when the collections step opted
-									into provider-managed-now.
-								</p>
-							</div>
-						</CardContent>
-					</Card>
 				</div>
 
 				<div className="space-y-6">
-					{commonStepDescription}
-
 					{renderOriginationStepContent({
 						applyDraftUpdate,
 						canCommit,
@@ -628,17 +549,13 @@ export function OriginationWorkspacePage({
 					})}
 
 					<div className="flex flex-col gap-4 rounded-[2rem] border border-border/70 bg-card px-5 py-5 shadow-sm sm:flex-row sm:items-center sm:justify-between">
-						<div className="space-y-1">
+						<div>
 							<p className="font-medium text-sm">
 								{currentStepErrors.length > 0
 									? `${currentStepErrors.length} validation issue${
 											currentStepErrors.length === 1 ? "" : "s"
 										} on this step`
 									: "This step has no saved validation blockers"}
-							</p>
-							<p className="text-muted-foreground text-sm">
-								Navigation is persistent. Step changes save immediately so
-								refresh reopens the same part of the workflow.
 							</p>
 						</div>
 						<div className="flex items-center gap-3">

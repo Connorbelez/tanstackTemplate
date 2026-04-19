@@ -13,8 +13,8 @@ import {
 	SelectValue,
 } from "#/components/ui/select";
 import { Textarea } from "#/components/ui/textarea";
-import { useCanDo } from "#/hooks/use-can-do";
 import { EMPTY_ADMIN_DETAIL_SEARCH } from "#/lib/admin-detail-search";
+import { useAuthorization } from "#/lib/auth";
 import {
 	defaultDocumentAssetName,
 	uploadDocumentAsset,
@@ -35,7 +35,10 @@ export function DocumentDraftComposer({
 	sourceMode,
 }: DocumentDraftComposerProps) {
 	const typedCaseId = caseId as Id<"adminOriginationCases">;
-	const canReviewDocumentEngine = useCanDo("document:review");
+	const canReviewDocumentEngine = useAuthorization({
+		kind: "permission",
+		permission: "document:review",
+	}).allowed;
 	const templates = useQuery(
 		api.admin.origination.caseDocuments.listAttachableTemplates,
 		{}

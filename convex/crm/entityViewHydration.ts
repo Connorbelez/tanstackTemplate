@@ -6,6 +6,9 @@ import type { EntityViewAdapterContract, UnifiedRecord } from "./types";
 type ObjectDef = Doc<"objectDefs">;
 type UserDoc = Doc<"users">;
 type BorrowerDoc = Doc<"borrowers">;
+type BrokerDoc = Doc<"brokers">;
+type LenderDoc = Doc<"lenders">;
+type OrganizationDoc = Doc<"organizations">;
 type MortgageDoc = Doc<"mortgages">;
 type MortgageBorrowerDoc = Doc<"mortgageBorrowers">;
 type PropertyDoc = Doc<"properties">;
@@ -82,6 +85,29 @@ function buildBorrowerSummary(names: readonly string[]): string | undefined {
 	}
 
 	return `${names[0]} + ${String(names.length - 1)} more`;
+}
+
+function buildBrokerRollupSummary(
+	broker: BrokerDoc | null | undefined
+): string | undefined {
+	if (!broker) {
+		return undefined;
+	}
+
+	const brokerageLabel =
+		typeof broker.brokerageName === "string" &&
+		broker.brokerageName.trim().length > 0
+			? broker.brokerageName.trim()
+			: undefined;
+	const licenseParts = [broker.licenseProvince, broker.licenseId].filter(
+		(part): part is string => typeof part === "string" && part.trim().length > 0
+	);
+	const licenseLabel =
+		licenseParts.length > 0 ? licenseParts.join(" ") : undefined;
+
+	return [brokerageLabel ?? "Brokerage", licenseLabel]
+		.filter(Boolean)
+		.join(" • ");
 }
 
 function buildListingSummary(
@@ -183,6 +209,107 @@ async function loadBorrowersById(args: {
 	);
 
 	return borrowers;
+}
+
+async function loadBrokersById(args: {
+	ctx: QueryCtx;
+	orgId: string;
+	recordIds: Iterable<string>;
+}): Promise<Map<string, BrokerDoc>> {
+	const brokers = new Map<string, BrokerDoc>();
+
+	await Promise.all(
+		[...new Set([...args.recordIds])].map(async (recordId) => {
+			const normalizedId = args.ctx.db.normalizeId("brokers", recordId);
+			if (!normalizedId) {
+				return;
+			}
+
+			const broker = await args.ctx.db.get(normalizedId);
+			if (
+				broker &&
+				(broker.orgId === args.orgId || broker.orgId === undefined)
+			) {
+				brokers.set(String(broker._id), broker);
+			}
+		})
+	);
+
+	return brokers;
+}
+
+async function loadLenderDocsByRecordIds(
+	ctx: QueryCtx,
+	recordIds: readonly string[]
+): Promise<Map<string, LenderDoc>> {
+	const lenders = new Map<string, LenderDoc>();
+
+	await Promise.all(
+		[...new Set(recordIds)].map(async (recordId) => {
+			const normalizedId = ctx.db.normalizeId("lenders", recordId);
+			if (!normalizedId) {
+				return;
+			}
+
+			const lender = await ctx.db.get(normalizedId);
+			if (lender) {
+				lenders.set(recordId, lender);
+			}
+		})
+	);
+
+	return lenders;
+}
+
+async function loadBrokerDocsByRecordIds(
+	ctx: QueryCtx,
+	recordIds: readonly string[]
+): Promise<Map<string, BrokerDoc>> {
+	const brokers = new Map<string, BrokerDoc>();
+
+	await Promise.all(
+		[...new Set(recordIds)].map(async (recordId) => {
+			const normalizedId = ctx.db.normalizeId("brokers", recordId);
+			if (!normalizedId) {
+				return;
+			}
+
+			const broker = await ctx.db.get(normalizedId);
+			if (broker) {
+				brokers.set(recordId, broker);
+			}
+		})
+	);
+
+	return brokers;
+}
+
+async function loadOrganizationsByWorkosIds(
+	ctx: QueryCtx,
+	workosIds: Iterable<string>
+): Promise<Map<string, OrganizationDoc>> {
+	const organizations = new Map<string, OrganizationDoc>();
+	const uniqueIds = [
+		...new Set(
+			[...workosIds].filter(
+				(id): id is string => typeof id === "string" && id.trim().length > 0
+			)
+		),
+	];
+
+	await Promise.all(
+		uniqueIds.map(async (workosId) => {
+			const org = await ctx.db
+				.query("organizations")
+				.withIndex("workosId", (q) => q.eq("workosId", workosId))
+				.unique();
+			if (org) {
+				organizations.set(workosId, org);
+			}
+		})
+	);
+
+	return organizations;
 }
 
 async function loadMortgagesById(args: {
@@ -470,6 +597,125 @@ async function hydrateBorrowerRecords(
 	});
 }
 
+async function hydrateLenderRecords(
+	args: EntityViewHydrationArgs
+): Promise<UnifiedRecord[]> {
+	const lenderDocsByRecordId = await loadLenderDocsByRecordIds(
+		args.ctx,
+		args.records.map((record) => record._id)
+	);
+
+	const mergedRecords = args.records.map((record) => {
+		const doc = lenderDocsByRecordId.get(record._id);
+		if (!doc) {
+			return record;
+		}
+
+		return mergeHydratedFields(record, {
+			userId: String(doc.userId),
+			brokerId: String(doc.brokerId),
+			orgId: doc.orgId,
+		});
+	});
+
+	const userIds = mergedRecords.flatMap((record) =>
+		typeof record.fields.userId === "string" ? [record.fields.userId] : []
+	);
+	const brokerIds = mergedRecords.flatMap((record) =>
+		typeof record.fields.brokerId === "string" ? [record.fields.brokerId] : []
+	);
+	const orgIds = mergedRecords.flatMap((record) =>
+		typeof record.fields.orgId === "string" ? [record.fields.orgId] : []
+	);
+
+	const [usersById, brokersById, organizationsByWorkosId] = await Promise.all([
+		loadUsersById(args.ctx, userIds),
+		loadBrokersById({
+			ctx: args.ctx,
+			orgId: args.orgId,
+			recordIds: brokerIds,
+		}),
+		loadOrganizationsByWorkosIds(args.ctx, orgIds),
+	]);
+
+	return mergedRecords.map((record) => {
+		const userId =
+			typeof record.fields.userId === "string"
+				? record.fields.userId
+				: undefined;
+		const brokerId =
+			typeof record.fields.brokerId === "string"
+				? record.fields.brokerId
+				: undefined;
+		const orgId =
+			typeof record.fields.orgId === "string" ? record.fields.orgId : undefined;
+
+		const user = userId ? usersById.get(userId) : undefined;
+		const broker = brokerId ? brokersById.get(brokerId) : undefined;
+		const organization = orgId ? organizationsByWorkosId.get(orgId) : undefined;
+
+		return mergeHydratedFields(record, {
+			lenderName: buildUserDisplayName(user),
+			contactEmail: user?.email,
+			contactPhone: user?.phoneNumber,
+			brokerSummary: buildBrokerRollupSummary(broker),
+			organizationName: organization?.name,
+		});
+	});
+}
+
+async function hydrateBrokerRecords(
+	args: EntityViewHydrationArgs
+): Promise<UnifiedRecord[]> {
+	const brokerDocsByRecordId = await loadBrokerDocsByRecordIds(
+		args.ctx,
+		args.records.map((record) => record._id)
+	);
+
+	const mergedRecords = args.records.map((record) => {
+		const doc = brokerDocsByRecordId.get(record._id);
+		if (!doc) {
+			return record;
+		}
+
+		return mergeHydratedFields(record, {
+			userId: String(doc.userId),
+			orgId: doc.orgId,
+		});
+	});
+
+	const userIds = mergedRecords.flatMap((record) =>
+		typeof record.fields.userId === "string" ? [record.fields.userId] : []
+	);
+	const orgIds = mergedRecords.flatMap((record) =>
+		typeof record.fields.orgId === "string" ? [record.fields.orgId] : []
+	);
+
+	const [usersById, organizationsByWorkosId] = await Promise.all([
+		loadUsersById(args.ctx, userIds),
+		loadOrganizationsByWorkosIds(args.ctx, orgIds),
+	]);
+
+	return mergedRecords.map((record) => {
+		const userId =
+			typeof record.fields.userId === "string"
+				? record.fields.userId
+				: undefined;
+		const orgId =
+			typeof record.fields.orgId === "string" ? record.fields.orgId : undefined;
+
+		const user = userId ? usersById.get(userId) : undefined;
+		const organization = orgId ? organizationsByWorkosId.get(orgId) : undefined;
+
+		return mergeHydratedFields(record, {
+			brokerContactName: buildUserDisplayName(user),
+			contactEmail: user?.email,
+			contactPhone: user?.phoneNumber,
+			organizationName: organization?.name,
+		});
+	});
+}
+
 async function hydrateRecordsForEntity(
 	args: EntityViewHydrationArgs
 ): Promise<UnifiedRecord[]> {
@@ -482,6 +728,10 @@ async function hydrateRecordsForEntity(
 			return hydrateObligationRecords(args);
 		case "borrowers":
 			return hydrateBorrowerRecords(args);
+		case "lenders":
+			return hydrateLenderRecords(args);
+		case "brokers":
+			return hydrateBrokerRecords(args);
 		default:
 			return [...args.records];
 	}

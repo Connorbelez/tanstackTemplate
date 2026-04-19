@@ -16,6 +16,21 @@ export const externalCollectionScheduleStatusValidator = v.union(
 	v.literal("completed")
 );
 
+export const externalCustomerProfileMatchStatusValidator = v.union(
+	v.literal("linked"),
+	v.literal("unmatched"),
+	v.literal("conflict"),
+	v.literal("suppressed")
+);
+
+export const externalProviderScheduleLinkStatusValidator = v.union(
+	v.literal("available"),
+	v.literal("reserved"),
+	v.literal("linked"),
+	v.literal("conflict"),
+	v.literal("suppressed")
+);
+
 export const externalOccurrenceChannelValidator = v.union(
 	v.literal("webhook"),
 	v.literal("poller")

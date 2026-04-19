@@ -3,6 +3,7 @@ import type { Doc, Id } from "../_generated/dataModel";
 import type { QueryCtx } from "../_generated/server";
 import { getAccountLenderId } from "../ledger/accountOwnership";
 import { getPostedBalance } from "../ledger/accounts";
+import { mortgageNominalAnnualRateToDecimal } from "../mortgages/nominalAnnualRate";
 import { calculateAccrualForPeriods, maxDate, minDate } from "./interestMath";
 import { getOwnershipPeriods } from "./ownershipPeriods";
 import type { AccrualResult, OwnershipPeriod } from "./types";
@@ -129,6 +130,9 @@ export async function buildLenderAccrualResult(
 	mortgageData?: { interestRate: number; principal: number }
 ): Promise<AccrualResult> {
 	const mortgage = mortgageData ?? (await getMortgageOrThrow(ctx, mortgageId));
+	const annualRateDecimal = mortgageNominalAnnualRateToDecimal(
+		mortgage.interestRate
+	);
 	const mortgageLedgerId = toLedgerMortgageId(mortgageId);
 	const periods = await getOwnershipPeriods(ctx, mortgageLedgerId, lenderId);
 	return {
@@ -138,7 +142,7 @@ export async function buildLenderAccrualResult(
 		toDate,
 		accruedInterest: calculateAccrualForPeriods(
 			periods,
-			mortgage.interestRate,
+			annualRateDecimal,
 			mortgage.principal,
 			fromDate,
 			toDate

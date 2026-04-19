@@ -5,7 +5,7 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { Id } from "../../../convex/_generated/dataModel";
+import type { Doc, Id } from "../../../convex/_generated/dataModel";
 import type {
 	NormalizedFieldDefinition,
 	UnifiedRecord,
@@ -287,18 +287,27 @@ describe("mortgage dedicated details", () => {
 				listingSummary: "King West bridge opportunity",
 				loanType: "conventional",
 				maturityDate: "2027-04-30",
-				paymentAmount: 2_450,
+				paymentAmount: 245_000,
 				paymentFrequency: "monthly",
 				paymentSummary: "Monthly • $2,450",
-				principal: 250_000,
+				principal: 25_000_000,
+				propertyId: "property_fixture_1",
 				propertySummary: "123 King St W, Toronto, ON",
 				rateType: "fixed",
 				status: "active",
 				termMonths: 12,
 			},
+			nativeTable: "mortgages",
 			objectDefId: "object_mortgage" as Id<"objectDefs">,
 			updatedAt: 0,
 		};
+
+		const objectDefs = [
+			{
+				_id: "object_properties_fixture" as Id<"objectDefs">,
+				nativeTable: "properties",
+			},
+		] as unknown as readonly Doc<"objectDefs">[];
 
 		render(
 			<MortgagesDedicatedDetailsContent
@@ -307,7 +316,9 @@ describe("mortgage dedicated details", () => {
 				detailContext={detailContext}
 				detailFields={fields}
 				mortgageHistory={[]}
+				objectDefs={objectDefs}
 				onArchiveBlueprint={vi.fn(async () => {})}
+				onNavigateRelation={vi.fn()}
 				onReplaceBlueprint={vi.fn()}
 				onRetryCollectionsActivation={vi.fn(async () => {})}
 				paymentSetup={detailContext.paymentSetup}

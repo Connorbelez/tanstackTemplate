@@ -3,6 +3,7 @@ import { Input } from "#/components/ui/input";
 import { Label } from "#/components/ui/label";
 import { Textarea } from "#/components/ui/textarea";
 import type { OriginationListingOverridesDraft } from "#/lib/admin-origination";
+import { ListingHeroImagesField } from "./ListingHeroImagesField";
 import { OriginationStepCard } from "./OriginationStepCard";
 
 interface ListingCurationStepProps {
@@ -10,8 +11,6 @@ interface ListingCurationStepProps {
 	errors?: readonly string[];
 	onChange: (nextDraft: OriginationListingOverridesDraft | undefined) => void;
 }
-
-const HERO_IMAGE_LINE_BREAKS = /\n+/;
 
 function parseIntegerInput(value: string) {
 	if (!value.trim()) {
@@ -22,17 +21,6 @@ function parseIntegerInput(value: string) {
 	return Number.isFinite(parsed) ? parsed : undefined;
 }
 
-function heroImagesToValue(heroImages: string[] | undefined) {
-	return heroImages?.join("\n") ?? "";
-}
-
-function valueToHeroImages(value: string) {
-	return value
-		.split(HERO_IMAGE_LINE_BREAKS)
-		.map((entry) => entry.trim())
-		.filter(Boolean);
-}
-
 export function ListingCurationStep({
 	draft,
 	errors,
@@ -41,11 +29,7 @@ export function ListingCurationStep({
 	const nextDraft = draft ?? {};
 
 	return (
-		<OriginationStepCard
-			description="These are listing-owned curation overrides only. The projector will keep economics, property facts, appraisal summary, and public-doc compatibility canonical elsewhere."
-			errors={errors}
-			title="Listing curation"
-		>
+		<OriginationStepCard errors={errors} title="Listing curation">
 			<div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
 				<div className="space-y-4 rounded-3xl border border-border/70 p-5">
 					<div className="space-y-2">
@@ -93,18 +77,14 @@ export function ListingCurationStep({
 						/>
 					</div>
 					<div className="space-y-2">
-						<Label htmlFor="heroImages">Hero images</Label>
-						<Textarea
-							id="heroImages"
-							onChange={(event) =>
+						<ListingHeroImagesField
+							onChange={(heroImages) =>
 								onChange({
 									...nextDraft,
-									heroImages: valueToHeroImages(event.target.value),
+									heroImages,
 								})
 							}
-							placeholder={"One image URL or asset reference per line"}
-							rows={5}
-							value={heroImagesToValue(nextDraft.heroImages)}
+							value={nextDraft.heroImages}
 						/>
 					</div>
 				</div>

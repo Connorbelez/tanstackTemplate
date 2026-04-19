@@ -52,6 +52,8 @@ import { Route as DemoConvexApiCredentialsRouteImport } from './routes/demo/conv
 import { Route as DemoConvexAggregateRouteImport } from './routes/demo/convex-aggregate'
 import { Route as DemoConvexActionCacheRouteImport } from './routes/demo/convex-action-cache'
 import { Route as DemoConvexRouteImport } from './routes/demo/convex'
+import { Route as AdminSettingsRouteImport } from './routes/admin/settings'
+import { Route as AdminRotessaReconciliationRouteImport } from './routes/admin/rotessa-reconciliation'
 import { Route as AdminPaymentOperationsRouteImport } from './routes/admin/payment-operations'
 import { Route as AdminOriginationsRouteImport } from './routes/admin/originations'
 import { Route as AdminFinancialLedgerRouteImport } from './routes/admin/financial-ledger'
@@ -357,6 +359,17 @@ const DemoConvexRoute = DemoConvexRouteImport.update({
   path: '/demo/convex',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminSettingsRoute = AdminSettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const AdminRotessaReconciliationRoute =
+  AdminRotessaReconciliationRouteImport.update({
+    id: '/rotessa-reconciliation',
+    path: '/rotessa-reconciliation',
+    getParentRoute: () => AdminRouteRoute,
+  } as any)
 const AdminPaymentOperationsRoute = AdminPaymentOperationsRouteImport.update({
   id: '/payment-operations',
   path: '/payment-operations',
@@ -860,6 +873,8 @@ export interface FileRoutesByFullPath {
   '/admin/financial-ledger': typeof AdminFinancialLedgerRoute
   '/admin/originations': typeof AdminOriginationsRouteWithChildren
   '/admin/payment-operations': typeof AdminPaymentOperationsRoute
+  '/admin/rotessa-reconciliation': typeof AdminRotessaReconciliationRoute
+  '/admin/settings': typeof AdminSettingsRoute
   '/demo/convex': typeof DemoConvexRoute
   '/demo/convex-action-cache': typeof DemoConvexActionCacheRoute
   '/demo/convex-aggregate': typeof DemoConvexAggregateRoute
@@ -982,6 +997,8 @@ export interface FileRoutesByTo {
   '/admin/financial-ledger': typeof AdminFinancialLedgerRoute
   '/admin/originations': typeof AdminOriginationsRouteWithChildren
   '/admin/payment-operations': typeof AdminPaymentOperationsRoute
+  '/admin/rotessa-reconciliation': typeof AdminRotessaReconciliationRoute
+  '/admin/settings': typeof AdminSettingsRoute
   '/demo/convex': typeof DemoConvexRoute
   '/demo/convex-action-cache': typeof DemoConvexActionCacheRoute
   '/demo/convex-aggregate': typeof DemoConvexAggregateRoute
@@ -1112,6 +1129,8 @@ export interface FileRoutesById {
   '/admin/financial-ledger': typeof AdminFinancialLedgerRoute
   '/admin/originations': typeof AdminOriginationsRouteWithChildren
   '/admin/payment-operations': typeof AdminPaymentOperationsRoute
+  '/admin/rotessa-reconciliation': typeof AdminRotessaReconciliationRoute
+  '/admin/settings': typeof AdminSettingsRoute
   '/demo/convex': typeof DemoConvexRoute
   '/demo/convex-action-cache': typeof DemoConvexActionCacheRoute
   '/demo/convex-aggregate': typeof DemoConvexAggregateRoute
@@ -1245,6 +1264,8 @@ export interface FileRouteTypes {
     | '/admin/financial-ledger'
     | '/admin/originations'
     | '/admin/payment-operations'
+    | '/admin/rotessa-reconciliation'
+    | '/admin/settings'
     | '/demo/convex'
     | '/demo/convex-action-cache'
     | '/demo/convex-aggregate'
@@ -1367,6 +1388,8 @@ export interface FileRouteTypes {
     | '/admin/financial-ledger'
     | '/admin/originations'
     | '/admin/payment-operations'
+    | '/admin/rotessa-reconciliation'
+    | '/admin/settings'
     | '/demo/convex'
     | '/demo/convex-action-cache'
     | '/demo/convex-aggregate'
@@ -1496,6 +1519,8 @@ export interface FileRouteTypes {
     | '/admin/financial-ledger'
     | '/admin/originations'
     | '/admin/payment-operations'
+    | '/admin/rotessa-reconciliation'
+    | '/admin/settings'
     | '/demo/convex'
     | '/demo/convex-action-cache'
     | '/demo/convex-aggregate'
@@ -1950,6 +1975,20 @@ declare module '@tanstack/react-router' {
       fullPath: '/demo/convex'
       preLoaderRoute: typeof DemoConvexRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/admin/settings': {
+      id: '/admin/settings'
+      path: '/settings'
+      fullPath: '/admin/settings'
+      preLoaderRoute: typeof AdminSettingsRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/admin/rotessa-reconciliation': {
+      id: '/admin/rotessa-reconciliation'
+      path: '/rotessa-reconciliation'
+      fullPath: '/admin/rotessa-reconciliation'
+      preLoaderRoute: typeof AdminRotessaReconciliationRouteImport
+      parentRoute: typeof AdminRouteRoute
     }
     '/admin/payment-operations': {
       id: '/admin/payment-operations'
@@ -2685,6 +2724,8 @@ interface AdminRouteRouteChildren {
   AdminFinancialLedgerRoute: typeof AdminFinancialLedgerRoute
   AdminOriginationsRoute: typeof AdminOriginationsRouteWithChildren
   AdminPaymentOperationsRoute: typeof AdminPaymentOperationsRoute
+  AdminRotessaReconciliationRoute: typeof AdminRotessaReconciliationRoute
+  AdminSettingsRoute: typeof AdminSettingsRoute
 }
 
 const AdminRouteRouteChildren: AdminRouteRouteChildren = {
@@ -2700,6 +2741,8 @@ const AdminRouteRouteChildren: AdminRouteRouteChildren = {
   AdminFinancialLedgerRoute: AdminFinancialLedgerRoute,
   AdminOriginationsRoute: AdminOriginationsRouteWithChildren,
   AdminPaymentOperationsRoute: AdminPaymentOperationsRoute,
+  AdminRotessaReconciliationRoute: AdminRotessaReconciliationRoute,
+  AdminSettingsRoute: AdminSettingsRoute,
 }
 
 const AdminRouteRouteWithChildren = AdminRouteRoute._addFileChildren(

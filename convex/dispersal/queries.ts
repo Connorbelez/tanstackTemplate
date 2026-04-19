@@ -1,13 +1,13 @@
 import { ConvexError, v } from "convex/values";
 import type { Doc, Id } from "../_generated/dataModel";
-import type { QueryCtx } from "../_generated/server";
-import { canAccessDispersal } from "../auth/resourceChecks";
-import { authedQuery, requirePermission, type Viewer } from "../fluent";
+import {
+	assertFairLendAdminAccess,
+	assertLenderDispersalAccess,
+} from "../authz/resourceAccess";
+import { authedQuery, requirePermission } from "../fluent";
 import { businessDateToUnixMs } from "../lib/businessDates";
 
 const dispersalQuery = authedQuery.use(requirePermission("dispersal:view"));
-
-type DispersalQueryCtx = Pick<QueryCtx, "db"> & { viewer: Viewer };
 
 function roundCurrency(amount: number) {
 	return Math.round(amount * 100) / 100;
@@ -66,40 +66,6 @@ function compareFeeEntriesByDate(
 	return left._id.localeCompare(right._id);
 }
 
-async function resolveLenderAuthIdOrThrow(
-	ctx: Pick<QueryCtx, "db">,
-	lenderId: Id<"lenders">
-) {
-	const lender = await ctx.db.get(lenderId);
-	if (!lender) {
-		throw new ConvexError("Lender not found");
-	}
-
-	const user = await ctx.db.get(lender.userId);
-	if (!user) {
-		throw new ConvexError("Lender user not found");
-	}
-
-	return user.authId;
-}
-
-async function assertLenderScopedDispersalAccess(
-	ctx: DispersalQueryCtx,
-	lenderId: Id<"lenders">
-) {
-	const lenderAuthId = await resolveLenderAuthIdOrThrow(ctx, lenderId);
-	const hasAccess = await canAccessDispersal(ctx, ctx.viewer, lenderAuthId);
-	if (!hasAccess) {
-		throw new ConvexError("No access to this dispersal data");
-	}
-}
-
-function assertAdminScopedDispersalAccess(viewer: Viewer) {
-	if (!viewer.isFairLendAdmin) {
-		throw new ConvexError("No access to this dispersal data");
-	}
-}
-
 function sumAmounts(entries: Array<{ amount: number }>) {
 	return roundCurrency(entries.reduce((sum, entry) => sum + entry.amount, 0));
 }
@@ -145,7 +111,7 @@ export const getUndisbursedBalance = dispersalQuery
 		lenderId: v.id("lenders"),
 	})
 	.handler(async (ctx, args) => {
-		await assertLenderScopedDispersalAccess(ctx, args.lenderId);
+		await assertLenderDispersalAccess(ctx, args.lenderId);
 
 		const entries = await ctx.db
 			.query("dispersalEntries")
@@ -170,7 +136,7 @@ export const getDisbursementHistory = dispersalQuery
 		limit: v.optional(v.number()),
 	})
 	.handler(async (ctx, args) => {
-		await assertLenderScopedDispersalAccess(ctx, args.lenderId);
+		await assertLenderDispersalAccess(ctx, args.lenderId);
 
 		const effectiveLimit = args.limit ?? 100;
 		const fromDate = args.fromDate;
@@ -239,7 +205,7 @@ export const getDispersalsByMortgage = dispersalQuery
 		limit: v.optional(v.number()),
 	})
 	.handler(async (ctx, args) => {
-		assertAdminScopedDispersalAccess(ctx.viewer);
+		assertFairLendAdminAccess(ctx.viewer, "No access to this dispersal data");
 		const effectiveLimit = args.limit ?? 100;
 		const fromDate = args.fromDate;
 		const toDate = args.toDate;
@@ -299,7 +265,7 @@ export const getDispersalsByObligation = dispersalQuery
 		obligationId: v.id("obligations"),
 	})
 	.handler(async (ctx, args) => {
-		assertAdminScopedDispersalAccess(ctx.viewer);
+		assertFairLendAdminAccess(ctx.viewer, "No access to this dispersal data");
 
 		const entries = await ctx.db
 			.query("dispersalEntries")
@@ -327,7 +293,7 @@ export const getPayoutEligibleEntries = dispersalQuery
 		limit: v.optional(v.number()),
 	})
 	.handler(async (ctx, args) => {
-		assertAdminScopedDispersalAccess(ctx.viewer);
+		assertFairLendAdminAccess(ctx.viewer, "No access to this dispersal data");
 		assertStrictBusinessDate("asOfDate", args.asOfDate);
 
 		const effectiveLimit = args.limit ?? 100;
@@ -390,7 +356,7 @@ export const getServicingFeeHistory = dispersalQuery
 		limit: v.optional(v.number()),
 	})
 	.handler(async (ctx, args) => {
-		assertAdminScopedDispersalAccess(ctx.viewer);
+		assertFairLendAdminAccess(ctx.viewer, "No access to this dispersal data");
 		const effectiveLimit = args.limit ?? 100;
 		const fromDate = args.fromDate;
 		const toDate = args.toDate;

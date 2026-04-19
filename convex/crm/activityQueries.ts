@@ -78,6 +78,13 @@ interface ActorInfo {
 	name: string;
 }
 
+type ActivityQueryCtx = QueryCtx & {
+	viewer: {
+		isFairLendAdmin?: boolean;
+		orgId?: string;
+	};
+};
+
 const SYSTEM_ACTOR: ActorInfo = { id: "system", name: "System" };
 const UNKNOWN_ACTOR_PREFIX = "Unknown User";
 
@@ -121,7 +128,14 @@ type NativeTable =
 	| "lenders"
 	| "brokers"
 	| "deals"
-	| "obligations";
+	| "obligations"
+	| "listings"
+	| "properties";
+
+interface EntityAccessResolution {
+	exists: boolean;
+	orgId: string | null;
+}
 
 /**
  * Get orgId from a native entity in QueryCtx (read-only version).
@@ -130,13 +144,19 @@ async function getNativeEntityOrgId(
 	ctx: QueryCtx,
 	tableName: NativeTable,
 	entityId: string
-): Promise<string | null> {
+): Promise<EntityAccessResolution> {
 	const normalizedId = ctx.db.normalizeId(tableName, entityId);
 	if (!normalizedId) {
-		return null;
+		return { exists: false, orgId: null };
 	}
 	const doc = await ctx.db.get(normalizedId);
-	return doc?.orgId ?? null;
+	if (!doc) {
+		return { exists: false, orgId: null };
+	}
+	return {
+		exists: true,
+		orgId: "orgId" in doc && typeof doc.orgId === "string" ? doc.orgId : null,
+	};
 }
 
 /**
@@ -146,23 +166,26 @@ async function getEntityOrgId(
 	ctx: QueryCtx,
 	recordKind: "record" | "native",
 	recordId: string
-): Promise<string | null> {
+): Promise<EntityAccessResolution> {
 	if (recordKind === "record") {
 		const normalizedId = ctx.db.normalizeId("records", recordId);
 		if (!normalizedId) {
-			return null;
+			return { exists: false, orgId: null };
 		}
 		const doc = await ctx.db.get(normalizedId);
-		return doc?.orgId ?? null;
+		if (!doc) {
+			return { exists: false, orgId: null };
+		}
+		return { exists: true, orgId: doc.orgId ?? null };
 	}
-	// Try each native table
+
 	for (const tableName of NATIVE_AUDIT_RESOURCE_TYPES) {
-		const orgId = await getNativeEntityOrgId(ctx, tableName, recordId);
-		if (orgId !== null) {
-			return orgId;
+		const result = await getNativeEntityOrgId(ctx, tableName, recordId);
+		if (result.exists) {
+			return result;
 		}
 	}
-	return null;
+	return { exists: false, orgId: null };
 }
 
 // ── Diff Parsing ────────────────────────────────────────────────────
@@ -196,6 +219,8 @@ const NATIVE_AUDIT_RESOURCE_TYPES = [
 	"brokers",
 	"deals",
 	"obligations",
+	"listings",
+	"properties",
 ] as const;
 
 function getAuditResourceTypes(
@@ -258,13 +283,18 @@ export const getRecordActivity = crmQuery
 			throw new ConvexError("Org context required");
 		}
 
-		// Validate the record belongs to the caller's org
-		const recordOrgId = await getEntityOrgId(
+		const entityAccess = await getEntityOrgId(
 			ctx,
 			args.recordKind,
 			args.recordId
 		);
-		if (recordOrgId !== orgId) {
+		if (!entityAccess.exists) {
+			throw new ConvexError("Record not found or access denied");
+		}
+
+		const canReadAcrossOrgs =
+			(ctx as ActivityQueryCtx).viewer.isFairLendAdmin === true;
+		if (!canReadAcrossOrgs && entityAccess.orgId !== orgId) {
 			throw new ConvexError("Record not found or access denied");
 		}
 

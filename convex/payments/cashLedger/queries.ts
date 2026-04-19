@@ -1,13 +1,13 @@
-import { ConvexError, v } from "convex/values";
+import { v } from "convex/values";
 import type { Doc, Id } from "../../_generated/dataModel";
 import { internalQuery, type QueryCtx } from "../../_generated/server";
 import {
-	canAccessBorrowerEntity,
-	canAccessCashLedgerAccount,
-	canAccessLenderEntity,
-	canAccessMortgage,
-	canAccessObligation,
-} from "../../auth/resourceChecks";
+	assertBorrowerEntityAccess,
+	assertCashLedgerAccountAccess,
+	assertLenderEntityAccess,
+	assertMortgageAccess,
+	assertObligationAccess,
+} from "../../authz/resourceAccess";
 import { cashLedgerQuery } from "../../fluent";
 import {
 	findCashAccount,
@@ -38,76 +38,6 @@ function compareSequence(
 		return 1;
 	}
 	return 0;
-}
-
-async function assertCashLedgerAccountAccess(
-	ctx: Parameters<typeof canAccessCashLedgerAccount>[0] & {
-		viewer: Parameters<typeof canAccessCashLedgerAccount>[1];
-	},
-	accountId: Parameters<typeof canAccessCashLedgerAccount>[2]
-) {
-	const allowed = await canAccessCashLedgerAccount(ctx, ctx.viewer, accountId);
-	if (!allowed) {
-		throw new ConvexError(
-			`Forbidden: no cash-ledger account access for ${String(accountId)}`
-		);
-	}
-}
-
-async function assertMortgageAccess(
-	ctx: Parameters<typeof canAccessMortgage>[0] & {
-		viewer: Parameters<typeof canAccessMortgage>[1];
-	},
-	mortgageId: Parameters<typeof canAccessMortgage>[2]
-) {
-	const allowed = await canAccessMortgage(ctx, ctx.viewer, mortgageId);
-	if (!allowed) {
-		throw new ConvexError(
-			`Forbidden: no mortgage access for ${String(mortgageId)}`
-		);
-	}
-}
-
-async function assertLenderAccess(
-	ctx: Parameters<typeof canAccessLenderEntity>[0] & {
-		viewer: Parameters<typeof canAccessLenderEntity>[1];
-	},
-	lenderId: Parameters<typeof canAccessLenderEntity>[2]
-) {
-	const allowed = await canAccessLenderEntity(ctx, ctx.viewer, lenderId);
-	if (!allowed) {
-		throw new ConvexError(
-			`Forbidden: no lender access for ${String(lenderId)}`
-		);
-	}
-}
-
-async function assertBorrowerAccess(
-	ctx: Parameters<typeof canAccessBorrowerEntity>[0] & {
-		viewer: Parameters<typeof canAccessBorrowerEntity>[1];
-	},
-	borrowerId: Parameters<typeof canAccessBorrowerEntity>[2]
-) {
-	const allowed = await canAccessBorrowerEntity(ctx, ctx.viewer, borrowerId);
-	if (!allowed) {
-		throw new ConvexError(
-			`Forbidden: no borrower access for ${String(borrowerId)}`
-		);
-	}
-}
-
-async function assertObligationAccess(
-	ctx: Parameters<typeof canAccessObligation>[0] & {
-		viewer: Parameters<typeof canAccessObligation>[1];
-	},
-	obligationId: Parameters<typeof canAccessObligation>[2]
-) {
-	const allowed = await canAccessObligation(ctx, ctx.viewer, obligationId);
-	if (!allowed) {
-		throw new ConvexError(
-			`Forbidden: no obligation access for ${String(obligationId)}`
-		);
-	}
 }
 
 export const getAccountBalance = cashLedgerQuery
@@ -169,7 +99,7 @@ export const getMortgageCashState = cashLedgerQuery
 export const getLenderPayableBalance = cashLedgerQuery
 	.input({ lenderId: v.id("lenders") })
 	.handler(async (ctx, args) => {
-		await assertLenderAccess(ctx, args.lenderId);
+		await assertLenderEntityAccess(ctx, args.lenderId);
 		return computeGrossLenderPayableBalance(ctx.db, args.lenderId);
 	})
 	.public();
@@ -247,7 +177,7 @@ export async function getAvailableLenderPayableBalanceImpl(
 export const getAvailableLenderPayableBalance = cashLedgerQuery
 	.input({ lenderId: v.id("lenders") })
 	.handler(async (ctx, args) => {
-		await assertLenderAccess(ctx, args.lenderId);
+		await assertLenderEntityAccess(ctx, args.lenderId);
 		return getAvailableLenderPayableBalanceImpl(ctx, args.lenderId);
 	})
 	.public();
@@ -532,7 +462,7 @@ export const getAccountBalanceRange = cashLedgerQuery
 export const getBorrowerBalance = cashLedgerQuery
 	.input({ borrowerId: v.id("borrowers") })
 	.handler(async (ctx, args) => {
-		await assertBorrowerAccess(ctx, args.borrowerId);
+		await assertBorrowerEntityAccess(ctx, args.borrowerId);
 		const accounts = await ctx.db
 			.query("cash_ledger_accounts")
 			.withIndex("by_borrower", (q) => q.eq("borrowerId", args.borrowerId))

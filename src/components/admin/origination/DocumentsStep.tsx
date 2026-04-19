@@ -38,11 +38,7 @@ export function DocumentsStep({ caseId, errors }: DocumentsStepProps) {
 	);
 
 	return (
-		<OriginationStepCard
-			description="Stage immutable public/private PDFs and pin template-backed blueprint inputs before commit. Static public docs project onto the listing; all other classes stay mortgage-owned until later deal-package phases."
-			errors={errors}
-			title="Documents"
-		>
+		<OriginationStepCard errors={errors} title="Documents">
 			<div className="grid gap-4 xl:grid-cols-2">
 				{ORIGINATION_DOCUMENT_SECTIONS.map((section) => {
 					const sectionDrafts = filterDraftsByClass(
@@ -53,9 +49,6 @@ export function DocumentsStep({ caseId, errors }: DocumentsStepProps) {
 						<Card className="border-border/80" key={section.documentClass}>
 							<CardHeader className="space-y-1">
 								<CardTitle className="text-base">{section.label}</CardTitle>
-								<p className="text-muted-foreground text-sm leading-6">
-									{section.description}
-								</p>
 							</CardHeader>
 							<CardContent className="space-y-4">
 								<DocumentDraftComposer
