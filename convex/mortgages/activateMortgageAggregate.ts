@@ -168,60 +168,43 @@ async function readMortgageBorrowerLinks(
 
 async function readExistingActivationResult(
 	ctx: Pick<MutationCtx, "db">,
-	existingMortgage: Doc<"mortgages">
+	existingMortgage: Doc<"mortgages">,
+	paymentBootstrap: Pick<
+		ActivateMortgageAggregateResult,
+		"createdObligationIds" | "createdPlanEntryIds" | "scheduleRuleMissing"
+	>
 ): Promise<ActivateMortgageAggregateResult> {
-	const [borrowerLinks, listing, planEntries, obligations, valuationSnapshot] =
-		await Promise.all([
-			readMortgageBorrowerLinks(ctx, existingMortgage._id),
-			ctx.db
-				.query("listings")
-				.withIndex("by_mortgage", (query) =>
-					query.eq("mortgageId", existingMortgage._id)
-				)
-				.unique(),
-			ctx.db
-				.query("collectionPlanEntries")
-				.withIndex("by_mortgage_status_scheduled", (query) =>
-					query.eq("mortgageId", existingMortgage._id)
-				)
-				.collect(),
-			ctx.db
-				.query("obligations")
-				.withIndex("by_mortgage_and_date", (query) =>
-					query.eq("mortgageId", existingMortgage._id)
-				)
-				.collect(),
-			ctx.db
-				.query("mortgageValuationSnapshots")
-				.withIndex("by_mortgage_created_at", (query) =>
-					query.eq("mortgageId", existingMortgage._id)
-				)
-				.order("desc")
-				.first(),
-		]);
-
-	const sortedPlanEntryIds = [...planEntries]
-		.sort((left, right) => left.scheduledDate - right.scheduledDate)
-		.map((entry) => entry._id);
-	const sortedObligationIds = [...obligations]
-		.sort((left, right) => left.dueDate - right.dueDate)
-		.map((obligation) => obligation._id);
+	const [borrowerLinks, listing, valuationSnapshot] = await Promise.all([
+		readMortgageBorrowerLinks(ctx, existingMortgage._id),
+		ctx.db
+			.query("listings")
+			.withIndex("by_mortgage", (query) =>
+				query.eq("mortgageId", existingMortgage._id)
+			)
+			.unique(),
+		ctx.db
+			.query("mortgageValuationSnapshots")
+			.withIndex("by_mortgage_created_at", (query) =>
+				query.eq("mortgageId", existingMortgage._id)
+			)
+			.order("desc")
+			.first(),
+	]);
 	const borrowerIds = dedupeBorrowerIds(borrowerLinks);
 	const primaryBorrowerLink =
 		borrowerLinks.find((link) => link.role === "primary") ?? borrowerLinks[0];
 
 	return {
 		borrowerIds,
-		createdObligationIds: sortedObligationIds,
-		createdPlanEntryIds: sortedPlanEntryIds,
+		createdObligationIds: paymentBootstrap.createdObligationIds,
+		createdPlanEntryIds: paymentBootstrap.createdPlanEntryIds,
 		dealBlueprintCount: 0,
 		listingId: listing?._id ?? null,
 		mortgageId: existingMortgage._id,
 		primaryBorrowerId: primaryBorrowerLink?.borrowerId ?? null,
 		propertyId: existingMortgage.propertyId,
 		publicBlueprintCount: 0,
-		scheduleRuleMissing:
-			existingMortgage.paymentBootstrapScheduleRuleMissing ?? false,
+		scheduleRuleMissing: paymentBootstrap.scheduleRuleMissing,
 		valuationSnapshotId: valuationSnapshot?._id ?? null,
 		wasAlreadyCommitted: true,
 	};
@@ -233,10 +216,22 @@ async function ensureReplaySafePaymentBootstrap(
 		existingMortgage: Doc<"mortgages">;
 	}
 ) {
-	const borrowerLinks = await readMortgageBorrowerLinks(
-		ctx,
-		args.existingMortgage._id
-	);
+	const [borrowerLinks, existingObligations, existingPlanEntries] =
+		await Promise.all([
+			readMortgageBorrowerLinks(ctx, args.existingMortgage._id),
+			ctx.db
+				.query("obligations")
+				.withIndex("by_mortgage_and_date", (query) =>
+					query.eq("mortgageId", args.existingMortgage._id)
+				)
+				.collect(),
+			ctx.db
+				.query("collectionPlanEntries")
+				.withIndex("by_mortgage_status_scheduled", (query) =>
+					query.eq("mortgageId", args.existingMortgage._id)
+				)
+				.collect(),
+		]);
 	const primaryBorrowerId = resolvePrimaryBorrowerId(borrowerLinks);
 	if (!primaryBorrowerId) {
 		throw new ConvexError(
@@ -260,7 +255,22 @@ async function ensureReplaySafePaymentBootstrap(
 		paymentBootstrapScheduleRuleMissing: paymentBootstrap.scheduleRuleMissing,
 	});
 
-	return paymentBootstrap;
+	const existingObligationIdSet = new Set(
+		existingObligations.map((obligation) => obligation._id)
+	);
+	const existingPlanEntryIdSet = new Set(
+		existingPlanEntries.map((entry) => entry._id)
+	);
+
+	return {
+		...paymentBootstrap,
+		createdObligationIds: paymentBootstrap.createdObligationIds.filter(
+			(obligationId) => !existingObligationIdSet.has(obligationId)
+		),
+		createdPlanEntryIds: paymentBootstrap.createdPlanEntryIds.filter(
+			(planEntryId) => !existingPlanEntryIdSet.has(planEntryId)
+		),
+	};
 }
 
 async function ensureReplaySafeListingProjection(
@@ -335,7 +345,7 @@ export async function activateMortgageAggregate(
 		)
 		.unique();
 	if (existingMortgage) {
-		await ensureReplaySafePaymentBootstrap(ctx, {
+		const paymentBootstrap = await ensureReplaySafePaymentBootstrap(ctx, {
 			existingMortgage,
 			now: args.now,
 			orgId: args.orgId,
@@ -347,7 +357,11 @@ export async function activateMortgageAggregate(
 		});
 		const refreshedMortgage =
 			(await ctx.db.get(existingMortgage._id)) ?? existingMortgage;
-		return readExistingActivationResult(ctx, refreshedMortgage);
+		return readExistingActivationResult(
+			ctx,
+			refreshedMortgage,
+			paymentBootstrap
+		);
 	}
 
 	const { propertyId } = await resolveCanonicalProperty(ctx, {
