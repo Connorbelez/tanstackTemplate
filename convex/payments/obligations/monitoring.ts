@@ -42,8 +42,14 @@ export const recordBatchOverflowMetrics = internalMutation({
 
 		if (existing?.lastRunBusinessDate === args.businessDate) {
 			await ctx.db.patch(existing._id, {
-				lastNewlyDueCount: args.newlyDueCount,
-				lastPastGraceCount: args.pastGraceCount,
+				lastNewlyDueCount: Math.max(
+					existing.lastNewlyDueCount,
+					args.newlyDueCount
+				),
+				lastPastGraceCount: Math.max(
+					existing.lastPastGraceCount,
+					args.pastGraceCount
+				),
 				updatedAt,
 			});
 

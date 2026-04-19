@@ -211,7 +211,7 @@ export const getPortalDealDetail = dealQuery
 			throw new ConvexError("Deal not found");
 		}
 
-		const [mortgage, property, lenderUser, sellerUser, packageSurface] =
+		const [mortgage, property, lenderUser, sellerUser, viewerUser] =
 			await Promise.all([
 				ctx.db.get(deal.mortgageId),
 				ctx.db
@@ -227,8 +227,20 @@ export const getPortalDealDetail = dealQuery
 					.query("users")
 					.withIndex("authId", (query) => query.eq("authId", deal.sellerId))
 					.unique(),
-				readDealDocumentPackageSurface(ctx, args.dealId),
+				ctx.db
+					.query("users")
+					.withIndex("authId", (query) => query.eq("authId", ctx.viewer.authId))
+					.unique(),
 			]);
+
+		const packageSurfaceWithViewer = await readDealDocumentPackageSurface(
+			ctx,
+			args.dealId,
+			{
+				isFairLendAdmin: ctx.viewer.isFairLendAdmin,
+				userId: viewerUser?._id,
+			}
+		);
 
 		if (!mortgage) {
 			throw new ConvexError("Deal mortgage not found");
@@ -282,8 +294,8 @@ export const getPortalDealDetail = dealQuery
 						deal.sellerId,
 				},
 			},
-			documentPackage: packageSurface.package,
-			documentInstances: packageSurface.instances,
+			documentPackage: packageSurfaceWithViewer.package,
+			documentInstances: packageSurfaceWithViewer.instances,
 		};
 	})
 	.public();

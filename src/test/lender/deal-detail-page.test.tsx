@@ -9,6 +9,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { LenderDealDetailPage } from "#/components/lender/deals/LenderDealDetailPage";
 
 vi.mock("convex/react", () => ({
+	useAction: vi.fn(() => vi.fn()),
 	useQuery: vi.fn(),
 }));
 
@@ -33,7 +34,7 @@ vi.mock("@tanstack/react-router", async () => {
 
 afterEach(() => {
 	cleanup();
-	vi.clearAllMocks();
+	vi.restoreAllMocks();
 });
 
 interface QueryMock {
@@ -67,7 +68,30 @@ describe("lender deal detail page", () => {
 					instanceId: "instance_2",
 					kind: "generated",
 					packageLabel: "Closing package",
-					status: "signature_pending_recipient_resolution",
+					signing: {
+						canLaunchEmbeddedSigning: true,
+						envelopeId: "envelope_1",
+						generatedDocumentSigningStatus: "sent",
+						lastError: null,
+						lastProviderSyncAt: new Date("2026-05-15T14:00:00.000Z").getTime(),
+						providerCode: "documenso",
+						providerEnvelopeId: "doc_env_1",
+						recipients: [
+							{
+								email: "lender@test.fairlend.ca",
+								isCurrentViewer: true,
+								name: "Lena Lender",
+								platformRole: "lender_primary",
+								providerRecipientId: "rcpt_1",
+								providerRole: "SIGNER",
+								signingOrder: 0,
+								status: "pending",
+								userId: "user_1",
+							},
+						],
+						status: "sent",
+					},
+					status: "signature_sent",
 					url: null,
 				},
 			],
@@ -113,9 +137,14 @@ describe("lender deal detail page", () => {
 		expect(screen.getAllByText("Package Status").length).toBeGreaterThan(0);
 		expect(screen.getByText("Generated Read-only Documents")).toBeTruthy();
 		expect(screen.getByText("Private Static Documents")).toBeTruthy();
-		expect(screen.getByText("Reserved Signable Documents")).toBeTruthy();
+		expect(screen.getByText("Signable Documents")).toBeTruthy();
 		expect(screen.getByText("Counsel memo")).toBeTruthy();
-		expect(screen.queryByText("Borrower signature packet")).toBeNull();
+		expect(screen.getByText("Borrower signature packet")).toBeTruthy();
+		expect(screen.getAllByText("Lena Lender").length).toBeGreaterThan(0);
+		expect(screen.getByRole("button", { name: "Sign in portal" })).toBeTruthy();
+		expect(
+			screen.getByRole("button", { name: "Refresh status" })
+		).toBeTruthy();
 		expect(
 			screen.getByRole("link", { name: "Open PDF" }).getAttribute("href")
 		).toBe("https://example.com/counsel-memo.pdf");

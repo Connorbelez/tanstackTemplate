@@ -1,8 +1,9 @@
 import { convexTest } from "convex-test";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import workflowSchema from "../../../node_modules/@convex-dev/workflow/dist/component/schema.js";
 import workpoolSchema from "../../../node_modules/@convex-dev/workpool/dist/component/schema.js";
 import { registerAuditLogComponent } from "../../../src/test/convex/registerAuditLogComponent";
+import { drainScheduledWork } from "../../../src/test/convex/runtime";
 import { internal } from "../../_generated/api";
 import type { Id } from "../../_generated/dataModel";
 import auditTrailSchema from "../../components/auditTrail/schema";
@@ -170,11 +171,27 @@ async function getCronMonitoring(t: ReturnType<typeof createTestHarness>) {
 	);
 }
 
+async function runObligationCron(t: ReturnType<typeof createTestHarness>) {
+	await t.action(
+		internal.payments.obligations.crons.processObligationTransitions,
+		{}
+	);
+	await drainScheduledWork(t, { flushMicrotasks: true });
+}
+
 // ---------------------------------------------------------------------------
 // processObligationTransitions tests
 // ---------------------------------------------------------------------------
 
 describe("processObligationTransitions", () => {
+	beforeEach(() => {
+		vi.useFakeTimers();
+	});
+
+	afterEach(() => {
+		vi.useRealTimers();
+	});
+
 	it("transitions upcoming obligations to due when dueDate <= now", async () => {
 		const t = createTestHarness();
 		const { mortgageId, borrowerId } = await seedMortgageWithBorrower(t);
@@ -191,10 +208,7 @@ describe("processObligationTransitions", () => {
 		});
 
 		// Run the cron action
-		await t.action(
-			internal.payments.obligations.crons.processObligationTransitions,
-			{}
-		);
+		await runObligationCron(t);
 
 		// Verify obligation transitioned to "due"
 		const obligation = await t.run(async (ctx) => {
@@ -205,7 +219,6 @@ describe("processObligationTransitions", () => {
 	});
 
 	it("transitions due obligations to overdue when gracePeriodEnd <= now", async () => {
-		vi.useFakeTimers();
 		const t = createTestHarness();
 		const { mortgageId, borrowerId } = await seedMortgageWithBorrower(t);
 
@@ -220,20 +233,13 @@ describe("processObligationTransitions", () => {
 			gracePeriodEnd,
 		});
 
-		await t.action(
-			internal.payments.obligations.crons.processObligationTransitions,
-			{}
-		);
-
-		// Drain scheduled effects (emitObligationOverdue, createLateFeeObligation)
-		await t.finishAllScheduledFunctions(vi.runAllTimers);
+		await runObligationCron(t);
 
 		const obligation = await t.run(async (ctx) => {
 			return ctx.db.get(obligationId);
 		});
 		expect(obligation).not.toBeNull();
 		expect(obligation?.status).toBe("overdue");
-		vi.useRealTimers();
 	});
 
 	it("does not transition obligations that are not yet due", async () => {
@@ -251,10 +257,7 @@ describe("processObligationTransitions", () => {
 			gracePeriodEnd,
 		});
 
-		await t.action(
-			internal.payments.obligations.crons.processObligationTransitions,
-			{}
-		);
+		await runObligationCron(t);
 
 		const obligation = await t.run(async (ctx) => {
 			return ctx.db.get(obligationId);
@@ -291,10 +294,7 @@ describe("processObligationTransitions", () => {
 			paymentNumber: 2,
 		});
 
-		await t.action(
-			internal.payments.obligations.crons.processObligationTransitions,
-			{}
-		);
+		await runObligationCron(t);
 
 		// The valid upcoming obligation should have transitioned
 		const upcomingObligation = await t.run(async (ctx) => {
@@ -312,7 +312,6 @@ describe("processObligationTransitions", () => {
 	});
 
 	it("processes both phases in a single run", async () => {
-		vi.useFakeTimers();
 		const t = createTestHarness();
 		const { mortgageId, borrowerId } = await seedMortgageWithBorrower(t);
 
@@ -338,13 +337,7 @@ describe("processObligationTransitions", () => {
 			paymentNumber: 2,
 		});
 
-		await t.action(
-			internal.payments.obligations.crons.processObligationTransitions,
-			{}
-		);
-
-		// Drain scheduled effects from GRACE_PERIOD_EXPIRED
-		await t.finishAllScheduledFunctions(vi.runAllTimers);
+		await runObligationCron(t);
 
 		const [upcomingObl, dueObl] = await t.run(async (ctx) => {
 			return Promise.all([ctx.db.get(upcomingId), ctx.db.get(dueId)]);
@@ -352,11 +345,9 @@ describe("processObligationTransitions", () => {
 
 		expect(upcomingObl?.status).toBe("due");
 		expect(dueObl?.status).toBe("overdue");
-		vi.useRealTimers();
 	});
 
 	it("logs batch overflow warnings and records the UTC business-date streak", async () => {
-		vi.useFakeTimers();
 		vi.setSystemTime(new Date("2026-03-21T06:00:00.000Z"));
 		const warnSpy = vi
 			.spyOn(console, "warn")
@@ -375,10 +366,7 @@ describe("processObligationTransitions", () => {
 				count: 101,
 			});
 
-			await t.action(
-				internal.payments.obligations.crons.processObligationTransitions,
-				{}
-			);
+			await runObligationCron(t);
 
 			const monitoring = await getCronMonitoring(t);
 			expect(monitoring).not.toBeNull();
@@ -390,12 +378,10 @@ describe("processObligationTransitions", () => {
 			);
 		} finally {
 			warnSpy.mockRestore();
-			vi.useRealTimers();
 		}
 	});
 
 	it("resets the overflow streak when the next UTC business day does not overflow", async () => {
-		vi.useFakeTimers();
 		const warnSpy = vi
 			.spyOn(console, "warn")
 			.mockImplementation(() => undefined);
@@ -414,24 +400,17 @@ describe("processObligationTransitions", () => {
 			});
 
 			vi.setSystemTime(new Date("2026-03-21T06:00:00.000Z"));
-			await t.action(
-				internal.payments.obligations.crons.processObligationTransitions,
-				{}
-			);
+			await runObligationCron(t);
 
 			vi.setSystemTime(new Date("2026-03-22T06:00:00.000Z"));
-			await t.action(
-				internal.payments.obligations.crons.processObligationTransitions,
-				{}
-			);
+			await runObligationCron(t);
 
 			const monitoring = await getCronMonitoring(t);
 			expect(monitoring?.newlyDueOverflowStreak).toBe(0);
 			expect(monitoring?.lastRunBusinessDate).toBe("2026-03-22");
-			expect(monitoring?.lastNewlyDueCount).toBe(50);
+			expect(monitoring?.lastNewlyDueCount).toBe(0);
 		} finally {
 			warnSpy.mockRestore();
-			vi.useRealTimers();
 		}
 	});
 
@@ -448,10 +427,7 @@ describe("processObligationTransitions", () => {
 			count: 105,
 		});
 
-		await t.action(
-			internal.payments.obligations.crons.processObligationTransitions,
-			{}
-		);
+		await runObligationCron(t);
 
 		const upcomingRemaining = await t.run(async (ctx) =>
 			ctx.db
@@ -463,7 +439,6 @@ describe("processObligationTransitions", () => {
 	});
 
 	it("does not increment overflow streaks twice when rerun on the same UTC business day", async () => {
-		vi.useFakeTimers();
 		vi.setSystemTime(new Date("2026-03-21T06:00:00.000Z"));
 		const warnSpy = vi
 			.spyOn(console, "warn")
@@ -482,28 +457,19 @@ describe("processObligationTransitions", () => {
 				count: 250,
 			});
 
-			await t.action(
-				internal.payments.obligations.crons.processObligationTransitions,
-				{}
-			);
-			await t.action(
-				internal.payments.obligations.crons.processObligationTransitions,
-				{}
-			);
+			await runObligationCron(t);
+			await runObligationCron(t);
 
 			const monitoring = await getCronMonitoring(t);
 			expect(monitoring?.newlyDueOverflowStreak).toBe(1);
 			expect(monitoring?.lastRunBusinessDate).toBe("2026-03-21");
-			// Multi-wave first run drains all 250; monitoring records the last wave's backlog snapshot.
-			expect(monitoring?.lastNewlyDueCount).toBe(50);
+			expect(monitoring?.lastNewlyDueCount).toBe(250);
 		} finally {
 			warnSpy.mockRestore();
-			vi.useRealTimers();
 		}
 	});
 
 	it("emits an alert log after more than three consecutive UTC business days of overflow", async () => {
-		vi.useFakeTimers();
 		const warnSpy = vi
 			.spyOn(console, "warn")
 			.mockImplementation(() => undefined);
@@ -515,21 +481,18 @@ describe("processObligationTransitions", () => {
 			const t = createTestHarness();
 			const { mortgageId, borrowerId } = await seedMortgageWithBorrower(t);
 
-			await seedObligationBatch(t, {
-				mortgageId,
-				borrowerId,
-				status: "upcoming",
-				dueDate: Date.UTC(2026, 2, 15, 0, 0, 0, 0),
-				gracePeriodEnd: Date.UTC(2026, 2, 30, 0, 0, 0, 0),
-				count: 450,
-			});
-
-			for (const day of [21, 22, 23, 24]) {
+			for (const [index, day] of [21, 22, 23, 24].entries()) {
+				await seedObligationBatch(t, {
+					mortgageId,
+					borrowerId,
+					status: "upcoming",
+					dueDate: Date.UTC(2026, 2, 15, 0, 0, 0, 0),
+					gracePeriodEnd: Date.UTC(2026, 2, 30, 0, 0, 0, 0),
+					count: 101,
+					startPaymentNumber: index * 200 + 1,
+				});
 				vi.setSystemTime(new Date(`2026-03-${day}T06:00:00.000Z`));
-				await t.action(
-					internal.payments.obligations.crons.processObligationTransitions,
-					{}
-				);
+				await runObligationCron(t);
 			}
 
 			const monitoring = await getCronMonitoring(t);
@@ -540,7 +503,6 @@ describe("processObligationTransitions", () => {
 		} finally {
 			errorSpy.mockRestore();
 			warnSpy.mockRestore();
-			vi.useRealTimers();
 		}
 	});
 
@@ -557,10 +519,7 @@ describe("processObligationTransitions", () => {
 			settledAt: Date.now() - 2 * MS_PER_DAY,
 		});
 
-		await t.action(
-			internal.payments.obligations.crons.processObligationTransitions,
-			{}
-		);
+		await runObligationCron(t);
 
 		const obligation = await t.run(async (ctx) => ctx.db.get(obligationId));
 		expect(typeof obligation?.dueDate).toBe("number");
