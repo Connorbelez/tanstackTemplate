@@ -1,8 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { api } from "../../../../../convex/_generated/api";
 import * as originationCasesModule from "../../../../../convex/admin/origination/cases";
-import { createTestConvex, ensureSeededIdentity } from "../../../auth/helpers";
+import {
+	createMockViewer,
+	createTestConvex,
+	ensureSeededIdentity,
+} from "../../../auth/helpers";
 import { FAIRLEND_ADMIN, MEMBER } from "../../../auth/identities";
+import { lookupPermissions } from "../../../auth/permissions";
 
 async function countCanonicalRows(t: ReturnType<typeof createTestConvex>) {
 	return await t.run(async (ctx) => {
@@ -23,6 +28,15 @@ async function countCanonicalRows(t: ReturnType<typeof createTestConvex>) {
 }
 
 describe("admin origination cases", () => {
+	const adminWithoutOrg = createMockViewer({
+		roles: ["admin"],
+		permissions: lookupPermissions(["admin"]),
+		subject: "user_admin_without_org_test",
+		email: "admin-without-org@test.fairlend.ca",
+		firstName: "Orgless",
+		lastName: "Admin",
+	});
+
 	it("does not expose a public phase-1 status mutation", () => {
 		expect("updateCaseStatus" in originationCasesModule).toBe(false);
 	});
@@ -115,30 +129,30 @@ describe("admin origination cases", () => {
 		await t.withIdentity(FAIRLEND_ADMIN).mutation(
 			api.admin.origination.cases.patchCase,
 			{
-					caseId,
-					patch: {
-						currentStep: "review",
-						participantsDraft: {
-							primaryBorrower: {
-								email: "ada@example.com",
+				caseId,
+				patch: {
+					currentStep: "review",
+					participantsDraft: {
+						primaryBorrower: {
+							email: "ada@example.com",
 							fullName: "Ada Lovelace",
 						},
 					},
 				},
 			}
-			);
+		);
 
-			const result = await t
-				.withIdentity(FAIRLEND_ADMIN)
-				.query(api.admin.origination.cases.getCase, { caseId });
+		const result = await t
+			.withIdentity(FAIRLEND_ADMIN)
+			.query(api.admin.origination.cases.getCase, { caseId });
 
-			expect(result).toMatchObject({
-				_id: caseId,
-				currentStep: "review",
-				label: "Ada Lovelace",
-				recommendedStep: "property",
-				status: "draft",
-			});
+		expect(result).toMatchObject({
+			_id: caseId,
+			currentStep: "review",
+			label: "Ada Lovelace",
+			recommendedStep: "property",
+			status: "draft",
+		});
 	});
 
 	it("lists case summaries with the exact last saved step", async () => {
@@ -179,6 +193,49 @@ describe("admin origination cases", () => {
 			primaryBorrowerName: "Ada Lovelace",
 			status: "draft",
 		});
+	});
+
+	it("rejects non-staff callers without org context from origination case access", async () => {
+		const t = createTestConvex();
+		await ensureSeededIdentity(t, FAIRLEND_ADMIN);
+		await ensureSeededIdentity(t, adminWithoutOrg);
+
+		const caseId = await t.withIdentity(FAIRLEND_ADMIN).mutation(
+			api.admin.origination.cases.createCase,
+			{}
+		);
+
+		await expect(
+			t.withIdentity(adminWithoutOrg).query(
+				api.admin.origination.cases.listCases,
+				{}
+			)
+		).rejects.toThrow("Forbidden: origination case access requires org context");
+
+		await expect(
+			t.withIdentity(adminWithoutOrg).query(api.admin.origination.cases.getCase, {
+				caseId,
+			})
+		).rejects.toThrow("Forbidden: origination case access requires org context");
+
+		await expect(
+			t.withIdentity(adminWithoutOrg).mutation(
+				api.admin.origination.cases.patchCase,
+				{
+					caseId,
+					patch: {
+						currentStep: "participants",
+					},
+				}
+			)
+		).rejects.toThrow("Forbidden: origination case access requires org context");
+
+		await expect(
+			t.withIdentity(adminWithoutOrg).mutation(
+				api.admin.origination.cases.createCase,
+				{}
+			)
+		).rejects.toThrow("Forbidden: origination case access requires org context");
 	});
 
 	it("reuses the same draft when createCase receives the same bootstrap token", async () => {

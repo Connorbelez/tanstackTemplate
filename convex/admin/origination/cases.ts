@@ -35,9 +35,19 @@ function assertCaseAccess(
 		return;
 	}
 
-	if (viewer.orgId && record.orgId && viewer.orgId !== record.orgId) {
+	if (requireViewerOrgId(viewer) !== record.orgId) {
 		throw new ConvexError("Forbidden: origination case is outside your org");
 	}
+}
+
+function requireViewerOrgId(viewer: { orgId?: string }) {
+	if (!viewer.orgId) {
+		throw new ConvexError(
+			"Forbidden: origination case access requires org context"
+		);
+	}
+
+	return viewer.orgId;
 }
 
 function summarizeCase(
@@ -95,6 +105,9 @@ export const createCase = originationMutation
 	})
 	.handler(async (ctx, args) => {
 		const now = Date.now();
+		const orgId = ctx.viewer.isFairLendAdmin
+			? ctx.viewer.orgId
+			: requireViewerOrgId(ctx.viewer);
 		const user = await ctx.db
 			.query("users")
 			.withIndex("authId", (query) => query.eq("authId", ctx.viewer.authId))
@@ -123,7 +136,7 @@ export const createCase = originationMutation
 			bootstrapToken: args.bootstrapToken,
 			createdByUserId: user._id,
 			updatedByUserId: user._id,
-			orgId: ctx.viewer.orgId,
+			orgId,
 			status: "draft",
 			currentStep: INITIAL_ORIGINATION_STEP,
 			validationSnapshot,
@@ -137,18 +150,17 @@ export const listCases = originationQuery
 	.handler(async (ctx) => {
 		let records: Doc<"adminOriginationCases">[];
 
-		if (ctx.viewer.isFairLendAdmin || !ctx.viewer.orgId) {
+		if (ctx.viewer.isFairLendAdmin) {
 			records = await ctx.db
 				.query("adminOriginationCases")
 				.withIndex("by_updated_at")
 				.order("desc")
 				.collect();
 		} else {
+			const orgId = requireViewerOrgId(ctx.viewer);
 			records = await ctx.db
 				.query("adminOriginationCases")
-				.withIndex("by_org_updated_at", (query) =>
-					query.eq("orgId", ctx.viewer.orgId)
-				)
+				.withIndex("by_org_updated_at", (query) => query.eq("orgId", orgId))
 				.order("desc")
 				.collect();
 		}
