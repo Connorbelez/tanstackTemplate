@@ -64,6 +64,35 @@ describe("route auth permission helpers", () => {
 		).toBe(false);
 	});
 
+	it("grants marketplace route access through listing:view", () => {
+		expect(
+			canAccessRoute("listings", {
+				orgId: "org_lender",
+				permissions: ["listing:view"],
+				role: "lender",
+				roles: ["lender"],
+			})
+		).toBe(true);
+
+		expect(
+			canAccessRoute("listings", {
+				orgId: "org_member",
+				permissions: [],
+				role: "member",
+				roles: ["member"],
+			})
+		).toBe(false);
+
+		expect(
+			canAccessRoute("listings", {
+				orgId: "org_admin",
+				permissions: ["admin:access"],
+				role: "admin",
+				roles: ["admin"],
+			})
+		).toBe(true);
+	});
+
 	it("keeps admin subtree access declarative by path registry", () => {
 		expect(
 			canAccessAdminPath("/admin/originations/case_123", {

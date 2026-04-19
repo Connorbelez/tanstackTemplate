@@ -426,6 +426,9 @@ export const lenderQuery = authedQuery
 export const lenderMutation = authedMutation
 	.use(requireOrgContext)
 	.use(requirePermission("lender:access"));
+export const listingQuery = authedQuery
+	.use(requireOrgContext)
+	.use(requirePermission("listing:view"));
 export const underwriterQuery = authedQuery
 	.use(requireOrgContext)
 	.use(requirePermission("underwriter:access"));
