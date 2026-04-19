@@ -42,7 +42,7 @@ export const ORIGINATION_STEPS: readonly OriginationStepDefinition[] = [
 	{
 		key: "documents",
 		label: "Documents",
-		description: "Placeholder document groups for future authoring phases.",
+		description: "Static uploads and pinned template/group blueprint staging.",
 	},
 	{
 		key: "listingCuration",

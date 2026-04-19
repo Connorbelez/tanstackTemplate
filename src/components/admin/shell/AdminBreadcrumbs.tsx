@@ -17,6 +17,7 @@ const adminSegmentLabels: Record<string, string> = {
 	applications: "Applications",
 	borrowers: "Borrowers",
 	deals: "Deals",
+	"document-engine": "Document Engine",
 	listings: "Listings",
 	mortgages: "Mortgages",
 	obligations: "Obligations",

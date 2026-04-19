@@ -3,7 +3,6 @@
  */
 
 import { cleanup, render, screen } from "@testing-library/react";
-import { useAction, useQuery } from "convex/react";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Id } from "../../../convex/_generated/dataModel";
@@ -11,35 +10,33 @@ import type {
 	NormalizedFieldDefinition,
 	UnifiedRecord,
 } from "../../../convex/crm/types";
-import { MortgagesDedicatedDetails } from "#/components/admin/shell/dedicated-detail-panels";
+import { MortgagesDedicatedDetailsContent } from "#/components/admin/shell/dedicated-detail-panels";
 
-vi.mock("convex/react", () => ({
-	useAction: vi.fn(),
-	useQuery: vi.fn(),
-}));
+vi.mock("@tanstack/react-router", async () => {
+	const actual = await vi.importActual<typeof import("@tanstack/react-router")>(
+		"@tanstack/react-router"
+	);
 
-vi.mock("#/hooks/use-can-do", () => ({
-	useCanDo: vi.fn(() => true),
-}));
-
-vi.mock("@tanstack/react-router", () => ({
-	Link: (props: {
-		children: ReactNode;
-		className?: string;
-		params?: Record<string, string>;
-		to: string;
-	}) => (
-		<a
-			className={props.className}
-			href={props.to.replace(
-				"$recordid",
-				props.params?.recordid ?? "$recordid"
-			)}
-		>
-			{props.children}
-		</a>
-	),
-}));
+	return {
+		...actual,
+		Link: (props: {
+			children: ReactNode;
+			className?: string;
+			params?: Record<string, string>;
+			to: string;
+		}) => (
+			<a
+				className={props.className}
+				href={props.to.replace(
+					"$recordid",
+					props.params?.recordid ?? "$recordid"
+				)}
+			>
+				{props.children}
+			</a>
+		),
+	};
+});
 
 function buildFieldDef(args: {
 	displayOrder: number;
@@ -88,16 +85,9 @@ afterEach(() => {
 	vi.clearAllMocks();
 });
 
-interface QueryMock {
-	mockReturnValueOnce(value: unknown): QueryMock;
-}
-
 describe("mortgage dedicated details", () => {
-	it("renders the phase-4 payment bootstrap surface and valuation context", () => {
-		const useQueryMock = useQuery as unknown as QueryMock;
-		vi.mocked(useAction).mockReturnValue(vi.fn());
-		useQueryMock
-			.mockReturnValueOnce({
+	it("renders the phase-6 payment, valuation, and document blueprint context", () => {
+		const detailContext = {
 				borrowers: [
 					{
 						borrowerId: "borrower_1",
@@ -105,6 +95,25 @@ describe("mortgage dedicated details", () => {
 						name: "Ada Borrower",
 						role: "primary",
 						status: "active",
+					},
+				],
+				documents: [
+					{
+						archivedAt: null,
+						asset: {
+							assetId: "document_asset_borrower_summary",
+							fileRef: "storage_doc_1",
+							name: "Borrower Summary.pdf",
+							url: "https://example.com/borrower-summary.pdf",
+						},
+						blueprintId: "blueprint_1",
+						class: "public_static",
+						description: "Public borrower summary staged during origination.",
+						displayName: "Borrower Summary",
+						packageLabel: null,
+						status: "active",
+						templateName: null,
+						templateVersion: null,
 					},
 				],
 				listing: {
@@ -203,8 +212,7 @@ describe("mortgage dedicated details", () => {
 					},
 				],
 				recentObligations: [],
-			})
-			.mockReturnValueOnce([]);
+			};
 
 		const fields = [
 			buildFieldDef({ displayOrder: 0, label: "Status", name: "status" }),
@@ -292,7 +300,20 @@ describe("mortgage dedicated details", () => {
 			updatedAt: 0,
 		};
 
-		render(<MortgagesDedicatedDetails fields={fields} record={record} />);
+		render(
+			<MortgagesDedicatedDetailsContent
+				canManageMortgageDocuments
+				canRetryCollectionsActivation
+				detailContext={detailContext}
+				detailFields={fields}
+				mortgageHistory={[]}
+				onArchiveBlueprint={vi.fn(async () => {})}
+				onReplaceBlueprint={vi.fn()}
+				onRetryCollectionsActivation={vi.fn(async () => {})}
+				paymentSetup={detailContext.paymentSetup}
+				record={record}
+			/>
+		);
 
 		expect(screen.getByText("Summary")).toBeTruthy();
 		expect(screen.getByText("Borrowers")).toBeTruthy();
@@ -307,7 +328,15 @@ describe("mortgage dedicated details", () => {
 		expect(screen.getByRole("button", { name: "Retry activation" })).toBeTruthy();
 		expect(screen.getByText("External schedule schedule_1")).toBeTruthy();
 		expect(screen.getByText("Open obligation")).toBeTruthy();
-		expect(screen.getByText("Plan Entries")).toBeTruthy();
+		expect(screen.getAllByText("Plan Entries").length).toBeGreaterThanOrEqual(1);
+		expect(screen.getAllByText("Borrower Summary").length).toBeGreaterThanOrEqual(
+			2
+		);
+		expect(
+			screen.getByText("Public borrower summary staged during origination.")
+		).toBeTruthy();
+		expect(screen.getByRole("link", { name: "Open PDF" })).toBeTruthy();
+		expect(screen.getByRole("button", { name: "Archive" })).toBeTruthy();
 		const paymentSetupSection = screen
 			.getByRole("heading", { exact: true, name: "Payment Setup" })
 			.closest("section");

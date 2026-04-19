@@ -132,6 +132,45 @@ async function seedMortgageBackedListingFixture(
 				store: (blob: Blob) => Promise<Id<"_storage">>;
 			}
 		).store(new Blob(["listing projection test asset"]));
+		const publicDocumentFileRef = await (
+			ctx.storage as unknown as {
+				store: (blob: Blob) => Promise<Id<"_storage">>;
+			}
+		).store(new Blob(["listing public doc"]));
+		const publicDocumentAssetId = await ctx.db.insert("documentAssets", {
+			description: "Visible on listing detail",
+			fileHash: `listing-public-${now}`,
+			fileRef: publicDocumentFileRef,
+			fileSize: 128,
+			mimeType: "application/pdf",
+			name: "Listing public summary",
+			originalFilename: "listing-public-summary.pdf",
+			pageCount: 1,
+			source: "admin_upload",
+			uploadedAt: now,
+			uploadedByUserId: adminUser._id,
+		});
+		await ctx.db.insert("mortgageDocumentBlueprints", {
+			archivedAt: undefined,
+			archivedByUserId: undefined,
+			assetId: publicDocumentAssetId,
+			category: "public",
+			class: "public_static",
+			createdAt: now,
+			createdByUserId: adminUser._id,
+			description: "Projected public summary",
+			displayName: "Listing public summary",
+			displayOrder: 0,
+			mortgageId,
+			packageKey: "public",
+			packageLabel: "Public docs",
+			sourceDraftId: undefined,
+			sourceKind: "asset",
+			status: "active",
+			templateId: undefined,
+			templateSnapshotMeta: undefined,
+			templateVersion: undefined,
+		});
 		const listingId = await ctx.db.insert("listings", {
 			adminNotes: "Curated admin note",
 			approximateLatitude: undefined,
@@ -179,6 +218,8 @@ async function seedMortgageBackedListingFixture(
 			adminUserId: adminUser._id,
 			listingId,
 			mortgageId,
+			publicDocumentAssetId,
+			publicDocumentFileRef,
 			propertyId,
 			storageId,
 			valuationSnapshotId,
@@ -229,7 +270,7 @@ describe("listings/projection.refreshListingProjection", () => {
 			principal: 250_000,
 			propertyType: "residential",
 			province: "ON",
-			publicDocumentIds: [],
+			publicDocumentIds: [fixture.publicDocumentFileRef],
 			rateType: "fixed",
 			seoSlug: "curated-listing-slug",
 			title: "Curated listing title",

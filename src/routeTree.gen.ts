@@ -22,6 +22,7 @@ import { Route as BrokerRouteRouteImport } from './routes/broker/route'
 import { Route as BorrowerRouteRouteImport } from './routes/borrower/route'
 import { Route as AdminRouteRouteImport } from './routes/admin/route'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as LenderListingsRouteImport } from './routes/lender.listings'
 import { Route as E2eSwitchOrgRouteImport } from './routes/e2e/switch-org'
 import { Route as E2eSessionRouteImport } from './routes/e2e/session'
 import { Route as DemoWorkosRouteImport } from './routes/demo/workos'
@@ -53,6 +54,7 @@ import { Route as DemoConvexRouteImport } from './routes/demo/convex'
 import { Route as AdminPaymentOperationsRouteImport } from './routes/admin/payment-operations'
 import { Route as AdminOriginationsRouteImport } from './routes/admin/originations'
 import { Route as AdminFinancialLedgerRouteImport } from './routes/admin/financial-ledger'
+import { Route as AdminDocumentEngineRouteImport } from './routes/admin.document-engine'
 import { Route as AdminEntitytypeRouteImport } from './routes/admin/$entitytype'
 import { Route as AuthenticatedAuthenticatedRouteImport } from './routes/_authenticated/authenticated'
 import { Route as DemoRbacAuthRouteRouteImport } from './routes/demo/rbac-auth/route'
@@ -79,6 +81,8 @@ import { Route as DemoCrmIndexRouteImport } from './routes/demo/crm/index'
 import { Route as DemoBrokerWhitelabelIndexRouteImport } from './routes/demo/broker-whitelabel/index'
 import { Route as DemoAuditTraceabilityIndexRouteImport } from './routes/demo/audit-traceability/index'
 import { Route as DemoAmpsIndexRouteImport } from './routes/demo/amps/index'
+import { Route as AdminDocumentEngineIndexRouteImport } from './routes/admin.document-engine.index'
+import { Route as LenderListingsListingIdRouteImport } from './routes/lender.listings.$listingId'
 import { Route as DemoRbacAuthRolesRouteImport } from './routes/demo/rbac-auth/roles'
 import { Route as DemoRbacAuthOnboardingRouteImport } from './routes/demo/rbac-auth/onboarding'
 import { Route as DemoRbacAuthAuditRouteImport } from './routes/demo/rbac-auth/audit'
@@ -112,6 +116,10 @@ import { Route as AdminOriginationsCaseIdRouteImport } from './routes/admin/orig
 import { Route as AdminObligationsRecordidRouteImport } from './routes/admin/obligations/$recordid'
 import { Route as AdminMortgagesRecordidRouteImport } from './routes/admin/mortgages/$recordid'
 import { Route as AdminListingsRecordidRouteImport } from './routes/admin/listings/$recordid'
+import { Route as AdminDocumentEngineVariablesRouteImport } from './routes/admin.document-engine.variables'
+import { Route as AdminDocumentEngineTemplatesRouteImport } from './routes/admin.document-engine.templates'
+import { Route as AdminDocumentEngineLibraryRouteImport } from './routes/admin.document-engine.library'
+import { Route as AdminDocumentEngineGroupsRouteImport } from './routes/admin.document-engine.groups'
 import { Route as AdminDealsRecordidRouteImport } from './routes/admin/deals/$recordid'
 import { Route as AdminBorrowersRecordidRouteImport } from './routes/admin/borrowers/$recordid'
 import { Route as AdminEntitytypeRecordidRouteImport } from './routes/admin/$entitytype.$recordid'
@@ -125,6 +133,7 @@ import { Route as DemoBrokerWhitelabelListingsIndexRouteImport } from './routes/
 import { Route as DemoDocumentEngineDesignerTemplateIdRouteImport } from './routes/demo/document-engine/designer.$templateId'
 import { Route as DemoCrmObjectDefIdRecordIdRouteImport } from './routes/demo/crm/$objectDefId.$recordId'
 import { Route as DemoBrokerWhitelabelListingsListingIdRouteImport } from './routes/demo/broker-whitelabel/listings/$listingId'
+import { Route as AdminDocumentEngineDesignerTemplateIdRouteImport } from './routes/admin.document-engine.designer.$templateId'
 import { Route as DemoRbacAdminUnderwritingRouteRouteImport } from './routes/demo/rbac/admin/underwriting/route'
 import { Route as DemoAmpsMortgagesMortgageIdPaymentsRouteImport } from './routes/demo/amps/mortgages.$mortgageId.payments'
 
@@ -192,6 +201,11 @@ const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
+} as any)
+const LenderListingsRoute = LenderListingsRouteImport.update({
+  id: '/listings',
+  path: '/listings',
+  getParentRoute: () => LenderRouteRoute,
 } as any)
 const E2eSwitchOrgRoute = E2eSwitchOrgRouteImport.update({
   id: '/e2e/switch-org',
@@ -351,6 +365,11 @@ const AdminFinancialLedgerRoute = AdminFinancialLedgerRouteImport.update({
   path: '/financial-ledger',
   getParentRoute: () => AdminRouteRoute,
 } as any)
+const AdminDocumentEngineRoute = AdminDocumentEngineRouteImport.update({
+  id: '/document-engine',
+  path: '/document-engine',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
 const AdminEntitytypeRoute = AdminEntitytypeRouteImport.update({
   id: '/$entitytype',
   path: '/$entitytype',
@@ -487,6 +506,17 @@ const DemoAmpsIndexRoute = DemoAmpsIndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => DemoAmpsRouteRoute,
+} as any)
+const AdminDocumentEngineIndexRoute =
+  AdminDocumentEngineIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => AdminDocumentEngineRoute,
+  } as any)
+const LenderListingsListingIdRoute = LenderListingsListingIdRouteImport.update({
+  id: '/$listingId',
+  path: '/$listingId',
+  getParentRoute: () => LenderListingsRoute,
 } as any)
 const DemoRbacAuthRolesRoute = DemoRbacAuthRolesRouteImport.update({
   id: '/roles',
@@ -670,6 +700,30 @@ const AdminListingsRecordidRoute = AdminListingsRecordidRouteImport.update({
   path: '/$recordid',
   getParentRoute: () => AdminListingsRouteRoute,
 } as any)
+const AdminDocumentEngineVariablesRoute =
+  AdminDocumentEngineVariablesRouteImport.update({
+    id: '/variables',
+    path: '/variables',
+    getParentRoute: () => AdminDocumentEngineRoute,
+  } as any)
+const AdminDocumentEngineTemplatesRoute =
+  AdminDocumentEngineTemplatesRouteImport.update({
+    id: '/templates',
+    path: '/templates',
+    getParentRoute: () => AdminDocumentEngineRoute,
+  } as any)
+const AdminDocumentEngineLibraryRoute =
+  AdminDocumentEngineLibraryRouteImport.update({
+    id: '/library',
+    path: '/library',
+    getParentRoute: () => AdminDocumentEngineRoute,
+  } as any)
+const AdminDocumentEngineGroupsRoute =
+  AdminDocumentEngineGroupsRouteImport.update({
+    id: '/groups',
+    path: '/groups',
+    getParentRoute: () => AdminDocumentEngineRoute,
+  } as any)
 const AdminDealsRecordidRoute = AdminDealsRecordidRouteImport.update({
   id: '/$recordid',
   path: '/$recordid',
@@ -740,6 +794,12 @@ const DemoBrokerWhitelabelListingsListingIdRoute =
     path: '/$listingId',
     getParentRoute: () => DemoBrokerWhitelabelListingsRouteRoute,
   } as any)
+const AdminDocumentEngineDesignerTemplateIdRoute =
+  AdminDocumentEngineDesignerTemplateIdRouteImport.update({
+    id: '/designer/$templateId',
+    path: '/designer/$templateId',
+    getParentRoute: () => AdminDocumentEngineRoute,
+  } as any)
 const DemoRbacAdminUnderwritingRouteRoute =
   DemoRbacAdminUnderwritingRouteRouteImport.update({
     id: '/underwriting',
@@ -759,7 +819,7 @@ export interface FileRoutesByFullPath {
   '/borrower': typeof BorrowerRouteRoute
   '/broker': typeof BrokerRouteRoute
   '/lawyer': typeof LawyerRouteRoute
-  '/lender': typeof LenderRouteRoute
+  '/lender': typeof LenderRouteRouteWithChildren
   '/onboard': typeof OnboardRouteRoute
   '/about': typeof AboutRoute
   '/callback': typeof CallbackRoute
@@ -784,6 +844,7 @@ export interface FileRoutesByFullPath {
   '/demo/rbac-auth': typeof DemoRbacAuthRouteRouteWithChildren
   '/authenticated': typeof AuthenticatedAuthenticatedRoute
   '/admin/$entitytype': typeof AdminEntitytypeRouteWithChildren
+  '/admin/document-engine': typeof AdminDocumentEngineRouteWithChildren
   '/admin/financial-ledger': typeof AdminFinancialLedgerRoute
   '/admin/originations': typeof AdminOriginationsRouteWithChildren
   '/admin/payment-operations': typeof AdminPaymentOperationsRoute
@@ -815,6 +876,7 @@ export interface FileRoutesByFullPath {
   '/demo/workos': typeof DemoWorkosRoute
   '/e2e/session': typeof E2eSessionRoute
   '/e2e/switch-org': typeof E2eSwitchOrgRoute
+  '/lender/listings': typeof LenderListingsRouteWithChildren
   '/demo/broker-whitelabel/listings': typeof DemoBrokerWhitelabelListingsRouteRouteWithChildren
   '/demo/rbac/admin': typeof DemoRbacAdminRouteRouteWithChildren
   '/demo/rbac/borrower': typeof DemoRbacBorrowerRouteRoute
@@ -824,6 +886,10 @@ export interface FileRoutesByFullPath {
   '/admin/$entitytype/$recordid': typeof AdminEntitytypeRecordidRoute
   '/admin/borrowers/$recordid': typeof AdminBorrowersRecordidRoute
   '/admin/deals/$recordid': typeof AdminDealsRecordidRoute
+  '/admin/document-engine/groups': typeof AdminDocumentEngineGroupsRoute
+  '/admin/document-engine/library': typeof AdminDocumentEngineLibraryRoute
+  '/admin/document-engine/templates': typeof AdminDocumentEngineTemplatesRoute
+  '/admin/document-engine/variables': typeof AdminDocumentEngineVariablesRoute
   '/admin/listings/$recordid': typeof AdminListingsRecordidRoute
   '/admin/mortgages/$recordid': typeof AdminMortgagesRecordidRoute
   '/admin/obligations/$recordid': typeof AdminObligationsRecordidRoute
@@ -857,6 +923,8 @@ export interface FileRoutesByFullPath {
   '/demo/rbac-auth/audit': typeof DemoRbacAuthAuditRoute
   '/demo/rbac-auth/onboarding': typeof DemoRbacAuthOnboardingRoute
   '/demo/rbac-auth/roles': typeof DemoRbacAuthRolesRoute
+  '/lender/listings/$listingId': typeof LenderListingsListingIdRoute
+  '/admin/document-engine/': typeof AdminDocumentEngineIndexRoute
   '/demo/amps/': typeof DemoAmpsIndexRoute
   '/demo/audit-traceability/': typeof DemoAuditTraceabilityIndexRoute
   '/demo/broker-whitelabel/': typeof DemoBrokerWhitelabelIndexRoute
@@ -867,6 +935,7 @@ export interface FileRoutesByFullPath {
   '/demo/rbac-auth/': typeof DemoRbacAuthIndexRoute
   '/demo/rbac/': typeof DemoRbacIndexRoute
   '/demo/rbac/admin/underwriting': typeof DemoRbacAdminUnderwritingRouteRoute
+  '/admin/document-engine/designer/$templateId': typeof AdminDocumentEngineDesignerTemplateIdRoute
   '/demo/broker-whitelabel/listings/$listingId': typeof DemoBrokerWhitelabelListingsListingIdRoute
   '/demo/crm/$objectDefId/$recordId': typeof DemoCrmObjectDefIdRecordIdRoute
   '/demo/document-engine/designer/$templateId': typeof DemoDocumentEngineDesignerTemplateIdRoute
@@ -879,7 +948,7 @@ export interface FileRoutesByTo {
   '/borrower': typeof BorrowerRouteRoute
   '/broker': typeof BrokerRouteRoute
   '/lawyer': typeof LawyerRouteRoute
-  '/lender': typeof LenderRouteRoute
+  '/lender': typeof LenderRouteRouteWithChildren
   '/onboard': typeof OnboardRouteRoute
   '/about': typeof AboutRoute
   '/callback': typeof CallbackRoute
@@ -926,6 +995,7 @@ export interface FileRoutesByTo {
   '/demo/workos': typeof DemoWorkosRoute
   '/e2e/session': typeof E2eSessionRoute
   '/e2e/switch-org': typeof E2eSwitchOrgRoute
+  '/lender/listings': typeof LenderListingsRouteWithChildren
   '/demo/rbac/admin': typeof DemoRbacAdminRouteRouteWithChildren
   '/demo/rbac/borrower': typeof DemoRbacBorrowerRouteRoute
   '/demo/rbac/broker': typeof DemoRbacBrokerRouteRoute
@@ -934,6 +1004,10 @@ export interface FileRoutesByTo {
   '/admin/$entitytype/$recordid': typeof AdminEntitytypeRecordidRoute
   '/admin/borrowers/$recordid': typeof AdminBorrowersRecordidRoute
   '/admin/deals/$recordid': typeof AdminDealsRecordidRoute
+  '/admin/document-engine/groups': typeof AdminDocumentEngineGroupsRoute
+  '/admin/document-engine/library': typeof AdminDocumentEngineLibraryRoute
+  '/admin/document-engine/templates': typeof AdminDocumentEngineTemplatesRoute
+  '/admin/document-engine/variables': typeof AdminDocumentEngineVariablesRoute
   '/admin/listings/$recordid': typeof AdminListingsRecordidRoute
   '/admin/mortgages/$recordid': typeof AdminMortgagesRecordidRoute
   '/admin/obligations/$recordid': typeof AdminObligationsRecordidRoute
@@ -967,6 +1041,8 @@ export interface FileRoutesByTo {
   '/demo/rbac-auth/audit': typeof DemoRbacAuthAuditRoute
   '/demo/rbac-auth/onboarding': typeof DemoRbacAuthOnboardingRoute
   '/demo/rbac-auth/roles': typeof DemoRbacAuthRolesRoute
+  '/lender/listings/$listingId': typeof LenderListingsListingIdRoute
+  '/admin/document-engine': typeof AdminDocumentEngineIndexRoute
   '/demo/amps': typeof DemoAmpsIndexRoute
   '/demo/audit-traceability': typeof DemoAuditTraceabilityIndexRoute
   '/demo/broker-whitelabel': typeof DemoBrokerWhitelabelIndexRoute
@@ -977,6 +1053,7 @@ export interface FileRoutesByTo {
   '/demo/rbac-auth': typeof DemoRbacAuthIndexRoute
   '/demo/rbac': typeof DemoRbacIndexRoute
   '/demo/rbac/admin/underwriting': typeof DemoRbacAdminUnderwritingRouteRoute
+  '/admin/document-engine/designer/$templateId': typeof AdminDocumentEngineDesignerTemplateIdRoute
   '/demo/broker-whitelabel/listings/$listingId': typeof DemoBrokerWhitelabelListingsListingIdRoute
   '/demo/crm/$objectDefId/$recordId': typeof DemoCrmObjectDefIdRecordIdRoute
   '/demo/document-engine/designer/$templateId': typeof DemoDocumentEngineDesignerTemplateIdRoute
@@ -990,7 +1067,7 @@ export interface FileRoutesById {
   '/borrower': typeof BorrowerRouteRoute
   '/broker': typeof BrokerRouteRoute
   '/lawyer': typeof LawyerRouteRoute
-  '/lender': typeof LenderRouteRoute
+  '/lender': typeof LenderRouteRouteWithChildren
   '/onboard': typeof OnboardRouteRoute
   '/about': typeof AboutRoute
   '/callback': typeof CallbackRoute
@@ -1015,6 +1092,7 @@ export interface FileRoutesById {
   '/demo/rbac-auth': typeof DemoRbacAuthRouteRouteWithChildren
   '/_authenticated/authenticated': typeof AuthenticatedAuthenticatedRoute
   '/admin/$entitytype': typeof AdminEntitytypeRouteWithChildren
+  '/admin/document-engine': typeof AdminDocumentEngineRouteWithChildren
   '/admin/financial-ledger': typeof AdminFinancialLedgerRoute
   '/admin/originations': typeof AdminOriginationsRouteWithChildren
   '/admin/payment-operations': typeof AdminPaymentOperationsRoute
@@ -1046,6 +1124,7 @@ export interface FileRoutesById {
   '/demo/workos': typeof DemoWorkosRoute
   '/e2e/session': typeof E2eSessionRoute
   '/e2e/switch-org': typeof E2eSwitchOrgRoute
+  '/lender/listings': typeof LenderListingsRouteWithChildren
   '/demo/broker-whitelabel/listings': typeof DemoBrokerWhitelabelListingsRouteRouteWithChildren
   '/demo/rbac/admin': typeof DemoRbacAdminRouteRouteWithChildren
   '/demo/rbac/borrower': typeof DemoRbacBorrowerRouteRoute
@@ -1055,6 +1134,10 @@ export interface FileRoutesById {
   '/admin/$entitytype/$recordid': typeof AdminEntitytypeRecordidRoute
   '/admin/borrowers/$recordid': typeof AdminBorrowersRecordidRoute
   '/admin/deals/$recordid': typeof AdminDealsRecordidRoute
+  '/admin/document-engine/groups': typeof AdminDocumentEngineGroupsRoute
+  '/admin/document-engine/library': typeof AdminDocumentEngineLibraryRoute
+  '/admin/document-engine/templates': typeof AdminDocumentEngineTemplatesRoute
+  '/admin/document-engine/variables': typeof AdminDocumentEngineVariablesRoute
   '/admin/listings/$recordid': typeof AdminListingsRecordidRoute
   '/admin/mortgages/$recordid': typeof AdminMortgagesRecordidRoute
   '/admin/obligations/$recordid': typeof AdminObligationsRecordidRoute
@@ -1088,6 +1171,8 @@ export interface FileRoutesById {
   '/demo/rbac-auth/audit': typeof DemoRbacAuthAuditRoute
   '/demo/rbac-auth/onboarding': typeof DemoRbacAuthOnboardingRoute
   '/demo/rbac-auth/roles': typeof DemoRbacAuthRolesRoute
+  '/lender/listings/$listingId': typeof LenderListingsListingIdRoute
+  '/admin/document-engine/': typeof AdminDocumentEngineIndexRoute
   '/demo/amps/': typeof DemoAmpsIndexRoute
   '/demo/audit-traceability/': typeof DemoAuditTraceabilityIndexRoute
   '/demo/broker-whitelabel/': typeof DemoBrokerWhitelabelIndexRoute
@@ -1098,6 +1183,7 @@ export interface FileRoutesById {
   '/demo/rbac-auth/': typeof DemoRbacAuthIndexRoute
   '/demo/rbac/': typeof DemoRbacIndexRoute
   '/demo/rbac/admin/underwriting': typeof DemoRbacAdminUnderwritingRouteRoute
+  '/admin/document-engine/designer/$templateId': typeof AdminDocumentEngineDesignerTemplateIdRoute
   '/demo/broker-whitelabel/listings/$listingId': typeof DemoBrokerWhitelabelListingsListingIdRoute
   '/demo/crm/$objectDefId/$recordId': typeof DemoCrmObjectDefIdRecordIdRoute
   '/demo/document-engine/designer/$templateId': typeof DemoDocumentEngineDesignerTemplateIdRoute
@@ -1137,6 +1223,7 @@ export interface FileRouteTypes {
     | '/demo/rbac-auth'
     | '/authenticated'
     | '/admin/$entitytype'
+    | '/admin/document-engine'
     | '/admin/financial-ledger'
     | '/admin/originations'
     | '/admin/payment-operations'
@@ -1168,6 +1255,7 @@ export interface FileRouteTypes {
     | '/demo/workos'
     | '/e2e/session'
     | '/e2e/switch-org'
+    | '/lender/listings'
     | '/demo/broker-whitelabel/listings'
     | '/demo/rbac/admin'
     | '/demo/rbac/borrower'
@@ -1177,6 +1265,10 @@ export interface FileRouteTypes {
     | '/admin/$entitytype/$recordid'
     | '/admin/borrowers/$recordid'
     | '/admin/deals/$recordid'
+    | '/admin/document-engine/groups'
+    | '/admin/document-engine/library'
+    | '/admin/document-engine/templates'
+    | '/admin/document-engine/variables'
     | '/admin/listings/$recordid'
     | '/admin/mortgages/$recordid'
     | '/admin/obligations/$recordid'
@@ -1210,6 +1302,8 @@ export interface FileRouteTypes {
     | '/demo/rbac-auth/audit'
     | '/demo/rbac-auth/onboarding'
     | '/demo/rbac-auth/roles'
+    | '/lender/listings/$listingId'
+    | '/admin/document-engine/'
     | '/demo/amps/'
     | '/demo/audit-traceability/'
     | '/demo/broker-whitelabel/'
@@ -1220,6 +1314,7 @@ export interface FileRouteTypes {
     | '/demo/rbac-auth/'
     | '/demo/rbac/'
     | '/demo/rbac/admin/underwriting'
+    | '/admin/document-engine/designer/$templateId'
     | '/demo/broker-whitelabel/listings/$listingId'
     | '/demo/crm/$objectDefId/$recordId'
     | '/demo/document-engine/designer/$templateId'
@@ -1279,6 +1374,7 @@ export interface FileRouteTypes {
     | '/demo/workos'
     | '/e2e/session'
     | '/e2e/switch-org'
+    | '/lender/listings'
     | '/demo/rbac/admin'
     | '/demo/rbac/borrower'
     | '/demo/rbac/broker'
@@ -1287,6 +1383,10 @@ export interface FileRouteTypes {
     | '/admin/$entitytype/$recordid'
     | '/admin/borrowers/$recordid'
     | '/admin/deals/$recordid'
+    | '/admin/document-engine/groups'
+    | '/admin/document-engine/library'
+    | '/admin/document-engine/templates'
+    | '/admin/document-engine/variables'
     | '/admin/listings/$recordid'
     | '/admin/mortgages/$recordid'
     | '/admin/obligations/$recordid'
@@ -1320,6 +1420,8 @@ export interface FileRouteTypes {
     | '/demo/rbac-auth/audit'
     | '/demo/rbac-auth/onboarding'
     | '/demo/rbac-auth/roles'
+    | '/lender/listings/$listingId'
+    | '/admin/document-engine'
     | '/demo/amps'
     | '/demo/audit-traceability'
     | '/demo/broker-whitelabel'
@@ -1330,6 +1432,7 @@ export interface FileRouteTypes {
     | '/demo/rbac-auth'
     | '/demo/rbac'
     | '/demo/rbac/admin/underwriting'
+    | '/admin/document-engine/designer/$templateId'
     | '/demo/broker-whitelabel/listings/$listingId'
     | '/demo/crm/$objectDefId/$recordId'
     | '/demo/document-engine/designer/$templateId'
@@ -1367,6 +1470,7 @@ export interface FileRouteTypes {
     | '/demo/rbac-auth'
     | '/_authenticated/authenticated'
     | '/admin/$entitytype'
+    | '/admin/document-engine'
     | '/admin/financial-ledger'
     | '/admin/originations'
     | '/admin/payment-operations'
@@ -1398,6 +1502,7 @@ export interface FileRouteTypes {
     | '/demo/workos'
     | '/e2e/session'
     | '/e2e/switch-org'
+    | '/lender/listings'
     | '/demo/broker-whitelabel/listings'
     | '/demo/rbac/admin'
     | '/demo/rbac/borrower'
@@ -1407,6 +1512,10 @@ export interface FileRouteTypes {
     | '/admin/$entitytype/$recordid'
     | '/admin/borrowers/$recordid'
     | '/admin/deals/$recordid'
+    | '/admin/document-engine/groups'
+    | '/admin/document-engine/library'
+    | '/admin/document-engine/templates'
+    | '/admin/document-engine/variables'
     | '/admin/listings/$recordid'
     | '/admin/mortgages/$recordid'
     | '/admin/obligations/$recordid'
@@ -1440,6 +1549,8 @@ export interface FileRouteTypes {
     | '/demo/rbac-auth/audit'
     | '/demo/rbac-auth/onboarding'
     | '/demo/rbac-auth/roles'
+    | '/lender/listings/$listingId'
+    | '/admin/document-engine/'
     | '/demo/amps/'
     | '/demo/audit-traceability/'
     | '/demo/broker-whitelabel/'
@@ -1450,6 +1561,7 @@ export interface FileRouteTypes {
     | '/demo/rbac-auth/'
     | '/demo/rbac/'
     | '/demo/rbac/admin/underwriting'
+    | '/admin/document-engine/designer/$templateId'
     | '/demo/broker-whitelabel/listings/$listingId'
     | '/demo/crm/$objectDefId/$recordId'
     | '/demo/document-engine/designer/$templateId'
@@ -1463,7 +1575,7 @@ export interface RootRouteChildren {
   BorrowerRouteRoute: typeof BorrowerRouteRoute
   BrokerRouteRoute: typeof BrokerRouteRoute
   LawyerRouteRoute: typeof LawyerRouteRoute
-  LenderRouteRoute: typeof LenderRouteRoute
+  LenderRouteRoute: typeof LenderRouteRouteWithChildren
   OnboardRouteRoute: typeof OnboardRouteRoute
   AboutRoute: typeof AboutRoute
   CallbackRoute: typeof CallbackRoute
@@ -1604,6 +1716,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/lender/listings': {
+      id: '/lender/listings'
+      path: '/listings'
+      fullPath: '/lender/listings'
+      preLoaderRoute: typeof LenderListingsRouteImport
+      parentRoute: typeof LenderRouteRoute
     }
     '/e2e/switch-org': {
       id: '/e2e/switch-org'
@@ -1822,6 +1941,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminFinancialLedgerRouteImport
       parentRoute: typeof AdminRouteRoute
     }
+    '/admin/document-engine': {
+      id: '/admin/document-engine'
+      path: '/document-engine'
+      fullPath: '/admin/document-engine'
+      preLoaderRoute: typeof AdminDocumentEngineRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
     '/admin/$entitytype': {
       id: '/admin/$entitytype'
       path: '/$entitytype'
@@ -2003,6 +2129,20 @@ declare module '@tanstack/react-router' {
       fullPath: '/demo/amps/'
       preLoaderRoute: typeof DemoAmpsIndexRouteImport
       parentRoute: typeof DemoAmpsRouteRoute
+    }
+    '/admin/document-engine/': {
+      id: '/admin/document-engine/'
+      path: '/'
+      fullPath: '/admin/document-engine/'
+      preLoaderRoute: typeof AdminDocumentEngineIndexRouteImport
+      parentRoute: typeof AdminDocumentEngineRoute
+    }
+    '/lender/listings/$listingId': {
+      id: '/lender/listings/$listingId'
+      path: '/$listingId'
+      fullPath: '/lender/listings/$listingId'
+      preLoaderRoute: typeof LenderListingsListingIdRouteImport
+      parentRoute: typeof LenderListingsRoute
     }
     '/demo/rbac-auth/roles': {
       id: '/demo/rbac-auth/roles'
@@ -2235,6 +2375,34 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminListingsRecordidRouteImport
       parentRoute: typeof AdminListingsRouteRoute
     }
+    '/admin/document-engine/variables': {
+      id: '/admin/document-engine/variables'
+      path: '/variables'
+      fullPath: '/admin/document-engine/variables'
+      preLoaderRoute: typeof AdminDocumentEngineVariablesRouteImport
+      parentRoute: typeof AdminDocumentEngineRoute
+    }
+    '/admin/document-engine/templates': {
+      id: '/admin/document-engine/templates'
+      path: '/templates'
+      fullPath: '/admin/document-engine/templates'
+      preLoaderRoute: typeof AdminDocumentEngineTemplatesRouteImport
+      parentRoute: typeof AdminDocumentEngineRoute
+    }
+    '/admin/document-engine/library': {
+      id: '/admin/document-engine/library'
+      path: '/library'
+      fullPath: '/admin/document-engine/library'
+      preLoaderRoute: typeof AdminDocumentEngineLibraryRouteImport
+      parentRoute: typeof AdminDocumentEngineRoute
+    }
+    '/admin/document-engine/groups': {
+      id: '/admin/document-engine/groups'
+      path: '/groups'
+      fullPath: '/admin/document-engine/groups'
+      preLoaderRoute: typeof AdminDocumentEngineGroupsRouteImport
+      parentRoute: typeof AdminDocumentEngineRoute
+    }
     '/admin/deals/$recordid': {
       id: '/admin/deals/$recordid'
       path: '/$recordid'
@@ -2325,6 +2493,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/demo/broker-whitelabel/listings/$listingId'
       preLoaderRoute: typeof DemoBrokerWhitelabelListingsListingIdRouteImport
       parentRoute: typeof DemoBrokerWhitelabelListingsRouteRoute
+    }
+    '/admin/document-engine/designer/$templateId': {
+      id: '/admin/document-engine/designer/$templateId'
+      path: '/designer/$templateId'
+      fullPath: '/admin/document-engine/designer/$templateId'
+      preLoaderRoute: typeof AdminDocumentEngineDesignerTemplateIdRouteImport
+      parentRoute: typeof AdminDocumentEngineRoute
     }
     '/demo/rbac/admin/underwriting': {
       id: '/demo/rbac/admin/underwriting'
@@ -2424,6 +2599,28 @@ const AdminEntitytypeRouteWithChildren = AdminEntitytypeRoute._addFileChildren(
   AdminEntitytypeRouteChildren,
 )
 
+interface AdminDocumentEngineRouteChildren {
+  AdminDocumentEngineGroupsRoute: typeof AdminDocumentEngineGroupsRoute
+  AdminDocumentEngineLibraryRoute: typeof AdminDocumentEngineLibraryRoute
+  AdminDocumentEngineTemplatesRoute: typeof AdminDocumentEngineTemplatesRoute
+  AdminDocumentEngineVariablesRoute: typeof AdminDocumentEngineVariablesRoute
+  AdminDocumentEngineIndexRoute: typeof AdminDocumentEngineIndexRoute
+  AdminDocumentEngineDesignerTemplateIdRoute: typeof AdminDocumentEngineDesignerTemplateIdRoute
+}
+
+const AdminDocumentEngineRouteChildren: AdminDocumentEngineRouteChildren = {
+  AdminDocumentEngineGroupsRoute: AdminDocumentEngineGroupsRoute,
+  AdminDocumentEngineLibraryRoute: AdminDocumentEngineLibraryRoute,
+  AdminDocumentEngineTemplatesRoute: AdminDocumentEngineTemplatesRoute,
+  AdminDocumentEngineVariablesRoute: AdminDocumentEngineVariablesRoute,
+  AdminDocumentEngineIndexRoute: AdminDocumentEngineIndexRoute,
+  AdminDocumentEngineDesignerTemplateIdRoute:
+    AdminDocumentEngineDesignerTemplateIdRoute,
+}
+
+const AdminDocumentEngineRouteWithChildren =
+  AdminDocumentEngineRoute._addFileChildren(AdminDocumentEngineRouteChildren)
+
 interface AdminOriginationsRouteChildren {
   AdminOriginationsCaseIdRoute: typeof AdminOriginationsCaseIdRoute
   AdminOriginationsNewRoute: typeof AdminOriginationsNewRoute
@@ -2446,6 +2643,7 @@ interface AdminRouteRouteChildren {
   AdminPropertiesRouteRoute: typeof AdminPropertiesRouteRouteWithChildren
   AdminUnderwritingRouteRoute: typeof AdminUnderwritingRouteRoute
   AdminEntitytypeRoute: typeof AdminEntitytypeRouteWithChildren
+  AdminDocumentEngineRoute: typeof AdminDocumentEngineRouteWithChildren
   AdminFinancialLedgerRoute: typeof AdminFinancialLedgerRoute
   AdminOriginationsRoute: typeof AdminOriginationsRouteWithChildren
   AdminPaymentOperationsRoute: typeof AdminPaymentOperationsRoute
@@ -2460,6 +2658,7 @@ const AdminRouteRouteChildren: AdminRouteRouteChildren = {
   AdminPropertiesRouteRoute: AdminPropertiesRouteRouteWithChildren,
   AdminUnderwritingRouteRoute: AdminUnderwritingRouteRoute,
   AdminEntitytypeRoute: AdminEntitytypeRouteWithChildren,
+  AdminDocumentEngineRoute: AdminDocumentEngineRouteWithChildren,
   AdminFinancialLedgerRoute: AdminFinancialLedgerRoute,
   AdminOriginationsRoute: AdminOriginationsRouteWithChildren,
   AdminPaymentOperationsRoute: AdminPaymentOperationsRoute,
@@ -2467,6 +2666,30 @@ const AdminRouteRouteChildren: AdminRouteRouteChildren = {
 
 const AdminRouteRouteWithChildren = AdminRouteRoute._addFileChildren(
   AdminRouteRouteChildren,
+)
+
+interface LenderListingsRouteChildren {
+  LenderListingsListingIdRoute: typeof LenderListingsListingIdRoute
+}
+
+const LenderListingsRouteChildren: LenderListingsRouteChildren = {
+  LenderListingsListingIdRoute: LenderListingsListingIdRoute,
+}
+
+const LenderListingsRouteWithChildren = LenderListingsRoute._addFileChildren(
+  LenderListingsRouteChildren,
+)
+
+interface LenderRouteRouteChildren {
+  LenderListingsRoute: typeof LenderListingsRouteWithChildren
+}
+
+const LenderRouteRouteChildren: LenderRouteRouteChildren = {
+  LenderListingsRoute: LenderListingsRouteWithChildren,
+}
+
+const LenderRouteRouteWithChildren = LenderRouteRoute._addFileChildren(
+  LenderRouteRouteChildren,
 )
 
 interface DemoAmpsRouteRouteChildren {
@@ -2690,7 +2913,7 @@ const rootRouteChildren: RootRouteChildren = {
   BorrowerRouteRoute: BorrowerRouteRoute,
   BrokerRouteRoute: BrokerRouteRoute,
   LawyerRouteRoute: LawyerRouteRoute,
-  LenderRouteRoute: LenderRouteRoute,
+  LenderRouteRoute: LenderRouteRouteWithChildren,
   OnboardRouteRoute: OnboardRouteRoute,
   AboutRoute: AboutRoute,
   CallbackRoute: CallbackRoute,

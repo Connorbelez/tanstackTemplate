@@ -11,15 +11,20 @@ import {
 	SelectValue,
 } from "#/components/ui/select";
 import {
+	DEMO_DOCUMENT_SIGNATORY_ROLE_OPTIONS,
+	type DocumentSignatoryRoleOption,
+} from "#/lib/document-engine/contracts";
+import {
 	getSignatoryColor,
 	getSignatoryLabel,
 } from "#/lib/document-engine/signatory-utils";
 import type { SignatoryConfig } from "#/lib/document-engine/types";
-import { DOMAIN_ROLES } from "#/lib/document-engine/types";
 
 interface SignatoryPanelProps {
+	allowCustomRoles?: boolean;
 	onChange: (signatories: SignatoryConfig[]) => void;
 	readOnly?: boolean;
+	roleOptions?: readonly DocumentSignatoryRoleOption[];
 	signatories: SignatoryConfig[];
 }
 
@@ -32,6 +37,8 @@ const SIGNATORY_ROLES = [
 const CUSTOM_SIGNATORY_VALUE = "__custom__";
 
 export function SignatoryPanel({
+	allowCustomRoles = true,
+	roleOptions = DEMO_DOCUMENT_SIGNATORY_ROLE_OPTIONS,
 	signatories,
 	onChange,
 	readOnly,
@@ -41,7 +48,9 @@ export function SignatoryPanel({
 	const [showCustomInput, setShowCustomInput] = useState(false);
 
 	const usedRoles = new Set(signatories.map((s) => s.platformRole));
-	const availableDomainRoles = DOMAIN_ROLES.filter((r) => !usedRoles.has(r));
+	const availableRoleOptions = roleOptions.filter(
+		(role) => !usedRoles.has(role.value)
+	);
 
 	const nextCustomId = (): string => {
 		let n = 1;
@@ -127,11 +136,14 @@ export function SignatoryPanel({
 							<div
 								className="size-3 shrink-0 rounded-full"
 								style={{
-									backgroundColor: getSignatoryColor(sig.platformRole),
+									backgroundColor: getSignatoryColor(
+										sig.platformRole,
+										roleOptions
+									),
 								}}
 							/>
 							<span className="min-w-0 flex-1 truncate text-sm">
-								{getSignatoryLabel(sig.platformRole, sig.label)}
+								{getSignatoryLabel(sig.platformRole, sig.label, roleOptions)}
 							</span>
 							{!readOnly && (
 								<Button
@@ -187,14 +199,16 @@ export function SignatoryPanel({
 								<SelectValue placeholder="Add signatory..." />
 							</SelectTrigger>
 							<SelectContent>
-								{availableDomainRoles.map((role) => (
-									<SelectItem key={role} value={role}>
-										{getSignatoryLabel(role)}
+								{availableRoleOptions.map((role) => (
+									<SelectItem key={role.value} value={role.value}>
+										{role.label}
 									</SelectItem>
 								))}
-								<SelectItem value={CUSTOM_SIGNATORY_VALUE}>
-									+ Custom Signatory
-								</SelectItem>
+								{allowCustomRoles ? (
+									<SelectItem value={CUSTOM_SIGNATORY_VALUE}>
+										+ Custom Signatory
+									</SelectItem>
+								) : null}
 							</SelectContent>
 						</Select>
 						{!showCustomInput && (

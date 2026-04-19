@@ -11,12 +11,12 @@ import type {
 	OriginationCaseDraftValues,
 	OriginationValidationSnapshot,
 } from "#/lib/admin-origination";
+import { ORIGINATION_DOCUMENT_SECTIONS } from "./document-drafts";
 import { OriginationStepCard } from "./OriginationStepCard";
 import {
 	formatOriginationCurrency,
 	getOriginationCommitBlockingErrors,
 	getOriginationStepErrors,
-	ORIGINATION_DOCUMENT_SECTION_SHELLS,
 	type OriginationWorkspaceCommitState,
 } from "./workflow";
 
@@ -443,16 +443,19 @@ export function ReviewStep({
 					<CardHeader>
 						<CardTitle className="text-base">Documents</CardTitle>
 						<CardDescription>
-							These sections are intentionally placeholder-only in phase 1.
+							Document blueprints are staged in the Documents step and commit
+							into mortgage-owned blueprint rows. Public static docs project to
+							the listing; all other classes remain mortgage-owned for later
+							deal-package phases.
 						</CardDescription>
 					</CardHeader>
 					<CardContent className="space-y-3 text-sm leading-6">
-						{ORIGINATION_DOCUMENT_SECTION_SHELLS.map((section) => (
+						{ORIGINATION_DOCUMENT_SECTIONS.map((section) => (
 							<div
 								className="rounded-xl border border-dashed px-4 py-3"
-								key={section.key}
+								key={section.documentClass}
 							>
-								<p className="font-medium">{section.title}</p>
+								<p className="font-medium">{section.label}</p>
 								<p className="text-muted-foreground">{section.description}</p>
 							</div>
 						))}

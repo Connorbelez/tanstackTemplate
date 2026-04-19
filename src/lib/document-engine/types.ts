@@ -1,5 +1,9 @@
 import type { Schema, Template } from "@pdfme/common";
 import type { Doc, Id } from "../../../convex/_generated/dataModel";
+import type {
+	DEMO_DOCUMENT_SIGNATORY_ROLE_OPTIONS,
+	DocumentSignatoryRoleOption,
+} from "./contracts";
 
 // ── Re-exported document types for convenience ────────────────────
 export type BasePdf = Doc<"documentBasePdfs">;
@@ -17,24 +21,12 @@ export type VariableType =
 	| "integer"
 	| "boolean";
 
-// ── Domain roles (the known 6) — used for color/label lookup type narrowing ──
-export const DOMAIN_ROLES = [
-	"fairlend_broker",
-	"lender_lawyer",
-	"lender",
-	"seller_lawyer",
-	"borrower_lawyer",
-	"borrower",
-] as const;
+export type DemoDocumentSignatoryRole =
+	(typeof DEMO_DOCUMENT_SIGNATORY_ROLE_OPTIONS)[number]["value"];
 
-export type DomainRole = (typeof DOMAIN_ROLES)[number];
+export type PlatformRole = DemoDocumentSignatoryRole;
 
-// Keep PlatformRole as alias for backward compat in color maps
-export type PlatformRole = DomainRole;
-
-export function isDomainRole(role: string): role is DomainRole {
-	return (DOMAIN_ROLES as readonly string[]).includes(role);
-}
+export type DocumentRolePalette = DocumentSignatoryRoleOption;
 
 // Shared signatory config interface (matches validator shape)
 export interface SignatoryConfig {

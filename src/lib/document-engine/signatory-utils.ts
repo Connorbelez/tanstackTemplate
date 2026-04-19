@@ -1,33 +1,8 @@
-import type { DomainRole } from "./types";
-import { isDomainRole } from "./types";
-
-// ── Domain role maps (the known 6) ──────────────────────────────
-export const DOMAIN_SIGNATORY_COLORS: Record<DomainRole, string> = {
-	fairlend_broker: "#d97706",
-	lender_lawyer: "#7c3aed",
-	lender: "#dc2626",
-	seller_lawyer: "#059669",
-	borrower_lawyer: "#0891b2",
-	borrower: "#2563eb",
-};
-
-export const DOMAIN_SIGNATORY_BG_COLORS: Record<DomainRole, string> = {
-	fairlend_broker: "#fef3c7",
-	lender_lawyer: "#ede9fe",
-	lender: "#fee2e2",
-	seller_lawyer: "#d1fae5",
-	borrower_lawyer: "#cffafe",
-	borrower: "#dbeafe",
-};
-
-export const DOMAIN_LABELS: Record<DomainRole, string> = {
-	fairlend_broker: "FairLend Broker",
-	lender_lawyer: "Lender's Lawyer",
-	lender: "Lender",
-	seller_lawyer: "Seller's Lawyer",
-	borrower_lawyer: "Borrower's Lawyer",
-	borrower: "Borrower",
-};
+import {
+	DEMO_DOCUMENT_SIGNATORY_ROLE_OPTIONS,
+	type DocumentSignatoryRoleOption,
+	findDocumentSignatoryRoleOption,
+} from "./contracts";
 
 // ── Custom signatory palette (for non-domain roles) ─────────────
 const CUSTOM_PALETTE: Array<{ color: string; bg: string }> = [
@@ -54,32 +29,54 @@ function hashIndex(str: string): number {
 const DEFAULT_COLOR = "#6b7280"; // gray-500
 const DEFAULT_BG = "#f3f4f6"; // gray-100
 
-export function getSignatoryColor(role: string): string {
+let activeRoleOptions: readonly DocumentSignatoryRoleOption[] =
+	DEMO_DOCUMENT_SIGNATORY_ROLE_OPTIONS;
+
+export function setDocumentEngineRoleOptions(
+	roleOptions: readonly DocumentSignatoryRoleOption[]
+) {
+	activeRoleOptions = roleOptions;
+}
+
+export function getSignatoryColor(
+	role: string,
+	roleOptions: readonly DocumentSignatoryRoleOption[] = activeRoleOptions
+): string {
 	if (!role) {
 		return DEFAULT_COLOR;
 	}
-	if (isDomainRole(role)) {
-		return DOMAIN_SIGNATORY_COLORS[role];
+	const option = findDocumentSignatoryRoleOption(role, roleOptions);
+	if (option) {
+		return option.color;
 	}
 	return CUSTOM_PALETTE[hashIndex(role)].color;
 }
 
-export function getSignatoryBgColor(role: string): string {
+export function getSignatoryBgColor(
+	role: string,
+	roleOptions: readonly DocumentSignatoryRoleOption[] = activeRoleOptions
+): string {
 	if (!role) {
 		return DEFAULT_BG;
 	}
-	if (isDomainRole(role)) {
-		return DOMAIN_SIGNATORY_BG_COLORS[role];
+	const option = findDocumentSignatoryRoleOption(role, roleOptions);
+	if (option) {
+		return option.bgColor;
 	}
 	return CUSTOM_PALETTE[hashIndex(role)].bg;
 }
 
-export function getSignatoryLabel(role: string, customLabel?: string): string {
+export function getSignatoryLabel(
+	role: string,
+	customLabel?: string,
+	roleOptions: readonly DocumentSignatoryRoleOption[] = activeRoleOptions
+): string {
 	if (customLabel) {
 		return customLabel;
 	}
-	if (isDomainRole(role)) {
-		return DOMAIN_LABELS[role];
+	const option = findDocumentSignatoryRoleOption(role, roleOptions);
+	if (option) {
+		return option.label;
 	}
 	if (!role) {
 		return "(None)";

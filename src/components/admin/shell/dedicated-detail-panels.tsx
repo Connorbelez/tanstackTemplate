@@ -2,17 +2,36 @@
 
 import { Link } from "@tanstack/react-router";
 import { useAction, useMutation, useQuery } from "convex/react";
-import type { ReactNode } from "react";
+import type { FunctionReturnType } from "convex/server";
+import type { FormEvent, ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Badge } from "#/components/ui/badge";
 import { Button } from "#/components/ui/button";
 import { Checkbox } from "#/components/ui/checkbox";
+import {
+	Dialog,
+	DialogContent,
+	DialogDescription,
+	DialogHeader,
+	DialogTitle,
+} from "#/components/ui/dialog";
 import { Input } from "#/components/ui/input";
 import { Label } from "#/components/ui/label";
+import {
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from "#/components/ui/select";
 import { Textarea } from "#/components/ui/textarea";
 import { useCanDo } from "#/hooks/use-can-do";
 import { EMPTY_ADMIN_DETAIL_SEARCH } from "#/lib/admin-detail-search";
+import {
+	defaultDocumentAssetName,
+	uploadDocumentAsset,
+} from "#/lib/documents/uploadDocumentAsset";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import type {
@@ -241,6 +260,263 @@ export function shouldHydrateListingCurationForm(
 	listing: { listingId: Id<"listings"> } | null | undefined
 ) {
 	return Boolean(listing && currentListingId !== listing.listingId);
+}
+
+interface MortgageDocumentListItem {
+	archivedAt: number | null;
+	asset: {
+		assetId: string;
+		fileRef: string;
+		name: string;
+		url?: string | null;
+	} | null;
+	blueprintId: string;
+	class: string;
+	description: string | null;
+	displayName: string;
+	displayOrder: number;
+	packageLabel: string | null;
+	status: string;
+	templateId: string | null;
+	templateName: string | null;
+	templateVersion: number | null;
+}
+
+type MortgageDetailContext = FunctionReturnType<
+	typeof api.crm.detailContextQueries.getMortgageDetailContext
+>;
+
+type MortgageHistoryEntry = FunctionReturnType<
+	typeof api.ledger.queries.getMortgageHistory
+>[number];
+
+function isStaticMortgageBlueprintClass(documentClass: string) {
+	return (
+		documentClass === "public_static" || documentClass === "private_static"
+	);
+}
+
+function MortgageBlueprintReplaceDialog({
+	blueprint,
+	onOpenChange,
+	open,
+}: {
+	blueprint: MortgageDocumentListItem | null;
+	onOpenChange: (open: boolean) => void;
+	open: boolean;
+}) {
+	const canReviewDocumentEngine = useCanDo("document:review");
+	const attachableTemplates = useQuery(
+		api.admin.origination.caseDocuments.listAttachableTemplates,
+		open && blueprint && !isStaticMortgageBlueprintClass(blueprint.class)
+			? {}
+			: "skip"
+	);
+	const generateUploadUrl = useMutation(api.documents.assets.generateUploadUrl);
+	const extractPdfMetadata = useAction(api.documents.assets.extractPdfMetadata);
+	const createAsset = useMutation(api.documents.assets.create);
+	const replaceStaticBlueprint = useMutation(
+		api.documents.mortgageBlueprints.replaceStaticBlueprint
+	);
+	const replaceTemplateBlueprint = useMutation(
+		api.documents.mortgageBlueprints.replaceTemplateBlueprint
+	);
+	const [displayName, setDisplayName] = useState("");
+	const [description, setDescription] = useState("");
+	const [selectedTemplateId, setSelectedTemplateId] = useState("");
+	const [submitting, setSubmitting] = useState(false);
+	const [error, setError] = useState<string | null>(null);
+	const [fileInputKey, setFileInputKey] = useState(0);
+
+	useEffect(() => {
+		if (!blueprint) {
+			setDisplayName("");
+			setDescription("");
+			setSelectedTemplateId("");
+			setError(null);
+			setFileInputKey((current) => current + 1);
+			return;
+		}
+
+		setDisplayName(blueprint.displayName);
+		setDescription(blueprint.description ?? "");
+		setSelectedTemplateId(blueprint.templateId ?? "");
+		setError(null);
+		setFileInputKey((current) => current + 1);
+	}, [blueprint]);
+
+	async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+		event.preventDefault();
+		if (!blueprint) {
+			return;
+		}
+
+		setSubmitting(true);
+		setError(null);
+		try {
+			if (isStaticMortgageBlueprintClass(blueprint.class)) {
+				const formData = new FormData(event.currentTarget);
+				const file = formData.get("replacementFile");
+				if (!(file instanceof File) || file.size === 0) {
+					throw new Error("Choose a PDF to upload.");
+				}
+
+				const resolvedName =
+					displayName.trim() || defaultDocumentAssetName(file);
+				if (!resolvedName) {
+					throw new Error("Document name is required.");
+				}
+
+				const createdAsset = await uploadDocumentAsset(
+					{
+						createAsset,
+						extractPdfMetadata,
+						generateUploadUrl,
+					},
+					{
+						description: description.trim() || undefined,
+						file,
+						name: resolvedName,
+					}
+				);
+
+				await replaceStaticBlueprint({
+					assetId: createdAsset.assetId,
+					blueprintId:
+						blueprint.blueprintId as Id<"mortgageDocumentBlueprints">,
+					description: description.trim() || undefined,
+					displayName: resolvedName,
+				});
+			} else {
+				if (!selectedTemplateId) {
+					throw new Error("Choose a replacement template.");
+				}
+
+				await replaceTemplateBlueprint({
+					blueprintId:
+						blueprint.blueprintId as Id<"mortgageDocumentBlueprints">,
+					description: description.trim() || undefined,
+					displayName: displayName.trim() || undefined,
+					templateId: selectedTemplateId as Id<"documentTemplates">,
+				});
+			}
+
+			toast.success("Mortgage document blueprint replaced.");
+			onOpenChange(false);
+		} catch (replaceError) {
+			setError(
+				replaceError instanceof Error
+					? replaceError.message
+					: "Unable to replace mortgage document blueprint."
+			);
+		} finally {
+			setSubmitting(false);
+		}
+	}
+
+	const isStatic = blueprint
+		? isStaticMortgageBlueprintClass(blueprint.class)
+		: true;
+
+	return (
+		<Dialog onOpenChange={onOpenChange} open={open}>
+			<DialogContent>
+				<DialogHeader>
+					<DialogTitle>
+						{blueprint
+							? `Replace ${blueprint.displayName}`
+							: "Replace document"}
+					</DialogTitle>
+					<DialogDescription>
+						The current active blueprint will be archived and replaced with a
+						new successor row.
+					</DialogDescription>
+				</DialogHeader>
+				<form
+					className="space-y-4"
+					onSubmit={(event) => void handleSubmit(event)}
+				>
+					<div className="space-y-2">
+						<Label htmlFor="mortgage-blueprint-display-name">
+							Display name
+						</Label>
+						<Input
+							id="mortgage-blueprint-display-name"
+							onChange={(event) => setDisplayName(event.target.value)}
+							placeholder="Document name"
+							value={displayName}
+						/>
+					</div>
+					<div className="space-y-2">
+						<Label htmlFor="mortgage-blueprint-description">Description</Label>
+						<Textarea
+							id="mortgage-blueprint-description"
+							onChange={(event) => setDescription(event.target.value)}
+							rows={3}
+							value={description}
+						/>
+					</div>
+
+					{isStatic ? (
+						<div className="space-y-2">
+							<Label htmlFor="mortgage-blueprint-file">Replacement PDF</Label>
+							<Input
+								accept="application/pdf"
+								id="mortgage-blueprint-file"
+								key={fileInputKey}
+								name="replacementFile"
+								type="file"
+							/>
+						</div>
+					) : (
+						<div className="space-y-3">
+							<div className="space-y-2">
+								<Label>Replacement template</Label>
+								<Select
+									onValueChange={setSelectedTemplateId}
+									value={selectedTemplateId}
+								>
+									<SelectTrigger>
+										<SelectValue placeholder="Choose a published template" />
+									</SelectTrigger>
+									<SelectContent>
+										{(attachableTemplates ?? []).map((template) => (
+											<SelectItem
+												key={template.templateId}
+												value={template.templateId}
+											>
+												{template.name}
+												{template.currentPublishedVersion
+													? ` v${template.currentPublishedVersion}`
+													: ""}
+											</SelectItem>
+										))}
+									</SelectContent>
+								</Select>
+							</div>
+							{canReviewDocumentEngine && selectedTemplateId ? (
+								<Button asChild size="sm" type="button" variant="outline">
+									<Link
+										params={{ templateId: selectedTemplateId }}
+										search={EMPTY_ADMIN_DETAIL_SEARCH}
+										to="/admin/document-engine/designer/$templateId"
+									>
+										Open designer
+									</Link>
+								</Button>
+							) : null}
+						</div>
+					)}
+
+					{error ? <p className="text-destructive text-sm">{error}</p> : null}
+
+					<Button disabled={submitting} type="submit">
+						{submitting ? "Replacing document" : "Replace document"}
+					</Button>
+				</form>
+			</DialogContent>
+		</Dialog>
+	);
 }
 
 export function ListingsDedicatedDetails({
@@ -568,7 +844,7 @@ export function ListingsDedicatedDetails({
 					</DetailSectionShell>
 
 					<DetailSectionShell
-						description="Compatibility cache only. Mortgage-owned public blueprints remain the source of truth in later phases."
+						description="Active public mortgage blueprints projected onto this listing for authenticated lender-facing reads."
 						title="Public Documents"
 					>
 						{detailContext?.publicDocuments?.length ? (
@@ -582,14 +858,34 @@ export function ListingsDedicatedDetails({
 									return (
 										<div
 											className="rounded-lg border border-border/60 bg-background/80 px-3 py-3"
-											key={String(document.fileRef)}
+											key={String(document.blueprintId)}
 										>
-											<p className="font-medium text-sm">
-												{document.name ?? String(document.fileRef)}
-											</p>
-											<p className="text-muted-foreground text-sm">
-												Compatibility file ref {String(document.fileRef)}
-											</p>
+											<div className="flex flex-wrap items-center justify-between gap-3">
+												<div className="space-y-1">
+													<p className="font-medium text-sm">
+														{document.displayName}
+													</p>
+													<p className="text-muted-foreground text-sm">
+														{document.description ?? "Public mortgage document"}
+													</p>
+												</div>
+												{document.url ? (
+													<Button
+														asChild
+														size="sm"
+														type="button"
+														variant="outline"
+													>
+														<a
+															href={document.url}
+															rel="noreferrer"
+															target="_blank"
+														>
+															Open PDF
+														</a>
+													</Button>
+												) : null}
+											</div>
 										</div>
 									);
 								}}
@@ -754,6 +1050,7 @@ export function MortgagesDedicatedDetails({
 	readonly record: UnifiedRecord;
 }) {
 	const mortgageId = record._id as Id<"mortgages">;
+	const canManageMortgageDocuments = useCanDo("mortgage:originate");
 	const canManagePaymentOperations = useCanDo("payment:manage");
 	const detailContext = useQuery(
 		api.crm.detailContextQueries.getMortgageDetailContext,
@@ -764,12 +1061,17 @@ export function MortgagesDedicatedDetails({
 	const retryCollectionsActivation = useAction(
 		api.admin.origination.collections.retryCollectionsActivation
 	);
+	const archiveMortgageBlueprint = useMutation(
+		api.documents.mortgageBlueprints.archiveBlueprint
+	);
 	const mortgageHistory = useQuery(api.ledger.queries.getMortgageHistory, {
 		mortgageId: record._id,
 		limit: 6,
 	});
 	const detailFields = filterDetailFields(fields, ["propertyId"]);
 	const paymentSetup = detailContext?.paymentSetup;
+	const [blueprintToReplace, setBlueprintToReplace] =
+		useState<MortgageDocumentListItem | null>(null);
 	const canRetryCollectionsActivation = Boolean(
 		canManagePaymentOperations &&
 			paymentSetup?.activationStatus === "failed" &&
@@ -799,6 +1101,71 @@ export function MortgagesDedicatedDetails({
 		}
 	}
 
+	async function handleArchiveBlueprint(blueprintId: string) {
+		try {
+			await archiveMortgageBlueprint({
+				blueprintId: blueprintId as Id<"mortgageDocumentBlueprints">,
+			});
+			toast.success("Mortgage document blueprint archived.");
+		} catch (error) {
+			toast.error(
+				error instanceof Error
+					? error.message
+					: "Unable to archive mortgage document blueprint."
+			);
+		}
+	}
+
+	return (
+		<>
+			<MortgageBlueprintReplaceDialog
+				blueprint={blueprintToReplace}
+				onOpenChange={(open) => {
+					if (!open) {
+						setBlueprintToReplace(null);
+					}
+				}}
+				open={blueprintToReplace !== null}
+			/>
+			<MortgagesDedicatedDetailsContent
+				canManageMortgageDocuments={canManageMortgageDocuments}
+				canRetryCollectionsActivation={canRetryCollectionsActivation}
+				detailContext={detailContext}
+				detailFields={detailFields}
+				mortgageHistory={mortgageHistory}
+				onArchiveBlueprint={handleArchiveBlueprint}
+				onReplaceBlueprint={setBlueprintToReplace}
+				onRetryCollectionsActivation={handleRetryCollectionsActivation}
+				paymentSetup={paymentSetup}
+				record={record}
+			/>
+		</>
+	);
+}
+
+export function MortgagesDedicatedDetailsContent({
+	canManageMortgageDocuments,
+	canRetryCollectionsActivation,
+	detailContext,
+	detailFields,
+	mortgageHistory,
+	onArchiveBlueprint,
+	onReplaceBlueprint,
+	onRetryCollectionsActivation,
+	paymentSetup,
+	record,
+}: {
+	readonly canManageMortgageDocuments: boolean;
+	readonly canRetryCollectionsActivation: boolean;
+	readonly detailContext: MortgageDetailContext | undefined;
+	readonly detailFields: readonly NormalizedFieldDefinition[];
+	readonly mortgageHistory: readonly MortgageHistoryEntry[] | undefined;
+	readonly onArchiveBlueprint: (blueprintId: string) => Promise<void>;
+	readonly onReplaceBlueprint: (document: MortgageDocumentListItem) => void;
+	readonly onRetryCollectionsActivation: () => Promise<void>;
+	readonly paymentSetup: MortgageDetailContext["paymentSetup"] | undefined;
+	readonly record: UnifiedRecord;
+}) {
 	return (
 		<div className="space-y-6">
 			<SectionedRecordDetails
@@ -822,9 +1189,8 @@ export function MortgagesDedicatedDetails({
 						emptyMessage="No borrower links found."
 						items={detailContext?.borrowers ?? []}
 						renderItem={(item) => {
-							const borrower = item as NonNullable<
-								typeof detailContext
-							>["borrowers"][number];
+							const borrower =
+								item as NonNullable<MortgageDetailContext>["borrowers"][number];
 							return (
 								<div
 									className="rounded-lg border border-border/60 bg-background/80 px-3 py-3"
@@ -880,7 +1246,7 @@ export function MortgagesDedicatedDetails({
 							<div className="mt-3 flex flex-wrap gap-3">
 								<Button
 									disabled={!canRetryCollectionsActivation}
-									onClick={() => void handleRetryCollectionsActivation()}
+									onClick={() => void onRetryCollectionsActivation()}
 									type="button"
 									variant="outline"
 								>
@@ -1132,7 +1498,7 @@ export function MortgagesDedicatedDetails({
 					</div>
 					<div className="space-y-2">
 						<p className="text-muted-foreground text-xs uppercase tracking-[0.08em]">
-							Collection Plan Entries
+							Plan Entries
 						</p>
 						{detailContext?.paymentSetup?.collectionPlanEntries?.length ? (
 							<div className="overflow-x-auto rounded-lg border border-border/60 bg-background/80">
@@ -1311,10 +1677,110 @@ export function MortgagesDedicatedDetails({
 			</DetailSectionShell>
 
 			<DetailSectionShell
-				description="Reserved anchor for later-phase document package and signing projections."
+				description="Mortgage-owned blueprint rows created during origination. Public static docs project onto the listing; private classes remain mortgage-owned until later deal-package phases."
 				title="Documents"
 			>
-				<EmptyContext message="Document package projection has not landed yet. Later phases will attach public and private origination artifacts here without redesigning this page." />
+				<CompactList
+					emptyMessage="No mortgage document blueprints have been staged yet."
+					items={detailContext?.documents ?? []}
+					renderItem={(item) => {
+						const document =
+							item as NonNullable<MortgageDetailContext>["documents"][number];
+						return (
+							<div
+								className="rounded-lg border border-border/60 bg-background/80 px-4 py-4"
+								key={String(document.blueprintId)}
+							>
+								<div className="flex flex-wrap items-start justify-between gap-3">
+									<div className="space-y-1">
+										<div className="flex flex-wrap items-center gap-2">
+											<p className="font-medium text-sm">
+												{document.displayName}
+											</p>
+											<Badge variant="outline">
+												{formatEnumLabel(document.class)}
+											</Badge>
+											<Badge variant="secondary">
+												{formatEnumLabel(document.status)}
+											</Badge>
+										</div>
+										<p className="text-muted-foreground text-sm">
+											{document.description ?? "Mortgage document blueprint"}
+										</p>
+									</div>
+									<div className="flex flex-wrap gap-2">
+										{document.asset?.url ? (
+											<Button asChild size="sm" type="button" variant="outline">
+												<a
+													href={document.asset.url}
+													rel="noreferrer"
+													target="_blank"
+												>
+													Open PDF
+												</a>
+											</Button>
+										) : null}
+										<Button
+											disabled={
+												!canManageMortgageDocuments ||
+												document.status !== "active"
+											}
+											onClick={() => onReplaceBlueprint(document)}
+											size="sm"
+											type="button"
+											variant="outline"
+										>
+											Replace
+										</Button>
+										<Button
+											disabled={!canManageMortgageDocuments}
+											onClick={() =>
+												void onArchiveBlueprint(String(document.blueprintId))
+											}
+											size="sm"
+											type="button"
+											variant="ghost"
+										>
+											Archive
+										</Button>
+									</div>
+								</div>
+								<div className="mt-3 grid gap-3 text-muted-foreground text-xs md:grid-cols-2 xl:grid-cols-4">
+									<div>
+										<p className="uppercase tracking-[0.08em]">Package</p>
+										<p className="mt-1">
+											{document.packageLabel ?? "Standalone"}
+										</p>
+									</div>
+									<div>
+										<p className="uppercase tracking-[0.08em]">Template</p>
+										<p className="mt-1">
+											{document.templateName
+												? `${document.templateName}${
+														document.templateVersion
+															? ` v${document.templateVersion}`
+															: ""
+													}`
+												: "Static asset"}
+										</p>
+									</div>
+									<div>
+										<p className="uppercase tracking-[0.08em]">Asset</p>
+										<p className="mt-1">
+											{document.asset?.name ?? "Template-generated later"}
+										</p>
+									</div>
+									<div>
+										<p className="uppercase tracking-[0.08em]">Archived</p>
+										<p className="mt-1">
+											{formatDateTime(document.archivedAt) ?? "Active"}
+										</p>
+									</div>
+								</div>
+							</div>
+						);
+					}}
+				/>
 			</DetailSectionShell>
 
 			<DetailSectionShell

@@ -3,6 +3,7 @@
  */
 
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { useAction, useMutation, useQuery } from "convex/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DocumentsStep } from "#/components/admin/origination/DocumentsStep";
 import { ReviewStep } from "#/components/admin/origination/ReviewStep";
@@ -12,8 +13,29 @@ import {
 	resolveOriginationReviewValues,
 } from "#/components/admin/origination/workflow";
 
+vi.mock("convex/react", () => ({
+	useAction: vi.fn(),
+	useMutation: vi.fn(),
+	useQuery: vi.fn(),
+}));
+
+vi.mock("#/components/admin/origination/DocumentDraftComposer", () => ({
+	DocumentDraftComposer: (props: { sourceMode: "static" | "templated" }) => (
+		<div>
+			{props.sourceMode === "static"
+				? "Upload static PDF"
+				: "Attach templated doc"}
+		</div>
+	),
+}));
+
+vi.mock("#/components/admin/origination/DocumentDraftList", () => ({
+	DocumentDraftList: () => <div>Draft list</div>,
+}));
+
 afterEach(() => {
 	cleanup();
+	vi.clearAllMocks();
 });
 
 describe("origination workflow helpers", () => {
@@ -62,8 +84,12 @@ describe("origination workflow helpers", () => {
 		);
 	});
 
-	it("renders the four phase-1 document placeholders", () => {
-		render(<DocumentsStep />);
+	it("renders the four phase-6 document authoring sections", () => {
+		vi.mocked(useQuery).mockReturnValue([]);
+		vi.mocked(useMutation).mockReturnValue(vi.fn());
+		vi.mocked(useAction).mockReturnValue(vi.fn());
+
+		render(<DocumentsStep caseId="case_123" />);
 
 		expect(screen.getByText("Public static docs")).toBeTruthy();
 		expect(screen.getByText("Private static docs")).toBeTruthy();
@@ -71,6 +97,8 @@ describe("origination workflow helpers", () => {
 			screen.getByText("Private templated non-signable docs")
 		).toBeTruthy();
 		expect(screen.getByText("Private templated signable docs")).toBeTruthy();
+		expect(screen.getAllByText(/Upload static PDF/i)).toHaveLength(2);
+		expect(screen.getAllByText(/Attach templated doc/i)).toHaveLength(2);
 	});
 
 	it("renders persisted review data and enables commit when blockers are clear", () => {

@@ -4,7 +4,7 @@
 
 The admin origination workspace lives under `/admin/originations` and stages every draft input in `adminOriginationCases`. The review step now activates canonical borrower, property, `mortgageValuationSnapshots`, compatibility `appraisals`, mortgage, mortgageBorrower, canonical obligations, planned app-owned `collectionPlanEntries`, the mortgage-backed listing projection, ledger-genesis, and audit rows from one persisted case.
 
-When the collections step chooses `provider_managed_now`, canonical commit still finishes first and the same action immediately follows with Rotessa recurring-schedule activation against the staged primary borrower bank account. Blueprint-driven document projection remains a later seam.
+When the collections step chooses `provider_managed_now`, canonical commit still finishes first and the same action immediately follows with Rotessa recurring-schedule activation against the staged primary borrower bank account. Phase 6 extends the same workflow with immutable staged document assets, pinned origination document drafts, mortgage-owned blueprint rows, and listing-facing public static document projection.
 
 ## Route Contract
 
@@ -34,7 +34,14 @@ All three routes are guarded by `mortgage:originate` for non-admin operators. Fa
 - `committedValuationSnapshotId`
 - status and metadata fields
 
-`originationCaseDocumentDrafts` remains the placeholder document table keyed by `caseId`. Later document phases extend that table in place.
+Document staging is now split across three persisted surfaces:
+
+- `documentAssets`
+  - Immutable uploaded files with `fileRef`, file metadata, and signed-read access.
+- `originationCaseDocumentDrafts`
+  - Case-scoped staged inputs keyed by `caseId`. Each row stores class, source kind, display metadata, pinned template version or static asset linkage, optional package/group provenance, validation snapshot, and archive state.
+- `mortgageDocumentBlueprints`
+  - Canonical mortgage-owned rows created during commit from active case document drafts. Public static blueprint rows are later projected onto listing reads; private rows remain mortgage-owned.
 
 ## Autosave Rules
 
@@ -55,6 +62,8 @@ Validation is persisted, not inferred only in the browser.
 - The review screen renders the same saved validation warnings and only commits the persisted case payload.
 
 Commit blockers are limited to the participant, property, and mortgage surfaces that are required to activate a canonical mortgage. Collections and listing curation remain staged-but-non-blocking so provider-managed-now can surface early preflight errors without preventing canonical commit.
+
+Document staging is intentionally non-blocking in phase 6. Operators can commit without staged docs, but when they do stage them the review step and post-commit surfaces read the persisted rows rather than optimistic browser state.
 
 The browser still shows local unsaved edits in form controls, but the review screen is intentionally persisted-data-first so commit behavior and validation share the same backend source of truth.
 
@@ -77,9 +86,10 @@ That action:
 - persists `paymentBootstrapScheduleRuleMissing` on the mortgage when no active schedule rule matched and the default delay was used
 - leaves the mortgage committed even if the follow-up provider activation fails
 - creates the canonical `mortgageValuationSnapshots` row with `source`, `valuationDate`, `createdByUserId`, and optional `documentAssets` linkage, plus a compatibility `appraisals` projection
+- materializes one active `mortgageDocumentBlueprints` row for every active staged document draft, preserving class, source kind, display order, package metadata, template pins, and static asset linkage
 - upserts exactly one `mortgage_pipeline` listing through `upsertMortgageListingProjection`
-- preserves curated listing fields while overwriting projection-owned economics, property facts, appraisal summary, and public-document compatibility values
-- clears stale `publicDocumentIds` compatibility values until the mortgage-owned public blueprint layer lands
+- preserves curated listing fields while overwriting projection-owned economics, property facts, appraisal summary, and public static document compatibility values
+- refreshes `publicDocumentIds` as a compatibility cache from active public static blueprint assets so existing lender-facing listing reads keep working until blueprint-native listing surfaces fully replace the cache
 - mints the ownership-ledger genesis entry through the existing ledger primitive
 - writes an origination audit journal entry
 - patches the case to `committed` with `committedMortgageId`, `committedListingId`, `committedValuationSnapshotId`, and `committedAt`
@@ -100,6 +110,19 @@ The persisted case status model is:
 
 Autosave recomputes `draft` versus `ready_to_commit` from the saved validation snapshot. `awaiting_identity_sync` and `committed` are preserved until the operator retries or reaches the canonical mortgage.
 
+## Document Blueprint Contract
+
+Phase 6 owns the origination-to-mortgage document handoff.
+
+- Static uploads always enter through `documentAssets`, then stage onto `originationCaseDocumentDrafts` with `sourceKind = "asset"`.
+- Templated docs always pin a concrete published template version at attach time; group attachment expands into one draft row per published template in that group.
+- Template-backed draft rows snapshot variable/role validation results at attach time so later phases can surface the pinned contract without reinterpreting the live template definition.
+- Draft rows are append-and-archive, not mutable-in-place replacements of prior canonical mortgage blueprint rows.
+- Commit copies only active case draft rows into `mortgageDocumentBlueprints`.
+- Active public static blueprints project onto listing reads and the `publicDocumentIds` compatibility cache.
+- Private static and templated blueprint rows remain mortgage-owned and are only surfaced through admin mortgage detail screens in this phase.
+- Blueprint rows can be archived from the mortgage detail page without mutating the underlying immutable `documentAssets` row.
+
 ## Step Ownership
 
 The workspace owns a fixed seven-step shell:
@@ -112,7 +135,14 @@ The workspace owns a fixed seven-step shell:
 6. Listing curation
 7. Review + commit
 
-Documents remain a staged shell in this phase. Collections now own the provider-managed-now decision surface and durable activation state, but the route position, step names, and persisted draft anchors are still stable so later phases can extend them without redesigning the workflow.
+Documents now own real staged blueprint authoring in this phase:
+
+- Public static docs
+- Private static docs
+- Private templated non-signable docs
+- Private templated signable docs
+
+The route position, step names, and persisted draft anchors remain stable so later deal-package phases can extend them without redesigning the workflow.
 
 ## Extension Rules
 
@@ -120,8 +150,9 @@ Later phases may:
 
 - add fields inside existing draft subdocuments
 - extend `originationCaseDocumentDrafts`
+- add new mortgage blueprint classes or later package metadata to `mortgageDocumentBlueprints`
 - enrich the review screen
-- extend the listing projection and replace `publicDocumentIds` with blueprint-driven reads
+- extend the listing projection and eventually replace `publicDocumentIds` with blueprint-native listing reads
 - project document outputs from committed mortgages
 - extend provider-managed collection activation beyond the immediate Rotessa bootstrap
 

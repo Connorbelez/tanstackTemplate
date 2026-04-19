@@ -437,9 +437,34 @@ describe("admin origination cases", () => {
 
 		await t.run(async (ctx) => {
 			await ctx.db.insert("originationCaseDocumentDrafts", {
+				archivedAt: undefined,
+				archivedByUserId: undefined,
+				assetId: undefined,
 				caseId,
+				category: undefined,
+				class: "public_static",
 				createdAt: Date.now(),
+				createdByUserId: undefined,
+				description: undefined,
+				displayName: "Title review package",
+				displayOrder: 0,
+				packageKey: undefined,
+				packageLabel: undefined,
+				selectedFromGroupId: undefined,
+				sourceKind: "asset",
+				status: "active",
+				supersededByDraftId: undefined,
+				templateId: undefined,
+				templateVersion: undefined,
 				updatedAt: Date.now(),
+				updatedByUserId: undefined,
+				validationSummary: {
+					containsSignableFields: false,
+					requiredPlatformRoles: [],
+					requiredVariableKeys: [],
+					unsupportedPlatformRoles: [],
+					unsupportedVariableKeys: [],
+				},
 			});
 		});
 
