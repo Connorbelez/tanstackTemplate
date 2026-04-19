@@ -10,6 +10,7 @@ import {
 	BreadcrumbPage,
 	BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
+import { useAdminPageMetadata } from "./AdminPageMetadataContext";
 
 const adminSegmentLabels: Record<string, string> = {
 	admin: "Admin",
@@ -19,6 +20,7 @@ const adminSegmentLabels: Record<string, string> = {
 	listings: "Listings",
 	mortgages: "Mortgages",
 	obligations: "Obligations",
+	originations: "Originations",
 	"payment-operations": "Payment Operations",
 	"financial-ledger": "Financial Ledger",
 	properties: "Properties",
@@ -29,7 +31,7 @@ function formatSegmentLabel(
 	segment: string,
 	index: number,
 	segments: string[]
-): string {
+) {
 	const decodedSegment = decodeURIComponent(segment);
 	const mappedLabel = adminSegmentLabels[decodedSegment];
 
@@ -46,7 +48,21 @@ function formatSegmentLabel(
 		.replace(/\b\w/g, (character) => character.toUpperCase());
 }
 
+export function getAdminBreadcrumbLabel(args: {
+	breadcrumbLabel?: string;
+	index: number;
+	segment: string;
+	segments: string[];
+}) {
+	if (args.breadcrumbLabel && args.index === args.segments.length - 1) {
+		return args.breadcrumbLabel;
+	}
+
+	return formatSegmentLabel(args.segment, args.index, args.segments);
+}
+
 export function AdminBreadcrumbs() {
+	const { breadcrumbLabel } = useAdminPageMetadata();
 	const pathname = useRouterState({
 		select: (state) => state.location.pathname,
 	});
@@ -61,7 +77,12 @@ export function AdminBreadcrumbs() {
 				{adminSegments.map((segment, index) => {
 					const href = `/${adminSegments.slice(0, index + 1).join("/")}`;
 					const isCurrentPage = index === adminSegments.length - 1;
-					const label = formatSegmentLabel(segment, index, adminSegments);
+					const label = getAdminBreadcrumbLabel({
+						breadcrumbLabel,
+						index,
+						segment,
+						segments: adminSegments,
+					});
 
 					return (
 						<Fragment key={href}>

@@ -59,13 +59,18 @@ export interface RecordSidebarEntityAdapter {
 		record: RecordDetailRecord | undefined;
 		recordId: string;
 	}) => string;
+	readonly pageSummaryFieldNames?: readonly string[];
 	readonly renderDetailsTab?: (args: RecordDetailsRenderArgs) => ReactNode;
 	readonly renderFilesTab?: (args: RecordTabRenderArgs) => ReactNode;
 	readonly renderNotesTab?: (args: RecordTabRenderArgs) => ReactNode;
+	readonly renderPageActions?: (args: RecordTabRenderArgs) => ReactNode;
+	readonly renderPageAside?: (args: RecordTabRenderArgs) => ReactNode;
+	readonly renderPageSections?: (args: RecordTabRenderArgs) => ReactNode;
 }
 
 interface DedicatedDetailLayoutDefinition {
 	readonly highlightFieldNames?: readonly string[];
+	readonly pageSummaryFieldNames?: readonly string[];
 	readonly sections: readonly DetailSectionDefinition[];
 }
 
@@ -76,6 +81,12 @@ const DEDICATED_DETAIL_LAYOUTS = {
 			"propertySummary",
 			"principal",
 			"interestRate",
+		],
+		pageSummaryFieldNames: [
+			"principal",
+			"interestRate",
+			"ltvRatio",
+			"monthlyPayment",
 		],
 		sections: [
 			{
@@ -103,6 +114,12 @@ const DEDICATED_DETAIL_LAYOUTS = {
 			"borrowerSummary",
 			"paymentSummary",
 		],
+		pageSummaryFieldNames: [
+			"principal",
+			"interestRate",
+			"paymentAmount",
+			"maturityDate",
+		],
 		sections: [
 			{
 				title: "Loan Terms",
@@ -129,6 +146,7 @@ const DEDICATED_DETAIL_LAYOUTS = {
 			"amount",
 			"paymentProgressSummary",
 		],
+		pageSummaryFieldNames: ["amount", "amountSettled", "dueDate", "status"],
 		sections: [
 			{
 				title: "Obligation",
@@ -145,6 +163,7 @@ const DEDICATED_DETAIL_LAYOUTS = {
 	},
 	deals: {
 		highlightFieldNames: ["closingDate", "fractionalShare", "status"],
+		pageSummaryFieldNames: ["status", "closingDate", "fractionalShare"],
 		sections: [
 			{
 				title: "Economics",
@@ -160,6 +179,7 @@ const DEDICATED_DETAIL_LAYOUTS = {
 			"idvStatus",
 			"verificationSummary",
 		],
+		pageSummaryFieldNames: ["status", "idvStatus", "onboardedAt"],
 		sections: [
 			{
 				title: "Verification",
@@ -170,6 +190,7 @@ const DEDICATED_DETAIL_LAYOUTS = {
 	},
 	lenders: {
 		highlightFieldNames: ["status", "accreditationStatus", "payoutFrequency"],
+		pageSummaryFieldNames: ["status", "accreditationStatus", "payoutFrequency"],
 		sections: [
 			{
 				title: "Payout Preferences",
@@ -180,6 +201,7 @@ const DEDICATED_DETAIL_LAYOUTS = {
 	},
 	brokers: {
 		highlightFieldNames: ["status", "brokerageName", "licenseId"],
+		pageSummaryFieldNames: ["status", "brokerageName", "licenseId"],
 		sections: [
 			{
 				title: "Brokerage",
@@ -194,6 +216,7 @@ function buildDedicatedDetailsAdapter(
 	layout: DedicatedDetailLayoutDefinition
 ): RecordSidebarEntityAdapter {
 	return {
+		pageSummaryFieldNames: layout.pageSummaryFieldNames,
 		renderDetailsTab: ({ fields, record }) => (
 			<SectionedRecordDetails
 				fields={fields}

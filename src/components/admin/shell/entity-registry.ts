@@ -153,6 +153,13 @@ export const STATIC_ADMIN_NAV_ITEMS = [
 	},
 	{
 		kind: "route",
+		label: "Originations",
+		route: "/admin/originations",
+		domain: "payments",
+		iconName: "file-text",
+	},
+	{
+		kind: "route",
 		label: "Payment Operations",
 		route: "/admin/payment-operations",
 		domain: "payments",

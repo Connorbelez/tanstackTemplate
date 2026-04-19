@@ -1,0 +1,296 @@
+import { describe, expect, it } from "vitest";
+import {
+	computeOriginationValidationSnapshot,
+	determineRecommendedOriginationStep,
+	mergeOriginationCaseDraftValues,
+	normalizeOriginationCollectionsDraft,
+	normalizeOriginationListingOverridesDraft,
+	normalizeOriginationMortgageDraft,
+	normalizeOriginationParticipantsDraft,
+	normalizeOriginationPropertyDraft,
+	normalizeOriginationValuationDraft,
+} from "../../../../../convex/admin/origination/validators";
+import type { OriginationCaseDraftValues } from "#/lib/admin-origination";
+
+describe("origination validators", () => {
+	it("deep-merges draft patches and preserves additive unknown fields", () => {
+		const existing = {
+			collectionsDraft: {
+				mode: "provider_managed_now",
+				providerCode: "pad_rotessa",
+				// Simulates a later-phase additive field the phase-1 UI does not know about.
+				activationStatus: "pending",
+			},
+			currentStep: "participants",
+			participantsDraft: {
+				primaryBorrower: {
+					fullName: "Ada Lovelace",
+					email: "ada@example.com",
+				},
+			},
+		} as OriginationCaseDraftValues & {
+			collectionsDraft: { activationStatus: string; mode: string; providerCode: string };
+		};
+
+		const merged = mergeOriginationCaseDraftValues(existing, {
+			currentStep: "collections",
+			participantsDraft: {
+				primaryBorrower: {
+					fullName: "Ada Byron",
+				},
+			},
+		});
+
+		expect(merged.currentStep).toBe("collections");
+		expect(merged.participantsDraft?.primaryBorrower?.fullName).toBe("Ada Byron");
+		expect(merged.participantsDraft?.primaryBorrower?.email).toBe(
+			"ada@example.com"
+		);
+		expect(
+			(
+				merged as typeof merged & {
+					collectionsDraft?: { activationStatus?: string };
+				}
+			).collectionsDraft?.activationStatus
+		).toBe("pending");
+	});
+
+	it("normalizes blank participant rows and trims entered text", () => {
+		const normalized = normalizeOriginationParticipantsDraft({
+			coBorrowers: [
+				{ email: "  ", fullName: "  " },
+				{ email: "  grace@example.com ", fullName: "  Grace Hopper " },
+			],
+			guarantors: [{ phone: "  " }],
+			primaryBorrower: {
+				email: "  ada@example.com ",
+				fullName: "  Ada Lovelace ",
+				phone: " ",
+			},
+		});
+
+		expect(normalized).toEqual({
+			coBorrowers: [
+				{ email: "grace@example.com", fullName: "Grace Hopper" },
+			],
+			primaryBorrower: {
+				email: "ada@example.com",
+				fullName: "Ada Lovelace",
+			},
+		});
+	});
+
+	it("normalizes blank property, valuation, mortgage, collections, and listing fields", () => {
+		expect(
+			normalizeOriginationPropertyDraft({
+				create: {
+					city: " Toronto ",
+					postalCode: " ",
+					streetAddress: " 123 King St W ",
+				},
+			})
+		).toEqual({
+			create: {
+				city: "Toronto",
+				streetAddress: "123 King St W",
+			},
+		});
+
+		expect(
+			normalizeOriginationValuationDraft({
+				valuationDate: " 2026-04-16 ",
+			})
+		).toEqual({
+			valuationDate: "2026-04-16",
+		});
+
+		expect(
+			normalizeOriginationMortgageDraft({
+				interestRate: 9.5,
+				maturityDate: " ",
+			})
+		).toEqual({
+			interestRate: 9.5,
+		});
+
+		expect(
+			normalizeOriginationCollectionsDraft({
+				mode: "provider_managed_now",
+				providerCode: "pad_rotessa",
+			})
+		).toEqual({
+			mode: "provider_managed_now",
+			providerCode: "pad_rotessa",
+		});
+
+		expect(
+			normalizeOriginationListingOverridesDraft({
+				description: " ",
+				heroImages: [" https://cdn.example.com/hero.jpg ", " "],
+				title: " Featured bridge loan ",
+			})
+		).toEqual({
+			heroImages: ["https://cdn.example.com/hero.jpg"],
+			title: "Featured bridge loan",
+		});
+	});
+
+	it("produces step validation errors and review warnings for incomplete drafts", () => {
+		const snapshot = computeOriginationValidationSnapshot({
+			collectionsDraft: { mode: "provider_managed_now" },
+			listingOverrides: { title: "Bridge Loan Opportunity" },
+			mortgageDraft: {
+				principal: 250_000,
+				rateType: "fixed",
+				termMonths: 12,
+			},
+			participantsDraft: {
+				primaryBorrower: {
+					fullName: "Ada Lovelace",
+				},
+			},
+			propertyDraft: {
+				create: {
+					streetAddress: "123 King St W",
+				},
+			},
+			valuationDraft: {},
+		});
+
+		expect(snapshot.stepErrors?.participants).toContain(
+			"Primary borrower email is required."
+		);
+		expect(snapshot.stepErrors?.property).toContain("Property city is required.");
+		expect(snapshot.stepErrors?.mortgageTerms).toContain(
+			"Interest rate is required."
+		);
+		expect(snapshot.stepErrors?.listingCuration).toContain(
+			"Listing description is required."
+		);
+		expect(snapshot.reviewWarnings).toContain(
+			"Commit stays disabled until every required phase-1 field is staged."
+		);
+	});
+
+	it("preserves additive validation metadata while recomputing phase-1 errors", () => {
+		const snapshot = computeOriginationValidationSnapshot({
+			currentStep: "review",
+			participantsDraft: {
+				primaryBorrower: {
+					email: "ada@example.com",
+					fullName: "Ada Lovelace",
+				},
+			},
+			validationSnapshot: {
+				reviewWarnings: ["Future document review is still pending."],
+				stepErrors: {
+					documents: ["Signed commitment letter is required."],
+					participants: ["Outdated participant validation."],
+				},
+			},
+		});
+
+		expect(snapshot.stepErrors?.participants).toBeUndefined();
+		expect(snapshot.stepErrors?.documents).toEqual([
+			"Signed commitment letter is required.",
+		]);
+		expect(snapshot.reviewWarnings).toContain(
+			"Future document review is still pending."
+		);
+		expect(snapshot.reviewWarnings).toContain(
+			"Commit stays disabled until every required phase-1 field is staged."
+		);
+	});
+
+	it("recommends the first incomplete step when the current step is ahead of missing data", () => {
+		expect(
+			determineRecommendedOriginationStep({
+				currentStep: "review",
+			})
+		).toBe("participants");
+
+		expect(
+			determineRecommendedOriginationStep({
+				currentStep: "review",
+				mortgageDraft: {
+					amortizationMonths: 300,
+					firstPaymentDate: "2026-06-01",
+					interestRate: 9.5,
+					loanType: "conventional",
+					paymentFrequency: "monthly",
+					principal: 250_000,
+					rateType: "fixed",
+					termMonths: 12,
+					termStartDate: "2026-05-01",
+				},
+				participantsDraft: {
+					primaryBorrower: {
+						email: "ada@example.com",
+						fullName: "Ada Lovelace",
+					},
+				},
+				propertyDraft: {
+					create: {
+						city: "Toronto",
+						postalCode: "M5H 1J9",
+						propertyType: "residential",
+						province: "ON",
+						streetAddress: "123 King St W",
+					},
+				},
+				valuationDraft: {
+					valueAsIs: 400_000,
+				},
+				})
+			).toBe("collections");
+	});
+
+	it("recommends preserved document validation when phase-1 steps are already complete", () => {
+		expect(
+			determineRecommendedOriginationStep({
+				currentStep: "review",
+				collectionsDraft: {
+					mode: "app_owned_only",
+				},
+				listingOverrides: {
+					description: "Senior secured mortgage opportunity.",
+					title: "Bridge Loan Opportunity",
+				},
+				mortgageDraft: {
+					amortizationMonths: 300,
+					firstPaymentDate: "2026-06-01",
+					interestRate: 9.5,
+					loanType: "conventional",
+					paymentFrequency: "monthly",
+					principal: 250_000,
+					rateType: "fixed",
+					termMonths: 12,
+					termStartDate: "2026-05-01",
+				},
+				participantsDraft: {
+					primaryBorrower: {
+						email: "ada@example.com",
+						fullName: "Ada Lovelace",
+					},
+				},
+				propertyDraft: {
+					create: {
+						city: "Toronto",
+						postalCode: "M5H 1J9",
+						propertyType: "residential",
+						province: "ON",
+						streetAddress: "123 King St W",
+					},
+				},
+				validationSnapshot: {
+					stepErrors: {
+						documents: ["Signed commitment letter is required."],
+					},
+				},
+				valuationDraft: {
+					valueAsIs: 400_000,
+				},
+			})
+		).toBe("documents");
+	});
+});

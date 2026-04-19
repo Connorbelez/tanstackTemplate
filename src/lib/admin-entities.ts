@@ -13,6 +13,7 @@ export type AdminEntityType = (typeof ADMIN_ENTITY_TYPES)[number];
 
 export const RESERVED_ADMIN_ROUTE_SEGMENTS = [
 	"financial-ledger",
+	"originations",
 	"payment-operations",
 	"underwriting",
 ] as const;
