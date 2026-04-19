@@ -48,8 +48,8 @@ export function MortgageTermsStep({
 					<CardHeader>
 						<CardTitle className="text-base">Core economics</CardTitle>
 						<CardDescription>
-							These fields drive the phase-2 constructor, but this phase only
-							persists draft values.
+							These fields drive the canonical activation constructor and the
+							payment bootstrap that follows commit.
 						</CardDescription>
 					</CardHeader>
 					<CardContent className="grid gap-4 md:grid-cols-2">
@@ -243,8 +243,8 @@ export function MortgageTermsStep({
 							Dates and servicing context
 						</CardTitle>
 						<CardDescription>
-							Stage the cadence now. No obligations, schedules, or collection
-							plans are created in this phase.
+							Commit uses these dates and cadence to bootstrap canonical
+							obligations and planned app-owned collection entries.
 						</CardDescription>
 					</CardHeader>
 					<CardContent className="grid gap-4">

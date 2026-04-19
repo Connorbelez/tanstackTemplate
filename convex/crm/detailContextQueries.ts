@@ -1,5 +1,8 @@
 import { ConvexError, v } from "convex/values";
+import type { Doc, Id } from "../_generated/dataModel";
+import type { QueryCtx } from "../_generated/server";
 import { crmQuery } from "../fluent";
+import { buildCollectionPlanEntryRow } from "../payments/collectionPlan/readModels";
 
 function toBorrowerName(args: {
 	firstName?: string;
@@ -7,6 +10,65 @@ function toBorrowerName(args: {
 }): string | null {
 	const name = [args.firstName, args.lastName].filter(Boolean).join(" ").trim();
 	return name.length > 0 ? name : null;
+}
+
+type CrmDetailQueryCtx = Pick<QueryCtx, "db"> & {
+	viewer: {
+		orgId?: string;
+	};
+};
+
+async function requireListingForDetailContext(
+	ctx: CrmDetailQueryCtx,
+	listingId: Id<"listings">
+) {
+	const orgId = ctx.viewer.orgId;
+	if (!orgId) {
+		throw new ConvexError("Org context required");
+	}
+
+	const listing = await ctx.db.get(listingId);
+	if (!listing) {
+		throw new ConvexError("Listing not found");
+	}
+
+	if (!listing.mortgageId) {
+		throw new ConvexError("Listing not found or access denied");
+	}
+
+	const mortgage = await ctx.db.get(listing.mortgageId);
+	if (!mortgage?.orgId || mortgage.orgId !== orgId) {
+		throw new ConvexError("Listing not found or access denied");
+	}
+
+	return { listing, mortgage };
+}
+
+async function loadListingDetailProjectionContext(
+	ctx: CrmDetailQueryCtx,
+	args: {
+		listing: Doc<"listings">;
+		mortgage: Doc<"mortgages">;
+	}
+) {
+	return Promise.all([
+		args.listing.propertyId ? ctx.db.get(args.listing.propertyId) : null,
+		ctx.db
+			.query("mortgageValuationSnapshots")
+			.withIndex("by_mortgage_created_at", (query) =>
+				query.eq("mortgageId", args.mortgage._id)
+			)
+			.order("desc")
+			.first(),
+	]);
+}
+
+function buildListingPublicDocumentContext(args: { listing: Doc<"listings"> }) {
+	return args.listing.publicDocumentIds.map((fileRef) => ({
+		assetId: null,
+		fileRef,
+		name: null,
+	}));
 }
 
 export const getMortgageDetailContext = crmQuery
@@ -29,8 +91,13 @@ export const getMortgageDetailContext = crmQuery
 			borrowerLinks,
 			listing,
 			obligations,
+			collectionPlanEntries,
+			collectionAttempts,
+			transferRequests,
 			auditEvents,
 			latestValuationSnapshot,
+			latestExternalCollectionSchedule,
+			originationCase,
 		] = await Promise.all([
 			ctx.db.get(mortgage.propertyId),
 			ctx.db
@@ -48,6 +115,22 @@ export const getMortgageDetailContext = crmQuery
 				)
 				.collect(),
 			ctx.db
+				.query("collectionPlanEntries")
+				.withIndex("by_mortgage_status_scheduled", (q) =>
+					q.eq("mortgageId", args.mortgageId)
+				)
+				.collect(),
+			ctx.db
+				.query("collectionAttempts")
+				.withIndex("by_mortgage_status", (q) =>
+					q.eq("mortgageId", args.mortgageId)
+				)
+				.collect(),
+			ctx.db
+				.query("transferRequests")
+				.withIndex("by_mortgage", (q) => q.eq("mortgageId", args.mortgageId))
+				.collect(),
+			ctx.db
 				.query("auditJournal")
 				.withIndex("by_mortgage", (q) =>
 					q.eq("mortgageId", String(args.mortgageId))
@@ -60,6 +143,19 @@ export const getMortgageDetailContext = crmQuery
 				)
 				.order("desc")
 				.first(),
+			mortgage.activeExternalCollectionScheduleId
+				? ctx.db.get(mortgage.activeExternalCollectionScheduleId)
+				: ctx.db
+						.query("externalCollectionSchedules")
+						.withIndex("by_mortgage", (q) =>
+							q.eq("mortgageId", args.mortgageId)
+						)
+						.order("desc")
+						.first(),
+			mortgage.workflowSourceType === "admin_origination_case" &&
+			mortgage.workflowSourceId
+				? ctx.db.get(mortgage.workflowSourceId as Id<"adminOriginationCases">)
+				: Promise.resolve(null),
 		]);
 
 		const borrowers = await Promise.all(
@@ -103,6 +199,22 @@ export const getMortgageDetailContext = crmQuery
 			},
 			{}
 		);
+		const paymentSetupObligations = [...obligations]
+			.sort((left, right) => left.dueDate - right.dueDate)
+			.map((obligation) => ({
+				amount: obligation.amount,
+				amountSettled: obligation.amountSettled,
+				dueDate: obligation.dueDate,
+				obligationId: obligation._id,
+				paymentNumber: obligation.paymentNumber,
+				status: obligation.status,
+				type: obligation.type,
+			}));
+		const paymentSetupPlanEntries = await Promise.all(
+			[...collectionPlanEntries]
+				.sort((left, right) => left.scheduledDate - right.scheduledDate)
+				.map((entry) => buildCollectionPlanEntryRow(ctx, entry))
+		);
 
 		return {
 			property: property
@@ -122,13 +234,17 @@ export const getMortgageDetailContext = crmQuery
 			),
 			listing: listing
 				? {
+						dataSource: listing.dataSource,
 						listingId: listing._id,
+						monthlyPayment: listing.monthlyPayment,
+						paymentFrequency: listing.paymentFrequency,
 						title: listing.title ?? null,
 						status: listing.status,
 						principal: listing.principal,
 						interestRate: listing.interestRate,
 						ltvRatio: listing.ltvRatio,
 						publishedAt: listing.publishedAt ?? null,
+						updatedAt: listing.updatedAt,
 					}
 				: null,
 			latestValuationSnapshot: latestValuationSnapshot
@@ -142,6 +258,46 @@ export const getMortgageDetailContext = crmQuery
 						valuationDate: latestValuationSnapshot.valuationDate,
 					}
 				: null,
+			paymentSetup: {
+				activationLastAttemptAt:
+					originationCase?.collectionsDraft?.lastAttemptAt ?? null,
+				activationLastError:
+					originationCase?.collectionsDraft?.lastError ?? null,
+				activationRetryCount:
+					originationCase?.collectionsDraft?.retryCount ?? 0,
+				activationSelectedBankAccountId:
+					originationCase?.collectionsDraft?.selectedBankAccountId ?? null,
+				activationStatus:
+					originationCase?.collectionsDraft?.activationStatus ?? null,
+				collectionAttemptCount: collectionAttempts.length,
+				collectionExecutionMode: mortgage.collectionExecutionMode ?? null,
+				collectionExecutionProviderCode:
+					mortgage.collectionExecutionProviderCode ?? null,
+				collectionPlanEntryCount: collectionPlanEntries.length,
+				collectionPlanEntries: paymentSetupPlanEntries,
+				externalSchedule: latestExternalCollectionSchedule
+					? {
+							activatedAt: latestExternalCollectionSchedule.activatedAt ?? null,
+							bankAccountId: latestExternalCollectionSchedule.bankAccountId,
+							externalScheduleRef:
+								latestExternalCollectionSchedule.externalScheduleRef ?? null,
+							lastSyncErrorMessage:
+								latestExternalCollectionSchedule.lastSyncErrorMessage ?? null,
+							lastSyncedAt:
+								latestExternalCollectionSchedule.lastSyncedAt ?? null,
+							nextPollAt: latestExternalCollectionSchedule.nextPollAt ?? null,
+							providerCode: latestExternalCollectionSchedule.providerCode,
+							scheduleId: latestExternalCollectionSchedule._id,
+							status: latestExternalCollectionSchedule.status,
+						}
+					: null,
+				obligationCount: obligations.length,
+				obligations: paymentSetupObligations,
+				originationCaseId: originationCase?._id ?? null,
+				scheduleRuleMissing:
+					mortgage.paymentBootstrapScheduleRuleMissing ?? false,
+				transferRequestCount: transferRequests.length,
+			},
 			recentObligations,
 			obligationStats,
 			recentAuditEvents: [...auditEvents]
@@ -155,6 +311,82 @@ export const getMortgageDetailContext = crmQuery
 					newState: event.newState,
 					timestamp: event.timestamp,
 				})),
+		};
+	})
+	.public();
+
+export const getListingDetailContext = crmQuery
+	.input({
+		listingId: v.id("listings"),
+	})
+	.handler(async (ctx, args) => {
+		const { listing, mortgage } = await requireListingForDetailContext(
+			ctx,
+			args.listingId
+		);
+		const [property, latestValuationSnapshot] =
+			await loadListingDetailProjectionContext(ctx, {
+				listing,
+				mortgage,
+			});
+		const publicDocuments = buildListingPublicDocumentContext({
+			listing,
+		});
+
+		return {
+			latestValuationSnapshot: latestValuationSnapshot
+				? {
+						createdByUserId: latestValuationSnapshot.createdByUserId,
+						relatedDocumentAssetId:
+							latestValuationSnapshot.relatedDocumentAssetId ?? null,
+						source: latestValuationSnapshot.source,
+						valueAsIs: latestValuationSnapshot.valueAsIs,
+						valuationDate: latestValuationSnapshot.valuationDate,
+					}
+				: null,
+			listing: {
+				adminNotes: listing.adminNotes ?? null,
+				dataSource: listing.dataSource,
+				description: listing.description ?? null,
+				displayOrder: listing.displayOrder ?? null,
+				featured: listing.featured,
+				heroImages: listing.heroImages,
+				listingId: listing._id,
+				marketplaceCopy: listing.marketplaceCopy ?? null,
+				publicDocumentIds: listing.publicDocumentIds,
+				seoSlug: listing.seoSlug ?? null,
+				status: listing.status,
+				title: listing.title ?? null,
+				updatedAt: listing.updatedAt,
+			},
+			mortgage: {
+				interestRate: mortgage.interestRate,
+				lienPosition: mortgage.lienPosition,
+				listingId: listing._id,
+				loanType: mortgage.loanType,
+				maturityDate: mortgage.maturityDate,
+				mortgageId: mortgage._id,
+				paymentAmount: mortgage.paymentAmount,
+				paymentFrequency: mortgage.paymentFrequency,
+				principal: mortgage.principal,
+				rateType: mortgage.rateType,
+				status: mortgage.status,
+				termMonths: mortgage.termMonths,
+			},
+			property: property
+				? {
+						city: property.city,
+						latitude: property.latitude ?? null,
+						longitude: property.longitude ?? null,
+						postalCode: property.postalCode,
+						propertyId: property._id,
+						propertyType: property.propertyType,
+						province: property.province,
+						streetAddress: property.streetAddress,
+						unit: property.unit ?? null,
+					}
+				: null,
+			publicDocuments,
 		};
 	})
 	.public();

@@ -131,20 +131,25 @@ async function seedMortgage(t: ReturnType<typeof createHarness>) {
 }
 
 describe("listings/create.create", () => {
-	it("creates a draft listing behind the fluent admin + permission chain", async () => {
+	it("creates a draft demo listing behind the fluent admin + permission chain", async () => {
 		const t = createHarness();
-		const mortgageId = await seedMortgage(t);
 
 		const listingId = await t
 			.withIdentity(FAIRLEND_ADMIN)
-			.mutation(api.listings.create.create, buildListingInput({ mortgageId }));
+			.mutation(
+				api.listings.create.create,
+				buildListingInput({
+					dataSource: "demo",
+					mortgageId: undefined,
+				})
+			);
 
 		const created = await t.run(async (ctx) => await ctx.db.get(listingId));
 		expect(created).toBeTruthy();
 		expect(created?.status).toBe("draft");
 		expect(created?.viewCount).toBe(0);
 		expect(created?.publishedAt).toBeUndefined();
-		expect(created?.mortgageId).toBe(mortgageId);
+		expect(created?.mortgageId).toBeUndefined();
 	});
 
 	it("rejects unauthenticated callers", async () => {
@@ -169,22 +174,18 @@ describe("listings/create.create", () => {
 		).rejects.toThrow("Forbidden: fair lend admin role required");
 	});
 
-	it("rejects duplicate listings for the same mortgage", async () => {
+	it("rejects the public mortgage-backed create path even when a mortgage exists", async () => {
 		const t = createHarness();
-		const auth = t.withIdentity(FAIRLEND_ADMIN);
 		const mortgageId = await seedMortgage(t);
 
-		await auth.mutation(
-			api.listings.create.create,
-			buildListingInput({ mortgageId })
-		);
-
 		await expect(
-			auth.mutation(
+			t.withIdentity(FAIRLEND_ADMIN).mutation(
 				api.listings.create.create,
 				buildListingInput({ mortgageId })
 			)
-		).rejects.toThrow(`Listing already exists for mortgage ${String(mortgageId)}`);
+		).rejects.toThrow(
+			"Mortgage-backed listings are created from Admin → Originations only."
+		);
 	});
 
 	it("allows demo listings without a mortgage link", async () => {
@@ -225,6 +226,8 @@ describe("listings/create.create", () => {
 				api.listings.create.create,
 				buildListingInput({ mortgageId: undefined })
 			)
-		).rejects.toThrow("Mortgage-backed listings require a mortgageId");
+		).rejects.toThrow(
+			"Mortgage-backed listings are created from Admin → Originations only."
+		);
 	});
 });

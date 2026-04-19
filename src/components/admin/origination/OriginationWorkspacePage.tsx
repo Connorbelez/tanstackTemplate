@@ -144,6 +144,7 @@ function renderOriginationStepContent(args: {
 		case "collections":
 			return (
 				<CollectionsStep
+					caseId={args.caseRecord._id}
 					draft={args.draft.collectionsDraft}
 					errors={args.currentStepErrors}
 					onChange={(collectionsDraft) =>
@@ -536,7 +537,7 @@ export function OriginationWorkspacePage({
 						</div>
 						<div className="space-y-2">
 							<p className="font-semibold text-muted-foreground text-sm uppercase tracking-[0.18em]">
-								Phase 2 workspace
+								Phase 5 workspace
 							</p>
 							<h1 className="font-semibold text-3xl tracking-tight">
 								{pageTitle}
@@ -544,9 +545,10 @@ export function OriginationWorkspacePage({
 							<p className="max-w-3xl text-muted-foreground text-sm leading-6">
 								Stage every origination input in one backoffice aggregate, then
 								activate canonical borrower, property, valuation, mortgage,
-								ledger, and audit rows from this exact review surface. Payments,
-								provider-managed collections, listing projection, and document
-								projection stay deferred.
+								payment bootstrap, listing projection, ledger, and audit rows
+								from this exact review surface. Provider-managed-now cases then
+								immediately attempt Rotessa schedule activation against the
+								staged primary borrower bank account.
 							</p>
 						</div>
 					</div>
@@ -592,10 +594,12 @@ export function OriginationWorkspacePage({
 							<div className="flex items-start gap-3">
 								<FileClock className="mt-0.5 size-4 text-muted-foreground" />
 								<p>
-									Phase 2 commit writes borrower, property, appraisal,
-									mortgageBorrower, mortgage, ledger-genesis, and origination
-									audit rows, but leaves listings and payment automation for
-									downstream phases.
+									Phase 5 commit writes borrower, property, appraisal,
+									mortgageBorrower, mortgage, obligations, planned app-owned
+									collection entries, listing projection, ledger-genesis, and
+									origination audit rows in one path. Phase 5 then follows with
+									immediate Rotessa activation when the collections step opted
+									into provider-managed-now.
 								</p>
 							</div>
 						</CardContent>

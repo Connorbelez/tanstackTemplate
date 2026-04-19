@@ -8,6 +8,7 @@ import {
 	getRecurringCollectionScheduleProvider,
 	type SupportedRecurringCollectionScheduleProvider,
 } from "./providers/registry";
+import { resolveRotessaCustomerReference } from "./rotessaCustomerReference";
 
 const loadActivationSnapshotRef = makeFunctionReference<
 	"query",
@@ -67,39 +68,6 @@ function mapMortgageFrequencyToRotessaFrequency(paymentFrequency: string) {
 				`Mortgage payment frequency "${paymentFrequency}" is not supported by the Rotessa recurring schedule adapter.`
 			);
 	}
-}
-
-function asRecord(value: unknown): Record<string, unknown> | undefined {
-	return value && typeof value === "object"
-		? (value as Record<string, unknown>)
-		: undefined;
-}
-
-function resolveRotessaCustomerReference(
-	bankAccountMetadata: Record<string, unknown> | undefined
-) {
-	const customerId = bankAccountMetadata?.rotessaCustomerId;
-	if (typeof customerId === "number" && Number.isFinite(customerId)) {
-		return { customerId };
-	}
-
-	if (
-		typeof bankAccountMetadata?.rotessaCustomerCustomIdentifier === "string"
-	) {
-		return {
-			customIdentifier: bankAccountMetadata.rotessaCustomerCustomIdentifier,
-		};
-	}
-
-	if (typeof bankAccountMetadata?.rotessaCustomIdentifier === "string") {
-		return {
-			customIdentifier: bankAccountMetadata.rotessaCustomIdentifier,
-		};
-	}
-
-	throw new ConvexError(
-		"Rotessa recurring schedule activation requires one of bankAccount.metadata.rotessaCustomerId, bankAccount.metadata.rotessaCustomerCustomIdentifier, or bankAccount.metadata.rotessaCustomIdentifier."
-	);
 }
 
 function buildActivationIdempotencyKey(args: {
@@ -495,7 +463,7 @@ export const activateRecurringSchedule = convex
 
 		const uniformAmount = validateUniformInstallments(snapshot.planEntries);
 		const customerReference = resolveRotessaCustomerReference(
-			asRecord(snapshot.bankAccount.metadata)
+			snapshot.bankAccount.metadata
 		);
 		const cadence = mapMortgageFrequencyToRotessaFrequency(
 			snapshot.mortgage.paymentFrequency

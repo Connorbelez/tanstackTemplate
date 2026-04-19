@@ -37,7 +37,7 @@ export const ORIGINATION_STEPS: readonly OriginationStepDefinition[] = [
 	{
 		key: "collections",
 		label: "Collections",
-		description: "Draft collection mode selection only in phase 1.",
+		description: "Choose app-owned servicing or immediate Rotessa activation.",
 	},
 	{
 		key: "documents",
@@ -138,8 +138,13 @@ export interface OriginationMortgageDraft {
 }
 
 export interface OriginationCollectionsDraft {
+	activationStatus?: "active" | "activating" | "failed" | "pending";
+	externalCollectionScheduleId?: string;
+	lastAttemptAt?: number;
+	lastError?: string;
 	mode?: "app_owned_only" | "none" | "provider_managed_now";
 	providerCode?: "pad_rotessa";
+	retryCount?: number;
 	selectedBankAccountId?: string;
 }
 

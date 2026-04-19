@@ -36,7 +36,7 @@ async function assertUniqueMortgageListing(
  * Canonical insertion path for listing records so uniqueness checks live in
  * one place instead of being reimplemented across admin/demo/GT creation flows.
  */
-async function insertListing(
+export async function insertListingRecord(
 	ctx: MutationCtx,
 	listing: ListingInsert
 ): Promise<Id<"listings">> {
@@ -59,8 +59,14 @@ const listingCreateMutation = adminMutation
 	.use(requirePermission("listing:create"))
 	.input(listingCreateInputFields)
 	.handler(async (ctx, input): Promise<Id<"listings">> => {
+		if (input.dataSource === "mortgage_pipeline") {
+			throw new ConvexError(
+				"Mortgage-backed listings are created from Admin → Originations only."
+			);
+		}
+
 		const now = Date.now();
-		return await insertListing(ctx, {
+		return await insertListingRecord(ctx, {
 			...input,
 			status: "draft",
 			machineContext: undefined,

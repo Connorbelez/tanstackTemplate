@@ -181,8 +181,9 @@ export function ParticipantsStep({
 					<div>
 						<h3 className="font-semibold text-base">Co-borrowers</h3>
 						<p className="text-muted-foreground text-sm">
-							Add secondary borrower drafts now; phase 2 later decides whether
-							they map to existing borrower profiles.
+							Add secondary borrower drafts now; commit resolves whether they
+							reuse existing borrower profiles or provision new canonical
+							borrowers.
 						</p>
 					</div>
 					<Button

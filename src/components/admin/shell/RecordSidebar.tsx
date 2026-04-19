@@ -510,16 +510,6 @@ function DetailsTab({
 	readonly record: RecordDetailRecord | undefined;
 	readonly recordId: string;
 }) {
-	if (!objectDef) {
-		return (
-			<UnavailableTab
-				description="This entity is not mapped to a CRM object definition yet, so the detail surface can only show route-level context."
-				icon={<FileText className="h-5 w-5" />}
-				title="Object definition unavailable"
-			/>
-		);
-	}
-
 	if (isLoading) {
 		return (
 			<div className="space-y-3">
@@ -534,6 +524,16 @@ function DetailsTab({
 	}
 
 	if (!record) {
+		if (!objectDef) {
+			return (
+				<UnavailableTab
+					description="This entity is not mapped to a CRM object definition yet, so the detail surface can only show route-level context."
+					icon={<FileText className="h-5 w-5" />}
+					title="Object definition unavailable"
+				/>
+			);
+		}
+
 		return (
 			<div className="space-y-4">
 				<UnavailableTab
@@ -562,6 +562,21 @@ function DetailsTab({
 		record,
 		recordId,
 	});
+
+	if (!objectDef && adapterDetails != null) {
+		return adapterDetails;
+	}
+
+	if (!objectDef) {
+		return (
+			<UnavailableTab
+				description="This entity is not mapped to a CRM object definition yet, so the detail surface can only show route-level context."
+				icon={<FileText className="h-5 w-5" />}
+				title="Object definition unavailable"
+			/>
+		);
+	}
+
 	if (adapterDetails != null) {
 		return adapterDetails;
 	}

@@ -85,7 +85,7 @@ export const listingCreateInputValidator = v.object(listingCreateInputFields);
 
 export type ListingCreateInput = Infer<typeof listingCreateInputValidator>;
 
-export const listingMarketplaceUpdateFields = {
+export const listingCurationUpdateFields = {
 	title: v.optional(v.string()),
 	description: v.optional(v.string()),
 	marketplaceCopy: v.optional(v.string()),
@@ -93,11 +93,10 @@ export const listingMarketplaceUpdateFields = {
 	featured: v.optional(v.boolean()),
 	displayOrder: v.optional(v.number()),
 	adminNotes: v.optional(v.string()),
-	publicDocumentIds: v.optional(v.array(v.id("_storage"))),
 	seoSlug: v.optional(v.string()),
 };
 
-export const listingDenormalizedUpdateFields = {
+export const listingProjectionOwnedUpdateFields = {
 	principal: v.optional(v.number()),
 	interestRate: v.optional(v.number()),
 	ltvRatio: v.optional(v.number()),
@@ -117,9 +116,15 @@ export const listingDenormalizedUpdateFields = {
 	latestAppraisalDate: v.optional(v.string()),
 	borrowerSignal: v.optional(v.any()),
 	paymentHistory: v.optional(v.any()),
+	publicDocumentIds: v.optional(v.array(v.id("_storage"))),
 };
 
 export const listingUpdateInputValidator = v.object({
-	...listingMarketplaceUpdateFields,
-	...listingDenormalizedUpdateFields,
+	...listingCurationUpdateFields,
+	...listingProjectionOwnedUpdateFields,
+});
+
+export const listingCurationUpdateInputValidator = v.object({
+	listingId: v.id("listings"),
+	patch: v.object(listingCurationUpdateFields),
 });

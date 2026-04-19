@@ -113,6 +113,7 @@ export interface CollectionPlanEntryRow {
 	createdByRule?: CollectionRuleRow | null;
 	executedAt?: number;
 	executionIdempotencyKey?: string;
+	executionMode?: Doc<"collectionPlanEntries">["executionMode"];
 	lineage: {
 		rescheduledFromId?: Id<"collectionPlanEntries">;
 		retryOfId?: Id<"collectionPlanEntries">;
@@ -327,6 +328,7 @@ export async function buildCollectionPlanEntryRow(
 		createdAt: entry.createdAt,
 		collectionAttemptId: entry.collectionAttemptId,
 		executedAt: entry.executedAt,
+		executionMode: entry.executionMode,
 		executionIdempotencyKey: entry.executionIdempotencyKey,
 		createdByRule: createdByRule ? buildCollectionRuleRow(createdByRule) : null,
 		lineage: {
