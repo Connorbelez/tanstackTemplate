@@ -10,19 +10,21 @@ import {
 	RotessaRequestError,
 } from "./client";
 
+const POSITIVE_INTEGER_ID_RE = /^[1-9]\d*$/;
+
 function centsToRotessaAmount(cents: number) {
 	return Number((cents / 100).toFixed(2));
 }
 
 function parseRotessaNumericId(value: string, resourceName: string) {
-	const parsed = Number.parseInt(value, 10);
-	if (!Number.isFinite(parsed)) {
+	if (!POSITIVE_INTEGER_ID_RE.test(value)) {
 		throw new RotessaRequestError({
 			message: `Invalid Rotessa ${resourceName} id: "${value}"`,
 			method: "GET",
 			path: `/${resourceName}/{id}`,
 		});
 	}
+	const parsed = Number.parseInt(value, 10);
 	return parsed;
 }
 

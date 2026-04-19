@@ -6,12 +6,23 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
 		: undefined;
 }
 
+function asNonEmptyString(value: unknown) {
+	if (typeof value !== "string") {
+		return undefined;
+	}
+
+	const trimmedValue = value.trim();
+	return trimmedValue.length > 0 ? trimmedValue : undefined;
+}
+
 export function hasRotessaCustomerReference(metadata: unknown) {
 	const bankAccountMetadata = asRecord(metadata);
 	return (
-		typeof bankAccountMetadata?.rotessaCustomerId === "number" ||
-		typeof bankAccountMetadata?.rotessaCustomerCustomIdentifier === "string" ||
-		typeof bankAccountMetadata?.rotessaCustomIdentifier === "string"
+		(typeof bankAccountMetadata?.rotessaCustomerId === "number" &&
+			Number.isFinite(bankAccountMetadata.rotessaCustomerId)) ||
+		asNonEmptyString(bankAccountMetadata?.rotessaCustomerCustomIdentifier) !==
+			undefined ||
+		asNonEmptyString(bankAccountMetadata?.rotessaCustomIdentifier) !== undefined
 	);
 }
 
@@ -22,17 +33,21 @@ export function resolveRotessaCustomerReference(metadata: unknown) {
 		return { customerId };
 	}
 
-	if (
-		typeof bankAccountMetadata?.rotessaCustomerCustomIdentifier === "string"
-	) {
+	const customerCustomIdentifier = asNonEmptyString(
+		bankAccountMetadata?.rotessaCustomerCustomIdentifier
+	);
+	if (customerCustomIdentifier) {
 		return {
-			customIdentifier: bankAccountMetadata.rotessaCustomerCustomIdentifier,
+			customIdentifier: customerCustomIdentifier,
 		};
 	}
 
-	if (typeof bankAccountMetadata?.rotessaCustomIdentifier === "string") {
+	const customIdentifier = asNonEmptyString(
+		bankAccountMetadata?.rotessaCustomIdentifier
+	);
+	if (customIdentifier) {
 		return {
-			customIdentifier: bankAccountMetadata.rotessaCustomIdentifier,
+			customIdentifier,
 		};
 	}
 

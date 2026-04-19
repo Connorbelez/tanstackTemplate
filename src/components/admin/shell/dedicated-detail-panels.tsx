@@ -3,7 +3,7 @@
 import { Link } from "@tanstack/react-router";
 import { useAction, useMutation, useQuery } from "convex/react";
 import type { ReactNode } from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Badge } from "#/components/ui/badge";
 import { Button } from "#/components/ui/button";
@@ -236,6 +236,13 @@ function buildListingCurationFormState(listing: {
 	};
 }
 
+export function shouldHydrateListingCurationForm(
+	currentListingId: Id<"listings"> | null,
+	listing: { listingId: Id<"listings"> } | null | undefined
+) {
+	return Boolean(listing && currentListingId !== listing.listingId);
+}
+
 export function ListingsDedicatedDetails({
 	record,
 }: {
@@ -258,6 +265,7 @@ export function ListingsDedicatedDetails({
 	const [isRefreshingProjection, setIsRefreshingProjection] = useState(false);
 	const [isSavingCuration, setIsSavingCuration] = useState(false);
 	const listing = detailContext?.listing;
+	const hydratedListingIdRef = useRef<Id<"listings"> | null>(null);
 	const [curationForm, setCurationForm] = useState(() =>
 		buildListingCurationFormState({
 			adminNotes: null,
@@ -276,6 +284,14 @@ export function ListingsDedicatedDetails({
 			return;
 		}
 
+		if (
+			!shouldHydrateListingCurationForm(hydratedListingIdRef.current, listing)
+		) {
+			return;
+		}
+
+		// Keep in-progress edits stable across live-query refreshes for the same listing.
+		hydratedListingIdRef.current = listing.listingId;
 		setCurationForm(buildListingCurationFormState(listing));
 	}, [listing]);
 

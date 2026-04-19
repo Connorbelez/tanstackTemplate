@@ -135,6 +135,22 @@ describe("Rotessa SDK adoption", () => {
 		expect(String(fetchMock.mock.calls[1]?.[0])).toContain("page=2");
 	});
 
+	it("rejects malformed numeric schedule ids before issuing provider requests", async () => {
+		vi.stubEnv("ROTESSA_API_KEY", "test-rotessa-key");
+		const fetchMock = vi.fn();
+		const client = new RotessaApiClient({
+			fetchImpl: fetchMock as unknown as typeof fetch,
+		});
+
+		await expect(client.getTransactionSchedule("123abc")).rejects.toThrow(
+			/Invalid Rotessa transaction_schedules id: "123abc"/
+		);
+		await expect(client.deleteTransactionSchedule("0")).rejects.toThrow(
+			/Invalid Rotessa transaction_schedules id: "0"/
+		);
+		expect(fetchMock).not.toHaveBeenCalled();
+	});
+
 	it("exposes the copied manifest for later Rotessa integrations", () => {
 		expect(
 			ROTESSA_MANIFEST.transactionSchedules.createWithCustomIdentifier.path

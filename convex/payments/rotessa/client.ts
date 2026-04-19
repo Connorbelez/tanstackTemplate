@@ -611,12 +611,29 @@ export function createRotessaClient(
 
 let rotessaClient: RotessaClient | null = null;
 
+function hasClientConfigOverrides(configInput: RotessaClientConfigInput) {
+	return (
+		configInput.apiKey !== undefined ||
+		configInput.baseUrl !== undefined ||
+		configInput.fetchFn !== undefined ||
+		configInput.reporter !== undefined ||
+		configInput.timeoutMs !== undefined
+	);
+}
+
 export function getRotessaClient(
 	configInput: RotessaClientConfigInput = {}
 ): RotessaClient {
-	if (!rotessaClient) {
-		rotessaClient = createRotessaClient(configInput);
+	if (rotessaClient) {
+		if (hasClientConfigOverrides(configInput)) {
+			throw new RotessaConfigError(
+				"Rotessa client already initialized; call resetRotessaClient() before re-configuring, or use createRotessaClient() for a scoped instance."
+			);
+		}
+		return rotessaClient;
 	}
+
+	rotessaClient = createRotessaClient(configInput);
 	return rotessaClient;
 }
 
