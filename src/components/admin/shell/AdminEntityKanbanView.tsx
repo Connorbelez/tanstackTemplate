@@ -1,7 +1,7 @@
 "use client";
 
 import { Layers3 } from "lucide-react";
-import { type ReactNode, useState } from "react";
+import { type KeyboardEvent, type ReactNode, useState } from "react";
 import { Badge } from "#/components/ui/badge";
 import { useAdminRelationNavigation } from "#/hooks/useAdminRelationNavigation";
 import type { Doc } from "../../../../convex/_generated/dataModel";
@@ -50,7 +50,7 @@ export function AdminEntityKanbanView({
 		fields.map((field) => [field.name, field] as const)
 	);
 	const handleSelectableCardKeyDown = (
-		event: React.KeyboardEvent<HTMLDivElement>,
+		event: KeyboardEvent<HTMLDivElement>,
 		recordId: string
 	) => {
 		if (!onSelectRecord || event.target !== event.currentTarget) {

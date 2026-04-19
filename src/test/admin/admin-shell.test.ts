@@ -408,6 +408,15 @@ describe("admin shell helpers", () => {
 		});
 	});
 
+	it("returns null when the related record id is blank", () => {
+		expect(
+			resolveAdminRecordRouteTarget({
+				entityType: "borrowers",
+				recordId: "   ",
+			})
+		).toBeNull();
+	});
+
 	it("prefers sidebar navigation for sheet-presented relation clicks", () => {
 		const navigate = vi.fn();
 		const pushToSidebar = vi.fn();

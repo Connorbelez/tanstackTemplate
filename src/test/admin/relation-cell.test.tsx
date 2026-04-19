@@ -84,4 +84,35 @@ describe("RelationCell", () => {
 		});
 		expect(onRowClick).not.toHaveBeenCalled();
 	});
+
+	it("renders all related records when toggling is disabled", () => {
+		render(
+			<RelationCell
+				allowToggle={false}
+				expanded
+				value={buildRelationValue(["Alpha", "Beta", "Gamma"])}
+				variant="detail"
+			/>
+		);
+
+		expect(screen.getByText("Alpha")).toBeTruthy();
+		expect(screen.getByText("Beta")).toBeTruthy();
+		expect(screen.getByText("Gamma")).toBeTruthy();
+		expect(screen.queryByText(/\+\d+ more/i)).toBeNull();
+		expect(screen.queryByText(/show less/i)).toBeNull();
+		expect(screen.queryByText(/\+\d+ more hidden/i)).toBeNull();
+	});
+
+	it("renders non-interactive chips when no navigation handler is provided", () => {
+		render(
+			<RelationCell
+				allowToggle={false}
+				value={buildRelationValue(["Alpha", "Beta"])}
+			/>
+		);
+
+		expect(screen.queryByRole("button", { name: /Alpha/i })).toBeNull();
+		expect(screen.getByText("Alpha")).toBeTruthy();
+		expect(screen.getByText("Beta")).toBeTruthy();
+	});
 });

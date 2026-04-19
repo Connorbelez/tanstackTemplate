@@ -60,24 +60,26 @@ export function resolveAdminRelationReference(args: {
 export function resolveAdminRecordRouteTarget(
 	reference: Pick<SidebarRecordRef, "entityType" | "recordId">
 ): AdminRecordRouteTarget | null {
-	if (!reference.entityType) {
+	const entityType = reference.entityType?.trim();
+	const recordId = reference.recordId.trim();
+	if (!(entityType && recordId)) {
 		return null;
 	}
 
-	if (isDedicatedAdminEntityType(reference.entityType)) {
+	if (isDedicatedAdminEntityType(entityType)) {
 		return {
 			params: {
-				recordid: reference.recordId,
+				recordid: recordId,
 			},
 			search: EMPTY_ADMIN_DETAIL_SEARCH,
-			to: getDedicatedAdminRecordRoute(reference.entityType),
+			to: getDedicatedAdminRecordRoute(entityType),
 		};
 	}
 
 	return {
 		params: {
-			entitytype: reference.entityType,
-			recordid: reference.recordId,
+			entitytype: entityType,
+			recordid: recordId,
 		},
 		search: EMPTY_ADMIN_DETAIL_SEARCH,
 		to: "/admin/$entitytype/$recordid",

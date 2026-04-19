@@ -62,14 +62,18 @@ export function RelationCell({
 		);
 	}
 
-	const visibleItems = expanded
-		? value.items.slice(0, MAX_EXPANDED_ITEMS)
-		: value.items.slice(0, COLLAPSED_VISIBLE_ITEMS);
-	const hiddenItemCount = expanded
-		? Math.max(0, value.items.length - visibleItems.length)
-		: value.items.length - visibleItems.length;
 	const showToggle =
 		allowToggle && value.items.length > COLLAPSED_VISIBLE_ITEMS;
+	const visibleItems = showToggle
+		? expanded
+			? value.items.slice(0, MAX_EXPANDED_ITEMS)
+			: value.items.slice(0, COLLAPSED_VISIBLE_ITEMS)
+		: value.items;
+	const hiddenItemCount = showToggle
+		? expanded
+			? Math.max(0, value.items.length - visibleItems.length)
+			: value.items.length - visibleItems.length
+		: 0;
 
 	return (
 		<div
@@ -79,28 +83,48 @@ export function RelationCell({
 				className
 			)}
 		>
-			{visibleItems.map((item) => (
-				<button
-					className={cn(
-						"inline-flex max-w-full items-center gap-1 rounded-full border border-border/70 bg-muted/20 px-2.5 py-1 font-medium text-foreground text-xs transition-colors hover:border-primary/40 hover:bg-muted/50",
-						variant === "detail" && "px-3 py-1.5 text-sm"
-					)}
-					key={`${item.recordKind}:${item.recordId}`}
-					onClick={(event) => {
-						stopEvent(event);
-						onNavigate?.(toNavigationTarget(item));
-					}}
-					type="button"
-				>
-					<Link2
-						className={cn(
-							"size-3 text-muted-foreground",
-							variant === "detail" && "size-3.5"
-						)}
-					/>
-					<span className="truncate">{item.label}</span>
-				</button>
-			))}
+			{visibleItems.map((item) => {
+				const content = (
+					<>
+						<Link2
+							className={cn(
+								"size-3 text-muted-foreground",
+								variant === "detail" && "size-3.5"
+							)}
+						/>
+						<span className="truncate">{item.label}</span>
+					</>
+				);
+				const itemClassName = cn(
+					"inline-flex max-w-full items-center gap-1 rounded-full border border-border/70 bg-muted/20 px-2.5 py-1 font-medium text-foreground text-xs",
+					onNavigate &&
+						"transition-colors hover:border-primary/40 hover:bg-muted/50",
+					variant === "detail" && "px-3 py-1.5 text-sm"
+				);
+				const itemKey = `${item.objectDefId}:${item.recordKind}:${item.recordId}`;
+
+				if (!onNavigate) {
+					return (
+						<span className={itemClassName} key={itemKey}>
+							{content}
+						</span>
+					);
+				}
+
+				return (
+					<button
+						className={itemClassName}
+						key={itemKey}
+						onClick={(event) => {
+							stopEvent(event);
+							onNavigate(toNavigationTarget(item));
+						}}
+						type="button"
+					>
+						{content}
+					</button>
+				);
+			})}
 
 			{!expanded && hiddenItemCount > 0 ? (
 				<button

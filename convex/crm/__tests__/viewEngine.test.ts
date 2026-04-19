@@ -383,6 +383,13 @@ describe("View Engine", () => {
 
 		it("hydrates relation cell payloads for normalized table rows and record detail surfaces", async () => {
 			const fixture = await seedRelationFixture(t);
+			const unlinkedDealRecordId = await seedRecord(
+				t,
+				fixture.sourceFixture.objectDefId,
+				{
+					name: "Loan Beta",
+				}
+			);
 
 			const result = await asAdmin(t).query(
 				api.crm.viewQueries.queryViewRecords,
@@ -396,6 +403,11 @@ describe("View Engine", () => {
 				(row) => row.record._id === (fixture.dealRecordId as string)
 			);
 			expect(relationRow).toBeDefined();
+			const scalarCell = relationRow?.cells.find(
+				(cell) => cell.fieldName === "name"
+			);
+			expect(scalarCell?.displayValue).toBeUndefined();
+			expect(scalarCell?.value).toBe("Loan Alpha");
 
 			const relationCell = relationRow?.cells.find(
 				(cell) => cell.fieldName === "property"
@@ -434,6 +446,35 @@ describe("View Engine", () => {
 						recordKind: "record",
 					},
 				],
+				kind: "relation",
+			});
+
+			const unlinkedRelationRow = result.page.rows.find(
+				(row) => row.record._id === (unlinkedDealRecordId as string)
+			);
+			expect(unlinkedRelationRow).toBeDefined();
+
+			const emptyRelationCell = unlinkedRelationRow?.cells.find(
+				(cell) => cell.fieldName === "property"
+			);
+			expect(emptyRelationCell?.displayValue).toEqual({
+				cardinality: "many_to_many",
+				items: [],
+				kind: "relation",
+			});
+			expect(emptyRelationCell?.value).toBeUndefined();
+
+			const emptyDetailSurface = await asAdmin(t).query(
+				api.crm.recordQueries.getRecordDetailSurface,
+				{
+					objectDefId: fixture.sourceFixture.objectDefId,
+					recordId: unlinkedDealRecordId as string,
+					recordKind: "record",
+				}
+			);
+			expect(emptyDetailSurface.record.fields.property).toEqual({
+				cardinality: "many_to_many",
+				items: [],
 				kind: "relation",
 			});
 		});

@@ -10,10 +10,11 @@
 - "Generic detail rendering handles relation payloads meaningfully so fallback detail sections do not degrade to raw JSON once relation values become structured."
 
 ## Implementation notes
-- `src/components/admin/shell/AdminEntityTableView.tsx` and `AdminEntityKanbanView.tsx` both still render via `renderAdminFieldValue(field, record.fields[column.name])`; both need to move to row/cell-aware rendering, ideally through one shared relation component.
-- `renderAdminFieldValue` currently formats only scalar/select-like values, so relation handling should be additive and not break non-relation cell output.
-- `RecordSidebar` already computes full-page fallbacks using `getDedicatedAdminRecordRoute` and generic `/admin/$entitytype/$recordid`; centralize that logic in a shared helper so `LinkedRecordsPanel` and new relation cells behave identically.
+- `src/components/admin/shell/AdminEntityTableView.tsx` and `AdminEntityKanbanView.tsx` are now row/cell-aware and route relation payloads through the shared `RelationCell` component.
+- `renderAdminFieldValue` still handles scalar/select-style values, while relation rendering is layered on through `RelationCell` so non-relation output stays unchanged.
+- Full-page fallback routing is centralized in `src/lib/admin-relation-navigation.ts`, keeping `RecordSidebar`, `LinkedRecordsPanel`, and relation cells aligned on dedicated-vs-generic detail routes.
 - Relation-chip clicks must stop propagation so row selection still works when clicking elsewhere in the row/card.
+- Treat this file as implementation context, not lint-oriented code. Verify relation rendering and fallback routing against the actual components before flagging documentation drift.
 
 ## Existing code touchpoints
 - `src/components/admin/shell/admin-view-types.ts`
@@ -28,4 +29,4 @@
 - `src/lib/admin-entity-routes.ts`
 
 ## Validation
-- Component tests should cover collapsed vs expanded relation display, single-open behavior, chip click propagation, and sidebar-vs-page fallback navigation.
+- Component tests cover collapsed vs expanded relation display, single-open behavior, and chip click propagation; route fallback behavior is verified through the admin shell navigation tests.

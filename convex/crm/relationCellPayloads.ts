@@ -47,13 +47,6 @@ function createPeerReferenceKey(reference: RelationPeerReference): string {
 	return `${reference.recordKind}:${reference.recordId}:${String(reference.objectDefId)}`;
 }
 
-function createScalarDisplayValue(value: unknown): EntityViewCellDisplayValue {
-	return {
-		kind: "scalar",
-		value,
-	};
-}
-
 async function loadActiveFieldDefs(
 	ctx: QueryCtx,
 	objectDefId: Id<"objectDefs">
@@ -131,20 +124,59 @@ async function loadLinksByType(args: {
 	ctx: QueryCtx;
 	linkTypeDefIds: readonly Id<"linkTypeDefs">[];
 	orgId: string;
+	records: readonly UnifiedRecord[];
 }): Promise<Map<string, RecordLinkDoc[]>> {
+	const allowedLinkTypeIds = new Set(
+		args.linkTypeDefIds.map((linkTypeDefId) => linkTypeDefId.toString())
+	);
 	const linksByType = new Map<string, RecordLinkDoc[]>();
+	const seenLinkIdsByType = new Map<string, Set<string>>();
 
 	await Promise.all(
-		args.linkTypeDefIds.map(async (linkTypeDefId) => {
-			const links = await args.ctx.db
-				.query("recordLinks")
-				.withIndex("by_link_type", (q) => q.eq("linkTypeDefId", linkTypeDefId))
-				.collect();
+		args.records.map(async (record) => {
+			const [outboundLinks, inboundLinks] = await Promise.all([
+				args.ctx.db
+					.query("recordLinks")
+					.withIndex("by_org_source", (q) =>
+						q
+							.eq("orgId", args.orgId)
+							.eq("sourceKind", record._kind)
+							.eq("sourceId", record._id)
+					)
+					.collect(),
+				args.ctx.db
+					.query("recordLinks")
+					.withIndex("by_org_target", (q) =>
+						q
+							.eq("orgId", args.orgId)
+							.eq("targetKind", record._kind)
+							.eq("targetId", record._id)
+					)
+					.collect(),
+			]);
 
-			linksByType.set(
-				linkTypeDefId.toString(),
-				links.filter((link) => link.orgId === args.orgId && !link.isDeleted)
-			);
+			for (const link of [...outboundLinks, ...inboundLinks]) {
+				if (link.isDeleted) {
+					continue;
+				}
+
+				const linkTypeDefKey = link.linkTypeDefId.toString();
+				if (!allowedLinkTypeIds.has(linkTypeDefKey)) {
+					continue;
+				}
+
+				const seenLinkIds =
+					seenLinkIdsByType.get(linkTypeDefKey) ?? new Set<string>();
+				if (seenLinkIds.has(link._id.toString())) {
+					continue;
+				}
+
+				seenLinkIds.add(link._id.toString());
+				seenLinkIdsByType.set(linkTypeDefKey, seenLinkIds);
+				const matchingLinks = linksByType.get(linkTypeDefKey) ?? [];
+				matchingLinks.push(link);
+				linksByType.set(linkTypeDefKey, matchingLinks);
+			}
 		})
 	);
 
@@ -320,26 +352,34 @@ async function resolveRelationItemsByKey(args: {
 }): Promise<Map<string, RelationCellItem | null>> {
 	const objectDefsById = new Map<string, ObjectDef>();
 	const activeFieldDefsByObjectId = new Map<string, FieldDef[]>();
+	const uniqueReferencesByKey = new Map<string, RelationPeerReference>();
 	const resolvedItemsByKey = new Map<string, RelationCellItem | null>();
 
 	for (const referencesForField of args.fieldReferences.values()) {
 		for (const reference of referencesForField.values()) {
 			const peerReferenceKey = createPeerReferenceKey(reference);
-			if (resolvedItemsByKey.has(peerReferenceKey)) {
-				continue;
-			}
-
-			resolvedItemsByKey.set(
-				peerReferenceKey,
-				await resolveRelationCellItem({
-					activeFieldDefsByObjectId,
-					ctx: args.ctx,
-					objectDefsById,
-					orgId: args.orgId,
-					reference,
-				})
-			);
+			uniqueReferencesByKey.set(peerReferenceKey, reference);
 		}
+	}
+
+	const resolvedEntries = await Promise.all(
+		[...uniqueReferencesByKey.entries()].map(
+			async ([peerReferenceKey, reference]) =>
+				[
+					peerReferenceKey,
+					await resolveRelationCellItem({
+						activeFieldDefsByObjectId,
+						ctx: args.ctx,
+						objectDefsById,
+						orgId: args.orgId,
+						reference,
+					}),
+				] as const
+		)
+	);
+
+	for (const [peerReferenceKey, resolvedItem] of resolvedEntries) {
+		resolvedItemsByKey.set(peerReferenceKey, resolvedItem);
 	}
 
 	return resolvedItemsByKey;
@@ -437,6 +477,7 @@ export async function buildRelationCellDisplayValueMap(args: {
 		ctx: args.ctx,
 		linkTypeDefIds: uniqueLinkTypeDefIds,
 		orgId: args.orgId,
+		records: args.records,
 	});
 
 	const currentRecordKeys = new Set(
@@ -504,10 +545,6 @@ export async function materializeRelationFieldValues(args: {
 		let changed = false;
 
 		for (const [fieldName, relationDisplayValue] of relationDisplayValues) {
-			if (relationDisplayValue.items.length === 0) {
-				continue;
-			}
-
 			nextFields[fieldName] = relationDisplayValue;
 			changed = true;
 		}
@@ -538,10 +575,6 @@ export function buildEntityViewCellDisplayValueMap(args: {
 			record._id
 		);
 		const displayValues = new Map<string, EntityViewCellDisplayValue>();
-
-		for (const [fieldName, value] of Object.entries(record.fields)) {
-			displayValues.set(fieldName, createScalarDisplayValue(value));
-		}
 
 		for (const [fieldName, relationDisplayValue] of relationDisplayValues ??
 			[]) {

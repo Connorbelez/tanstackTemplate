@@ -21,16 +21,6 @@ function navigateToRoute(
 	navigate: ReturnType<typeof useNavigate>,
 	target: AdminRecordRouteTarget
 ) {
-	if ("entitytype" in target.params) {
-		void navigate({
-			params: target.params,
-			search: target.search,
-			to: target.to,
-			viewTransition: true,
-		});
-		return;
-	}
-
 	void navigate({
 		params: target.params,
 		search: target.search,
@@ -45,8 +35,9 @@ export function useAdminRelationNavigation(
 	const navigate = useNavigate();
 	const objectDefs = useQuery(api.crm.objectDefs.listObjects);
 	const sidebar = useOptionalRecordSidebar();
-
-	return useCallback(
+	const canNavigateWithoutMetadata =
+		options.presentation === "sheet" && Boolean(sidebar?.push);
+	const navigateRelation = useCallback(
 		(target: AdminRelationNavigationTarget) => {
 			navigateToAdminRelation({
 				navigate: (routeTarget) => navigateToRoute(navigate, routeTarget),
@@ -65,4 +56,8 @@ export function useAdminRelationNavigation(
 			sidebar,
 		]
 	);
+
+	return objectDefs !== undefined || canNavigateWithoutMetadata
+		? navigateRelation
+		: undefined;
 }

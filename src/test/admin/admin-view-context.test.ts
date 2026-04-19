@@ -90,6 +90,7 @@ describe("admin view context helpers", () => {
 		});
 
 		expect(resolveAdminObjectDef("borrowers", [borrowers])).toEqual(borrowers);
+		expect(resolveAdminObjectDef("Borrowers", [borrowers])).toEqual(borrowers);
 	});
 
 	it("resolves metadata-fallback objects by fallback entity type", () => {

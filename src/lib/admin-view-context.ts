@@ -52,7 +52,9 @@ export function resolveAdminObjectDef(
 	const normalizedEntityType = entityType.trim().toLowerCase();
 
 	return objectDefs.find((objectDef) => {
-		if (getAdminEntityForObjectDef(objectDef)?.entityType === entityType) {
+		if (
+			getAdminEntityForObjectDef(objectDef)?.entityType === normalizedEntityType
+		) {
 			return true;
 		}
 

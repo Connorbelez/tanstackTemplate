@@ -1,6 +1,6 @@
 "use client";
 
-import { type ReactNode, useState } from "react";
+import { type KeyboardEvent, type ReactNode, useState } from "react";
 import { Badge } from "#/components/ui/badge";
 import {
 	Table,
@@ -58,7 +58,7 @@ export function AdminEntityTableView({
 		fields.map((field) => [field.name, field] as const)
 	);
 	const handleSelectableRowKeyDown = (
-		event: React.KeyboardEvent<HTMLTableRowElement>,
+		event: KeyboardEvent<HTMLTableRowElement>,
 		recordId: string
 	) => {
 		if (!onSelectRecord || event.target !== event.currentTarget) {
