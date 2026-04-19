@@ -1,6 +1,13 @@
 import { Input } from "#/components/ui/input";
 import { Label } from "#/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "#/components/ui/radio-group";
+import {
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from "#/components/ui/select";
 import type { OriginationCollectionsDraft } from "#/lib/admin-origination";
 import { cn } from "#/lib/utils";
 import { OriginationStepCard } from "./OriginationStepCard";
@@ -29,6 +36,13 @@ const COLLECTION_OPTIONS = [
 		label: "Provider-managed now",
 		description:
 			"Reserves the future provider-managed branch without contacting Rotessa or creating schedules yet.",
+	},
+] as const;
+
+const COLLECTION_PROVIDER_OPTIONS = [
+	{
+		value: "pad_rotessa",
+		label: "pad_rotessa",
 	},
 ] as const;
 
@@ -85,20 +99,26 @@ export function CollectionsStep({
 			<div className="grid gap-4 md:grid-cols-2">
 				<div className="space-y-2">
 					<Label htmlFor="providerCode">Provider code</Label>
-					<Input
-						id="providerCode"
-						onChange={(event) =>
+					<Select
+						onValueChange={(value) =>
 							onChange({
 								...nextDraft,
-								providerCode:
-									(event.target
-										.value as OriginationCollectionsDraft["providerCode"]) ||
-									undefined,
+								providerCode: value === "pad_rotessa" ? value : undefined,
 							})
 						}
-						placeholder="pad_rotessa"
 						value={nextDraft.providerCode ?? ""}
-					/>
+					>
+						<SelectTrigger className="w-full" id="providerCode">
+							<SelectValue placeholder="Select provider" />
+						</SelectTrigger>
+						<SelectContent>
+							{COLLECTION_PROVIDER_OPTIONS.map((option) => (
+								<SelectItem key={option.value} value={option.value}>
+									{option.label}
+								</SelectItem>
+							))}
+						</SelectContent>
+					</Select>
 				</div>
 				<div className="space-y-2">
 					<Label htmlFor="selectedBankAccountId">
