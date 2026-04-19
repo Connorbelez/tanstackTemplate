@@ -258,13 +258,85 @@ function evaluateBorrowerVerificationSummary(
 	return status ?? idvStatus;
 }
 
+function formatCurrencyAmount(value: number, divisor = 1): string {
+	const normalizedValue = value / divisor;
+	return new Intl.NumberFormat("en-US", {
+		style: "currency",
+		currency: "USD",
+		maximumFractionDigits: normalizedValue % 1 === 0 ? 0 : 2,
+	}).format(normalizedValue);
+}
+
+function formatTokenLabel(value: string | undefined): string | undefined {
+	if (!value) {
+		return undefined;
+	}
+
+	return toDisplayLabel(value);
+}
+
+function evaluateMortgagePaymentSummary(
+	fieldValues: Record<string, unknown>
+): string | undefined {
+	const paymentAmount =
+		typeof fieldValues.paymentAmount === "number"
+			? formatCurrencyAmount(fieldValues.paymentAmount)
+			: undefined;
+	const paymentFrequency =
+		typeof fieldValues.paymentFrequency === "string"
+			? formatTokenLabel(fieldValues.paymentFrequency)
+			: undefined;
+	const rateType =
+		typeof fieldValues.rateType === "string"
+			? formatTokenLabel(fieldValues.rateType)
+			: undefined;
+
+	return [paymentAmount, paymentFrequency, rateType]
+		.filter(Boolean)
+		.join(" • ");
+}
+
+function evaluateObligationPaymentProgressSummary(
+	fieldValues: Record<string, unknown>
+): string | undefined {
+	const amount =
+		typeof fieldValues.amount === "number" ? fieldValues.amount : undefined;
+	const amountSettled =
+		typeof fieldValues.amountSettled === "number"
+			? fieldValues.amountSettled
+			: undefined;
+	const status =
+		typeof fieldValues.status === "string"
+			? formatTokenLabel(fieldValues.status)
+			: undefined;
+
+	if (amount === undefined) {
+		return status;
+	}
+
+	const settledLabel =
+		amountSettled !== undefined
+			? `${formatCurrencyAmount(amountSettled, 100)} of ${formatCurrencyAmount(amount, 100)} settled`
+			: undefined;
+
+	return [settledLabel, status].filter(Boolean).join(" • ");
+}
+
 export function evaluateComputedFieldValue(args: {
 	computedField: EntityViewAdapterContract["computedFields"][number];
 	fieldValues: Record<string, unknown>;
 }): unknown {
+	if (args.computedField.materializationMode === "hydrated") {
+		return undefined;
+	}
+
 	switch (args.computedField.expressionKey) {
 		case "borrowerVerificationSummary":
 			return evaluateBorrowerVerificationSummary(args.fieldValues);
+		case "mortgagePaymentSummary":
+			return evaluateMortgagePaymentSummary(args.fieldValues);
+		case "obligationPaymentProgressSummary":
+			return evaluateObligationPaymentProgressSummary(args.fieldValues);
 		default:
 			return undefined;
 	}

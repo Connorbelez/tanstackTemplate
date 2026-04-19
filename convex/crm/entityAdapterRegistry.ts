@@ -37,30 +37,134 @@ const DEDICATED_ENTITY_VIEW_ADAPTERS = [
 		entityType: "mortgages",
 		aliases: ["mortgage"],
 		detail: { mode: "dedicated", surfaceKey: "mortgages" },
+		computedFields: [
+			{
+				description:
+					"Hydrated property summary for mortgage-backed admin views.",
+				expressionKey: "mortgagePropertySummary",
+				fieldName: "propertySummary",
+				fieldType: "text",
+				isVisibleByDefault: true,
+				label: "Property",
+				materializationMode: "hydrated",
+				rendererHint: "computed",
+				sourceFieldNames: ["propertyId"],
+			},
+			{
+				description: "Hydrated borrower rollup for the mortgage relationship.",
+				expressionKey: "mortgageBorrowerSummary",
+				fieldName: "borrowerSummary",
+				fieldType: "text",
+				isVisibleByDefault: true,
+				label: "Borrowers",
+				materializationMode: "hydrated",
+				rendererHint: "computed",
+				sourceFieldNames: [],
+			},
+			{
+				description: "Hydrated listing summary when the mortgage is published.",
+				expressionKey: "mortgageListingSummary",
+				fieldName: "listingSummary",
+				fieldType: "text",
+				isVisibleByDefault: false,
+				label: "Listing",
+				materializationMode: "hydrated",
+				rendererHint: "computed",
+				sourceFieldNames: [],
+			},
+			{
+				description: "Formatted payment setup summary for servicing context.",
+				expressionKey: "mortgagePaymentSummary",
+				fieldName: "paymentSummary",
+				fieldType: "text",
+				isVisibleByDefault: true,
+				label: "Payment Setup",
+				materializationMode: "sync",
+				rendererHint: "computed",
+				sourceFieldNames: ["paymentAmount", "paymentFrequency", "rateType"],
+			},
+		],
+		fieldOverrides: [
+			{
+				fieldName: "interestRate",
+				label: "Rate",
+			},
+			{
+				fieldName: "loanType",
+				label: "Loan",
+			},
+		],
 		layoutDefaults: {
 			calendarDateFieldName: "maturityDate",
 			kanbanFieldName: "status",
 			preferredVisibleFieldNames: [
+				"propertySummary",
 				"principal",
-				"paymentAmount",
 				"interestRate",
-				"paymentFrequency",
+				"paymentSummary",
+				"borrowerSummary",
 				"loanType",
 				"maturityDate",
 				"status",
 			],
 		},
-		titleFieldCandidates: ["name", "title"],
+		titleFieldCandidates: ["propertySummary", "name", "title"],
 	},
 	{
 		entityType: "obligations",
 		aliases: ["obligation"],
 		detail: { mode: "dedicated", surfaceKey: "obligations" },
+		computedFields: [
+			{
+				description:
+					"Hydrated mortgage summary for obligation context and navigation.",
+				expressionKey: "obligationMortgageSummary",
+				fieldName: "mortgageSummary",
+				fieldType: "text",
+				isVisibleByDefault: true,
+				label: "Mortgage",
+				materializationMode: "hydrated",
+				rendererHint: "computed",
+				sourceFieldNames: ["mortgageId"],
+			},
+			{
+				description: "Hydrated borrower summary for the obligation owner.",
+				expressionKey: "obligationBorrowerSummary",
+				fieldName: "borrowerSummary",
+				fieldType: "text",
+				isVisibleByDefault: true,
+				label: "Borrower",
+				materializationMode: "hydrated",
+				rendererHint: "computed",
+				sourceFieldNames: ["borrowerId"],
+			},
+			{
+				description: "Formatted settlement progress for the obligation.",
+				expressionKey: "obligationPaymentProgressSummary",
+				fieldName: "paymentProgressSummary",
+				fieldType: "text",
+				isVisibleByDefault: true,
+				label: "Settlement",
+				materializationMode: "sync",
+				rendererHint: "computed",
+				sourceFieldNames: ["amount", "amountSettled", "status"],
+			},
+		],
 		layoutDefaults: {
 			calendarDateFieldName: "dueDate",
 			kanbanFieldName: "status",
-			preferredVisibleFieldNames: ["amount", "dueDate", "type", "status"],
+			preferredVisibleFieldNames: [
+				"mortgageSummary",
+				"borrowerSummary",
+				"paymentNumber",
+				"type",
+				"amount",
+				"paymentProgressSummary",
+				"dueDate",
+				"status",
+			],
 		},
+		titleFieldCandidates: ["mortgageSummary"],
 	},
 	{
 		entityType: "deals",
@@ -83,13 +187,25 @@ const DEDICATED_ENTITY_VIEW_ADAPTERS = [
 		detail: { mode: "dedicated", surfaceKey: "borrowers" },
 		computedFields: [
 			{
+				description: "Hydrated borrower display name from the linked user.",
+				expressionKey: "borrowerDisplayName",
+				fieldName: "borrowerName",
+				fieldType: "text",
+				isVisibleByDefault: true,
+				label: "Borrower",
+				materializationMode: "hydrated",
+				rendererHint: "computed",
+				sourceFieldNames: ["userId"],
+			},
+			{
 				description:
 					"Derived borrower verification summary from lifecycle and IDV state.",
 				expressionKey: "borrowerVerificationSummary",
 				fieldName: "verificationSummary",
 				fieldType: "text",
-				isVisibleByDefault: false,
+				isVisibleByDefault: true,
 				label: "Verification Summary",
+				materializationMode: "sync",
 				rendererHint: "computed",
 				sourceFieldNames: ["status", "idvStatus"],
 			},
@@ -108,8 +224,15 @@ const DEDICATED_ENTITY_VIEW_ADAPTERS = [
 		],
 		layoutDefaults: {
 			kanbanFieldName: "status",
-			preferredVisibleFieldNames: ["status", "idvStatus"],
+			preferredVisibleFieldNames: [
+				"borrowerName",
+				"status",
+				"idvStatus",
+				"verificationSummary",
+				"onboardedAt",
+			],
 		},
+		titleFieldCandidates: ["borrowerName"],
 	},
 	{
 		entityType: "lenders",
@@ -138,6 +261,60 @@ const DEDICATED_ENTITY_VIEW_ADAPTERS = [
 		entityType: "listings",
 		aliases: ["listing"],
 		detail: { mode: "dedicated", surfaceKey: "listings" },
+		computedFields: [
+			{
+				description:
+					"Hydrated property summary when the listing is linked to a property record.",
+				expressionKey: "listingPropertySummary",
+				fieldName: "propertySummary",
+				fieldType: "text",
+				isVisibleByDefault: true,
+				label: "Property",
+				materializationMode: "hydrated",
+				rendererHint: "computed",
+				sourceFieldNames: ["propertyId"],
+			},
+			{
+				description:
+					"Hydrated mortgage summary when the listing is linked to a mortgage record.",
+				expressionKey: "listingMortgageSummary",
+				fieldName: "mortgageSummary",
+				fieldType: "text",
+				isVisibleByDefault: false,
+				label: "Mortgage",
+				materializationMode: "hydrated",
+				rendererHint: "computed",
+				sourceFieldNames: ["mortgageId"],
+			},
+		],
+		fieldOverrides: [
+			{
+				fieldName: "ltvRatio",
+				label: "LTV",
+			},
+			{
+				fieldName: "latestAppraisalValueAsIs",
+				label: "Appraisal",
+			},
+		],
+		layoutDefaults: {
+			kanbanFieldName: "status",
+			preferredVisibleFieldNames: [
+				"title",
+				"propertySummary",
+				"status",
+				"propertyType",
+				"city",
+				"province",
+				"principal",
+				"interestRate",
+				"ltvRatio",
+				"monthlyPayment",
+				"latestAppraisalValueAsIs",
+				"maturityDate",
+			],
+		},
+		titleFieldCandidates: ["title", "propertySummary", "city"],
 	},
 	{
 		entityType: "properties",
@@ -191,13 +368,20 @@ function sanitizeFieldNames(
 	return fieldNames.filter((fieldName) => availableFieldNames.has(fieldName));
 }
 
+function buildAvailableFieldNameSet(args: {
+	computedFields?: readonly EntityViewComputedFieldContract[];
+	fieldDefs: readonly MaterializedFieldDef[];
+}): Set<string> {
+	return new Set([
+		...args.fieldDefs.map((fieldDef) => fieldDef.name),
+		...(args.computedFields ?? []).map((fieldDef) => fieldDef.fieldName),
+	]);
+}
+
 function resolveFieldCandidate(
-	fieldDefs: readonly MaterializedFieldDef[],
+	availableFieldNames: ReadonlySet<string>,
 	candidates: readonly string[]
 ): string | undefined {
-	const availableFieldNames = new Set(
-		fieldDefs.map((fieldDef) => fieldDef.name)
-	);
 	return candidates.find((candidate) => availableFieldNames.has(candidate));
 }
 
@@ -219,10 +403,14 @@ function deriveCalendarFieldName(
 }
 
 function deriveKanbanFieldName(
-	fieldDefs: readonly MaterializedFieldDef[]
+	fieldDefs: readonly MaterializedFieldDef[],
+	availableFieldNames: ReadonlySet<string>
 ): string | undefined {
 	return (
-		resolveFieldCandidate(fieldDefs, DEFAULT_STATUS_FIELD_CANDIDATES) ??
+		resolveFieldCandidate(
+			availableFieldNames,
+			DEFAULT_STATUS_FIELD_CANDIDATES
+		) ??
 		fieldDefs.find((fieldDef) => fieldDef.layoutEligibility.kanban.enabled)
 			?.name
 	);
@@ -271,9 +459,10 @@ function buildLayoutDefaults(args: {
 	definition: EntityViewAdapterDefinition | undefined;
 	fieldDefs: readonly MaterializedFieldDef[];
 }): EntityViewLayoutDefaultsContract {
-	const availableFieldNames = new Set(
-		args.fieldDefs.map((fieldDef) => fieldDef.name)
-	);
+	const availableFieldNames = buildAvailableFieldNameSet({
+		computedFields: args.definition?.computedFields,
+		fieldDefs: args.fieldDefs,
+	});
 	const preferredVisibleFieldNames = sanitizeFieldNames(
 		args.definition?.layoutDefaults?.preferredVisibleFieldNames,
 		availableFieldNames
@@ -288,7 +477,7 @@ function buildLayoutDefaults(args: {
 			args.definition?.layoutDefaults?.kanbanFieldName &&
 			availableFieldNames.has(args.definition.layoutDefaults.kanbanFieldName)
 				? args.definition.layoutDefaults.kanbanFieldName
-				: deriveKanbanFieldName(args.fieldDefs),
+				: deriveKanbanFieldName(args.fieldDefs, availableFieldNames),
 		calendarDateFieldName:
 			args.definition?.layoutDefaults?.calendarDateFieldName &&
 			availableFieldNames.has(
@@ -301,11 +490,13 @@ function buildLayoutDefaults(args: {
 
 function normalizeOverrides(
 	overrides: readonly EntityViewFieldOverrideContract[] | undefined,
-	fieldDefs: readonly MaterializedFieldDef[]
+	fieldDefs: readonly MaterializedFieldDef[],
+	computedFields?: readonly EntityViewComputedFieldContract[]
 ): EntityViewFieldOverrideContract[] {
-	const availableFieldNames = new Set(
-		fieldDefs.map((fieldDef) => fieldDef.name)
-	);
+	const availableFieldNames = buildAvailableFieldNameSet({
+		computedFields,
+		fieldDefs,
+	});
 	return (overrides ?? []).filter((override) =>
 		availableFieldNames.has(override.fieldName)
 	);
@@ -321,6 +512,10 @@ export function resolveEntityViewAdapterContract(args: {
 	const entityType =
 		definition?.entityType ?? resolveFallbackEntityType(args.objectDef);
 	const materializedFieldDefs = args.fieldDefs.map(materializeFieldDef);
+	const availableFieldNames = buildAvailableFieldNameSet({
+		computedFields: definition?.computedFields,
+		fieldDefs: materializedFieldDefs,
+	});
 
 	return {
 		variant: definition ? "dedicated" : "fallback",
@@ -331,11 +526,11 @@ export function resolveEntityViewAdapterContract(args: {
 			surfaceKey: entityType,
 		},
 		detailSurfaceKey: definition?.detail.surfaceKey ?? entityType,
-		titleFieldName: resolveFieldCandidate(materializedFieldDefs, [
+		titleFieldName: resolveFieldCandidate(availableFieldNames, [
 			...(definition?.titleFieldCandidates ?? []),
 			...DEFAULT_TITLE_FIELD_CANDIDATES,
 		]),
-		statusFieldName: resolveFieldCandidate(materializedFieldDefs, [
+		statusFieldName: resolveFieldCandidate(availableFieldNames, [
 			...(definition?.statusFieldCandidates ?? []),
 			...DEFAULT_STATUS_FIELD_CANDIDATES,
 		]),
@@ -349,7 +544,8 @@ export function resolveEntityViewAdapterContract(args: {
 		}),
 		fieldOverrides: normalizeOverrides(
 			definition?.fieldOverrides,
-			materializedFieldDefs
+			materializedFieldDefs,
+			definition?.computedFields
 		),
 		computedFields: [...(definition?.computedFields ?? [])],
 	};

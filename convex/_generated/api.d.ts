@@ -30,6 +30,7 @@ import type * as brokers_migrations from "../brokers/migrations.js";
 import type * as constants from "../constants.js";
 import type * as crm_activityQueries from "../crm/activityQueries.js";
 import type * as crm_calendarQuery from "../crm/calendarQuery.js";
+import type * as crm_detailContextQueries from "../crm/detailContextQueries.js";
 import type * as crm_entityAdapterRegistry from "../crm/entityAdapterRegistry.js";
 import type * as crm_entityViewFields from "../crm/entityViewFields.js";
 import type * as crm_fieldDefs from "../crm/fieldDefs.js";
@@ -328,6 +329,7 @@ declare const fullApi: ApiFromModules<{
   constants: typeof constants;
   "crm/activityQueries": typeof crm_activityQueries;
   "crm/calendarQuery": typeof crm_calendarQuery;
+  "crm/detailContextQueries": typeof crm_detailContextQueries;
   "crm/entityAdapterRegistry": typeof crm_entityAdapterRegistry;
   "crm/entityViewFields": typeof crm_entityViewFields;
   "crm/fieldDefs": typeof crm_fieldDefs;

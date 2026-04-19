@@ -1,11 +1,13 @@
 import { ConvexError } from "convex/values";
 import type { Doc } from "../../_generated/dataModel";
 import type { QueryCtx } from "../../_generated/server";
+import type { Viewer } from "../../fluent";
 import type { UnifiedRecord } from "../types";
 import { resolveColumnPath } from "./columnResolver";
 
 type FieldDef = Doc<"fieldDefs">;
 type ObjectDef = Doc<"objectDefs">;
+type ViewerAwareQueryCtx = QueryCtx & { viewer?: Viewer };
 
 interface NativePaginationOptions {
 	cursor: string | null;
@@ -22,6 +24,13 @@ export interface NativeRecordPage {
 	continueCursor: string | null;
 	isDone: boolean;
 	records: UnifiedRecord[];
+}
+
+function assertNativeTableReadAccess(ctx: QueryCtx, tableName: string): void {
+	const viewer = (ctx as ViewerAwareQueryCtx).viewer;
+	if (tableName === "listings" && !viewer?.isFairLendAdmin) {
+		throw new ConvexError("Forbidden: fair lend admin role required");
+	}
 }
 
 function assembleNativeDoc(
@@ -78,6 +87,10 @@ async function getNativeTableRecordById(
 			const normalizedId = ctx.db.normalizeId("obligations", recordId);
 			return normalizedId ? ctx.db.get(normalizedId) : null;
 		}
+		case "listings": {
+			const normalizedId = ctx.db.normalizeId("listings", recordId);
+			return normalizedId ? ctx.db.get(normalizedId) : null;
+		}
 		default: {
 			const exhaustiveCheck: never = tableName;
 			throw new ConvexError(`Unknown native table: ${String(exhaustiveCheck)}`);
@@ -91,6 +104,8 @@ async function paginateNativeTable(
 	orgId: string,
 	paginationOpts: NativePaginationOptions
 ): Promise<NativeTablePage> {
+	assertNativeTableReadAccess(ctx, tableName);
+
 	switch (tableName) {
 		case "mortgages":
 			return ctx.db
@@ -122,6 +137,11 @@ async function paginateNativeTable(
 				.query("obligations")
 				.withIndex("by_org", (q) => q.eq("orgId", orgId))
 				.paginate(paginationOpts);
+		case "listings":
+			// Listings live on the FairLend marketplace surface and do not carry
+			// their own orgId. Admin access to this native table is already scoped
+			// to the FairLend staff org at the route/auth layer.
+			return ctx.db.query("listings").paginate(paginationOpts);
 		default:
 			throw new ConvexError(`Unknown native table: ${tableName}`);
 	}
@@ -134,7 +154,8 @@ export type NativeTableName =
 	| "lenders"
 	| "brokers"
 	| "deals"
-	| "obligations";
+	| "obligations"
+	| "listings";
 
 /**
  * Routes a runtime table name to a compile-time Convex query.
