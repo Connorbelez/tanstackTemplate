@@ -251,6 +251,8 @@ async function insertDealAccess(
 	role:
 		| "platform_lawyer"
 		| "guest_lawyer"
+		| "broker_of_record"
+		| "assigned_broker"
 		| "lender"
 		| "borrower" = "platform_lawyer",
 	status: "active" | "revoked" = "active"
@@ -560,7 +562,7 @@ describe("canAccessDeal", () => {
 		});
 	});
 
-	it("broker — owns deal's mortgage — true", async () => {
+	it("broker — owns deal's mortgage but lacks explicit dealAccess — false", async () => {
 		const t = convexTest(schema, modules);
 		await t.run(async (ctx) => {
 			const brokerUserId = await insertUser(ctx, { authId: "broker-auth" });
@@ -572,6 +574,34 @@ describe("canAccessDeal", () => {
 				mortgageId,
 				"buyer-auth",
 				"seller-auth"
+			);
+
+			const viewer = makeViewer({ authId: "broker-auth" });
+			const result = await canAccessDeal(ctx, viewer, dealId);
+			expect(result).toBe(false);
+		});
+	});
+
+	it("broker — active dealAccess — true", async () => {
+		const t = convexTest(schema, modules);
+		await t.run(async (ctx) => {
+			const brokerUserId = await insertUser(ctx, { authId: "broker-auth" });
+			const brokerId = await insertBroker(ctx, brokerUserId);
+			const propId = await insertProperty(ctx);
+			const mortgageId = await insertMortgage(ctx, propId, brokerId);
+			const dealId = await insertDeal(
+				ctx,
+				mortgageId,
+				"buyer-auth",
+				"seller-auth"
+			);
+
+			await insertDealAccess(
+				ctx,
+				"broker-auth",
+				dealId,
+				"broker_of_record",
+				"active"
 			);
 
 			const viewer = makeViewer({ authId: "broker-auth" });

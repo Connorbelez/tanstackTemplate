@@ -1602,6 +1602,8 @@ export default defineSchema({
 		role: v.union(
 			v.literal("platform_lawyer"),
 			v.literal("guest_lawyer"),
+			v.literal("broker_of_record"),
+			v.literal("assigned_broker"),
 			v.literal("lender"),
 			v.literal("borrower")
 		),

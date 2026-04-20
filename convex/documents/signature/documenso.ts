@@ -38,10 +38,17 @@ interface DocumensoConfig {
 
 interface DocumensoEnvelopeResponse {
 	completedAt?: string | null;
+	envelopeItems?: DocumensoEnvelopeItemResponse[];
 	id: string;
 	recipients?: DocumensoRecipientResponse[];
 	status: string;
 	updatedAt?: string | null;
+}
+
+interface DocumensoEnvelopeItemResponse {
+	id: string;
+	name?: string | null;
+	type?: string | null;
 }
 
 interface DocumensoRecipientResponse {
@@ -322,6 +329,53 @@ async function requestJson<T>(
 	}
 }
 
+async function requestBytes(
+	config: DocumensoConfig,
+	path: string,
+	init: RequestInit
+): Promise<ArrayBuffer> {
+	const controller = new AbortController();
+	const timeout = setTimeout(() => controller.abort(), config.timeoutMs);
+	const method = init.method ?? "GET";
+
+	try {
+		const response = await config.fetchFn(buildApiUrl(config, path), {
+			...init,
+			headers: {
+				Authorization: config.apiKey,
+				...(init.headers ?? {}),
+			},
+			signal: controller.signal,
+		});
+
+		if (!response.ok) {
+			const responseText = await readResponseText(response);
+			throw new DocumensoApiError({
+				message: `Documenso ${method} ${path} failed with status ${response.status}`,
+				method,
+				path,
+				responseText,
+				status: response.status,
+			});
+		}
+
+		return response.arrayBuffer();
+	} catch (error) {
+		if (error instanceof DocumensoApiError) {
+			throw error;
+		}
+
+		throw new DocumensoRequestError({
+			cause: error,
+			message: `Documenso ${method} ${path} request failed`,
+			method,
+			path,
+		});
+	} finally {
+		clearTimeout(timeout);
+	}
+}
+
 async function getEnvelope(
 	config: DocumensoConfig,
 	providerEnvelopeId: string
@@ -420,6 +474,33 @@ async function createAndOptionallyDistributeEnvelope(
 	}
 }
 
+function isCertificateEnvelopeItem(item: DocumensoEnvelopeItemResponse) {
+	const haystack = `${item.name ?? ""} ${item.type ?? ""}`.toLowerCase();
+	return haystack.includes("certificate");
+}
+
+function getPrimaryEnvelopeItem(items: DocumensoEnvelopeItemResponse[]) {
+	return items.find((item) => !isCertificateEnvelopeItem(item)) ?? items[0];
+}
+
+async function tryDownloadOptionalArtifact(
+	config: DocumensoConfig,
+	path: string
+) {
+	try {
+		return await requestBytes(config, path, { method: "GET" });
+	} catch (error) {
+		if (
+			error instanceof DocumensoApiError &&
+			(error.status === 400 || error.status === 404)
+		) {
+			return undefined;
+		}
+
+		throw error;
+	}
+}
+
 export function createDocumensoSignatureProvider(
 	input: DocumensoSignatureProviderFactoryOptions
 ): SignatureProvider {
@@ -496,14 +577,50 @@ export function createDocumensoSignatureProvider(
 		},
 
 		async downloadCompletedArtifacts(
-			_input: SignatureProviderDownloadCompletedArtifactsInput
+			input: SignatureProviderDownloadCompletedArtifactsInput
 		): Promise<SignatureProviderDownloadCompletedArtifactsResult> {
-			throw new DocumensoRequestError({
-				message:
-					"Documenso completed artifact download is reserved for phase 9 and is not integrated in phase 8.",
-				method: "GET",
-				path: "/envelope/download",
-			});
+			const envelope = await getEnvelope(config, input.providerEnvelopeId);
+			if (envelope.status.toUpperCase() !== "COMPLETED") {
+				throw new DocumensoRequestError({
+					message: `Documenso envelope ${input.providerEnvelopeId} is ${envelope.status}, expected COMPLETED before downloading signed artifacts`,
+					method: "GET",
+					path: `/envelope/${encodeURIComponent(input.providerEnvelopeId)}`,
+				});
+			}
+
+			const envelopeItems = envelope.envelopeItems ?? [];
+			const primaryEnvelopeItem = getPrimaryEnvelopeItem(envelopeItems);
+			if (!primaryEnvelopeItem) {
+				throw new DocumensoRequestError({
+					message: `Documenso envelope ${input.providerEnvelopeId} did not include any envelope items for completed artifact download`,
+					method: "GET",
+					path: `/envelope/${encodeURIComponent(input.providerEnvelopeId)}`,
+				});
+			}
+
+			const finalPdfBytes = await requestBytes(
+				config,
+				`/envelope/item/${encodeURIComponent(primaryEnvelopeItem.id)}/download?version=signed`,
+				{ method: "GET" }
+			);
+
+			const certificateEnvelopeItem = envelopeItems.find(
+				isCertificateEnvelopeItem
+			);
+			const completionCertificateBytes = certificateEnvelopeItem
+				? await tryDownloadOptionalArtifact(
+						config,
+						`/envelope/item/${encodeURIComponent(certificateEnvelopeItem.id)}/download`
+					)
+				: await tryDownloadOptionalArtifact(
+						config,
+						`/envelope/item/${encodeURIComponent(primaryEnvelopeItem.id)}/download?version=certificate`
+					);
+
+			return {
+				completionCertificateBytes,
+				finalPdfBytes,
+			};
 		},
 	};
 }

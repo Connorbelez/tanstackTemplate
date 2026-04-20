@@ -137,7 +137,13 @@ async function seedDealAccessRecord(
 	t: TestHarness,
 	dealId: Id<"deals">,
 	userId: string,
-	role: "platform_lawyer" | "guest_lawyer" | "lender" | "borrower",
+	role:
+		| "platform_lawyer"
+		| "guest_lawyer"
+		| "broker_of_record"
+		| "assigned_broker"
+		| "lender"
+		| "borrower",
 	status: "active" | "revoked" = "active"
 ) {
 	return t.run(async (ctx) => {
@@ -183,6 +189,20 @@ describe("dealAccess mutations", () => {
 			expect(record.grantedBy).toBe("test-admin");
 			expect(record.grantedAt).toBeTypeOf("number");
 			expect(record.revokedAt).toBeUndefined();
+		});
+
+		it("accepts broker deal access roles", async () => {
+			const accessId = await t.mutation(internal.deals.mutations.grantAccess, {
+				userId: "broker-auth",
+				dealId,
+				role: "broker_of_record",
+				grantedBy: "test-admin",
+			});
+
+			const record = await t.run(async (ctx) => ctx.db.get(accessId));
+			assert(record, "dealAccess record should exist");
+			expect(record.role).toBe("broker_of_record");
+			expect(record.status).toBe("active");
 		});
 
 		it("is idempotent — returns existing active record", async () => {
@@ -272,7 +292,7 @@ describe("dealAccess effects", () => {
 	});
 
 	describe("createDealAccess", () => {
-		it("creates dealAccess record on LAWYER_VERIFIED", async () => {
+		it("creates deal access records for the lawyer and broker of record", async () => {
 			await t.mutation(internal.engine.effects.dealAccess.createDealAccess, {
 				entityId: dealId,
 				entityType: "deal",
@@ -288,13 +308,24 @@ describe("dealAccess effects", () => {
 					.collect()
 					.then((all) => all.filter((record) => record.dealId === dealId))
 			);
-			expect(records).toHaveLength(1);
-			expect(records[0].userId).toBe(LAWYER_IDENTITY.subject);
-			expect(records[0].role).toBe("platform_lawyer");
-			expect(records[0].status).toBe("active");
+			expect(records).toHaveLength(2);
+			expect(records).toEqual(
+				expect.arrayContaining([
+					expect.objectContaining({
+						role: "platform_lawyer",
+						status: "active",
+						userId: LAWYER_IDENTITY.subject,
+					}),
+					expect.objectContaining({
+						role: "broker_of_record",
+						status: "active",
+						userId: "seed-user",
+					}),
+				])
+			);
 		});
 
-		it("is idempotent — fires twice, only one record", async () => {
+		it("is idempotent — fires twice without duplicating participant access", async () => {
 			const effectArgs = {
 				entityId: dealId,
 				entityType: "deal" as const,
@@ -323,7 +354,60 @@ describe("dealAccess effects", () => {
 						)
 					)
 			);
-			expect(records).toHaveLength(1);
+			expect(records).toHaveLength(2);
+		});
+
+		it("adds assigned broker access when the mortgage has a distinct assignee", async () => {
+			const seed = await seedDealWithLawyer(t);
+			await t.run(async (ctx) => {
+				const assignedBrokerUserId = await ctx.db.insert("users", {
+					authId: "assigned-broker-auth",
+					email: "assigned-broker@test.fairlend.ca",
+					firstName: "Assigned",
+					lastName: "Broker",
+				});
+				const assignedBrokerId = await ctx.db.insert("brokers", {
+					status: "active",
+					userId: assignedBrokerUserId,
+					createdAt: Date.now(),
+				});
+				await ctx.db.patch(seed.mortgageId, {
+					assignedBrokerId,
+				});
+			});
+
+			await t.mutation(internal.engine.effects.dealAccess.createDealAccess, {
+				entityId: seed.dealId,
+				entityType: "deal",
+				eventType: "LAWYER_VERIFIED",
+				journalEntryId: "test-journal-assigned-broker",
+				effectName: "createDealAccess",
+				source: EFFECT_SOURCE,
+			});
+
+			const records = await t.run(async (ctx) =>
+				ctx.db
+					.query("dealAccess")
+					.collect()
+					.then((all) => all.filter((record) => record.dealId === seed.dealId))
+			);
+
+			expect(records).toEqual(
+				expect.arrayContaining([
+					expect.objectContaining({
+						role: "platform_lawyer",
+						userId: LAWYER_IDENTITY.subject,
+					}),
+					expect.objectContaining({
+						role: "broker_of_record",
+						userId: "seed-user",
+					}),
+					expect.objectContaining({
+						role: "assigned_broker",
+						userId: "assigned-broker-auth",
+					}),
+				])
+			);
 		});
 
 		it("no-ops when deal has no lawyerId", async () => {
@@ -381,9 +465,11 @@ describe("dealAccess effects", () => {
 	});
 
 	describe("revokeLawyerAccess", () => {
-		it("revokes lawyer records, retains buyer/seller", async () => {
+		it("revokes lawyer records and retains broker and party access", async () => {
 			await seedDealAccessRecord(t, dealId, "lawyer-1", "platform_lawyer");
 			await seedDealAccessRecord(t, dealId, "guest-lawyer-1", "guest_lawyer");
+			await seedDealAccessRecord(t, dealId, "broker-1", "broker_of_record");
+			await seedDealAccessRecord(t, dealId, "broker-2", "assigned_broker");
 			await seedDealAccessRecord(t, dealId, "buyer-1", "lender");
 			await seedDealAccessRecord(t, dealId, "seller-1", "borrower");
 
@@ -406,8 +492,12 @@ describe("dealAccess effects", () => {
 			const lawyerRecords = records.filter(
 				(r) => r.role === "platform_lawyer" || r.role === "guest_lawyer"
 			);
-			const partyRecords = records.filter(
-				(r) => r.role === "lender" || r.role === "borrower"
+			const retainedRecords = records.filter(
+				(r) =>
+					r.role === "broker_of_record" ||
+					r.role === "assigned_broker" ||
+					r.role === "lender" ||
+					r.role === "borrower"
 			);
 
 			expect(lawyerRecords).toHaveLength(2);
@@ -416,8 +506,8 @@ describe("dealAccess effects", () => {
 				expect(r.revokedAt).toBeTypeOf("number");
 			}
 
-			expect(partyRecords).toHaveLength(2);
-			for (const r of partyRecords) {
+			expect(retainedRecords).toHaveLength(4);
+			for (const r of retainedRecords) {
 				expect(r.status).toBe("active");
 				expect(r.revokedAt).toBeUndefined();
 			}
