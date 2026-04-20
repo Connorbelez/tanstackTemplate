@@ -110,7 +110,6 @@ export function hasEffectivePermission(
 ): boolean {
 	return (
 		hasAdminAccessPermission(context.permissions) ||
-		isFairLendStaffAdmin(context) ||
 		hasPermission(context.permissions, permission)
 	);
 }
@@ -121,7 +120,6 @@ export function hasAnyEffectivePermission(
 ): boolean {
 	return (
 		hasAdminAccessPermission(context.permissions) ||
-		isFairLendStaffAdmin(context) ||
 		hasAnyPermission(context.permissions, requiredPermissions)
 	);
 }

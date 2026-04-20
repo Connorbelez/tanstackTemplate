@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
-import type { Id } from "../../../_generated/dataModel";
-import type { MutationCtx } from "../../../_generated/server";
 import {
 	createHarness,
 	SYSTEM_SOURCE,
 	seedMinimalEntities,
 	type TestHarness,
-} from "../../../payments/cashLedger/__tests__/testUtils";
+} from "../../../../src/test/convex/payments/cashLedger/testUtils";
+import type { Id } from "../../../_generated/dataModel";
+import type { MutationCtx } from "../../../_generated/server";
 import { convexModules } from "../../../test/moduleMaps";
 import { accrueObligation } from "../obligationAccrual";
 

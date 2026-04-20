@@ -10,7 +10,7 @@ const modules = convexModules;
 // Constants (mirror the implementation)
 // ---------------------------------------------------------------------------
 
-const GRACE_PERIOD_DAYS = 15;
+const GRACE_PERIOD_DAYS = 7;
 const MS_PER_DAY = 86_400_000;
 const PERIODS_PER_YEAR: Record<string, number> = {
 	monthly: 12,
@@ -317,7 +317,7 @@ describe("generateObligations", () => {
 		}
 	});
 
-	it("sets gracePeriodEnd to dueDate + 15 days for each obligation", async () => {
+	it("sets gracePeriodEnd to dueDate + 7 days for each obligation", async () => {
 		const t = createTestHarness();
 		const { mortgageId } = await seedMortgageWithBorrower(t);
 

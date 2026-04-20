@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { FAIRLEND_ADMIN } from "../../../src/test/auth/identities";
 import {
 	createMockViewer,
 	createTestConvex,
 } from "../../../src/test/auth/helpers";
+import { FAIRLEND_ADMIN } from "../../../src/test/auth/identities";
 import {
 	type CrmTestHarness,
 	createCrmTestHarness,

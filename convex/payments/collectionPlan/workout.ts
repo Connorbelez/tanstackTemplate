@@ -8,7 +8,7 @@ import {
 	assertWorkoutPlanAccess,
 } from "../../authz/resourceAccess";
 import { buildSource } from "../../engine/commands";
-import { paymentMutation, paymentQuery, type Viewer } from "../../fluent";
+import { authedMutation, paymentQuery, type Viewer } from "../../fluent";
 import {
 	createEntryImpl,
 	ensureDefaultEntriesForObligationsImpl,
@@ -1154,7 +1154,7 @@ async function activateWorkoutPlanImpl(
 	return result;
 }
 
-export const createWorkoutPlan = paymentMutation
+export const createWorkoutPlan = authedMutation
 	.input({
 		installments: v.array(workoutPlanInstallmentInputValidator),
 		mortgageId: v.id("mortgages"),
@@ -1188,7 +1188,7 @@ export const createWorkoutPlanInternal = internalMutation({
 		),
 });
 
-export const activateWorkoutPlan = paymentMutation
+export const activateWorkoutPlan = authedMutation
 	.input(workoutPlanIdInput)
 	.handler(async (ctx, args): Promise<ActivateWorkoutPlanResult> => {
 		// Page 14 boundary lock: workout activation only rewrites future
@@ -1214,7 +1214,7 @@ export const activateWorkoutPlanInternal = internalMutation({
 		),
 });
 
-export const completeWorkoutPlan = paymentMutation
+export const completeWorkoutPlan = authedMutation
 	.input(workoutPlanIdInput)
 	.handler(async (ctx, args): Promise<CompleteWorkoutPlanResult> => {
 		await assertWorkoutPlanAccess(ctx, args.workoutPlanId);
@@ -1244,7 +1244,7 @@ export const completeWorkoutPlanInternal = internalMutation({
 		})) as CompleteWorkoutPlanResult,
 });
 
-export const cancelWorkoutPlan = paymentMutation
+export const cancelWorkoutPlan = authedMutation
 	.input({
 		reason: v.optional(v.string()),
 		...workoutPlanIdInput,

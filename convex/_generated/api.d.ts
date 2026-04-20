@@ -22,6 +22,7 @@ import type * as admin_origination_collections from "../admin/origination/collec
 import type * as admin_origination_commit from "../admin/origination/commit.js";
 import type * as admin_origination_media from "../admin/origination/media.js";
 import type * as admin_origination_participants from "../admin/origination/participants.js";
+import type * as admin_origination_postCommitCollectionsActivation from "../admin/origination/postCommitCollectionsActivation.js";
 import type * as admin_origination_properties from "../admin/origination/properties.js";
 import type * as admin_origination_validators from "../admin/origination/validators.js";
 import type * as admin_queries from "../admin/queries.js";
@@ -358,6 +359,7 @@ declare const fullApi: ApiFromModules<{
   "admin/origination/commit": typeof admin_origination_commit;
   "admin/origination/media": typeof admin_origination_media;
   "admin/origination/participants": typeof admin_origination_participants;
+  "admin/origination/postCommitCollectionsActivation": typeof admin_origination_postCommitCollectionsActivation;
   "admin/origination/properties": typeof admin_origination_properties;
   "admin/origination/validators": typeof admin_origination_validators;
   "admin/queries": typeof admin_queries;

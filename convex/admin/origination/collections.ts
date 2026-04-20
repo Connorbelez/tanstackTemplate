@@ -2,7 +2,7 @@ import { makeFunctionReference } from "convex/server";
 import { ConvexError, v } from "convex/values";
 import { internal } from "../../_generated/api";
 import type { Doc, Id } from "../../_generated/dataModel";
-import type { MutationCtx, QueryCtx } from "../../_generated/server";
+import type { ActionCtx, MutationCtx, QueryCtx } from "../../_generated/server";
 import { assertOriginationCaseAccess } from "../../authz/origination";
 import {
 	ensureCanonicalBorrowerForOrigination,
@@ -56,7 +56,7 @@ const collectionsActivationStatusValidator = v.union(
 	v.literal("failed")
 );
 
-type CollectionsActivationResult =
+export type CollectionsActivationResult =
 	| { status: "skipped" }
 	| { message: string; status: "failed" }
 	| { scheduleId: string; status: "active" };
@@ -102,14 +102,10 @@ const patchCollectionsActivationStateRef = makeFunctionReference<
 	Promise<Doc<"adminOriginationCases"> | null>
 >("admin/origination/collections:patchCollectionsActivationState");
 
-const activateCommittedCaseCollectionsRef = makeFunctionReference<
-	"action",
-	{
-		caseId: Id<"adminOriginationCases">;
-		viewerUserId: Id<"users">;
-	},
-	Promise<CollectionsActivationResult>
->("admin/origination/collections:activateCommittedCaseCollections");
+type CollectionsActivationRuntimeCtx = Pick<
+	ActionCtx,
+	"runAction" | "runMutation" | "runQuery"
+>;
 
 interface CanonicalBorrowerProfileResult {
 	bankAccountId?: Id<"bankAccounts">;
@@ -2566,6 +2562,7 @@ export const patchCollectionsActivationState = convex
 		const nextCollectionsDraft = normalizeOriginationCollectionsDraft({
 			...caseRecord.collectionsDraft,
 			activationStatus: args.activationStatus,
+			providerManagedActivationStatus: args.activationStatus,
 			externalCollectionScheduleId: args.clearExternalCollectionScheduleId
 				? undefined
 				: (args.externalCollectionScheduleId ??
@@ -2591,125 +2588,57 @@ export const patchCollectionsActivationState = convex
 	})
 	.internal();
 
-export const activateCommittedCaseCollections = convex
-	.action()
-	.input({
-		caseId: v.id("adminOriginationCases"),
-		viewerUserId: v.id("users"),
-	})
-	.handler(async (ctx, args): Promise<CollectionsActivationResult> => {
-		const activationContext = await ctx.runQuery(
-			getCommittedCollectionsActivationContextRef,
-			{
-				caseId: args.caseId,
-			}
-		);
-		if (!activationContext) {
-			throw new ConvexError("Origination case not found");
-		}
-
-		const collectionsDraft = activationContext.collectionsDraft;
-		if (
-			!collectionsDraft ||
-			(collectionsDraft?.executionIntent ?? collectionsDraft?.mode) !==
-				"provider_managed_now" ||
-			!activationContext.committedMortgageId
-		) {
-			return { status: "skipped" as const };
-		}
-
-		const providerCode = collectionsDraft.providerCode ?? "pad_rotessa";
-		const isRetryActivation = collectionsDraft.activationStatus === "failed";
-		const lastAttemptAt = Date.now();
-		await ctx.runMutation(patchCollectionsActivationStateRef, {
+export async function activateCommittedCaseCollectionsRuntime(
+	ctx: CollectionsActivationRuntimeCtx,
+	args: {
+		caseId: Id<"adminOriginationCases">;
+		viewerUserId: Id<"users">;
+	}
+): Promise<CollectionsActivationResult> {
+	const activationContext = await ctx.runQuery(
+		getCommittedCollectionsActivationContextRef,
+		{
 			caseId: args.caseId,
-			activationStatus: "activating",
-			clearError: true,
-			clearExternalCollectionScheduleId: true,
-			incrementRetryCount: isRetryActivation,
-			lastAttemptAt,
-			viewerUserId: args.viewerUserId,
-		});
-
-		if (collectionsDraft.selectedProviderScheduleId) {
-			try {
-				const activationResult = await ctx.runAction(
-					adoptImportedRotessaScheduleForCommittedCaseRef,
-					{
-						mortgageId: activationContext.committedMortgageId,
-						planEntryIds: activationContext.activationPlanEntryIds,
-						providerScheduleId: collectionsDraft.selectedProviderScheduleId,
-						viewerUserId: args.viewerUserId,
-					}
-				);
-
-				await ctx.runMutation(patchCollectionsActivationStateRef, {
-					caseId: args.caseId,
-					activationStatus: "active",
-					clearError: true,
-					externalCollectionScheduleId:
-						activationResult.scheduleId as Id<"externalCollectionSchedules">,
-					lastAttemptAt,
-					viewerUserId: args.viewerUserId,
-				});
-
-				return {
-					scheduleId: activationResult.scheduleId,
-					status: "active" as const,
-				};
-			} catch (error) {
-				const message =
-					error instanceof Error
-						? error.message
-						: "Unable to adopt imported Rotessa schedule";
-				await ctx.runMutation(patchCollectionsActivationStateRef, {
-					caseId: args.caseId,
-					activationStatus: "failed",
-					errorMessage: message,
-					lastAttemptAt,
-					viewerUserId: args.viewerUserId,
-				});
-				return { message, status: "failed" as const };
-			}
 		}
+	);
+	if (!activationContext) {
+		throw new ConvexError("Origination case not found");
+	}
 
-		if (!collectionsDraft.selectedBankAccountId) {
-			const message =
-				"Select a primary borrower bank account before retrying immediate Rotessa activation.";
-			await ctx.runMutation(patchCollectionsActivationStateRef, {
-				caseId: args.caseId,
-				activationStatus: "failed",
-				errorMessage: message,
-				lastAttemptAt,
-				viewerUserId: args.viewerUserId,
-			});
-			return { message, status: "failed" as const };
-		}
+	const collectionsDraft = activationContext.collectionsDraft;
+	if (
+		!collectionsDraft ||
+		(collectionsDraft?.executionIntent ?? collectionsDraft?.mode) !==
+			"provider_managed_now" ||
+		!activationContext.committedMortgageId
+	) {
+		return { status: "skipped" as const };
+	}
 
-		if (activationContext.activationPlanEntryIds.length === 0) {
-			const message =
-				"Immediate Rotessa activation requires at least one future recurring installment plan entry.";
-			await ctx.runMutation(patchCollectionsActivationStateRef, {
-				caseId: args.caseId,
-				activationStatus: "failed",
-				errorMessage: message,
-				lastAttemptAt,
-				viewerUserId: args.viewerUserId,
-			});
-			return { message, status: "failed" as const };
-		}
+	const providerCode = collectionsDraft.providerCode ?? "pad_rotessa";
+	const isRetryActivation = collectionsDraft.activationStatus === "failed";
+	const lastAttemptAt = Date.now();
+	await ctx.runMutation(patchCollectionsActivationStateRef, {
+		caseId: args.caseId,
+		activationStatus: "activating",
+		clearError: true,
+		clearExternalCollectionScheduleId: true,
+		incrementRetryCount: isRetryActivation,
+		lastAttemptAt,
+		viewerUserId: args.viewerUserId,
+	});
 
+	if (collectionsDraft.selectedProviderScheduleId) {
 		try {
-			const activationResult = (await ctx.runAction(
-				internal.payments.recurringSchedules.activation
-					.activateRecurringSchedule,
+			const activationResult = await ctx.runAction(
+				adoptImportedRotessaScheduleForCommittedCaseRef,
 				{
-					planEntryIds: activationContext.activationPlanEntryIds,
-					bankAccountId: collectionsDraft.selectedBankAccountId,
 					mortgageId: activationContext.committedMortgageId,
-					providerCode,
+					planEntryIds: activationContext.activationPlanEntryIds,
+					providerScheduleId: collectionsDraft.selectedProviderScheduleId,
+					viewerUserId: args.viewerUserId,
 				}
-			)) as { scheduleId: Id<"externalCollectionSchedules"> };
+			);
 
 			await ctx.runMutation(patchCollectionsActivationStateRef, {
 				caseId: args.caseId,
@@ -2722,14 +2651,14 @@ export const activateCommittedCaseCollections = convex
 			});
 
 			return {
-				scheduleId: String(activationResult.scheduleId),
+				scheduleId: activationResult.scheduleId,
 				status: "active" as const,
 			};
 		} catch (error) {
 			const message =
 				error instanceof Error
 					? error.message
-					: "Unable to activate provider-managed collections";
+					: "Unable to adopt imported Rotessa schedule";
 			await ctx.runMutation(patchCollectionsActivationStateRef, {
 				caseId: args.caseId,
 				activationStatus: "failed",
@@ -2739,7 +2668,85 @@ export const activateCommittedCaseCollections = convex
 			});
 			return { message, status: "failed" as const };
 		}
+	}
+
+	if (!collectionsDraft.selectedBankAccountId) {
+		const message =
+			"Select a primary borrower bank account before retrying immediate Rotessa activation.";
+		await ctx.runMutation(patchCollectionsActivationStateRef, {
+			caseId: args.caseId,
+			activationStatus: "failed",
+			errorMessage: message,
+			lastAttemptAt,
+			viewerUserId: args.viewerUserId,
+		});
+		return { message, status: "failed" as const };
+	}
+
+	if (activationContext.activationPlanEntryIds.length === 0) {
+		const message =
+			"Immediate Rotessa activation requires at least one future recurring installment plan entry.";
+		await ctx.runMutation(patchCollectionsActivationStateRef, {
+			caseId: args.caseId,
+			activationStatus: "failed",
+			errorMessage: message,
+			lastAttemptAt,
+			viewerUserId: args.viewerUserId,
+		});
+		return { message, status: "failed" as const };
+	}
+
+	try {
+		const activationResult = (await ctx.runAction(
+			internal.payments.recurringSchedules.activation.activateRecurringSchedule,
+			{
+				planEntryIds: activationContext.activationPlanEntryIds,
+				bankAccountId: collectionsDraft.selectedBankAccountId,
+				mortgageId: activationContext.committedMortgageId,
+				providerCode,
+			}
+		)) as { scheduleId: Id<"externalCollectionSchedules"> };
+
+		await ctx.runMutation(patchCollectionsActivationStateRef, {
+			caseId: args.caseId,
+			activationStatus: "active",
+			clearError: true,
+			externalCollectionScheduleId:
+				activationResult.scheduleId as Id<"externalCollectionSchedules">,
+			lastAttemptAt,
+			viewerUserId: args.viewerUserId,
+		});
+
+		return {
+			scheduleId: String(activationResult.scheduleId),
+			status: "active" as const,
+		};
+	} catch (error) {
+		const message =
+			error instanceof Error
+				? error.message
+				: "Unable to activate provider-managed collections";
+		await ctx.runMutation(patchCollectionsActivationStateRef, {
+			caseId: args.caseId,
+			activationStatus: "failed",
+			errorMessage: message,
+			lastAttemptAt,
+			viewerUserId: args.viewerUserId,
+		});
+		return { message, status: "failed" as const };
+	}
+}
+
+export const activateCommittedCaseCollections = convex
+	.action()
+	.input({
+		caseId: v.id("adminOriginationCases"),
+		viewerUserId: v.id("users"),
 	})
+	.handler(
+		async (ctx, args): Promise<CollectionsActivationResult> =>
+			activateCommittedCaseCollectionsRuntime(ctx, args)
+	)
 	.internal();
 
 export const retryCollectionsActivation = paymentManageAction
@@ -2760,7 +2767,7 @@ export const retryCollectionsActivation = paymentManageAction
 			throw new ConvexError("Origination case not found");
 		}
 
-		return ctx.runAction(activateCommittedCaseCollectionsRef, {
+		return activateCommittedCaseCollectionsRuntime(ctx, {
 			caseId: args.caseId,
 			viewerUserId: commitContext.viewerUserId,
 		});

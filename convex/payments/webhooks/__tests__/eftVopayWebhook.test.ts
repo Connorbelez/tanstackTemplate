@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createWebhookTestHarness } from "../../../../src/test/convex/payments/webhooks/convexTestHarness";
-import { internal } from "../../../_generated/api";
-import type { Id } from "../../../_generated/dataModel";
 import {
 	createTestAccount,
 	seedMinimalEntities,
-} from "../../cashLedger/__tests__/testUtils";
+} from "../../../../src/test/convex/payments/cashLedger/testUtils";
+import { createWebhookTestHarness } from "../../../../src/test/convex/payments/webhooks/convexTestHarness";
+import { internal } from "../../../_generated/api";
+import type { Id } from "../../../_generated/dataModel";
 
 const TEST_SOURCE = {
 	channel: "api_webhook" as const,

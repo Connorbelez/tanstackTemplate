@@ -10,6 +10,7 @@ import {
 	httpAction,
 	internalAction,
 	internalMutation,
+	internalQuery,
 	type MutationCtx,
 } from "../../_generated/server";
 import { auditLog } from "../../auditLog";
@@ -103,6 +104,39 @@ const getExternalCollectionScheduleByProviderRefReference =
 	>(
 		"payments/recurringSchedules/queries:getExternalCollectionScheduleByProviderRef"
 	);
+
+export const getRotessaPadWebhookTransferContext = internalQuery({
+	args: {
+		transactionId: v.string(),
+	},
+	handler: async (ctx, args) => {
+		const transfer = await ctx.db
+			.query("transferRequests")
+			.withIndex("by_provider_ref", (q) =>
+				q
+					.eq("providerCode", "pad_rotessa")
+					.eq("providerRef", args.transactionId)
+			)
+			.first();
+		if (!transfer) {
+			return null;
+		}
+
+		const collectionAttempt = transfer.collectionAttemptId
+			? await ctx.db.get(transfer.collectionAttemptId)
+			: null;
+		const planEntryId = transfer.planEntryId ?? collectionAttempt?.planEntryId;
+		const planEntry = planEntryId ? await ctx.db.get(planEntryId) : null;
+
+		return {
+			hasProviderManagedPlanEntry: Boolean(
+				planEntry?.externalCollectionScheduleId ||
+					planEntry?.externalOccurrenceRef
+			),
+			transferId: transfer._id,
+		};
+	},
+});
 
 export function mapRotessaPadStatusToTransferEvent(
 	rotessaEventType: string
@@ -565,12 +599,21 @@ export const processRotessaPadWebhook = internalAction({
 			return;
 		}
 
-		if (
+		const localTransferContext = await ctx.runQuery(
+			internal.payments.webhooks.rotessaPad.getRotessaPadWebhookTransferContext,
+			{
+				transactionId: args.transactionId,
+			}
+		);
+		const shouldIngestProviderManagedOccurrence =
 			shouldAttemptProviderManagedOccurrenceIngestion(
 				args.eventType,
 				normalizedEventType
-			)
-		) {
+			) &&
+			(localTransferContext === null ||
+				localTransferContext.hasProviderManagedPlanEntry);
+
+		if (shouldIngestProviderManagedOccurrence) {
 			let row: RotessaTransactionReportRow | null = null;
 			try {
 				row = await findRotessaFinancialTransactionForWebhook({
@@ -661,6 +704,15 @@ export const processRotessaPadWebhook = internalAction({
 					});
 				}
 			}
+		}
+
+		if (
+			localTransferContext &&
+			!localTransferContext.hasProviderManagedPlanEntry
+		) {
+			console.info(
+				`[Rotessa PAD Webhook] Using direct transfer webhook path for transfer ${localTransferContext.transferId} without provider-managed schedule linkage`
+			);
 		}
 
 		try {

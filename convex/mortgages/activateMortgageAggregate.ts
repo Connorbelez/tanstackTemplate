@@ -179,62 +179,38 @@ async function readExistingActivationResult(
 		"createdObligationIds" | "createdPlanEntryIds" | "scheduleRuleMissing"
 	>
 ): Promise<ActivateMortgageAggregateResult> {
-	const [
-		borrowerLinks,
-		listing,
-		planEntries,
-		obligations,
-		valuationSnapshot,
-		documentBlueprints,
-	] = await Promise.all([
-		readMortgageBorrowerLinks(ctx, existingMortgage._id),
-		ctx.db
-			.query("listings")
-			.withIndex("by_mortgage", (query) =>
-				query.eq("mortgageId", existingMortgage._id)
-			)
-			.unique(),
-		ctx.db
-			.query("collectionPlanEntries")
-			.withIndex("by_mortgage_status_scheduled", (query) =>
-				query.eq("mortgageId", existingMortgage._id)
-			)
-			.collect(),
-		ctx.db
-			.query("obligations")
-			.withIndex("by_mortgage_and_date", (query) =>
-				query.eq("mortgageId", existingMortgage._id)
-			)
-			.collect(),
-		ctx.db
-			.query("mortgageValuationSnapshots")
-			.withIndex("by_mortgage_created_at", (query) =>
-				query.eq("mortgageId", existingMortgage._id)
-			)
-			.order("desc")
-			.first(),
-		ctx.db
-			.query("mortgageDocumentBlueprints")
-			.withIndex("by_mortgage_status_class", (query) =>
-				query.eq("mortgageId", existingMortgage._id).eq("status", "active")
-			)
-			.collect(),
-	]);
+	const [borrowerLinks, listing, valuationSnapshot, documentBlueprints] =
+		await Promise.all([
+			readMortgageBorrowerLinks(ctx, existingMortgage._id),
+			ctx.db
+				.query("listings")
+				.withIndex("by_mortgage", (query) =>
+					query.eq("mortgageId", existingMortgage._id)
+				)
+				.unique(),
+			ctx.db
+				.query("mortgageValuationSnapshots")
+				.withIndex("by_mortgage_created_at", (query) =>
+					query.eq("mortgageId", existingMortgage._id)
+				)
+				.order("desc")
+				.first(),
+			ctx.db
+				.query("mortgageDocumentBlueprints")
+				.withIndex("by_mortgage_status_class", (query) =>
+					query.eq("mortgageId", existingMortgage._id).eq("status", "active")
+				)
+				.collect(),
+		]);
 
-	const sortedPlanEntryIds = [...planEntries]
-		.sort((left, right) => left.scheduledDate - right.scheduledDate)
-		.map((entry) => entry._id);
-	const sortedObligationIds = [...obligations]
-		.sort((left, right) => left.dueDate - right.dueDate)
-		.map((obligation) => obligation._id);
 	const borrowerIds = dedupeBorrowerIds(borrowerLinks);
 	const primaryBorrowerLink =
 		borrowerLinks.find((link) => link.role === "primary") ?? borrowerLinks[0];
 
 	return {
 		borrowerIds,
-		createdObligationIds: sortedObligationIds,
-		createdPlanEntryIds: sortedPlanEntryIds,
+		createdObligationIds: paymentBootstrap.createdObligationIds,
+		createdPlanEntryIds: paymentBootstrap.createdPlanEntryIds,
 		dealBlueprintCount: documentBlueprints.filter(
 			(blueprint) => blueprint.class !== "public_static"
 		).length,

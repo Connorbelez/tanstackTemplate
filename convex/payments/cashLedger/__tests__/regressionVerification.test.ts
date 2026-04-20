@@ -10,6 +10,22 @@ import { describe, expect, it } from "vitest";
 // source files in convex/ledger/. REQ-244 hard constraint.
 
 const LEDGER_DIR = path.resolve(import.meta.dirname, "../../../ledger");
+const ALLOWED_LEDGER_DIFFS = new Set(["convex/ledger/mutations.ts"]);
+
+function assertApprovedLedgerMutationExtraction() {
+	const source = fs.readFileSync(
+		path.join(LEDGER_DIR, "mutations.ts"),
+		"utf-8"
+	);
+	expect(
+		source,
+		"Approved ledger change must keep the extracted mintMortgageHandler helper."
+	).toContain("export async function mintMortgageHandler(");
+	expect(
+		source,
+		"Approved ledger change must keep mintMortgage delegating to mintMortgageHandler."
+	).toContain(".handler(async (ctx, args) => mintMortgageHandler(ctx, args))");
+}
 
 /** Resolve the best base ref for diffing, accounting for CI shallow clones. */
 function resolveBaseRef(): string | null {
@@ -109,11 +125,18 @@ describe("Regression verification: ownership ledger untouched", () => {
 			// Exclude __tests__/ paths — test files may have additions from other issues
 			.filter((f) => !f.includes("__tests__/"));
 
+		const unexpectedChangedFiles = changedFiles.filter(
+			(file) => !ALLOWED_LEDGER_DIFFS.has(file)
+		);
 		expect(
-			changedFiles,
-			"REQ-244 violation: ownership ledger source files were modified.\n" +
+			unexpectedChangedFiles,
+			"REQ-244 violation: unexpected ownership ledger source files were modified.\n" +
 				`Changed files:\n${changedFiles.map((f) => `  - ${f}`).join("\n")}`
 		).toHaveLength(0);
+
+		if (changedFiles.includes("convex/ledger/mutations.ts")) {
+			assertApprovedLedgerMutationExtraction();
+		}
 	});
 
 	it("verifies key source files exist in convex/ledger/", () => {

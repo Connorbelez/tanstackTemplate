@@ -2,16 +2,16 @@ import { ConvexError } from "convex/values";
 import auditLogTest from "convex-audit-log/test";
 import type { convexTest } from "convex-test";
 import { describe, expect, it } from "vitest";
+import {
+	createHarness,
+	createTestAccount,
+	seedMinimalEntities,
+} from "../../../../src/test/convex/payments/cashLedger/testUtils";
 import { api } from "../../../_generated/api";
 import type { Id } from "../../../_generated/dataModel";
 import type { QueryCtx } from "../../../_generated/server";
 import { FAIRLEND_STAFF_ORG_ID } from "../../../constants";
 import { convexModules } from "../../../test/moduleMaps";
-import {
-	createHarness,
-	createTestAccount,
-	seedMinimalEntities,
-} from "../../cashLedger/__tests__/testUtils";
 import { MINIMUM_PAYOUT_CENTS } from "../config";
 import { getEligibleDispersalEntries } from "../queries";
 

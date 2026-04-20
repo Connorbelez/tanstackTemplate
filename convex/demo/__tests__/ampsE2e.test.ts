@@ -231,7 +231,9 @@ describe("demo.ampsE2e", () => {
 			await t.finishAllScheduledFunctions(vi.runAllTimers);
 
 			expect(firstPayout.created).toBe(1);
-			expect(secondPayout.skippedIdempotent).toBe(1);
+			expect(secondPayout.created).toBe(0);
+			expect(secondPayout.eligibleCount).toBe(0);
+			expect(secondPayout.skippedIdempotent).toBe(0);
 
 			state = await admin.query(api.demo.ampsE2e.getOfflineLifecycleScenario, {
 				runId,
