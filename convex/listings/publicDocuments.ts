@@ -2,7 +2,7 @@ import { ConvexError, v } from "convex/values";
 import type { Id } from "../_generated/dataModel";
 import type { QueryCtx } from "../_generated/server";
 import { listActivePublicStaticBlueprintAssets } from "../documents/mortgageBlueprints";
-import { lenderQuery } from "../fluent";
+import { listingQuery } from "../fluent";
 
 export async function readListingPublicDocuments(
 	ctx: Pick<QueryCtx, "db" | "storage">,
@@ -29,13 +29,16 @@ export async function readListingPublicDocuments(
 	);
 }
 
-export const listForListing = lenderQuery
+export const listForListing = listingQuery
 	.input({
 		listingId: v.id("listings"),
 	})
 	.handler(async (ctx, args) => {
 		const listing = await ctx.db.get(args.listingId);
 		if (!listing) {
+			throw new ConvexError("Listing not found");
+		}
+		if (listing.status !== "published") {
 			throw new ConvexError("Listing not found");
 		}
 

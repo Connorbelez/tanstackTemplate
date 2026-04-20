@@ -1,7 +1,7 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { AlertCircle, ArrowLeft } from "lucide-react";
-import { ListingDetailPage } from "#/components/demo/listings/ListingDetailPage";
 import { getListingDetailMock } from "#/components/demo/listings/listing-detail-mock-data";
+import { ListingDetailPage } from "#/components/listings/ListingDetailPage";
 
 export const Route = createFileRoute("/demo/listings/$listingid")({
 	loader: ({ params }) => {

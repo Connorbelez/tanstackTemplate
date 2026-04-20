@@ -1,12 +1,6 @@
 import { AnimatePresence, motion, type Variants } from "framer-motion";
 import { Map as MapIcon } from "lucide-react";
-import {
-	type ReactNode,
-	useCallback,
-	useEffect,
-	useMemo,
-	useState,
-} from "react";
+import { type ReactNode, useCallback, useMemo, useState } from "react";
 import { Button } from "#/components/ui/button";
 import {
 	Drawer,
@@ -18,8 +12,6 @@ import {
 import ProgressiveBlur from "#/components/ui/progressive-blur";
 import { ScrollArea } from "#/components/ui/scroll-area";
 import { useIsMobile } from "#/hooks/use-mobile";
-import { useFiltersStore } from "./contexts/listingContext";
-import { FilterBar } from "./filter-bar";
 import {
 	useViewportFilteredItems,
 	type WithLatLng,
@@ -33,11 +25,6 @@ import {
 	MobileListingScroller,
 	type MobileListingSection,
 } from "./mobile-listing-scroller";
-import type {
-	FilterState,
-	MortgageType,
-	PropertyType,
-} from "./types/listing-filters";
 
 interface ClassNames {
 	container?: string;
@@ -67,72 +54,7 @@ export interface ListingGridShellProps<T extends WithLatLng> {
 	>;
 	renderCard: (item: T) => ReactNode;
 	renderMapPopup: ListingMapProps<T>["renderPopup"];
-	showFilters?: boolean;
-}
-
-function applyFilters<T extends FilterableItem>(
-	items: readonly T[],
-	filters: FilterState
-): readonly T[] {
-	return items.filter((item) => {
-		if (
-			item.ltv !== undefined &&
-			(item.ltv < filters.ltvRange[0] || item.ltv > filters.ltvRange[1])
-		) {
-			return false;
-		}
-
-		if (
-			item.apr !== undefined &&
-			(item.apr < filters.interestRateRange[0] ||
-				item.apr > filters.interestRateRange[1])
-		) {
-			return false;
-		}
-
-		if (
-			item.principal !== undefined &&
-			(item.principal < filters.loanAmountRange[0] ||
-				item.principal > filters.loanAmountRange[1])
-		) {
-			return false;
-		}
-
-		if (
-			filters.mortgageTypes.length > 0 &&
-			item.mortgageType &&
-			!filters.mortgageTypes.includes(item.mortgageType as MortgageType)
-		) {
-			return false;
-		}
-
-		if (
-			filters.propertyTypes.length > 0 &&
-			item.propertyType &&
-			!filters.propertyTypes.includes(item.propertyType as PropertyType)
-		) {
-			return false;
-		}
-
-		if (filters.searchQuery) {
-			const query = filters.searchQuery.toLowerCase();
-			const matchesTitle = item.title?.toLowerCase().includes(query);
-			const matchesAddress = item.address?.toLowerCase().includes(query);
-			if (!(matchesTitle || matchesAddress)) {
-				return false;
-			}
-		}
-
-		if (filters.maturityDate && item.maturityDate) {
-			const filterDate = new Date(filters.maturityDate);
-			const itemDate = new Date(item.maturityDate);
-			if (itemDate > filterDate) {
-				return false;
-			}
-		}
-
-		return true;
-	});
+	toolbar?: ReactNode;
 }
 
 const drawerVariants: Variants = {
@@ -190,30 +112,14 @@ export function ListingGridShell<T extends WithLatLng>({
 	classNames,
 	mapProps,
 	groupItemsForMobile,
-	showFilters = false,
+	toolbar,
 }: ListingGridShellProps<T>) {
 	const isMobile = useIsMobile();
 	const [viewportBounds, setViewportBounds] = useState<
 		ViewportBounds | undefined
 	>(undefined);
-	const { filters, setItems } = useFiltersStore();
 	const [isMapDrawerOpen, setIsMapDrawerOpen] = useState(false);
-
-	const userFilteredItems = useMemo(() => {
-		if (!showFilters) {
-			return items;
-		}
-
-		return applyFilters(
-			items as readonly FilterableItem[],
-			filters
-		) as readonly T[];
-	}, [items, filters, showFilters]);
-
-	const filteredItems = useViewportFilteredItems(
-		userFilteredItems,
-		viewportBounds
-	);
+	const filteredItems = useViewportFilteredItems(items, viewportBounds);
 
 	const mobileSections = useMemo(() => {
 		if (filteredItems.length === 0) {
@@ -230,10 +136,6 @@ export function ListingGridShell<T extends WithLatLng>({
 		return [{ title: "All Listings", items: filteredItems }];
 	}, [filteredItems, groupItemsForMobile]);
 
-	useEffect(() => {
-		setItems(items as readonly FilterableItem[]);
-	}, [items, setItems]);
-
 	const handleViewportChange = useCallback((bounds: ViewportBounds) => {
 		setViewportBounds(bounds);
 	}, []);
@@ -242,7 +144,7 @@ export function ListingGridShell<T extends WithLatLng>({
 		return (
 			<div className={classNames?.container}>
 				<div className="space-y-4 px-4">
-					{showFilters ? <FilterBar /> : null}
+					{toolbar}
 					<div className={classNames?.gridColumn}>
 						<MobileListingScroller
 							renderCard={renderCard}
@@ -303,11 +205,7 @@ export function ListingGridShell<T extends WithLatLng>({
 			}
 		>
 			<div className={classNames?.gridColumn ?? "col-span-8"}>
-				{showFilters ? (
-					<div className="mb-4 px-8">
-						<FilterBar />
-					</div>
-				) : null}
+				{toolbar ? <div className="mb-4 px-8">{toolbar}</div> : null}
 				<ScrollArea className="relative h-[calc(100vh-7rem)]">
 					<ProgressiveBlur />
 					<div className="grid grid-cols-1 gap-3 px-4 pt-4 pb-32 min-[98rem]:grid-cols-2">

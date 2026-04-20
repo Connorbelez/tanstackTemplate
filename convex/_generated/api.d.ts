@@ -22,6 +22,7 @@ import type * as admin_origination_collections from "../admin/origination/collec
 import type * as admin_origination_commit from "../admin/origination/commit.js";
 import type * as admin_origination_media from "../admin/origination/media.js";
 import type * as admin_origination_participants from "../admin/origination/participants.js";
+import type * as admin_origination_postCommitCollectionsActivation from "../admin/origination/postCommitCollectionsActivation.js";
 import type * as admin_origination_properties from "../admin/origination/properties.js";
 import type * as admin_origination_validators from "../admin/origination/validators.js";
 import type * as admin_queries from "../admin/queries.js";
@@ -190,6 +191,8 @@ import type * as lib_businessDays from "../lib/businessDays.js";
 import type * as lib_orgScope from "../lib/orgScope.js";
 import type * as listings_create from "../listings/create.js";
 import type * as listings_curation from "../listings/curation.js";
+import type * as listings_marketplace from "../listings/marketplace.js";
+import type * as listings_marketplaceShared from "../listings/marketplaceShared.js";
 import type * as listings_projection from "../listings/projection.js";
 import type * as listings_publicDocuments from "../listings/publicDocuments.js";
 import type * as listings_queries from "../listings/queries.js";
@@ -358,6 +361,7 @@ declare const fullApi: ApiFromModules<{
   "admin/origination/commit": typeof admin_origination_commit;
   "admin/origination/media": typeof admin_origination_media;
   "admin/origination/participants": typeof admin_origination_participants;
+  "admin/origination/postCommitCollectionsActivation": typeof admin_origination_postCommitCollectionsActivation;
   "admin/origination/properties": typeof admin_origination_properties;
   "admin/origination/validators": typeof admin_origination_validators;
   "admin/queries": typeof admin_queries;
@@ -526,6 +530,8 @@ declare const fullApi: ApiFromModules<{
   "lib/orgScope": typeof lib_orgScope;
   "listings/create": typeof listings_create;
   "listings/curation": typeof listings_curation;
+  "listings/marketplace": typeof listings_marketplace;
+  "listings/marketplaceShared": typeof listings_marketplaceShared;
   "listings/projection": typeof listings_projection;
   "listings/publicDocuments": typeof listings_publicDocuments;
   "listings/queries": typeof listings_queries;

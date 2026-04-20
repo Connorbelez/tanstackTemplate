@@ -80,6 +80,7 @@ import {
 	listingPropertyTypeValidator,
 	listingRateTypeValidator,
 	listingStatusValidator,
+	marketplaceListingPropertyTypeValidator,
 } from "./listings/validators";
 import {
 	balancePreCheckDecisionValidator,
@@ -834,6 +835,7 @@ export default defineSchema({
 		loanType: listingLoanTypeValidator,
 		lienPosition: v.number(),
 		propertyType: listingPropertyTypeValidator,
+		marketplacePropertyType: marketplaceListingPropertyTypeValidator,
 		city: v.string(),
 		province: v.string(),
 		approximateLatitude: v.optional(v.number()),
@@ -875,6 +877,10 @@ export default defineSchema({
 		.index("by_status_and_featured", ["status", "featured"])
 		.index("by_status_and_view_count", ["status", "viewCount"])
 		.index("by_property_type_and_status", ["propertyType", "status"])
+		.index("by_marketplace_property_type_and_status", [
+			"marketplacePropertyType",
+			"status",
+		])
 		.index("by_province_and_status", ["province", "status"])
 		.index("by_city_and_status", ["city", "status"])
 		.index("by_lien_position_and_status", ["lienPosition", "status"])

@@ -6,6 +6,7 @@ import type { Doc, Id } from "../../_generated/dataModel";
 import { FAIRLEND_STAFF_ORG_ID } from "../../constants";
 import schema from "../../schema";
 import { convexModules } from "../../test/moduleMaps";
+import { deriveMarketplacePropertyType } from "../marketplaceShared";
 
 const modules = convexModules;
 const listingApi = anyApi.listings.queries;
@@ -88,6 +89,11 @@ async function issueShares(
 function buildListingDoc(
 	overrides: Partial<Omit<Doc<"listings">, "_creationTime" | "_id">> = {}
 ): Omit<Doc<"listings">, "_creationTime" | "_id"> {
+	const propertyType = overrides.propertyType ?? "residential";
+	const marketplacePropertyType =
+		overrides.marketplacePropertyType ??
+		deriveMarketplacePropertyType(propertyType);
+
 	return {
 		adminNotes: undefined,
 		approximateLatitude: 43.6532,
@@ -116,7 +122,8 @@ function buildListingDoc(
 		paymentHistory: undefined,
 		principal: 250_000,
 		propertyId: undefined,
-		propertyType: "residential",
+		propertyType,
+		marketplacePropertyType,
 		province: "ON",
 		publicDocumentIds: [],
 		publishedAt: 1_710_000_000_000,
