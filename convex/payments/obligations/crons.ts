@@ -7,11 +7,17 @@ import { unixMsToBusinessDate } from "../../lib/businessDates";
 
 /**
  * Batch size for processing obligations per phase.
- * Limits the number of obligations processed in a single cron invocation
- * to avoid exceeding Convex query result / CPU / cron timeout limits.
- * If more obligations remain, the cron will pick them up on its next run.
+ * Limits how many obligations are transitioned per phase **per wave** to
+ * avoid oversized single queries and to keep each transition batch bounded.
+ *
+ * When more than `BATCH_SIZE` rows exist in either phase, this action runs
+ * additional **waves** in the same cron invocation until the backlog clears or
+ * {@link MAX_WAVES_PER_CRON_RUN} is reached (then logs an alert; remainder
+ * waits for the next day's cron).
  */
 const BATCH_SIZE = 100;
+/** Upper bound on waves per single `processObligationTransitions` run (100×500 = 50k per phase). */
+const MAX_WAVES_PER_CRON_RUN = 500;
 const JOB_NAME = "daily obligation transitions";
 type CronActionCtx = Pick<GenericActionCtx<GenericDataModel>, "runMutation">;
 interface CronSource {
@@ -107,7 +113,9 @@ function formatCompletionLog(args: {
 	allNewlyDueCount: number;
 	allPastGraceCount: number;
 	businessDate: string;
+	waveIndex: number;
 }) {
+	const waveTag = args.waveIndex > 0 ? ` [wave=${args.waveIndex + 1}]` : "";
 	return (
 		"[Obligation Cron] Completed: " +
 		`${args.becameDueCount}/${args.newlyDueLength} BECAME_DUE succeeded` +
@@ -119,9 +127,9 @@ function formatCompletionLog(args: {
 			? ` (${args.gracePeriodExpiredRejectedCount} rejected)`
 			: "") +
 		(args.allNewlyDueCount > BATCH_SIZE || args.allPastGraceCount > BATCH_SIZE
-			? ` [BATCH_SIZE=${BATCH_SIZE} applied — remaining obligations will be processed on next run]`
+			? ` [BATCH_SIZE=${BATCH_SIZE} — additional waves run same cron when backlog exceeds batch]`
 			: "") +
-		` [businessDate=${args.businessDate}]`
+		` [businessDate=${args.businessDate}]${waveTag}`
 	);
 }
 
@@ -130,6 +138,9 @@ function formatCompletionLog(args: {
  *
  * Phase 1: upcoming → due (BECAME_DUE) for obligations where dueDate <= now
  * Phase 2: due → overdue (GRACE_PERIOD_EXPIRED) for obligations where gracePeriodEnd <= now
+ *
+ * Repeats in **waves** (same action invocation) until both candidate lists are
+ * drained or {@link MAX_WAVES_PER_CRON_RUN} is exceeded.
  *
  * Each transition fires independently through the GT engine. Failures are
  * logged but do not abort the batch. Note that the GT engine records a
@@ -146,79 +157,114 @@ export const processObligationTransitions = internalAction({
 			actorType: "system" as const,
 		};
 
-		// ── Phase 1: upcoming → due ──────────────────────────────────
-		const allNewlyDue = await ctx.runQuery(
-			internal.payments.obligations.queries.getUpcomingDue,
-			{ asOf: now }
-		);
+		let waveIndex = 0;
+		let loggedFirstWaveOverflow = false;
 
-		// Limit to BATCH_SIZE to stay within Convex action limits
-		const newlyDue = allNewlyDue.slice(0, BATCH_SIZE);
-		const {
-			successCount: becameDueCount,
-			rejectedCount: becameDueRejectedCount,
-		} = await processTransitionBatch(ctx, newlyDue, "BECAME_DUE", source);
+		while (waveIndex < MAX_WAVES_PER_CRON_RUN) {
+			const allNewlyDue = await ctx.runQuery(
+				internal.payments.obligations.queries.getUpcomingDue,
+				{ asOf: now }
+			);
+			const allPastGrace = await ctx.runQuery(
+				internal.payments.obligations.queries.getDuePastGrace,
+				{ asOf: now }
+			);
 
-		// ── Phase 2: due → overdue ───────────────────────────────────
-		const allPastGrace = await ctx.runQuery(
-			internal.payments.obligations.queries.getDuePastGrace,
-			{ asOf: now }
-		);
-
-		// Limit to BATCH_SIZE to stay within Convex action limits
-		const pastGrace = allPastGrace.slice(0, BATCH_SIZE);
-		const {
-			successCount: gracePeriodExpiredCount,
-			rejectedCount: gracePeriodExpiredRejectedCount,
-		} = await processTransitionBatch(
-			ctx,
-			pastGrace,
-			"GRACE_PERIOD_EXPIRED",
-			source
-		);
-
-		const overflowMetrics = await ctx.runMutation(
-			internal.payments.obligations.monitoring.recordBatchOverflowMetrics,
-			{
-				jobName: JOB_NAME,
-				businessDate,
-				batchSize: BATCH_SIZE,
-				newlyDueCount: allNewlyDue.length,
-				pastGraceCount: allPastGrace.length,
+			if (allNewlyDue.length === 0 && allPastGrace.length === 0) {
+				break;
 			}
-		);
 
-		logOverflowWarnings({
-			allNewlyDueCount: allNewlyDue.length,
-			allPastGraceCount: allPastGrace.length,
-			batchSize: BATCH_SIZE,
-			businessDate,
-			newlyDueOverflow: overflowMetrics.newlyDueOverflow,
-			pastGraceOverflow: overflowMetrics.pastGraceOverflow,
-			newlyDueOverflowStreak: overflowMetrics.newlyDueOverflowStreak,
-			pastGraceOverflowStreak: overflowMetrics.pastGraceOverflowStreak,
-		});
+			const newlyDue = allNewlyDue.slice(0, BATCH_SIZE);
+			const {
+				successCount: becameDueCount,
+				rejectedCount: becameDueRejectedCount,
+			} = await processTransitionBatch(ctx, newlyDue, "BECAME_DUE", source);
 
-		if (!overflowMetrics.isSameBusinessDate) {
-			logOverflowAlerts({
-				businessDate,
-				newlyDueOverflowStreak: overflowMetrics.newlyDueOverflowStreak,
-				pastGraceOverflowStreak: overflowMetrics.pastGraceOverflowStreak,
-			});
+			const pastGrace = allPastGrace.slice(0, BATCH_SIZE);
+			const {
+				successCount: gracePeriodExpiredCount,
+				rejectedCount: gracePeriodExpiredRejectedCount,
+			} = await processTransitionBatch(
+				ctx,
+				pastGrace,
+				"GRACE_PERIOD_EXPIRED",
+				source
+			);
+
+			const overflowMetrics = await ctx.runMutation(
+				internal.payments.obligations.monitoring.recordBatchOverflowMetrics,
+				{
+					jobName: JOB_NAME,
+					businessDate,
+					batchSize: BATCH_SIZE,
+					newlyDueCount: allNewlyDue.length,
+					pastGraceCount: allPastGrace.length,
+				}
+			);
+
+			if (
+				!loggedFirstWaveOverflow &&
+				(overflowMetrics.newlyDueOverflow || overflowMetrics.pastGraceOverflow)
+			) {
+				loggedFirstWaveOverflow = true;
+				logOverflowWarnings({
+					allNewlyDueCount: allNewlyDue.length,
+					allPastGraceCount: allPastGrace.length,
+					batchSize: BATCH_SIZE,
+					businessDate,
+					newlyDueOverflow: overflowMetrics.newlyDueOverflow,
+					pastGraceOverflow: overflowMetrics.pastGraceOverflow,
+					newlyDueOverflowStreak: overflowMetrics.newlyDueOverflowStreak,
+					pastGraceOverflowStreak: overflowMetrics.pastGraceOverflowStreak,
+				});
+			}
+
+			if (waveIndex === 0 && !overflowMetrics.isSameBusinessDate) {
+				logOverflowAlerts({
+					businessDate,
+					newlyDueOverflowStreak: overflowMetrics.newlyDueOverflowStreak,
+					pastGraceOverflowStreak: overflowMetrics.pastGraceOverflowStreak,
+				});
+			}
+
+			console.info(
+				formatCompletionLog({
+					becameDueCount,
+					newlyDueLength: newlyDue.length,
+					becameDueRejectedCount,
+					gracePeriodExpiredCount,
+					pastGraceLength: pastGrace.length,
+					gracePeriodExpiredRejectedCount,
+					allNewlyDueCount: allNewlyDue.length,
+					allPastGraceCount: allPastGrace.length,
+					businessDate,
+					waveIndex,
+				})
+			);
+
+			const backlogExceedsBatch =
+				allNewlyDue.length > BATCH_SIZE || allPastGrace.length > BATCH_SIZE;
+			if (!backlogExceedsBatch) {
+				break;
+			}
+
+			waveIndex += 1;
 		}
 
-		console.info(
-			formatCompletionLog({
-				becameDueCount,
-				newlyDueLength: newlyDue.length,
-				becameDueRejectedCount,
-				gracePeriodExpiredCount,
-				pastGraceLength: pastGrace.length,
-				gracePeriodExpiredRejectedCount,
-				allNewlyDueCount: allNewlyDue.length,
-				allPastGraceCount: allPastGrace.length,
-				businessDate,
-			})
-		);
+		if (waveIndex >= MAX_WAVES_PER_CRON_RUN) {
+			const remainingNewlyDue = await ctx.runQuery(
+				internal.payments.obligations.queries.getUpcomingDue,
+				{ asOf: now }
+			);
+			const remainingPastGrace = await ctx.runQuery(
+				internal.payments.obligations.queries.getDuePastGrace,
+				{ asOf: now }
+			);
+			if (remainingNewlyDue.length > 0 || remainingPastGrace.length > 0) {
+				console.error(
+					`[Obligation Cron] ALERT: wave cap reached (${MAX_WAVES_PER_CRON_RUN}) with remaining backlog — newlyDue=${remainingNewlyDue.length}, pastGrace=${remainingPastGrace.length}, businessDate=${businessDate}`
+				);
+			}
+		}
 	},
 });

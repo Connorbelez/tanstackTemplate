@@ -12,6 +12,7 @@ import {
 } from "./workflow";
 
 interface SaveStateIndicatorProps {
+	compact?: boolean;
 	errorMessage?: string;
 	lastSavedAt?: number;
 	state: OriginationWorkspaceSaveState;
@@ -46,12 +47,37 @@ const STATE_CONFIG = {
 } as const;
 
 export function SaveStateIndicator({
+	compact = false,
 	errorMessage,
 	lastSavedAt,
 	state,
 }: SaveStateIndicatorProps) {
 	const config = STATE_CONFIG[state];
 	const Icon = config.icon;
+	const detailText =
+		state === "error" && errorMessage
+			? errorMessage
+			: `Last update ${formatOriginationDateTime(lastSavedAt)}`;
+
+	if (compact) {
+		return (
+			<div className="flex flex-wrap items-center gap-2">
+				<Badge
+					className={cn(
+						"inline-flex items-center gap-2 border px-3 py-1 font-medium",
+						config.className
+					)}
+					variant="outline"
+				>
+					<Icon
+						className={cn("size-3.5", state === "saving" && "animate-spin")}
+					/>
+					{config.label}
+				</Badge>
+				<p className="text-muted-foreground text-xs sm:text-sm">{detailText}</p>
+			</div>
+		);
+	}
 
 	return (
 		<div className="flex flex-col items-end gap-1 text-right">
@@ -67,11 +93,7 @@ export function SaveStateIndicator({
 				/>
 				{config.label}
 			</Badge>
-			<p className="text-muted-foreground text-xs">
-				{state === "error" && errorMessage
-					? errorMessage
-					: `Last update ${formatOriginationDateTime(lastSavedAt)}`}
-			</p>
+			<p className="text-muted-foreground text-xs">{detailText}</p>
 		</div>
 	);
 }

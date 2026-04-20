@@ -14,6 +14,7 @@ export interface RoleClaimsInput {
 
 export interface FairLendAdminCheck extends RoleClaimsInput {
 	orgId?: string | null;
+	permissions?: ClaimCollection;
 }
 
 export function parseClaimArray(value: unknown): string[] {
@@ -92,7 +93,8 @@ export function hasAnyPermission(
 export function isFairLendStaffAdmin(context: FairLendAdminCheck): boolean {
 	return (
 		context.orgId === FAIRLEND_STAFF_ORG_ID &&
-		normalizeRoles(context).includes("admin")
+		(normalizeRoles(context).includes("admin") ||
+			hasAdminAccessPermission(context.permissions))
 	);
 }
 

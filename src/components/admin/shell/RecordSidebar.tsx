@@ -21,7 +21,7 @@ import { EMPTY_ADMIN_DETAIL_SEARCH } from "#/lib/admin-detail-search";
 import { resolveAdminRecordRouteTarget } from "#/lib/admin-relation-navigation";
 import { cn } from "#/lib/utils";
 import { api } from "../../../../convex/_generated/api";
-import type { Doc } from "../../../../convex/_generated/dataModel";
+import type { Doc, Id } from "../../../../convex/_generated/dataModel";
 import type {
 	EntityViewAdapterContract,
 	NormalizedFieldDefinition,
@@ -267,6 +267,7 @@ export function AdminRecordDetailSurface({
 						fields={detailFields}
 						isLoading={shouldLoadLiveRecord && detailSurface === undefined}
 						objectDef={objectDef}
+						objectDefs={objectDefs ?? undefined}
 						onNavigateRelation={navigateRelation}
 						record={record}
 						recordId={reference.recordId}
@@ -493,8 +494,9 @@ function DetailsTab({
 	entity,
 	fields,
 	isLoading,
-	onNavigateRelation,
 	objectDef,
+	objectDefs,
+	onNavigateRelation,
 	record,
 	recordId,
 }: {
@@ -503,13 +505,52 @@ function DetailsTab({
 	readonly entity: ReturnType<typeof getAdminEntityByType> | undefined;
 	readonly fields: readonly DetailField[] | undefined;
 	readonly isLoading: boolean;
+	readonly objectDef: ObjectDef | undefined;
+	readonly objectDefs?: readonly ObjectDef[];
 	readonly onNavigateRelation: Parameters<
 		typeof FieldRenderer
 	>[0]["onNavigateRelation"];
-	readonly objectDef: ObjectDef | undefined;
 	readonly record: RecordDetailRecord | undefined;
 	readonly recordId: string;
 }) {
+	const fallbackAdapterRecord = useMemo<RecordDetailRecord>(
+		() => ({
+			_id: recordId,
+			_kind: "native",
+			createdAt: 0,
+			fields: {},
+			nativeTable: null,
+			objectDefId: "fallback" as Id<"objectDefs">,
+			updatedAt: 0,
+		}),
+		[recordId]
+	);
+	const adapterRecord = record ?? fallbackAdapterRecord;
+	const adapterDetails = adapter?.renderDetailsTab?.({
+		adapterContract,
+		entity,
+		fields: fields ?? [],
+		objectDef,
+		objectDefs,
+		onNavigateRelation,
+		record: adapterRecord,
+		recordId,
+	});
+
+	if (!objectDef && adapterDetails != null) {
+		return adapterDetails;
+	}
+
+	if (!objectDef) {
+		return (
+			<UnavailableTab
+				description="This entity is not mapped to a CRM object definition yet, so the detail surface can only show route-level context."
+				icon={<FileText className="h-5 w-5" />}
+				title="Object definition unavailable"
+			/>
+		);
+	}
+
 	if (isLoading) {
 		return (
 			<div className="space-y-3">
@@ -554,29 +595,6 @@ function DetailsTab({
 		);
 	}
 
-	const adapterDetails = adapter?.renderDetailsTab?.({
-		adapterContract,
-		entity,
-		fields: fields ?? [],
-		objectDef,
-		record,
-		recordId,
-	});
-
-	if (!objectDef && adapterDetails != null) {
-		return adapterDetails;
-	}
-
-	if (!objectDef) {
-		return (
-			<UnavailableTab
-				description="This entity is not mapped to a CRM object definition yet, so the detail surface can only show route-level context."
-				icon={<FileText className="h-5 w-5" />}
-				title="Object definition unavailable"
-			/>
-		);
-	}
-
 	if (adapterDetails != null) {
 		return adapterDetails;
 	}
@@ -601,7 +619,9 @@ function DetailsTab({
 				<FieldRenderer
 					field={field}
 					key={field.name}
+					objectDefs={objectDefs}
 					onNavigateRelation={onNavigateRelation}
+					record={record}
 					value={record.fields[field.name]}
 				/>
 			))}
@@ -686,7 +706,11 @@ function PageSummaryRail({
 							<SummaryValueCard
 								key={field.name}
 								label={field.label}
-								value={renderAdminFieldValue(field, record?.fields[field.name])}
+								value={renderAdminFieldValue(
+									field,
+									record?.fields[field.name],
+									record
+								)}
 							/>
 						))}
 					</div>

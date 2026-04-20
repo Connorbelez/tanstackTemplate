@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import { FAIRLEND_STAFF_ORG_ID } from "../../../../convex/constants";
+import { upsertMortgageListingProjection } from "../../../../convex/listings/projection";
 import { createTestConvex, ensureSeededIdentity } from "../../auth/helpers";
 import { FAIRLEND_ADMIN } from "../../auth/identities";
 
@@ -335,5 +336,36 @@ describe("listings/projection.refreshListingProjection", () => {
 			title: "Curated listing title",
 		});
 		expect(afterSecondRefresh.listing?.ltvRatio).toBe(55);
+	});
+
+	it("preserves hero image captions when origination overrides provide structured images", async () => {
+		const t = createTestConvex();
+		const fixture = await seedMortgageBackedListingFixture(t);
+
+		await t.run(async (ctx) => {
+			await upsertMortgageListingProjection(
+				ctx as Parameters<typeof upsertMortgageListingProjection>[0],
+				{
+					mortgageId: fixture.mortgageId,
+					now: Date.now(),
+					overrides: {
+						heroImages: [
+							{
+								caption: "Front elevation",
+								storageId: String(fixture.storageId),
+							},
+						],
+					},
+				}
+			);
+		});
+
+		const listing = await t.run(async (ctx) => ctx.db.get(fixture.listingId));
+		expect(listing?.heroImages).toEqual([
+			{
+				caption: "Front elevation",
+				storageId: fixture.storageId,
+			},
+		]);
 	});
 });

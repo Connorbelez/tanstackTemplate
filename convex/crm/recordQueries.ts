@@ -1,6 +1,7 @@
 import { ConvexError, v } from "convex/values";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
+import { canAccessCrmOrgScopedRecord } from "../authz/crm";
 import { crmQuery } from "../fluent";
 import {
 	buildEntityViewAdapter,
@@ -170,6 +171,7 @@ export async function assembleRecords(
 		records.map(async (record) => ({
 			_id: record._id as string,
 			_kind: "record" as const,
+			nativeTable: null,
 			objectDefId: record.objectDefId,
 			fields: await assembleRecordFields(ctx, record._id, fieldDefs),
 			createdAt: record.createdAt,
@@ -577,6 +579,10 @@ async function loadReferencedRecord(args: {
 	orgId: string;
 	recordId: string;
 	recordKind: "record" | "native";
+	viewer: {
+		isFairLendAdmin: boolean;
+		orgId?: string | null;
+	};
 }): Promise<UnifiedRecord> {
 	if (args.recordKind === "record") {
 		const normalizedId = args.ctx.db.normalizeId("records", args.recordId);
@@ -586,8 +592,7 @@ async function loadReferencedRecord(args: {
 
 		const recordDoc = await args.ctx.db.get(normalizedId);
 		if (
-			!recordDoc ||
-			recordDoc.orgId !== args.orgId ||
+			!(recordDoc && canAccessCrmOrgScopedRecord(args.viewer, recordDoc)) ||
 			recordDoc.isDeleted ||
 			recordDoc.objectDefId !== args.objectDef._id
 		) {
@@ -597,6 +602,7 @@ async function loadReferencedRecord(args: {
 		return {
 			_id: recordDoc._id as string,
 			_kind: "record",
+			nativeTable: null,
 			objectDefId: recordDoc.objectDefId,
 			fields: await assembleRecordFields(
 				args.ctx,
@@ -847,15 +853,17 @@ export const queryRecords = crmQuery
 		}),
 	})
 	.handler(async (ctx, args) => {
-		const orgId = ctx.viewer.orgId;
-		if (!orgId) {
-			throw new ConvexError("Org context required");
-		}
-
-		// 1. Load + verify objectDef
 		const objectDef = await ctx.db.get(args.objectDefId);
-		if (!objectDef || objectDef.orgId !== orgId || !objectDef.isActive) {
+		if (
+			!(
+				canAccessCrmOrgScopedRecord(ctx.viewer, objectDef) && objectDef.isActive
+			)
+		) {
 			throw new ConvexError("Object not found or access denied");
+		}
+		const orgId = objectDef.orgId;
+		if (!orgId) {
+			throw new ConvexError("Object org context required");
 		}
 
 		if (objectDef.isSystem && !objectDef.nativeTable) {
@@ -928,20 +936,21 @@ export const queryRecords = crmQuery
 export const getRecord = crmQuery
 	.input({ recordId: v.id("records") })
 	.handler(async (ctx, args) => {
-		const orgId = ctx.viewer.orgId;
-		if (!orgId) {
-			throw new ConvexError("Org context required");
-		}
-
-		// 1. Load record + verify org
 		const record = await ctx.db.get(args.recordId);
-		if (!record || record.orgId !== orgId || record.isDeleted) {
+		if (!canAccessCrmOrgScopedRecord(ctx.viewer, record) || record.isDeleted) {
 			throw new ConvexError("Record not found or access denied");
 		}
+		const orgId = record.orgId;
+		if (!orgId) {
+			throw new ConvexError("Record org context required");
+		}
 
-		// 2. Load + verify objectDef (active, org-scoped, system check)
 		const objectDef = await ctx.db.get(record.objectDefId);
-		if (!objectDef || objectDef.orgId !== orgId || !objectDef.isActive) {
+		if (
+			!(
+				canAccessCrmOrgScopedRecord(ctx.viewer, objectDef) && objectDef.isActive
+			)
+		) {
 			throw new ConvexError("Object not found or access denied");
 		}
 		if (objectDef.isSystem) {
@@ -961,6 +970,7 @@ export const getRecord = crmQuery
 		const unifiedRecord: UnifiedRecord = {
 			_id: record._id as string,
 			_kind: "record",
+			nativeTable: null,
 			objectDefId: record.objectDefId,
 			fields,
 			createdAt: record.createdAt,
@@ -981,14 +991,17 @@ export const getRecordReference = crmQuery
 		recordKind: entityKindValidator,
 	})
 	.handler(async (ctx, args) => {
-		const orgId = ctx.viewer.orgId;
-		if (!orgId) {
-			throw new ConvexError("Org context required");
-		}
-
 		const objectDef = await ctx.db.get(args.objectDefId);
-		if (!objectDef || objectDef.orgId !== orgId || !objectDef.isActive) {
+		if (
+			!(
+				canAccessCrmOrgScopedRecord(ctx.viewer, objectDef) && objectDef.isActive
+			)
+		) {
 			throw new ConvexError("Object not found or access denied");
+		}
+		const orgId = objectDef.orgId;
+		if (!orgId) {
+			throw new ConvexError("Object org context required");
 		}
 
 		const activeFieldDefs = await loadActiveFieldDefs(ctx, args.objectDefId);
@@ -999,6 +1012,7 @@ export const getRecordReference = crmQuery
 			orgId,
 			recordId: args.recordId,
 			recordKind: args.recordKind,
+			viewer: ctx.viewer,
 		});
 
 		return {
@@ -1020,14 +1034,17 @@ export const getRecordDetailSurface = crmQuery
 		recordKind: entityKindValidator,
 	})
 	.handler(async (ctx, args): Promise<GetRecordDetailSurfaceResult> => {
-		const orgId = ctx.viewer.orgId;
-		if (!orgId) {
-			throw new ConvexError("Org context required");
-		}
-
 		const objectDef = await ctx.db.get(args.objectDefId);
-		if (!objectDef || objectDef.orgId !== orgId || !objectDef.isActive) {
+		if (
+			!(
+				canAccessCrmOrgScopedRecord(ctx.viewer, objectDef) && objectDef.isActive
+			)
+		) {
 			throw new ConvexError("Object not found or access denied");
+		}
+		const orgId = objectDef.orgId;
+		if (!orgId) {
+			throw new ConvexError("Object org context required");
 		}
 
 		const activeFieldDefs = await loadActiveFieldDefs(ctx, args.objectDefId);
@@ -1063,6 +1080,7 @@ export const getRecordDetailSurface = crmQuery
 						orgId,
 						recordId: args.recordId,
 						recordKind: args.recordKind,
+						viewer: ctx.viewer,
 					}),
 				],
 			}),
@@ -1085,15 +1103,17 @@ export const searchRecords = crmQuery
 		limit: v.optional(v.number()),
 	})
 	.handler(async (ctx, args) => {
-		const orgId = ctx.viewer.orgId;
-		if (!orgId) {
-			throw new ConvexError("Org context required");
-		}
-
-		// 1. Verify objectDef
 		const objectDef = await ctx.db.get(args.objectDefId);
-		if (!objectDef || objectDef.orgId !== orgId || !objectDef.isActive) {
+		if (
+			!(
+				canAccessCrmOrgScopedRecord(ctx.viewer, objectDef) && objectDef.isActive
+			)
+		) {
 			throw new ConvexError("Object not found or access denied");
+		}
+		const orgId = objectDef.orgId;
+		if (!orgId) {
+			throw new ConvexError("Object org context required");
 		}
 		if (objectDef.isSystem) {
 			// Native tables don't have a search index on labelValue.

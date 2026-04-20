@@ -128,6 +128,13 @@ const LISTING_STATUS_COLORS: Record<string, string> = {
 	delisted: "#ef4444",
 };
 
+const PROPERTY_TYPE_COLORS: Record<string, string> = {
+	residential: "#3b82f6",
+	commercial: "#8b5cf6",
+	multi_unit: "#f97316",
+	condo: "#0ea5e9",
+};
+
 const DEAL_STATUS_COLORS: Record<string, string> = {
 	initiated: "#6b7280",
 	lawyerOnboarding: "#3b82f6",
@@ -317,6 +324,24 @@ export const SYSTEM_OBJECT_CONFIGS: readonly SystemObjectConfig[] = [
 		nativeTable: "lenders",
 		fields: [
 			{
+				name: "userId",
+				label: "User ID",
+				fieldType: "text",
+				nativeColumnPath: "userId",
+			},
+			{
+				name: "brokerId",
+				label: "Broker ID",
+				fieldType: "text",
+				nativeColumnPath: "brokerId",
+			},
+			{
+				name: "orgId",
+				label: "Organization ID",
+				fieldType: "text",
+				nativeColumnPath: "orgId",
+			},
+			{
 				name: "accreditationStatus",
 				label: "Accreditation Status",
 				fieldType: "select",
@@ -327,11 +352,57 @@ export const SYSTEM_OBJECT_CONFIGS: readonly SystemObjectConfig[] = [
 				),
 			},
 			{
+				name: "idvStatus",
+				label: "IDV Status",
+				fieldType: "select",
+				nativeColumnPath: "idvStatus",
+				options: opts(
+					["verified", "pending_review", "manual_review_required"],
+					IDV_STATUS_COLORS
+				),
+			},
+			{
+				name: "kycStatus",
+				label: "KYC Status",
+				fieldType: "text",
+				nativeColumnPath: "kycStatus",
+			},
+			{
+				name: "onboardingEntryPath",
+				label: "Onboarding Path",
+				fieldType: "text",
+				nativeColumnPath: "onboardingEntryPath",
+			},
+			{
+				name: "onboardingId",
+				label: "Onboarding Request ID",
+				fieldType: "text",
+				nativeColumnPath: "onboardingId",
+			},
+			{
+				name: "personaInquiryId",
+				label: "Persona Inquiry ID",
+				fieldType: "text",
+				nativeColumnPath: "personaInquiryId",
+			},
+			{
 				name: "status",
 				label: "Status",
 				fieldType: "select",
 				nativeColumnPath: "status",
 				options: opts(["active", "pending_activation"], LENDER_STATUS_COLORS),
+			},
+			{
+				name: "activatedAt",
+				label: "Activated At",
+				fieldType: "datetime",
+				nativeColumnPath: "activatedAt",
+			},
+			{
+				name: "createdAt",
+				label: "Created At",
+				fieldType: "datetime",
+				nativeColumnPath: "createdAt",
 			},
 			{
 				name: "payoutFrequency",
@@ -343,6 +414,18 @@ export const SYSTEM_OBJECT_CONFIGS: readonly SystemObjectConfig[] = [
 					PAYOUT_FREQUENCY_COLORS
 				),
 			},
+			{
+				name: "lastPayoutDate",
+				label: "Last Payout Date",
+				fieldType: "date",
+				nativeColumnPath: "lastPayoutDate",
+			},
+			{
+				name: "minimumPayoutCents",
+				label: "Minimum Payout",
+				fieldType: "currency",
+				nativeColumnPath: "minimumPayoutCents",
+			},
 		],
 	},
 	{
@@ -353,6 +436,18 @@ export const SYSTEM_OBJECT_CONFIGS: readonly SystemObjectConfig[] = [
 		description: "Mortgage brokers with licensing and brokerage details",
 		nativeTable: "brokers",
 		fields: [
+			{
+				name: "userId",
+				label: "User ID",
+				fieldType: "text",
+				nativeColumnPath: "userId",
+			},
+			{
+				name: "orgId",
+				label: "Organization ID",
+				fieldType: "text",
+				nativeColumnPath: "orgId",
+			},
 			{
 				name: "status",
 				label: "Status",
@@ -367,10 +462,34 @@ export const SYSTEM_OBJECT_CONFIGS: readonly SystemObjectConfig[] = [
 				nativeColumnPath: "licenseId",
 			},
 			{
+				name: "licenseProvince",
+				label: "License Province",
+				fieldType: "text",
+				nativeColumnPath: "licenseProvince",
+			},
+			{
 				name: "brokerageName",
 				label: "Brokerage Name",
 				fieldType: "text",
 				nativeColumnPath: "brokerageName",
+			},
+			{
+				name: "lastTransitionAt",
+				label: "Last Transition At",
+				fieldType: "datetime",
+				nativeColumnPath: "lastTransitionAt",
+			},
+			{
+				name: "onboardedAt",
+				label: "Onboarded At",
+				fieldType: "datetime",
+				nativeColumnPath: "onboardedAt",
+			},
+			{
+				name: "createdAt",
+				label: "Created At",
+				fieldType: "datetime",
+				nativeColumnPath: "createdAt",
 			},
 		],
 	},
@@ -662,6 +781,88 @@ export const SYSTEM_OBJECT_CONFIGS: readonly SystemObjectConfig[] = [
 				label: "Settled At",
 				fieldType: "datetime",
 				nativeColumnPath: "settledAt",
+			},
+		],
+	},
+	{
+		name: "property",
+		singularLabel: "Property",
+		pluralLabel: "Properties",
+		icon: "building-2",
+		description:
+			"Real-estate collateral — structured addresses, legal identifiers, and classification shared across the FairLend marketplace",
+		nativeTable: "properties",
+		defaultVisibleFieldNames: [
+			"streetAddress",
+			"city",
+			"province",
+			"postalCode",
+			"propertyType",
+		],
+		fields: [
+			{
+				name: "streetAddress",
+				label: "Street Address",
+				fieldType: "text",
+				nativeColumnPath: "streetAddress",
+			},
+			{
+				name: "unit",
+				label: "Unit",
+				fieldType: "text",
+				nativeColumnPath: "unit",
+			},
+			{
+				name: "city",
+				label: "City",
+				fieldType: "text",
+				nativeColumnPath: "city",
+			},
+			{
+				name: "province",
+				label: "Province",
+				fieldType: "text",
+				nativeColumnPath: "province",
+			},
+			{
+				name: "postalCode",
+				label: "Postal Code",
+				fieldType: "text",
+				nativeColumnPath: "postalCode",
+			},
+			{
+				name: "propertyType",
+				label: "Property Type",
+				fieldType: "select",
+				nativeColumnPath: "propertyType",
+				options: opts(
+					["residential", "commercial", "multi_unit", "condo"],
+					PROPERTY_TYPE_COLORS
+				),
+			},
+			{
+				name: "pin",
+				label: "PIN",
+				fieldType: "text",
+				nativeColumnPath: "pin",
+			},
+			{
+				name: "lroNumber",
+				label: "LRO Number",
+				fieldType: "text",
+				nativeColumnPath: "lroNumber",
+			},
+			{
+				name: "legalDescription",
+				label: "Legal Description",
+				fieldType: "text",
+				nativeColumnPath: "legalDescription",
+			},
+			{
+				name: "createdAt",
+				label: "Created At",
+				fieldType: "datetime",
+				nativeColumnPath: "createdAt",
 			},
 		],
 	},

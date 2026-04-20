@@ -1,7 +1,9 @@
 "use client";
 
 import type { ReactNode } from "react";
+import type { AdminRelationNavigationTarget } from "#/lib/admin-relation-navigation";
 import { cn } from "#/lib/utils";
+import type { Doc } from "../../../../convex/_generated/dataModel";
 import type {
 	NormalizedFieldDefinition,
 	UnifiedRecord,
@@ -22,6 +24,8 @@ interface SectionedRecordDetailsProps {
 	readonly emptyState?: ReactNode;
 	readonly fields: readonly NormalizedFieldDefinition[];
 	readonly highlightFieldNames?: readonly string[];
+	readonly objectDefs?: readonly Doc<"objectDefs">[];
+	readonly onNavigateRelation?: (target: AdminRelationNavigationTarget) => void;
 	readonly record: UnifiedRecord;
 	readonly sections: readonly DetailSectionDefinition[];
 }
@@ -58,10 +62,14 @@ function getDetailSectionKey(section: DetailSectionDefinition): string {
 function DetailFieldGrid({
 	className,
 	fields,
+	objectDefs,
+	onNavigateRelation,
 	record,
 }: {
 	readonly className?: string;
 	readonly fields: readonly NormalizedFieldDefinition[];
+	readonly objectDefs?: readonly Doc<"objectDefs">[];
+	readonly onNavigateRelation?: (target: AdminRelationNavigationTarget) => void;
 	readonly record: UnifiedRecord;
 }) {
 	return (
@@ -70,6 +78,9 @@ function DetailFieldGrid({
 				<FieldRenderer
 					field={field}
 					key={field.name}
+					objectDefs={objectDefs}
+					onNavigateRelation={onNavigateRelation}
+					record={record}
 					value={record.fields[field.name]}
 				/>
 			))}
@@ -81,6 +92,8 @@ export function SectionedRecordDetails({
 	emptyState = null,
 	fields,
 	highlightFieldNames,
+	objectDefs,
+	onNavigateRelation,
 	record,
 	sections,
 }: SectionedRecordDetailsProps) {
@@ -140,6 +153,9 @@ export function SectionedRecordDetails({
 							className="h-full border-border/70 bg-background/80"
 							field={field}
 							key={field.name}
+							objectDefs={objectDefs}
+							onNavigateRelation={onNavigateRelation}
+							record={record}
 							value={record.fields[field.name]}
 						/>
 					))}
@@ -161,7 +177,12 @@ export function SectionedRecordDetails({
 							</p>
 						) : null}
 					</div>
-					<DetailFieldGrid fields={section.fields} record={record} />
+					<DetailFieldGrid
+						fields={section.fields}
+						objectDefs={objectDefs}
+						onNavigateRelation={onNavigateRelation}
+						record={record}
+					/>
 				</section>
 			))}
 
@@ -175,7 +196,12 @@ export function SectionedRecordDetails({
 							Remaining populated fields on this record.
 						</p>
 					</div>
-					<DetailFieldGrid fields={remainingFields} record={record} />
+					<DetailFieldGrid
+						fields={remainingFields}
+						objectDefs={objectDefs}
+						onNavigateRelation={onNavigateRelation}
+						record={record}
+					/>
 				</section>
 			) : null}
 		</div>

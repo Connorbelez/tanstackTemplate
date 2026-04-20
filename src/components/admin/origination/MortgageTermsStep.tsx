@@ -1,10 +1,4 @@
-import {
-	Card,
-	CardContent,
-	CardDescription,
-	CardHeader,
-	CardTitle,
-} from "#/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "#/components/ui/card";
 import { Checkbox } from "#/components/ui/checkbox";
 import { Input } from "#/components/ui/input";
 import { Label } from "#/components/ui/label";
@@ -38,19 +32,11 @@ export function MortgageTermsStep({
 	const nextDraft = draft ?? {};
 
 	return (
-		<OriginationStepCard
-			description="Capture staged economics and date cadence exactly once so later commit logic can build the canonical mortgage without re-entering terms."
-			errors={errors}
-			title="Mortgage terms"
-		>
+		<OriginationStepCard errors={errors} title="Mortgage terms">
 			<div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
 				<Card className="border-border/70">
 					<CardHeader>
 						<CardTitle className="text-base">Core economics</CardTitle>
-						<CardDescription>
-							These fields drive the canonical activation constructor and the
-							payment bootstrap that follows commit.
-						</CardDescription>
 					</CardHeader>
 					<CardContent className="grid gap-4 md:grid-cols-2">
 						<div className="space-y-2">
@@ -242,10 +228,6 @@ export function MortgageTermsStep({
 						<CardTitle className="text-base">
 							Dates and servicing context
 						</CardTitle>
-						<CardDescription>
-							Commit uses these dates and cadence to bootstrap canonical
-							obligations and planned app-owned collection entries.
-						</CardDescription>
 					</CardHeader>
 					<CardContent className="grid gap-4">
 						<div className="space-y-2">

@@ -9,14 +9,14 @@
  * - getTransferTimeline: joined transfer + GT audit + cash-ledger timeline
  */
 
-import { ConvexError, v } from "convex/values";
+import { v } from "convex/values";
 import { internalQuery } from "../../_generated/server";
 import {
-	canAccessCounterpartyResource,
-	canAccessDeal,
-	canAccessMortgage,
-	canAccessTransferRequest,
-} from "../../auth/resourceChecks";
+	assertCounterpartyResourceAccess,
+	assertDealAccess,
+	assertMortgageAccess,
+	assertTransferRequestAccess,
+} from "../../authz/resourceAccess";
 import { paymentQuery } from "../../fluent";
 import { computePipelineStatus } from "./pipeline.types";
 import {
@@ -28,68 +28,6 @@ interface TimelineRecord {
 	recordId: string;
 	source: string;
 	timestamp: number;
-}
-
-async function assertTransferAccess(
-	ctx: Parameters<typeof canAccessTransferRequest>[0] & {
-		viewer: Parameters<typeof canAccessTransferRequest>[1];
-	},
-	transferId: Parameters<typeof canAccessTransferRequest>[2]
-) {
-	const allowed = await canAccessTransferRequest(ctx, ctx.viewer, transferId);
-	if (!allowed) {
-		throw new ConvexError(
-			`Forbidden: no transfer access for ${String(transferId)}`
-		);
-	}
-}
-
-async function assertMortgageAccess(
-	ctx: Parameters<typeof canAccessMortgage>[0] & {
-		viewer: Parameters<typeof canAccessMortgage>[1];
-	},
-	mortgageId: Parameters<typeof canAccessMortgage>[2]
-) {
-	const allowed = await canAccessMortgage(ctx, ctx.viewer, mortgageId);
-	if (!allowed) {
-		throw new ConvexError(
-			`Forbidden: no mortgage access for ${String(mortgageId)}`
-		);
-	}
-}
-
-async function assertDealAccess(
-	ctx: Parameters<typeof canAccessDeal>[0] & {
-		viewer: Parameters<typeof canAccessDeal>[1];
-	},
-	dealId: Parameters<typeof canAccessDeal>[2]
-) {
-	const allowed = await canAccessDeal(ctx, ctx.viewer, dealId);
-	if (!allowed) {
-		throw new ConvexError(`Forbidden: no deal access for ${String(dealId)}`);
-	}
-}
-
-async function assertCounterpartyAccess(
-	ctx: Parameters<typeof canAccessCounterpartyResource>[0] & {
-		viewer: Parameters<typeof canAccessCounterpartyResource>[1];
-	},
-	args: {
-		counterpartyId: string;
-		counterpartyType: Parameters<typeof canAccessCounterpartyResource>[2];
-	}
-) {
-	const allowed = await canAccessCounterpartyResource(
-		ctx,
-		ctx.viewer,
-		args.counterpartyType,
-		args.counterpartyId
-	);
-	if (!allowed) {
-		throw new ConvexError(
-			`Forbidden: no ${args.counterpartyType} access for ${args.counterpartyId}`
-		);
-	}
 }
 
 // ── getTransferInternal ───────────────────────────────────────────
@@ -119,7 +57,7 @@ export const getTransferByIdempotencyKeyInternal = internalQuery({
 export const getTransferRequest = paymentQuery
 	.input({ transferId: v.id("transferRequests") })
 	.handler(async (ctx, args) => {
-		await assertTransferAccess(ctx, args.transferId);
+		await assertTransferRequestAccess(ctx, args.transferId);
 		return ctx.db.get(args.transferId);
 	})
 	.public();
@@ -175,7 +113,10 @@ export const listTransfersByCounterparty = paymentQuery
 		limit: v.optional(v.number()),
 	})
 	.handler(async (ctx, args) => {
-		await assertCounterpartyAccess(ctx, args);
+		await assertCounterpartyResourceAccess(ctx, {
+			ownerId: args.counterpartyId,
+			ownerType: args.counterpartyType,
+		});
 		const limit = args.limit ?? 50;
 		const status = args.status;
 		if (status !== undefined) {
@@ -243,7 +184,7 @@ export const getTransferTimeline = paymentQuery
 		transferId: v.id("transferRequests"),
 	})
 	.handler(async (ctx, args) => {
-		await assertTransferAccess(ctx, args.transferId);
+		await assertTransferRequestAccess(ctx, args.transferId);
 		const transfer = await ctx.db.get(args.transferId);
 		if (!transfer) {
 			return null;

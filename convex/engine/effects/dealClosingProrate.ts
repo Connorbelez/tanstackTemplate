@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { internal } from "../../_generated/api";
 import { internalAction } from "../../_generated/server";
 import { unixMsToBusinessDate } from "../../lib/businessDates";
+import { mortgageNominalAnnualRateToDecimal } from "../../mortgages/nominalAnnualRate";
 import { effectPayloadValidator } from "../validators";
 
 const dealEffectPayloadValidator = {
@@ -24,7 +25,8 @@ function daysBetween(startDate: string, endDate: string): number {
  *
  * Formula:
  *   fractionalRate = deal.fractionalShare / 10000
- *   dailyRate = (mortgage.interestRate × fractionalRate × mortgage.principal) / 365
+ *   annualRate = mortgageNominalAnnualRateToDecimal(mortgage.interestRate)
+ *   dailyRate = (annualRate × fractionalRate × mortgage.principal) / 365
  *   sellerDays = daysBetween(lastPaymentDate, closingDate)
  *   buyerDays = daysBetween(closingDate, nextPaymentDate)
  *
@@ -108,8 +110,11 @@ export const prorateAccrualBetweenOwners = internalAction({
 		// Calculate daily rate
 		// TODO(Phase 2): use computed currentBalance once amortization engine is live
 		const fractionalRate = deal.fractionalShare / 10_000;
+		const annualRateDecimal = mortgageNominalAnnualRateToDecimal(
+			mortgage.interestRate
+		);
 		const dailyRate =
-			(mortgage.interestRate * fractionalRate * mortgage.principal) / 365;
+			(annualRateDecimal * fractionalRate * mortgage.principal) / 365;
 
 		const sellerDays = daysBetween(lastPaymentDate, closingDateStr);
 		const buyerDays = daysBetween(closingDateStr, nextPaymentDate);

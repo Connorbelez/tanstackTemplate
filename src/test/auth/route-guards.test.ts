@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { hasAnyPermission, hasPermission } from "#/lib/auth";
+import {
+	canAccessAdminPath,
+	canAccessRoute,
+	hasAnyPermission,
+	hasPermission,
+} from "#/lib/auth";
 
 describe("route auth permission helpers", () => {
 	it("treats admin:access as a wildcard permission", () => {
@@ -36,6 +41,46 @@ describe("route auth permission helpers", () => {
 				"underwriter:access",
 				"document:review",
 			])
+		).toBe(false);
+	});
+
+	it("evaluates registered product routes through the shared registry", () => {
+		expect(
+			canAccessRoute("broker", {
+				orgId: "org_broker",
+				permissions: ["broker:access"],
+				role: "broker",
+				roles: ["broker"],
+			})
+		).toBe(true);
+
+		expect(
+			canAccessRoute("adminDocumentEngine", {
+				orgId: "org_broker",
+				permissions: ["document:review"],
+				role: "broker",
+				roles: ["broker"],
+			})
+		).toBe(false);
+	});
+
+	it("keeps admin subtree access declarative by path registry", () => {
+		expect(
+			canAccessAdminPath("/admin/originations/case_123", {
+				orgId: "org_ops",
+				permissions: ["mortgage:originate"],
+				role: "member",
+				roles: ["member"],
+			})
+		).toBe(true);
+
+		expect(
+			canAccessAdminPath("/admin/rotessa-reconciliation", {
+				orgId: "org_ops",
+				permissions: ["mortgage:originate"],
+				role: "member",
+				roles: ["member"],
+			})
 		).toBe(false);
 	});
 });

@@ -1,6 +1,7 @@
 import { ConvexError, v } from "convex/values";
 import type { Doc, Id } from "../../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../../_generated/server";
+import { assertOriginationCaseAccess } from "../../authz/origination";
 import {
 	isStaticMortgageDocumentClass,
 	isTemplatedMortgageDocumentClass,
@@ -13,7 +14,6 @@ import {
 	loadPinnedTemplateSnapshot,
 } from "../../documents/templateValidation";
 import { authedMutation, authedQuery, requirePermission } from "../../fluent";
-import { assertOriginationCaseAccess } from "./access";
 
 const originationQuery = authedQuery.use(
 	requirePermission("mortgage:originate")

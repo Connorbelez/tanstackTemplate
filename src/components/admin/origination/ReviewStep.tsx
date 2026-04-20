@@ -1,12 +1,6 @@
 import { AlertTriangle, FileClock, LoaderCircle } from "lucide-react";
 import { Button } from "#/components/ui/button";
-import {
-	Card,
-	CardContent,
-	CardDescription,
-	CardHeader,
-	CardTitle,
-} from "#/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "#/components/ui/card";
 import type {
 	OriginationCaseDraftValues,
 	OriginationValidationSnapshot,
@@ -29,6 +23,10 @@ interface ReviewStepProps {
 	snapshot?: OriginationValidationSnapshot;
 	values: OriginationCaseDraftValues;
 }
+
+type ReviewHeroImages = NonNullable<
+	OriginationCaseDraftValues["listingOverrides"]
+>["heroImages"];
 
 function resolveCommitButtonLabel(args: {
 	isCommitted: boolean;
@@ -253,6 +251,88 @@ function joinValues(values: Array<string | undefined>) {
 	return presentValues.length > 0 ? presentValues.join(", ") : "Not staged";
 }
 
+function describeHeroImages(heroImages: ReviewHeroImages | undefined) {
+	if (!(heroImages && heroImages.length > 0)) {
+		return "Not staged";
+	}
+
+	return heroImages
+		.map((image, index) =>
+			typeof image === "string"
+				? `Image ${index + 1}`
+				: image.caption?.trim() || `Image ${index + 1}`
+		)
+		.join(", ");
+}
+
+function resolveCollectionsExecutionIntent(
+	values: OriginationCaseDraftValues["collectionsDraft"]
+) {
+	if (values?.executionIntent) {
+		return values.executionIntent;
+	}
+
+	switch (values?.mode) {
+		case "app_owned_only":
+			return "app_owned";
+		case "provider_managed_now":
+			return "provider_managed_now";
+		default:
+			return undefined;
+	}
+}
+
+function formatCollectionsExecutionIntent(
+	values: OriginationCaseDraftValues["collectionsDraft"]
+) {
+	const executionIntent = resolveCollectionsExecutionIntent(values);
+	switch (executionIntent) {
+		case "app_owned":
+			return "App managed via manual";
+		case "provider_managed_now":
+			return "Provider managed via Rotessa payment schedule";
+		default:
+			return "Not staged";
+	}
+}
+
+function formatCollectionsFlowSummary(
+	values: OriginationCaseDraftValues["collectionsDraft"]
+) {
+	let borrowerSource: string | undefined;
+	if (values?.borrowerSource === "existing") {
+		borrowerSource = "Existing borrower";
+	} else if (values?.borrowerSource === "create") {
+		borrowerSource = "New borrower";
+	}
+
+	let scheduleSource: string | undefined;
+	if (values?.scheduleSource === "existing") {
+		scheduleSource = "Existing Rotessa schedule";
+	} else if (values?.scheduleSource === "create") {
+		scheduleSource = "New Rotessa schedule";
+	}
+
+	return joinValues([borrowerSource, scheduleSource]);
+}
+
+function formatPadAuthorizationSummary(
+	values: OriginationCaseDraftValues["collectionsDraft"]
+) {
+	let padAuthorizationSource: string | undefined;
+	if (values?.padAuthorizationSource === "uploaded") {
+		padAuthorizationSource = "Signed PAD uploaded";
+	} else if (values?.padAuthorizationSource === "admin_override") {
+		padAuthorizationSource = "Admin override";
+	}
+
+	return joinValues([
+		padAuthorizationSource,
+		values?.padAuthorizationAssetId,
+		values?.padAuthorizationOverrideReason,
+	]);
+}
+
 export function ReviewStep({
 	canCommit,
 	commitState,
@@ -283,11 +363,7 @@ export function ReviewStep({
 	});
 
 	return (
-		<OriginationStepCard
-			description="Review the exact staged payload currently persisted on the case before activating canonical borrower, property, valuation, mortgage, payment bootstrap, listing, ledger, and audit rows."
-			errors={stepErrors}
-			title="Review + commit"
-		>
+		<OriginationStepCard errors={stepErrors} title="Review + commit">
 			<ReviewWarningsBanner reviewWarnings={reviewWarnings} />
 
 			<div className="grid gap-4 lg:grid-cols-2">
@@ -334,11 +410,20 @@ export function ReviewStep({
 							}
 						/>
 						<ReviewField
-							label="Broker refs"
-							value={joinValues([
-								values.participantsDraft?.brokerOfRecordId,
-								values.participantsDraft?.assignedBrokerId,
-							])}
+							label="Broker of record"
+							value={
+								values.participantsDraft?.brokerOfRecordLabel ??
+								values.participantsDraft?.brokerOfRecordId ??
+								"Not staged"
+							}
+						/>
+						<ReviewField
+							label="Assigned broker"
+							value={
+								values.participantsDraft?.assignedBrokerLabel ??
+								values.participantsDraft?.assignedBrokerId ??
+								"Not staged"
+							}
 						/>
 					</CardContent>
 				</Card>
@@ -423,18 +508,33 @@ export function ReviewStep({
 					</CardHeader>
 					<CardContent className="grid gap-4">
 						<ReviewField
-							label="Mode"
-							value={values.collectionsDraft?.mode ?? "Not staged"}
+							label="Execution intent"
+							value={formatCollectionsExecutionIntent(values.collectionsDraft)}
+						/>
+						<ReviewField
+							label="Execution strategy"
+							value={values.collectionsDraft?.executionStrategy ?? "Not staged"}
 						/>
 						<ReviewField
 							label="Provider"
 							value={values.collectionsDraft?.providerCode ?? "Not staged"}
 						/>
 						<ReviewField
-							label="Bank account ref"
-							value={
-								values.collectionsDraft?.selectedBankAccountId ?? "Not staged"
-							}
+							label="Borrower / schedule"
+							value={formatCollectionsFlowSummary(values.collectionsDraft)}
+						/>
+						<ReviewField
+							label="PAD authorization"
+							value={formatPadAuthorizationSummary(values.collectionsDraft)}
+						/>
+						<ReviewField
+							label="Selected rail details"
+							value={joinValues([
+								values.collectionsDraft?.selectedBorrowerId,
+								values.collectionsDraft?.selectedProviderScheduleId,
+								values.collectionsDraft?.selectedExistingExternalScheduleId,
+								values.collectionsDraft?.selectedBankAccountId,
+							])}
 						/>
 					</CardContent>
 				</Card>
@@ -442,12 +542,6 @@ export function ReviewStep({
 				<Card className="border-border/70">
 					<CardHeader>
 						<CardTitle className="text-base">Documents</CardTitle>
-						<CardDescription>
-							Document blueprints are staged in the Documents step and commit
-							into mortgage-owned blueprint rows. Public static docs project to
-							the listing; all other classes remain mortgage-owned for later
-							deal-package phases.
-						</CardDescription>
 					</CardHeader>
 					<CardContent className="space-y-3 text-sm leading-6">
 						{ORIGINATION_DOCUMENT_SECTIONS.map((section) => (
@@ -456,7 +550,6 @@ export function ReviewStep({
 								key={section.documentClass}
 							>
 								<p className="font-medium">{section.label}</p>
-								<p className="text-muted-foreground">{section.description}</p>
 							</div>
 						))}
 					</CardContent>
@@ -477,11 +570,7 @@ export function ReviewStep({
 						/>
 						<ReviewField
 							label="Hero images"
-							value={
-								values.listingOverrides?.heroImages?.length
-									? values.listingOverrides.heroImages.join(", ")
-									: "Not staged"
-							}
+							value={describeHeroImages(values.listingOverrides?.heroImages)}
 						/>
 						<ReviewField
 							label="Merchandising"

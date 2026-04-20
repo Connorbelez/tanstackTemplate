@@ -103,6 +103,20 @@ describe("authMiddleware (whoAmI)", () => {
 		expect(result.isFairLendAdmin).toBe(true);
 	});
 
+	it("sets isFairLendAdmin true for a FairLend staff admin:access holder without an admin role", async () => {
+		const identity = createMockViewer({
+			orgId: FAIRLEND_STAFF_ORG_ID,
+			permissions: ["admin:access"],
+			roles: ["member"],
+		});
+		const t = createTestConvex();
+		await seedFromIdentity(t, identity);
+
+		const result = await t.withIdentity(identity).query(api.fluent.whoAmI);
+
+		expect(result.isFairLendAdmin).toBe(true);
+	});
+
 	it("sets isFairLendAdmin false for external admin", async () => {
 		const t = createTestConvex();
 		await seedFromIdentity(t, EXTERNAL_ORG_ADMIN);

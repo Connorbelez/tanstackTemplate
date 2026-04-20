@@ -22,7 +22,7 @@ const CURATED_LISTING_OVERRIDE_KEYS = [
 
 type ListingProjectionOverrides = Partial<{
 	[K in (typeof CURATED_LISTING_OVERRIDE_KEYS)[number]]: K extends "heroImages"
-		? string[]
+		? OriginationListingOverridesDraftValue["heroImages"]
 		: ListingDoc[K];
 }>;
 
@@ -54,7 +54,7 @@ function hasOwn<T extends object, K extends PropertyKey>(
 }
 
 function normalizeHeroImages(
-	heroImages: string[] | undefined
+	heroImages: OriginationListingOverridesDraftValue["heroImages"] | undefined
 ): ListingDoc["heroImages"] | undefined {
 	if (heroImages === undefined) {
 		return undefined;
@@ -62,12 +62,17 @@ function normalizeHeroImages(
 
 	const normalized: ListingHeroImage[] = [];
 	for (const value of heroImages) {
-		const trimmed = value.trim();
+		const trimmed =
+			typeof value === "string" ? value.trim() : value.storageId.trim();
 		if (!trimmed) {
 			continue;
 		}
 
-		normalized.push({ storageId: trimmed as Id<"_storage"> });
+		normalized.push({
+			caption:
+				typeof value === "string" ? undefined : trimToUndefined(value.caption),
+			storageId: trimmed as Id<"_storage">,
+		});
 	}
 
 	return normalized;

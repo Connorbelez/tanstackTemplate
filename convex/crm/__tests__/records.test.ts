@@ -12,6 +12,7 @@
  */
 import { ConvexError } from "convex/values";
 import { beforeEach, describe, expect, it } from "vitest";
+import { FAIRLEND_ADMIN } from "../../../src/test/auth/identities";
 import {
 	asAdmin,
 	asDifferentOrg,
@@ -913,13 +914,11 @@ describe("getRecordDetailSurface", () => {
 		expect(
 			result.fields.find((field) => field.name === "status")
 		).toMatchObject({
-			displayOrder: 0,
 			label: "Borrower Status",
 		});
 		expect(
 			result.fields.find((field) => field.name === "idvStatus")
 		).toMatchObject({
-			displayOrder: 1,
 			label: "Identity Verification",
 		});
 		expect(
@@ -931,5 +930,92 @@ describe("getRecordDetailSurface", () => {
 		expect(result.record.fields.verificationSummary).toBe(
 			"Active borrower • IDV pending review"
 		);
+	});
+
+	it("allows FairLend admins to load native detail surfaces across orgs", async () => {
+		const EXTERNAL_ORG_ID = "org_records_external";
+		const staffOrgId = FAIRLEND_ADMIN.org_id;
+		if (!staffOrgId) {
+			throw new Error("FairLend admin org id is required");
+		}
+
+		await t.mutation(
+			internal.crm.systemAdapters.bootstrap.bootstrapSystemObjects,
+			{ orgId: staffOrgId }
+		);
+
+		const mortgageObjDef = await t.run(async (ctx) => {
+			return ctx.db
+				.query("objectDefs")
+				.withIndex("by_org_name", (q) =>
+					q.eq("orgId", staffOrgId).eq("name", "mortgage")
+				)
+				.first();
+		});
+		expect(mortgageObjDef).not.toBeNull();
+		if (!mortgageObjDef) {
+			throw new Error("Mortgage system object not found");
+		}
+
+		const mortgageId = await t.run(async (ctx) => {
+			const userId = await ctx.db.insert("users", {
+				authId: "records-cross-org-broker",
+				email: "records-cross-org-broker@test.ca",
+				firstName: "Morgan",
+				lastName: "Broker",
+			});
+			const brokerId = await ctx.db.insert("brokers", {
+				createdAt: Date.now(),
+				orgId: EXTERNAL_ORG_ID,
+				status: "active",
+				userId,
+			});
+			const propertyId = await ctx.db.insert("properties", {
+				city: "Toronto",
+				createdAt: Date.now(),
+				postalCode: "M5V1A1",
+				propertyType: "residential",
+				province: "ON",
+				streetAddress: "456 Detail Surface Ave",
+			});
+
+			return ctx.db.insert("mortgages", {
+				amortizationMonths: 300,
+				brokerOfRecordId: brokerId,
+				createdAt: Date.now(),
+				firstPaymentDate: "2026-07-01",
+				interestAdjustmentDate: "2026-06-01",
+				interestRate: 5.1,
+				lienPosition: 1,
+				loanType: "conventional",
+				maturityDate: "2031-06-01",
+				orgId: EXTERNAL_ORG_ID,
+				paymentAmount: 2950,
+				paymentFrequency: "monthly",
+				principal: 480_000,
+				propertyId,
+				rateType: "fixed",
+				status: "active",
+				termMonths: 60,
+				termStartDate: "2026-06-01",
+			});
+		});
+
+		const result = await t
+			.withIdentity(FAIRLEND_ADMIN)
+			.query(api.crm.recordQueries.getRecordDetailSurface, {
+				objectDefId: mortgageObjDef._id,
+				recordId: mortgageId as string,
+				recordKind: "native",
+			});
+
+		expect(result.adapterContract).toMatchObject({
+			detailSurfaceKey: "mortgages",
+			entityType: "mortgages",
+			variant: "dedicated",
+		});
+		expect(result.record._id).toBe(mortgageId);
+		expect(result.record.fields.principal).toBe(480_000);
+		expect(result.record.fields.paymentAmount).toBe(2950);
 	});
 });

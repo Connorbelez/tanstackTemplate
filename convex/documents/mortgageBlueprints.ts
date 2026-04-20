@@ -1,6 +1,7 @@
 import { ConvexError, v } from "convex/values";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
+import { assertOrgScopedRecordAccess } from "../authz/orgScope";
 import { adminMutation, adminQuery, requirePermission } from "../fluent";
 import { syncListingPublicDocumentsProjection } from "../listings/projection";
 import { mortgageDocumentBlueprintClassValidator } from "./contracts";
@@ -134,12 +135,12 @@ async function requireAccessibleMortgage(
 	mortgageId: Id<"mortgages">
 ) {
 	const mortgage = await ctx.db.get(mortgageId);
-	if (!mortgage) {
-		throw new ConvexError("Mortgage not found");
-	}
-	if (!ctx.viewer.isFairLendAdmin && mortgage.orgId !== ctx.viewer.orgId) {
-		throw new ConvexError("Mortgage not found or access denied");
-	}
+	assertOrgScopedRecordAccess({
+		entityName: "Mortgage",
+		notFoundMessage: "Mortgage not found or access denied",
+		record: mortgage,
+		viewer: ctx.viewer,
+	});
 
 	return mortgage;
 }
@@ -370,9 +371,12 @@ export const listForMortgage = blueprintQuery
 		if (!mortgage) {
 			return [];
 		}
-		if (!ctx.viewer.isFairLendAdmin && mortgage.orgId !== ctx.viewer.orgId) {
-			throw new ConvexError("Mortgage not found or access denied");
-		}
+		assertOrgScopedRecordAccess({
+			entityName: "Mortgage",
+			notFoundMessage: "Mortgage not found or access denied",
+			record: mortgage,
+			viewer: ctx.viewer,
+		});
 
 		const rows = await listMortgageBlueprintRows(ctx, args);
 		return Promise.all(
@@ -395,9 +399,12 @@ export const archiveBlueprint = blueprintMutation
 		if (!mortgage) {
 			throw new ConvexError("Mortgage not found");
 		}
-		if (!ctx.viewer.isFairLendAdmin && mortgage.orgId !== ctx.viewer.orgId) {
-			throw new ConvexError("Mortgage not found or access denied");
-		}
+		assertOrgScopedRecordAccess({
+			entityName: "Mortgage",
+			notFoundMessage: "Mortgage not found or access denied",
+			record: mortgage,
+			viewer: ctx.viewer,
+		});
 
 		const viewerUser = await ctx.db
 			.query("users")

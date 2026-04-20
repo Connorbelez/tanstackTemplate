@@ -39,7 +39,9 @@ export const originationParticipantsDraftValidator = v.object({
 	coBorrowers: v.optional(v.array(originationParticipantDraftValidator)),
 	guarantors: v.optional(v.array(originationParticipantDraftValidator)),
 	brokerOfRecordId: v.optional(v.id("brokers")),
+	brokerOfRecordLabel: v.optional(v.string()),
 	assignedBrokerId: v.optional(v.id("brokers")),
+	assignedBrokerLabel: v.optional(v.string()),
 });
 
 export const originationPropertyTypeValidator = v.union(
@@ -58,6 +60,7 @@ export const originationPropertyCreateDraftValidator = v.object({
 	propertyType: v.optional(originationPropertyTypeValidator),
 	approximateLatitude: v.optional(v.number()),
 	approximateLongitude: v.optional(v.number()),
+	googlePlaceData: v.optional(v.any()),
 });
 
 export const originationPropertyDraftValidator = v.object({
@@ -113,16 +116,40 @@ export const originationMortgageDraftValidator = v.object({
 });
 
 export const originationCollectionsDraftValidator = v.object({
+	executionIntent: v.optional(
+		v.union(v.literal("app_owned"), v.literal("provider_managed_now"))
+	),
+	executionStrategy: v.optional(v.literal("manual")),
+	borrowerSource: v.optional(
+		v.union(v.literal("existing"), v.literal("create"))
+	),
+	scheduleSource: v.optional(
+		v.union(v.literal("existing"), v.literal("create"))
+	),
+	selectedBorrowerId: v.optional(v.id("borrowers")),
+	selectedProviderScheduleId: v.optional(v.id("externalProviderSchedules")),
+	selectedExistingExternalScheduleId: v.optional(
+		v.id("externalCollectionSchedules")
+	),
+	padAuthorizationSource: v.optional(
+		v.union(v.literal("uploaded"), v.literal("admin_override"))
+	),
+	padAuthorizationAssetId: v.optional(v.id("documentAssets")),
+	padAuthorizationOverrideReason: v.optional(v.string()),
 	mode: v.optional(
-		v.union(
-			v.literal("none"),
-			v.literal("app_owned_only"),
-			v.literal("provider_managed_now")
-		)
+		v.union(v.literal("app_owned_only"), v.literal("provider_managed_now"))
 	),
 	providerCode: v.optional(v.literal("pad_rotessa")),
 	selectedBankAccountId: v.optional(v.id("bankAccounts")),
 	activationStatus: v.optional(
+		v.union(
+			v.literal("pending"),
+			v.literal("activating"),
+			v.literal("active"),
+			v.literal("failed")
+		)
+	),
+	providerManagedActivationStatus: v.optional(
 		v.union(
 			v.literal("pending"),
 			v.literal("activating"),
@@ -136,11 +163,18 @@ export const originationCollectionsDraftValidator = v.object({
 	externalCollectionScheduleId: v.optional(v.id("externalCollectionSchedules")),
 });
 
+export const originationHeroImageDraftValidator = v.object({
+	storageId: v.id("_storage"),
+	caption: v.optional(v.string()),
+});
+
 export const originationListingOverridesValidator = v.object({
 	title: v.optional(v.string()),
 	description: v.optional(v.string()),
 	marketplaceCopy: v.optional(v.string()),
-	heroImages: v.optional(v.array(v.string())),
+	heroImages: v.optional(
+		v.array(v.union(originationHeroImageDraftValidator, v.string()))
+	),
 	featured: v.optional(v.boolean()),
 	displayOrder: v.optional(v.number()),
 	seoSlug: v.optional(v.string()),
@@ -187,6 +221,9 @@ export type OriginationMortgageDraftValue = Infer<
 export type OriginationCollectionsDraftValue = Infer<
 	typeof originationCollectionsDraftValidator
 >;
+export type OriginationHeroImageDraftValue = Infer<
+	typeof originationHeroImageDraftValidator
+>;
 export type OriginationListingOverridesDraftValue = Infer<
 	typeof originationListingOverridesValidator
 >;
@@ -221,6 +258,42 @@ export const ORIGINATION_COMMIT_REVIEW_WARNING =
 	"Resolve the required participant, property, and mortgage fields before committing this origination case.";
 export const ORIGINATION_PROVIDER_MANAGED_COLLECTIONS_WARNING =
 	"Provider-managed now will attempt immediate Rotessa activation after canonical commit. The mortgage still commits even if activation fails, and the payment setup screen will surface status and retry.";
+
+function resolveCollectionsExecutionIntent(
+	value: OriginationCollectionsDraftValue | undefined
+): "app_owned" | "provider_managed_now" | undefined {
+	if (value?.executionIntent) {
+		return value.executionIntent;
+	}
+
+	switch (value?.mode) {
+		case "app_owned_only":
+			return "app_owned";
+		case "provider_managed_now":
+			return "provider_managed_now";
+		default:
+			return undefined;
+	}
+}
+
+function resolveCollectionsModeAlias(
+	value:
+		| Pick<OriginationCollectionsDraftValue, "executionIntent" | "mode">
+		| undefined
+) {
+	if (value?.mode) {
+		return value.mode;
+	}
+
+	switch (value?.executionIntent) {
+		case "app_owned":
+			return "app_owned_only" as const;
+		case "provider_managed_now":
+			return "provider_managed_now" as const;
+		default:
+			return undefined;
+	}
+}
 
 function trimToUndefined(value: string | undefined) {
 	if (typeof value !== "string") {
@@ -387,7 +460,10 @@ export function computeOriginationValidationSnapshot(
 	if (hasCommitBlockingErrors) {
 		reviewWarnings.push(ORIGINATION_COMMIT_REVIEW_WARNING);
 	}
-	if (normalized.collectionsDraft?.mode === "provider_managed_now") {
+	if (
+		resolveCollectionsExecutionIntent(normalized.collectionsDraft) ===
+		"provider_managed_now"
+	) {
 		reviewWarnings.push(ORIGINATION_PROVIDER_MANAGED_COLLECTIONS_WARNING);
 	}
 
@@ -562,28 +638,68 @@ function buildMortgageValidationErrors(values: OriginationCaseDraftState) {
 }
 
 function buildCollectionsValidationErrors(values: OriginationCaseDraftState) {
-	if (values.collectionsDraft?.mode !== "provider_managed_now") {
+	const executionIntent = resolveCollectionsExecutionIntent(
+		values.collectionsDraft
+	);
+	if (!executionIntent) {
 		return [];
+	}
+
+	if (executionIntent === "app_owned") {
+		return collectMissingFieldErrors([
+			{
+				value: values.collectionsDraft?.executionStrategy,
+				message: "App-owned collections require an execution strategy.",
+			},
+		]);
+	}
+
+	const collectionsDraft = values.collectionsDraft;
+	let padAuthorizationSatisfied: unknown;
+	if (collectionsDraft?.padAuthorizationSource === "uploaded") {
+		padAuthorizationSatisfied = collectionsDraft.padAuthorizationAssetId;
+	} else if (collectionsDraft?.padAuthorizationSource === "admin_override") {
+		padAuthorizationSatisfied = collectionsDraft.padAuthorizationOverrideReason;
 	}
 
 	return collectMissingFieldErrors([
 		{
 			value:
-				values.collectionsDraft.providerCode ??
-				(values.collectionsDraft.mode === "provider_managed_now"
+				collectionsDraft?.providerCode ??
+				(executionIntent === "provider_managed_now"
 					? "pad_rotessa"
 					: undefined),
-			message: "Provider-managed activation requires a provider selection.",
+			message: "Immediate Rotessa activation requires a provider selection.",
 		},
 		{
-			value: values.participantsDraft?.primaryBorrower,
-			message:
-				"Provider-managed activation requires a staged primary borrower.",
+			value: collectionsDraft?.borrowerSource,
+			message: "Immediate Rotessa activation requires a borrower source.",
 		},
 		{
-			value: values.collectionsDraft.selectedBankAccountId,
+			value: collectionsDraft?.scheduleSource,
+			message: "Immediate Rotessa activation requires a schedule source.",
+		},
+		{
+			value:
+				collectionsDraft?.borrowerSource === "existing"
+					? collectionsDraft.selectedBorrowerId
+					: true,
+			message: "Immediate Rotessa activation requires selecting a borrower.",
+		},
+		{
+			value:
+				collectionsDraft?.scheduleSource === "existing" ||
+				collectionsDraft?.scheduleSource === "create"
+					? (collectionsDraft.selectedProviderScheduleId ??
+						collectionsDraft.selectedExistingExternalScheduleId)
+					: true,
 			message:
-				"Provider-managed activation requires selecting a primary borrower bank account.",
+				"Immediate Rotessa activation requires selecting or creating a Rotessa payment schedule.",
+		},
+		{
+			value: padAuthorizationSatisfied,
+			message:
+				"Immediate Rotessa activation requires PAD authorization evidence or an audited override.",
 		},
 	]);
 }
@@ -672,7 +788,9 @@ export function normalizeOriginationParticipantsDraft(
 			"coBorrowers",
 			"guarantors",
 			"brokerOfRecordId",
+			"brokerOfRecordLabel",
 			"assignedBrokerId",
+			"assignedBrokerLabel",
 		]),
 		primaryBorrower: normalizeOriginationParticipantDraft(
 			value.primaryBorrower
@@ -680,7 +798,9 @@ export function normalizeOriginationParticipantsDraft(
 		coBorrowers,
 		guarantors,
 		brokerOfRecordId: value.brokerOfRecordId,
+		brokerOfRecordLabel: trimToUndefined(value.brokerOfRecordLabel),
 		assignedBrokerId: value.assignedBrokerId,
+		assignedBrokerLabel: trimToUndefined(value.assignedBrokerLabel),
 	});
 }
 
@@ -701,6 +821,7 @@ export function normalizeOriginationPropertyCreateDraft(
 			"propertyType",
 			"approximateLatitude",
 			"approximateLongitude",
+			"googlePlaceData",
 		]),
 		streetAddress: trimToUndefined(value.streetAddress),
 		unit: trimToUndefined(value.unit),
@@ -710,6 +831,7 @@ export function normalizeOriginationPropertyCreateDraft(
 		propertyType: value.propertyType,
 		approximateLatitude: value.approximateLatitude,
 		approximateLongitude: value.approximateLongitude,
+		googlePlaceData: value.googlePlaceData,
 	});
 }
 
@@ -805,8 +927,31 @@ export function normalizeOriginationCollectionsDraft(
 		return undefined;
 	}
 
+	const executionIntent = resolveCollectionsExecutionIntent(value);
+	const mode = resolveCollectionsModeAlias({
+		executionIntent,
+		mode: value.mode,
+	});
+	const activationStatus =
+		executionIntent === "provider_managed_now"
+			? (value.providerManagedActivationStatus ??
+				value.activationStatus ??
+				"pending")
+			: undefined;
+
 	const normalized = pruneObject({
 		...pickUnknownFields(value as Record<string, unknown>, [
+			"executionIntent",
+			"executionStrategy",
+			"borrowerSource",
+			"scheduleSource",
+			"selectedBorrowerId",
+			"selectedProviderScheduleId",
+			"selectedExistingExternalScheduleId",
+			"padAuthorizationSource",
+			"padAuthorizationAssetId",
+			"padAuthorizationOverrideReason",
+			"providerManagedActivationStatus",
 			"mode",
 			"providerCode",
 			"selectedBankAccountId",
@@ -816,16 +961,49 @@ export function normalizeOriginationCollectionsDraft(
 			"lastAttemptAt",
 			"externalCollectionScheduleId",
 		]),
-		mode: value.mode,
-		providerCode:
-			value.mode === "provider_managed_now"
-				? (value.providerCode ?? "pad_rotessa")
-				: value.providerCode,
-		selectedBankAccountId: value.selectedBankAccountId,
-		activationStatus:
-			value.mode === "provider_managed_now"
-				? (value.activationStatus ?? "pending")
+		executionIntent,
+		executionStrategy:
+			executionIntent === "app_owned" ? value.executionStrategy : undefined,
+		borrowerSource:
+			executionIntent === "provider_managed_now"
+				? value.borrowerSource
 				: undefined,
+		scheduleSource:
+			executionIntent === "provider_managed_now"
+				? value.scheduleSource
+				: undefined,
+		selectedBorrowerId:
+			executionIntent === "provider_managed_now"
+				? value.selectedBorrowerId
+				: undefined,
+		selectedProviderScheduleId:
+			executionIntent === "provider_managed_now"
+				? value.selectedProviderScheduleId
+				: undefined,
+		selectedExistingExternalScheduleId:
+			executionIntent === "provider_managed_now"
+				? value.selectedExistingExternalScheduleId
+				: undefined,
+		padAuthorizationSource:
+			executionIntent === "provider_managed_now"
+				? value.padAuthorizationSource
+				: undefined,
+		padAuthorizationAssetId:
+			executionIntent === "provider_managed_now"
+				? value.padAuthorizationAssetId
+				: undefined,
+		padAuthorizationOverrideReason:
+			executionIntent === "provider_managed_now"
+				? trimToUndefined(value.padAuthorizationOverrideReason)
+				: undefined,
+		mode,
+		providerCode:
+			executionIntent === "provider_managed_now"
+				? (value.providerCode ?? "pad_rotessa")
+				: undefined,
+		selectedBankAccountId: value.selectedBankAccountId,
+		providerManagedActivationStatus: activationStatus,
+		activationStatus,
 		lastError: trimToUndefined(value.lastError),
 		retryCount: value.retryCount,
 		lastAttemptAt: value.lastAttemptAt,
@@ -836,10 +1014,20 @@ export function normalizeOriginationCollectionsDraft(
 		return undefined;
 	}
 
-	if (normalized.mode !== "provider_managed_now") {
+	if (executionIntent !== "provider_managed_now") {
 		return pruneObject({
 			...normalized,
+			borrowerSource: undefined,
+			scheduleSource: undefined,
+			selectedBorrowerId: undefined,
+			selectedBankAccountId: undefined,
+			selectedProviderScheduleId: undefined,
+			selectedExistingExternalScheduleId: undefined,
+			padAuthorizationSource: undefined,
+			padAuthorizationAssetId: undefined,
+			padAuthorizationOverrideReason: undefined,
 			activationStatus: undefined,
+			providerManagedActivationStatus: undefined,
 			lastError: undefined,
 			lastAttemptAt: undefined,
 			retryCount: undefined,
@@ -858,8 +1046,30 @@ export function normalizeOriginationListingOverridesDraft(
 	}
 
 	const heroImages = value.heroImages
-		?.map((image) => trimToUndefined(image))
-		.filter((image): image is string => Boolean(image));
+		?.map((image) => {
+			if (typeof image === "string") {
+				const storageId = trimToUndefined(image);
+				return storageId ? { storageId } : null;
+			}
+
+			const storageId = trimToUndefined(image.storageId);
+			if (!storageId) {
+				return null;
+			}
+
+			return {
+				storageId,
+				caption: trimToUndefined(image.caption),
+			};
+		})
+		.filter(
+			(
+				image
+			): image is {
+				caption?: string;
+				storageId: OriginationHeroImageDraftValue["storageId"];
+			} => Boolean(image)
+		);
 
 	return pruneObject({
 		...pickUnknownFields(value as Record<string, unknown>, [

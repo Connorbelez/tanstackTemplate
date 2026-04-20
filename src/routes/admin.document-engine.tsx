@@ -1,9 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { DocumentEngineLayout } from "#/components/document-engine/DocumentEngineLayout";
-import { guardFairLendAdminWithPermission } from "#/lib/auth";
+import { guardRouteAccess } from "#/lib/auth";
 
 export const Route = createFileRoute("/admin/document-engine")({
-	beforeLoad: guardFairLendAdminWithPermission("document:review"),
+	beforeLoad: guardRouteAccess("adminDocumentEngine"),
 	component: AdminDocumentEngineLayout,
 	ssr: false,
 });

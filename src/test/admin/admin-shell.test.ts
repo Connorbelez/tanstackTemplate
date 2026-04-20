@@ -30,6 +30,12 @@ import { EMPTY_ADMIN_DETAIL_SEARCH } from "#/lib/admin-detail-search";
 import { canAccessAdminPath } from "#/lib/auth";
 import { isAdminPathname } from "#/lib/admin-routes";
 
+vi.mock("convex/react", () => ({
+	useAction: vi.fn(),
+	useMutation: vi.fn(),
+	useQuery: vi.fn(() => undefined),
+}));
+
 function buildFieldDef(args: {
 	displayOrder: number;
 	fieldType?: NormalizedFieldDefinition["fieldType"];
@@ -184,6 +190,15 @@ const ROLE_ONLY_ADMIN_CONTEXT = {
 	userId: "user_fairlend_admin_role_only",
 };
 
+const FAIRLEND_ADMIN_ACCESS_ONLY_CONTEXT = {
+	orgId: FAIRLEND_STAFF_ORG_ID,
+	permissions: ["admin:access"],
+	role: "member",
+	roles: ["member"],
+	token: null,
+	userId: "user_fairlend_admin_access_only",
+};
+
 describe("admin shell helpers", () => {
 	it("matches dashboard routes exactly instead of every admin page", () => {
 		expect(isAdminRouteActive("/admin", "/admin")).toBe(true);
@@ -293,6 +308,12 @@ describe("admin shell helpers", () => {
 		expect(canAccessAdminPath("/admin/mortgages", ROLE_ONLY_ADMIN_CONTEXT)).toBe(
 			true
 		);
+		expect(
+			canAccessAdminPath(
+				"/admin/mortgages",
+				FAIRLEND_ADMIN_ACCESS_ONLY_CONTEXT
+			)
+		).toBe(true);
 		expect(canAccessAdminPath("/admin/mortgages", EXTERNAL_ADMIN_CONTEXT)).toBe(
 			false
 		);
@@ -449,6 +470,7 @@ describe("admin shell helpers", () => {
 				propertyType: "condo",
 				title: "Downtown First Mortgage",
 			},
+			nativeTable: "listings",
 			objectDefId: "object_listing" as Id<"objectDefs">,
 			updatedAt: 0,
 		};
@@ -500,6 +522,7 @@ describe("admin shell helpers", () => {
 				principal: 425_000,
 				propertySummary: "789 King St W, Toronto, ON",
 			},
+			nativeTable: "mortgages",
 			objectDefId: "object_mortgage" as Id<"objectDefs">,
 			updatedAt: 0,
 		};
@@ -526,7 +549,7 @@ describe("admin shell helpers", () => {
 				objectDef,
 				record,
 			})
-		).toBe("Alice Borrower + 1 more • Monthly • $2,460 • $425,000");
+		).toBe("Alice Borrower + 1 more • Monthly • $2,460 • $4,250");
 	});
 
 	it("resolves relation references from object metadata", () => {

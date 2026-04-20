@@ -228,7 +228,7 @@ async function stageCommitReadyCase(
 	args: {
 		brokerOfRecordId: Id<"brokers">;
 		collectionsDraft?: {
-			mode?: "app_owned_only" | "none" | "provider_managed_now";
+			mode?: "app_owned_only" | "provider_managed_now";
 			providerCode?: "pad_rotessa";
 			selectedBankAccountId?: Id<"bankAccounts">;
 		};

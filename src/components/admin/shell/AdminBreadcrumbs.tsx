@@ -25,6 +25,7 @@ const adminSegmentLabels: Record<string, string> = {
 	"payment-operations": "Payment Operations",
 	"financial-ledger": "Financial Ledger",
 	properties: "Properties",
+	settings: "Settings",
 	underwriting: "Underwriting",
 };
 

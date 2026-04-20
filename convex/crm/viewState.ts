@@ -18,6 +18,7 @@ import type {
 	RecordFilter,
 	SavedViewFilterDefinition,
 	SystemViewDefinition,
+	UnifiedRecord,
 	UserSavedViewDefinition,
 	ViewAggregateResult,
 } from "./types";
@@ -904,16 +905,9 @@ export async function resolveViewState(
 }
 
 export function projectRecordToVisibleColumns(
-	record: {
-		createdAt: number;
-		fields: Record<string, unknown>;
-		objectDefId: Id<"objectDefs">;
-		updatedAt: number;
-		_id: string;
-		_kind: "record" | "native";
-	},
+	record: UnifiedRecord,
 	columns: ViewColumnDefinition[]
-) {
+): UnifiedRecord {
 	const visibleFieldNames = new Set(
 		columns.filter((column) => column.isVisible).map((column) => column.name)
 	);
@@ -932,14 +926,7 @@ export function projectRecordToVisibleColumns(
 }
 
 export function buildEntityViewRows(
-	records: Array<{
-		createdAt: number;
-		fields: Record<string, unknown>;
-		objectDefId: Id<"objectDefs">;
-		updatedAt: number;
-		_id: string;
-		_kind: "record" | "native";
-	}>,
+	records: UnifiedRecord[],
 	columns: ViewColumnDefinition[],
 	displayValuesByRecordId?: ReadonlyMap<
 		string,

@@ -1,9 +1,9 @@
 import { ConvexError, v } from "convex/values";
 import type { Id } from "../_generated/dataModel";
 import { internalMutation, internalQuery } from "../_generated/server";
+import { assertDealAccess } from "../authz/resourceAccess";
 import { readDealDocumentPackageSurface } from "../documents/dealPackages";
 import { adminQuery, authedQuery, dealQuery } from "../fluent";
-import { assertDealAccess } from "./accessCheck";
 
 // ── Phase mapping ──────────────────────────────────────────────────────
 
@@ -135,7 +135,7 @@ export const getActiveLawyerAccess = internalQuery({
 export const activeDealAccessRecords = authedQuery
 	.input({ dealId: v.id("deals") })
 	.handler(async (ctx, { dealId }) => {
-		await assertDealAccess(ctx, ctx.viewer, dealId);
+		await assertDealAccess(ctx, dealId);
 
 		return await ctx.db
 			.query("dealAccess")
@@ -204,7 +204,7 @@ export const getPortalDealDetail = dealQuery
 		dealId: v.id("deals"),
 	})
 	.handler(async (ctx, args) => {
-		await assertDealAccess(ctx, ctx.viewer, args.dealId);
+		await assertDealAccess(ctx, args.dealId);
 
 		const deal = await ctx.db.get(args.dealId);
 		if (!deal) {

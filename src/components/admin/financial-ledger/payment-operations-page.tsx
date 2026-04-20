@@ -2,8 +2,8 @@ import { Link } from "@tanstack/react-router";
 import { Download, ExternalLink, Landmark, RefreshCw } from "lucide-react";
 import { type ReactNode, useMemo } from "react";
 import { Button } from "#/components/ui/button";
-import { useCanDo } from "#/hooks/use-can-do";
 import type { AdminDetailSearch } from "#/lib/admin-detail-search";
+import { useAuthorization } from "#/lib/auth";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import {
 	ExecutePlanEntryDialog,
@@ -631,9 +631,18 @@ export function PaymentOperationsPage({
 		[snapshot.transfers]
 	);
 
-	const canWaiveObligationBalance = useCanDo("obligation:waive");
-	const canWriteOffObligationBalance = useCanDo("cash_ledger:correct");
-	const canManagePaymentOperations = useCanDo("payment:manage");
+	const canWaiveObligationBalance = useAuthorization({
+		kind: "permission",
+		permission: "obligation:waive",
+	}).allowed;
+	const canWriteOffObligationBalance = useAuthorization({
+		kind: "permission",
+		permission: "cash_ledger:correct",
+	}).allowed;
+	const canManagePaymentOperations = useAuthorization({
+		kind: "permission",
+		permission: "payment:manage",
+	}).allowed;
 
 	const obligationColumns: TableColumn<PaymentOperationsObligationRow>[] = [
 		{

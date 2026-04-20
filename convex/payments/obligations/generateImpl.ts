@@ -2,6 +2,7 @@ import { ConvexError } from "convex/values";
 import type { Id } from "../../_generated/dataModel";
 import type { MutationCtx } from "../../_generated/server";
 import { orgIdFromMortgageId } from "../../lib/orgScope";
+import { mortgageNominalAnnualRateToDecimal } from "../../mortgages/nominalAnnualRate";
 import {
 	getPeriodsPerYear,
 	type PaymentFrequency,
@@ -12,7 +13,7 @@ import { postObligationAccrued } from "../cashLedger/integrations";
 // Constants
 // ---------------------------------------------------------------------------
 
-export const GRACE_PERIOD_DAYS = 15;
+export const GRACE_PERIOD_DAYS = 7;
 
 export const MS_PER_DAY = 86_400_000;
 
@@ -103,7 +104,10 @@ export async function generateObligationsImpl(
 	} catch {
 		throw new ConvexError(`Unknown payment frequency: ${paymentFrequency}`);
 	}
-	const periodAmount = Math.round((interestRate * principal) / periodsPerYear);
+	const annualRateDecimal = mortgageNominalAnnualRateToDecimal(interestRate);
+	const periodAmount = Math.round(
+		(annualRateDecimal * principal) / periodsPerYear
+	);
 
 	// Generate obligations from firstPaymentDate to maturityDate (inclusive)
 	const obligations: Id<"obligations">[] = [];

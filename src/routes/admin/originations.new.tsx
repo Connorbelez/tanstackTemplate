@@ -4,10 +4,10 @@ import {
 	AdminPageSkeleton,
 	AdminRouteErrorBoundary,
 } from "#/components/admin/shell/AdminRouteStates";
-import { guardOperationalAdminPermission } from "#/lib/auth";
+import { guardRouteAccess } from "#/lib/auth";
 
 export const Route = createFileRoute("/admin/originations/new")({
-	beforeLoad: guardOperationalAdminPermission("mortgage:originate"),
+	beforeLoad: guardRouteAccess("adminOriginations"),
 	component: NewOriginationBootstrap,
 	errorComponent: AdminRouteErrorBoundary,
 	pendingComponent: OriginationsPendingPage,

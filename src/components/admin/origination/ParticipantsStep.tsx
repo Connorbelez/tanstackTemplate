@@ -1,12 +1,10 @@
+import { useQuery } from "convex/react";
 import { Plus, Trash2 } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { BorrowerAutocompleteField } from "#/components/admin/origination/BorrowerAutocompleteField";
+import { BrokerAutocompleteField } from "#/components/admin/origination/BrokerAutocompleteField";
 import { Button } from "#/components/ui/button";
-import {
-	Card,
-	CardContent,
-	CardDescription,
-	CardHeader,
-	CardTitle,
-} from "#/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "#/components/ui/card";
 import { Input } from "#/components/ui/input";
 import { Label } from "#/components/ui/label";
 import type {
@@ -14,42 +12,113 @@ import type {
 	OriginationParticipantsDraft,
 } from "#/lib/admin-origination";
 import { createOriginationDraftId } from "#/lib/admin-origination";
+import { api } from "../../../../convex/_generated/api";
+import type { Id } from "../../../../convex/_generated/dataModel";
+import {
+	type BorrowerAutocompleteOption,
+	listBorrowerAutocompleteOptions,
+	resolveSelectedBorrowerOption,
+} from "./borrower-autocomplete-model";
+import {
+	type BrokerAutocompleteOption,
+	buildBrokerDisplayLabel,
+	buildFallbackBrokerOption,
+	listBrokerAutocompleteOptions,
+	resolveSelectedBrokerOption,
+} from "./broker-autocomplete-model";
+import { buildBorrowerDisplayLabel } from "./collections-step-model";
 import { OriginationStepCard } from "./OriginationStepCard";
+import {
+	buildParticipantBorrowerDraft,
+	clearParticipantBorrowerSelection,
+} from "./participants-step-model";
 
 interface ParticipantsStepProps {
+	caseId: string;
 	draft?: OriginationParticipantsDraft;
 	errors?: readonly string[];
 	onChange: (nextDraft: OriginationParticipantsDraft | undefined) => void;
 }
 
-function buildParticipantFieldId(idPrefix: string, fieldName: string) {
-	return `${idPrefix}-${fieldName}`;
+interface ParticipantsBorrowerSearchContext {
+	searchResults: BorrowerAutocompleteOption[];
+}
+
+interface ParticipantsBrokerSearchContext {
+	searchResults: BrokerAutocompleteOption[];
 }
 
 function ParticipantFields({
-	description,
+	borrowerOptions,
 	draft,
-	idPrefix,
+	isBorrowerSearchLoading,
 	onChange,
 	onRemove,
 	title,
 }: {
-	description: string;
+	borrowerOptions: BorrowerAutocompleteOption[];
 	draft?: OriginationParticipantDraft;
-	idPrefix: string;
+	isBorrowerSearchLoading: boolean;
 	onChange: (nextDraft: OriginationParticipantDraft | undefined) => void;
 	onRemove?: () => void;
 	title: string;
 }) {
 	const nextDraft = draft ?? {};
+	const fieldId = title.toLowerCase().replace(/\s+/g, "-");
+	const [borrowerSearch, setBorrowerSearch] = useState("");
+	const selectedBorrower = useMemo(
+		() =>
+			resolveSelectedBorrowerOption({
+				borrowerOptions,
+				fallbackBorrower: nextDraft.existingBorrowerId
+					? {
+							borrowerId: nextDraft.existingBorrowerId,
+							email: nextDraft.email ?? null,
+							fullName: nextDraft.fullName ?? null,
+						}
+					: null,
+				selectedBorrowerId: nextDraft.existingBorrowerId,
+			}),
+		[
+			borrowerOptions,
+			nextDraft.email,
+			nextDraft.existingBorrowerId,
+			nextDraft.fullName,
+		]
+	);
+	const selectedBorrowerLabel = selectedBorrower
+		? buildBorrowerDisplayLabel(selectedBorrower)
+		: "";
+	const filteredBorrowers = useMemo(
+		() =>
+			listBorrowerAutocompleteOptions({
+				borrowerOptions,
+				search: borrowerSearch,
+				selectedBorrower,
+			}),
+		[borrowerOptions, borrowerSearch, selectedBorrower]
+	);
+
+	useEffect(() => {
+		setBorrowerSearch(selectedBorrowerLabel);
+	}, [selectedBorrowerLabel]);
+
+	const hasExistingBorrowerSelection = Boolean(selectedBorrower);
+
+	const applyBorrowerSelection = (borrower: BorrowerAutocompleteOption) => {
+		setBorrowerSearch(buildBorrowerDisplayLabel(borrower));
+		onChange(buildParticipantBorrowerDraft(nextDraft, borrower));
+	};
+
+	const clearBorrowerSelection = (nextSearch = "") => {
+		setBorrowerSearch(nextSearch);
+		onChange(clearParticipantBorrowerSelection(nextDraft));
+	};
 
 	return (
 		<Card className="border-border/70">
 			<CardHeader className="flex flex-row items-start justify-between gap-4">
-				<div className="space-y-1">
-					<CardTitle className="text-base">{title}</CardTitle>
-					<CardDescription>{description}</CardDescription>
-				</div>
+				<CardTitle className="text-base">{title}</CardTitle>
 				{onRemove ? (
 					<Button onClick={onRemove} size="icon" type="button" variant="ghost">
 						<Trash2 className="size-4" />
@@ -58,30 +127,32 @@ function ParticipantFields({
 				) : null}
 			</CardHeader>
 			<CardContent className="grid gap-4 md:grid-cols-2">
-				<div className="space-y-2">
-					<Label
-						htmlFor={buildParticipantFieldId(idPrefix, "existingBorrowerId")}
-					>
-						Existing borrower ID
-					</Label>
-					<Input
-						id={buildParticipantFieldId(idPrefix, "existingBorrowerId")}
-						onChange={(event) =>
-							onChange({
-								...nextDraft,
-								existingBorrowerId: event.target.value || undefined,
-							})
-						}
-						placeholder="borrower_..."
-						value={nextDraft.existingBorrowerId ?? ""}
+				<div className="md:col-span-2">
+					<BorrowerAutocompleteField
+						helperText="Select a canonical borrower here, or leave this blank to stage a new borrower identity manually."
+						id={`${fieldId}-existing-borrower`}
+						isLoading={isBorrowerSearchLoading}
+						label="Existing borrower"
+						onClearSelection={() => clearBorrowerSelection()}
+						onSearchChange={(nextSearch) => {
+							setBorrowerSearch(nextSearch);
+							if (
+								hasExistingBorrowerSelection &&
+								nextSearch !== selectedBorrowerLabel
+							) {
+								clearBorrowerSelection(nextSearch);
+							}
+						}}
+						onSelectBorrower={applyBorrowerSelection}
+						options={filteredBorrowers}
+						search={borrowerSearch}
+						selectedBorrowerId={selectedBorrower?.borrowerId}
 					/>
 				</div>
 				<div className="space-y-2">
-					<Label htmlFor={buildParticipantFieldId(idPrefix, "fullName")}>
-						Full name
-					</Label>
+					<Label htmlFor={`${fieldId}-fullName`}>Full name</Label>
 					<Input
-						id={buildParticipantFieldId(idPrefix, "fullName")}
+						id={`${fieldId}-fullName`}
 						onChange={(event) =>
 							onChange({
 								...nextDraft,
@@ -89,15 +160,14 @@ function ParticipantFields({
 							})
 						}
 						placeholder="Ada Lovelace"
+						readOnly={hasExistingBorrowerSelection}
 						value={nextDraft.fullName ?? ""}
 					/>
 				</div>
 				<div className="space-y-2">
-					<Label htmlFor={buildParticipantFieldId(idPrefix, "email")}>
-						Email
-					</Label>
+					<Label htmlFor={`${fieldId}-email`}>Email</Label>
 					<Input
-						id={buildParticipantFieldId(idPrefix, "email")}
+						id={`${fieldId}-email`}
 						onChange={(event) =>
 							onChange({
 								...nextDraft,
@@ -105,16 +175,15 @@ function ParticipantFields({
 							})
 						}
 						placeholder="ada@example.com"
+						readOnly={hasExistingBorrowerSelection}
 						type="email"
 						value={nextDraft.email ?? ""}
 					/>
 				</div>
 				<div className="space-y-2">
-					<Label htmlFor={buildParticipantFieldId(idPrefix, "phone")}>
-						Phone
-					</Label>
+					<Label htmlFor={`${fieldId}-phone`}>Phone</Label>
 					<Input
-						id={buildParticipantFieldId(idPrefix, "phone")}
+						id={`${fieldId}-phone`}
 						onChange={(event) =>
 							onChange({
 								...nextDraft,
@@ -125,6 +194,12 @@ function ParticipantFields({
 						value={nextDraft.phone ?? ""}
 					/>
 				</div>
+				{hasExistingBorrowerSelection ? (
+					<p className="text-muted-foreground text-xs leading-5 md:col-span-2">
+						Name and email are auto-filled from the selected canonical borrower.
+						Clear the selection to stage a new borrower instead.
+					</p>
+				) : null}
 			</CardContent>
 		</Card>
 	);
@@ -149,24 +224,106 @@ function createParticipantDraft(prefix: string): OriginationParticipantDraft {
 }
 
 export function ParticipantsStep({
+	caseId,
 	draft,
 	errors,
 	onChange,
 }: ParticipantsStepProps) {
+	const typedCaseId = caseId as Id<"adminOriginationCases">;
+	const searchContext = useQuery(
+		api.admin.origination.collections.getCollectionsSetupContext,
+		{
+			caseId: typedCaseId,
+		}
+	) as ParticipantsBorrowerSearchContext | null | undefined;
+	const brokerSearchContext = useQuery(
+		api.admin.origination.participants.getBrokerSearchContext,
+		{
+			caseId: typedCaseId,
+		}
+	) as ParticipantsBrokerSearchContext | null | undefined;
 	const currentDraft = draft ?? {};
 	const coBorrowers = currentDraft.coBorrowers ?? [];
 	const guarantors = currentDraft.guarantors ?? [];
+	const borrowerOptions = searchContext?.searchResults ?? [];
+	const brokerOptions = brokerSearchContext?.searchResults ?? [];
+	const isBorrowerSearchLoading = searchContext === undefined;
+	const isBrokerSearchLoading = brokerSearchContext === undefined;
+	const [brokerOfRecordSearch, setBrokerOfRecordSearch] = useState("");
+	const [assignedBrokerSearch, setAssignedBrokerSearch] = useState("");
+	const selectedBrokerOfRecord = useMemo(
+		() =>
+			resolveSelectedBrokerOption({
+				brokerOptions,
+				fallbackBroker: buildFallbackBrokerOption({
+					brokerId: currentDraft.brokerOfRecordId,
+					label: currentDraft.brokerOfRecordLabel,
+				}),
+				selectedBrokerId: currentDraft.brokerOfRecordId,
+			}),
+		[
+			brokerOptions,
+			currentDraft.brokerOfRecordId,
+			currentDraft.brokerOfRecordLabel,
+		]
+	);
+	const selectedAssignedBroker = useMemo(
+		() =>
+			resolveSelectedBrokerOption({
+				brokerOptions,
+				fallbackBroker: buildFallbackBrokerOption({
+					brokerId: currentDraft.assignedBrokerId,
+					label: currentDraft.assignedBrokerLabel,
+				}),
+				selectedBrokerId: currentDraft.assignedBrokerId,
+			}),
+		[
+			brokerOptions,
+			currentDraft.assignedBrokerId,
+			currentDraft.assignedBrokerLabel,
+		]
+	);
+	const filteredBrokerOfRecordOptions = useMemo(
+		() =>
+			listBrokerAutocompleteOptions({
+				brokerOptions,
+				search: brokerOfRecordSearch,
+				selectedBroker: selectedBrokerOfRecord,
+			}),
+		[brokerOfRecordSearch, brokerOptions, selectedBrokerOfRecord]
+	);
+	const filteredAssignedBrokerOptions = useMemo(
+		() =>
+			listBrokerAutocompleteOptions({
+				brokerOptions,
+				search: assignedBrokerSearch,
+				selectedBroker: selectedAssignedBroker,
+			}),
+		[assignedBrokerSearch, brokerOptions, selectedAssignedBroker]
+	);
+
+	useEffect(() => {
+		setBrokerOfRecordSearch(
+			selectedBrokerOfRecord
+				? buildBrokerDisplayLabel(selectedBrokerOfRecord)
+				: (currentDraft.brokerOfRecordLabel ?? "")
+		);
+	}, [currentDraft.brokerOfRecordLabel, selectedBrokerOfRecord]);
+
+	useEffect(() => {
+		setAssignedBrokerSearch(
+			selectedAssignedBroker
+				? buildBrokerDisplayLabel(selectedAssignedBroker)
+				: (currentDraft.assignedBrokerLabel ?? "")
+		);
+	}, [currentDraft.assignedBrokerLabel, selectedAssignedBroker]);
 
 	return (
-		<OriginationStepCard
-			description="Stage borrower identity, supporting parties, and broker assignment without creating canonical borrower rows yet."
-			errors={errors}
-			title="Participants"
-		>
+		<OriginationStepCard errors={errors} title="Participants">
 			<ParticipantFields
-				description="This borrower label drives the case name until canonical identity sync exists."
+				borrowerOptions={borrowerOptions}
 				draft={currentDraft.primaryBorrower}
-				idPrefix="primary-borrower"
+				isBorrowerSearchLoading={isBorrowerSearchLoading}
 				onChange={(primaryBorrower) =>
 					onChange({
 						...currentDraft,
@@ -178,14 +335,7 @@ export function ParticipantsStep({
 
 			<section className="space-y-4">
 				<div className="flex items-center justify-between gap-3">
-					<div>
-						<h3 className="font-semibold text-base">Co-borrowers</h3>
-						<p className="text-muted-foreground text-sm">
-							Add secondary borrower drafts now; commit resolves whether they
-							reuse existing borrower profiles or provision new canonical
-							borrowers.
-						</p>
-					</div>
+					<h3 className="font-semibold text-base">Co-borrowers</h3>
 					<Button
 						onClick={() =>
 							onChange({
@@ -207,9 +357,9 @@ export function ParticipantsStep({
 					<div className="space-y-4">
 						{coBorrowers.map((coBorrower, index) => (
 							<ParticipantFields
-								description="Optional supporting borrower for the staged mortgage."
+								borrowerOptions={borrowerOptions}
 								draft={coBorrower}
-								idPrefix={coBorrower.draftId ?? `co-borrower-${index + 1}`}
+								isBorrowerSearchLoading={isBorrowerSearchLoading}
 								key={
 									coBorrower.draftId ??
 									coBorrower.existingBorrowerId ??
@@ -251,13 +401,7 @@ export function ParticipantsStep({
 
 			<section className="space-y-4">
 				<div className="flex items-center justify-between gap-3">
-					<div>
-						<h3 className="font-semibold text-base">Guarantors</h3>
-						<p className="text-muted-foreground text-sm">
-							Use this for third-party support without triggering any downstream
-							legal-package behavior yet.
-						</p>
-					</div>
+					<h3 className="font-semibold text-base">Guarantors</h3>
 					<Button
 						onClick={() =>
 							onChange({
@@ -279,9 +423,9 @@ export function ParticipantsStep({
 					<div className="space-y-4">
 						{guarantors.map((guarantor, index) => (
 							<ParticipantFields
-								description="Optional guarantor draft staged for later commitment logic."
+								borrowerOptions={borrowerOptions}
 								draft={guarantor}
-								idPrefix={guarantor.draftId ?? `guarantor-${index + 1}`}
+								isBorrowerSearchLoading={isBorrowerSearchLoading}
 								key={
 									guarantor.draftId ??
 									guarantor.existingBorrowerId ??
@@ -324,40 +468,56 @@ export function ParticipantsStep({
 			<Card className="border-border/70">
 				<CardHeader>
 					<CardTitle className="text-base">Broker assignment</CardTitle>
-					<CardDescription>
-						Keep broker references at the draft layer until the canonical
-						mortgage constructor exists.
-					</CardDescription>
 				</CardHeader>
 				<CardContent className="grid gap-4 md:grid-cols-2">
-					<div className="space-y-2">
-						<Label htmlFor="brokerOfRecordId">Broker of record ID</Label>
-						<Input
-							id="brokerOfRecordId"
-							onChange={(event) =>
-								onChange({
-									...currentDraft,
-									brokerOfRecordId: event.target.value || undefined,
-								})
-							}
-							placeholder="broker_..."
-							value={currentDraft.brokerOfRecordId ?? ""}
-						/>
-					</div>
-					<div className="space-y-2">
-						<Label htmlFor="assignedBrokerId">Assigned broker ID</Label>
-						<Input
-							id="assignedBrokerId"
-							onChange={(event) =>
-								onChange({
-									...currentDraft,
-									assignedBrokerId: event.target.value || undefined,
-								})
-							}
-							placeholder="broker_..."
-							value={currentDraft.assignedBrokerId ?? ""}
-						/>
-					</div>
+					<BrokerAutocompleteField
+						helperText="Broker of record is required. Search by broker name, email, or brokerage."
+						id="broker-of-record-search"
+						isLoading={isBrokerSearchLoading}
+						label="Broker of record"
+						onClearSelection={() =>
+							onChange({
+								...currentDraft,
+								brokerOfRecordId: undefined,
+								brokerOfRecordLabel: undefined,
+							})
+						}
+						onSearchChange={setBrokerOfRecordSearch}
+						onSelectBroker={(broker) =>
+							onChange({
+								...currentDraft,
+								brokerOfRecordId: broker.brokerId,
+								brokerOfRecordLabel: buildBrokerDisplayLabel(broker),
+							})
+						}
+						options={filteredBrokerOfRecordOptions}
+						search={brokerOfRecordSearch}
+						selectedBrokerId={selectedBrokerOfRecord?.brokerId ?? null}
+					/>
+					<BrokerAutocompleteField
+						helperText="Assigned broker is optional and can differ from the broker of record."
+						id="assigned-broker-search"
+						isLoading={isBrokerSearchLoading}
+						label="Assigned broker"
+						onClearSelection={() =>
+							onChange({
+								...currentDraft,
+								assignedBrokerId: undefined,
+								assignedBrokerLabel: undefined,
+							})
+						}
+						onSearchChange={setAssignedBrokerSearch}
+						onSelectBroker={(broker) =>
+							onChange({
+								...currentDraft,
+								assignedBrokerId: broker.brokerId,
+								assignedBrokerLabel: buildBrokerDisplayLabel(broker),
+							})
+						}
+						options={filteredAssignedBrokerOptions}
+						search={assignedBrokerSearch}
+						selectedBrokerId={selectedAssignedBroker?.brokerId ?? null}
+					/>
 				</CardContent>
 			</Card>
 		</OriginationStepCard>

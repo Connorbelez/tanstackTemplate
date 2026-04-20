@@ -21,6 +21,22 @@ describe("requireFairLendAdmin middleware", () => {
 		expect(result).toEqual({ ok: true });
 	});
 
+	it("allows a FairLend staff admin:access holder without an admin role", async () => {
+		const identity = createMockViewer({
+			orgId: FAIRLEND_STAFF_ORG_ID,
+			permissions: ["admin:access"],
+			roles: ["member"],
+		});
+		const t = createTestConvex();
+		await seedFromIdentity(t, identity);
+
+		const result = await t
+			.withIdentity(identity)
+			.query(api.test.authTestEndpoints.testAdminQuery);
+
+		expect(result).toEqual({ ok: true });
+	});
+
 	it("rejects external org admin", async () => {
 		const t = createTestConvex();
 		await seedFromIdentity(t, EXTERNAL_ORG_ADMIN);

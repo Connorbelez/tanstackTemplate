@@ -1,7 +1,7 @@
 import { createFileRoute, Outlet } from "@tanstack/react-router";
-import { guardPermission } from "#/lib/auth";
+import { guardRouteAccess } from "#/lib/auth";
 
 export const Route = createFileRoute("/broker")({
-	beforeLoad: guardPermission("broker:access"),
+	beforeLoad: guardRouteAccess("broker"),
 	component: () => <Outlet />,
 });

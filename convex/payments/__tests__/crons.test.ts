@@ -435,6 +435,33 @@ describe("processObligationTransitions", () => {
 		}
 	});
 
+	it("drains a 105-obligation BECAME_DUE backlog in one cron invocation (multi-wave)", async () => {
+		const t = createTestHarness();
+		const { mortgageId, borrowerId } = await seedMortgageWithBorrower(t);
+
+		await seedObligationBatch(t, {
+			mortgageId,
+			borrowerId,
+			status: "upcoming",
+			dueDate: Date.now() - MS_PER_DAY,
+			gracePeriodEnd: Date.now() + GRACE_PERIOD_DAYS * MS_PER_DAY,
+			count: 105,
+		});
+
+		await t.action(
+			internal.payments.obligations.crons.processObligationTransitions,
+			{}
+		);
+
+		const upcomingRemaining = await t.run(async (ctx) =>
+			ctx.db
+				.query("obligations")
+				.withIndex("by_status", (q) => q.eq("status", "upcoming"))
+				.collect()
+		);
+		expect(upcomingRemaining).toHaveLength(0);
+	});
+
 	it("does not increment overflow streaks twice when rerun on the same UTC business day", async () => {
 		vi.useFakeTimers();
 		vi.setSystemTime(new Date("2026-03-21T06:00:00.000Z"));
@@ -467,7 +494,8 @@ describe("processObligationTransitions", () => {
 			const monitoring = await getCronMonitoring(t);
 			expect(monitoring?.newlyDueOverflowStreak).toBe(1);
 			expect(monitoring?.lastRunBusinessDate).toBe("2026-03-21");
-			expect(monitoring?.lastNewlyDueCount).toBe(150);
+			// Multi-wave first run drains all 250; monitoring records the last wave's backlog snapshot.
+			expect(monitoring?.lastNewlyDueCount).toBe(50);
 		} finally {
 			warnSpy.mockRestore();
 			vi.useRealTimers();

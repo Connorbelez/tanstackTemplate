@@ -8,13 +8,7 @@ import {
 	AdminTableSkeleton,
 } from "#/components/admin/shell/AdminRouteStates";
 import { Button } from "#/components/ui/button";
-import {
-	Card,
-	CardContent,
-	CardDescription,
-	CardHeader,
-	CardTitle,
-} from "#/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "#/components/ui/card";
 import { Input } from "#/components/ui/input";
 import {
 	Table,
@@ -70,19 +64,9 @@ export function OriginationCasesIndexPage() {
 	return (
 		<div className="space-y-6">
 			<div className="flex flex-col gap-4 rounded-3xl border border-border/70 bg-card px-6 py-6 shadow-sm lg:flex-row lg:items-end lg:justify-between">
-				<div className="space-y-2">
-					<p className="font-semibold text-muted-foreground text-sm uppercase tracking-[0.18em]">
-						Admin origination
-					</p>
-					<h1 className="font-semibold text-3xl tracking-tight">
-						Origination cases
-					</h1>
-					<p className="max-w-3xl text-muted-foreground text-sm leading-6">
-						Draft mortgage-backed originations staged in backoffice before any
-						canonical borrower, property, mortgage, listing, payment, or
-						document rows exist.
-					</p>
-				</div>
+				<h1 className="font-semibold text-3xl tracking-tight">
+					Origination cases
+				</h1>
 				<Button asChild>
 					<Link search={EMPTY_ADMIN_DETAIL_SEARCH} to="/admin/originations/new">
 						<Plus className="mr-2 size-4" />
@@ -93,12 +77,7 @@ export function OriginationCasesIndexPage() {
 
 			<Card className="border-border/70">
 				<CardHeader className="gap-4 lg:flex-row lg:items-end lg:justify-between">
-					<div className="space-y-1">
-						<CardTitle>Draft queue</CardTitle>
-						<CardDescription>
-							Resume any staged case from the exact last saved step.
-						</CardDescription>
-					</div>
+					<CardTitle>Draft queue</CardTitle>
 					<div className="w-full max-w-sm space-y-2">
 						<label className="font-medium text-sm" htmlFor="origination-search">
 							Search drafts
@@ -178,7 +157,7 @@ export function OriginationCasesIndexPage() {
 							<p className="mt-2 text-muted-foreground text-sm">
 								{search.trim()
 									? "Try another borrower name, address, or case identifier."
-									: "Create the first draft to stage an origination case and activate it from review when it is ready."}
+									: "Create the first origination draft."}
 							</p>
 							{search.trim() ? null : (
 								<Button asChild className="mt-4">

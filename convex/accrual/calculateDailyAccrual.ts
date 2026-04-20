@@ -1,5 +1,5 @@
-import { ConvexError, v } from "convex/values";
-import { canAccessMortgage } from "../auth/resourceChecks";
+import { v } from "convex/values";
+import { assertMortgageAccess } from "../authz/resourceAccess";
 import { ledgerQuery } from "../fluent";
 import { buildDailyAccrualBreakdown } from "./queryHelpers";
 
@@ -9,12 +9,7 @@ export const calculateDailyAccrual = ledgerQuery
 		mortgageId: v.id("mortgages"),
 	})
 	.handler(async (ctx, args) => {
-		const allowed = await canAccessMortgage(ctx, ctx.viewer, args.mortgageId);
-		if (!allowed) {
-			throw new ConvexError(
-				`Forbidden: no mortgage access for ${String(args.mortgageId)}`
-			);
-		}
+		await assertMortgageAccess(ctx, args.mortgageId);
 
 		return buildDailyAccrualBreakdown(ctx, args.mortgageId, args.date);
 	})
