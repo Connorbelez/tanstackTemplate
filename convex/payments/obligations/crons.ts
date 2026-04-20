@@ -171,6 +171,25 @@ export const processObligationTransitions = internalAction({
 			);
 
 			if (allNewlyDue.length === 0 && allPastGrace.length === 0) {
+				if (waveIndex === 0) {
+					const monitoring = await ctx.runQuery(
+						internal.payments.obligations.monitoring.getBatchOverflowMetrics,
+						{ jobName: JOB_NAME }
+					);
+					if (monitoring?.lastRunBusinessDate !== businessDate) {
+						await ctx.runMutation(
+							internal.payments.obligations.monitoring
+								.recordBatchOverflowMetrics,
+							{
+								jobName: JOB_NAME,
+								businessDate,
+								batchSize: BATCH_SIZE,
+								newlyDueCount: 0,
+								pastGraceCount: 0,
+							}
+						);
+					}
+				}
 				break;
 			}
 

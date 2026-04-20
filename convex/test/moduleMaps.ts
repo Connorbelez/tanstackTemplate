@@ -237,6 +237,14 @@ export const convexModules: ModuleMap = withModuleAliases({
 		await import("./../documents/dealPackages.ts"),
 	"/convex/documents/mortgageBlueprints.ts": async () =>
 		await import("./../documents/mortgageBlueprints.ts"),
+	"/convex/documents/signature/documenso.ts": async () =>
+		await import("./../documents/signature/documenso.ts"),
+	"/convex/documents/signature/provider.ts": async () =>
+		await import("./../documents/signature/provider.ts"),
+	"/convex/documents/signature/sessions.ts": async () =>
+		await import("./../documents/signature/sessions.ts"),
+	"/convex/documents/signature/webhooks.ts": async () =>
+		await import("./../documents/signature/webhooks.ts"),
 	"/convex/documentEngine/generation.ts": async () =>
 		await import("./../documentEngine/generation.ts"),
 	"/convex/documentEngine/generationHelpers.ts": async () =>
