@@ -135,11 +135,22 @@ export function deriveAggregationEligibility(
 				enabled: true,
 				supportedFunctions: ["count", "sum", "avg", "min", "max"],
 			};
+		case "date":
+		case "datetime":
+			return {
+				enabled: true,
+				supportedFunctions: ["count", "min", "max"],
+			};
+		case "select":
+			return {
+				enabled: true,
+				supportedFunctions: ["count"],
+			};
 		default:
 			return {
 				enabled: false,
 				reason:
-					"Only numeric fields support aggregate functions in the current engine.",
+					"This field type does not produce a meaningful table footer summary.",
 				supportedFunctions: [],
 			};
 	}
@@ -279,7 +290,16 @@ export function materializeFieldDefinition(
 export function deriveCapabilities(fieldType: FieldType): Capability[] {
 	const caps: Capability[] = ["table"];
 	const layoutEligibility = deriveLayoutEligibility(fieldType);
-	const aggregationEligibility = deriveAggregationEligibility(fieldType);
+	const supportsAggregateCapability =
+		fieldType === "number" ||
+		fieldType === "currency" ||
+		fieldType === "percentage";
+	const supportsSort =
+		fieldType === "number" ||
+		fieldType === "currency" ||
+		fieldType === "percentage" ||
+		fieldType === "date" ||
+		fieldType === "datetime";
 
 	if (layoutEligibility.kanban.enabled) {
 		caps.push("kanban");
@@ -288,10 +308,13 @@ export function deriveCapabilities(fieldType: FieldType): Capability[] {
 		caps.push("group_by");
 	}
 	if (layoutEligibility.calendar.enabled) {
-		caps.push("calendar", "sort");
+		caps.push("calendar");
 	}
-	if (aggregationEligibility.enabled) {
-		caps.push("aggregate", "sort");
+	if (supportsAggregateCapability) {
+		caps.push("aggregate");
+	}
+	if (supportsSort) {
+		caps.push("sort");
 	}
 
 	return caps;

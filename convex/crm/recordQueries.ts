@@ -22,7 +22,11 @@ import type {
 	RecordSort,
 	UnifiedRecord,
 } from "./types";
-import { entityKindValidator, logicalOperatorValidator } from "./validators";
+import {
+	entityKindValidator,
+	logicalOperatorValidator,
+	recordSortValidator,
+} from "./validators";
 import { fieldTypeToTable, type ValueTableName } from "./valueRouter";
 
 type FieldDef = Doc<"fieldDefs">;
@@ -841,12 +845,7 @@ export const queryRecords = crmQuery
 				})
 			)
 		),
-		sort: v.optional(
-			v.object({
-				fieldDefId: v.id("fieldDefs"),
-				direction: v.union(v.literal("asc"), v.literal("desc")),
-			})
-		),
+		sort: v.optional(recordSortValidator),
 		paginationOpts: v.object({
 			numItems: v.number(),
 			cursor: v.union(v.string(), v.null()),

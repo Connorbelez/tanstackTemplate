@@ -1,6 +1,10 @@
 import { ConvexError } from "convex/values";
-import type { Doc } from "../../_generated/dataModel";
+import type { Doc, Id } from "../../_generated/dataModel";
 import type { QueryCtx } from "../../_generated/server";
+import {
+	EMPTY_MORTGAGE_PAYMENT_SNAPSHOT,
+	loadMortgagePaymentSnapshots,
+} from "../../payments/mortgagePaymentSnapshot";
 import type { UnifiedRecord } from "../types";
 import { resolveColumnPath } from "./columnResolver";
 
@@ -53,6 +57,40 @@ function assembleNativeDoc(
 			(doc.createdAt as number) ??
 			0,
 	};
+}
+
+async function enrichNativeDocs(
+	ctx: QueryCtx,
+	objectDef: ObjectDef,
+	docs: Record<string, unknown>[]
+): Promise<Record<string, unknown>[]> {
+	if (objectDef.nativeTable !== "mortgages" || docs.length === 0) {
+		return docs;
+	}
+
+	const snapshotByMortgageId = await loadMortgagePaymentSnapshots(
+		ctx,
+		docs.map((doc) => doc._id as Id<"mortgages">)
+	);
+
+	return docs.map((doc) => ({
+		...doc,
+		__snapshot__:
+			snapshotByMortgageId.get(String(doc._id)) ??
+			EMPTY_MORTGAGE_PAYMENT_SNAPSHOT,
+	}));
+}
+
+async function assembleNativeDocs(
+	ctx: QueryCtx,
+	objectDef: ObjectDef,
+	fieldDefs: FieldDef[],
+	docs: Record<string, unknown>[]
+): Promise<UnifiedRecord[]> {
+	const enrichedDocs = await enrichNativeDocs(ctx, objectDef, docs);
+	return enrichedDocs.map((doc) =>
+		assembleNativeDoc(objectDef, fieldDefs, doc)
+	);
 }
 
 async function getNativeTableRecordById(
@@ -330,7 +368,7 @@ export async function queryNativeRecords(
 			orgId,
 			paginationOptsOrLimit
 		);
-		return docs.map((doc) => assembleNativeDoc(objectDef, fieldDefs, doc));
+		return assembleNativeDocs(ctx, objectDef, fieldDefs, docs);
 	}
 
 	const nativePage = await paginateNativeTable(
@@ -341,8 +379,11 @@ export async function queryNativeRecords(
 	);
 
 	// Only iterate fieldDefs with nativeColumnPath (skip EAV-only fields)
-	const records = nativePage.page.map((doc) =>
-		assembleNativeDoc(objectDef, fieldDefs, doc)
+	const records = await assembleNativeDocs(
+		ctx,
+		objectDef,
+		fieldDefs,
+		nativePage.page
 	);
 
 	return {
@@ -382,5 +423,8 @@ export async function getNativeRecordById(
 		return null;
 	}
 
-	return assembleNativeDoc(objectDef, fieldDefs, nativeDoc);
+	const [record] = await assembleNativeDocs(ctx, objectDef, fieldDefs, [
+		nativeDoc,
+	]);
+	return record ?? null;
 }

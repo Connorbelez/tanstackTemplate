@@ -22,7 +22,11 @@ import {
 } from "#/lib/admin-view-context";
 import { api } from "../../../../convex/_generated/api";
 import type { Doc, Id } from "../../../../convex/_generated/dataModel";
-import type { UserSavedViewDefinition } from "../../../../convex/crm/types";
+import type {
+	RecordFilter,
+	RecordSort,
+	UserSavedViewDefinition,
+} from "../../../../convex/crm/types";
 import { AdminEntityKanbanView } from "./AdminEntityKanbanView";
 import { AdminEntityTableView } from "./AdminEntityTableView";
 import {
@@ -62,6 +66,19 @@ function findFieldIdByName(
 
 	const field = schema.fields.find((entry) => entry.name === fieldName);
 	return field?.fieldDefId;
+}
+
+function serializeFilterValue(value: unknown) {
+	return value === undefined ? undefined : JSON.stringify(value);
+}
+
+function serializeRecordFilters(filters: readonly RecordFilter[]) {
+	return filters.map((filter) => ({
+		fieldDefId: filter.fieldDefId,
+		logicalOperator: filter.logicalOperator,
+		operator: filter.operator,
+		value: serializeFilterValue(filter.value),
+	}));
 }
 
 function renderEmptyState(args: { description: string; title: string }) {
@@ -108,6 +125,9 @@ export function AdminEntityViewPage({
 	const updateView = useMutation(api.crm.viewDefs.updateView);
 	const createUserSavedView = useMutation(
 		api.crm.userSavedViews.createUserSavedView
+	);
+	const updateUserSavedView = useMutation(
+		api.crm.userSavedViews.updateUserSavedView
 	);
 	const setDefaultUserSavedView = useMutation(
 		api.crm.userSavedViews.setDefaultUserSavedView
@@ -400,6 +420,166 @@ export function AdminEntityViewPage({
 		}));
 	}
 
+	async function persistTableSavedViewState(args: {
+		filters?: readonly RecordFilter[];
+		sort?: RecordSort | null;
+		visibleFieldIds?: readonly Id<"fieldDefs">[];
+	}) {
+		if (
+			!(activeViewMode === "table" && objectDef && activeSourceView && schema)
+		) {
+			return;
+		}
+
+		const nextFilters = args.filters ?? schema.effectiveView.filters;
+		const nextSort =
+			args.sort === undefined ? (schema.effectiveView.sort ?? null) : args.sort;
+		const nextVisibleFieldIds =
+			args.visibleFieldIds ?? schema.effectiveView.visibleFieldIds;
+
+		setIsMutating(true);
+		try {
+			if (activeSavedView) {
+				await updateUserSavedView({
+					fieldOrder: [...schema.effectiveView.fieldOrder],
+					filters: serializeRecordFilters(nextFilters),
+					sort: nextSort,
+					userSavedViewId: activeSavedView.userSavedViewId,
+					visibleFieldIds: [...nextVisibleFieldIds],
+				});
+			} else {
+				await createUserSavedView({
+					fieldOrder: [...schema.effectiveView.fieldOrder],
+					filters: serializeRecordFilters(nextFilters),
+					isDefault: true,
+					name: activeSourceView.name,
+					objectDefId: objectDef._id,
+					sort: nextSort,
+					sourceViewDefId: activeSourceView._id,
+					viewType: "table",
+					visibleFieldIds: [...nextVisibleFieldIds],
+				});
+			}
+
+			setTablePagination({
+				cursorHistory: [null],
+				pageIndex: 0,
+			});
+		} catch (error) {
+			toast.error(getErrorMessage(error));
+		} finally {
+			setIsMutating(false);
+		}
+	}
+
+	async function handleColumnVisibilityChange(
+		fieldDefId: Id<"fieldDefs">,
+		nextVisible: boolean
+	) {
+		if (!schema) {
+			return;
+		}
+
+		const currentVisibleFieldIds = schema.effectiveView.visibleFieldIds;
+		const currentVisibleSet = new Set(
+			currentVisibleFieldIds.map((visibleFieldId) => String(visibleFieldId))
+		);
+		const isCurrentlyVisible = currentVisibleSet.has(String(fieldDefId));
+
+		if (nextVisible === isCurrentlyVisible) {
+			return;
+		}
+
+		if (!nextVisible && currentVisibleFieldIds.length === 1) {
+			toast.error("At least one table column must remain visible.");
+			return;
+		}
+
+		const nextVisibleFieldIds = nextVisible
+			? schema.effectiveView.fieldOrder.filter(
+					(candidateFieldDefId) =>
+						String(candidateFieldDefId) === String(fieldDefId) ||
+						currentVisibleSet.has(String(candidateFieldDefId))
+				)
+			: currentVisibleFieldIds.filter(
+					(candidateFieldDefId) =>
+						String(candidateFieldDefId) !== String(fieldDefId)
+				);
+
+		await persistTableSavedViewState({
+			visibleFieldIds: nextVisibleFieldIds,
+		});
+	}
+
+	async function handleColumnFilterChange(
+		fieldDefId: Id<"fieldDefs">,
+		nextFilter: {
+			logicalOperator?: RecordFilter["logicalOperator"];
+			operator: RecordFilter["operator"];
+			value: unknown;
+		} | null
+	) {
+		if (!schema) {
+			return;
+		}
+
+		const nextFilters = schema.effectiveView.filters.filter(
+			(filter) => String(filter.fieldDefId) !== String(fieldDefId)
+		);
+
+		if (nextFilter) {
+			nextFilters.push({
+				fieldDefId,
+				logicalOperator: nextFilter.logicalOperator,
+				operator: nextFilter.operator,
+				value: nextFilter.value,
+			});
+		}
+
+		await persistTableSavedViewState({
+			filters: nextFilters,
+		});
+	}
+
+	async function handleColumnSortChange(
+		fieldDefId: Id<"fieldDefs">,
+		direction: RecordSort["direction"] | null
+	) {
+		await persistTableSavedViewState({
+			sort: direction
+				? {
+						direction,
+						fieldDefId,
+					}
+				: null,
+		});
+	}
+
+	async function handleClearAllTableControls() {
+		await persistTableSavedViewState({
+			filters: [],
+			sort: null,
+		});
+	}
+
+	async function handleClearTableSort() {
+		await persistTableSavedViewState({
+			sort: null,
+		});
+	}
+
+	async function handleRestoreDefaultTableControls() {
+		if (!schema) {
+			return;
+		}
+
+		await persistTableSavedViewState({
+			filters: schema.systemView.filters,
+			sort: null,
+			visibleFieldIds: schema.systemView.visibleFieldIds,
+		});
+	}
+
 	if (isLoadingContext) {
 		return (
 			<AdminPageSkeleton descriptionWidth="w-72" titleWidth="w-56">
@@ -532,12 +712,39 @@ export function AdminEntityViewPage({
 			{activeViewMode === "table" && tableResult && activeRows.length > 0 ? (
 				<>
 					<AdminEntityTableView
+						activeFilters={schema.effectiveView.filters}
+						activeSort={schema.effectiveView.sort}
 						adapterContract={schema.adapterContract}
 						columns={tableResult.columns}
+						defaultVisibleFieldIds={schema.systemView.visibleFieldIds}
 						fields={schema.fields}
+						footerAggregates={tableResult.footerAggregates}
+						isMutating={isMutating}
 						objectDef={objectDef}
+						onApplyColumnFilter={(fieldDefId, nextFilter) => {
+							void handleColumnFilterChange(fieldDefId, nextFilter);
+						}}
+						onChangeColumnSort={(fieldDefId, direction) => {
+							void handleColumnSortChange(fieldDefId, direction);
+						}}
+						onChangeColumnVisibility={(fieldDefId, nextVisible) => {
+							void handleColumnVisibilityChange(fieldDefId, nextVisible);
+						}}
+						onClearAllControls={() => {
+							void handleClearAllTableControls();
+						}}
+						onClearFieldFilter={(fieldDefId) => {
+							void handleColumnFilterChange(fieldDefId, null);
+						}}
+						onClearSort={() => {
+							void handleClearTableSort();
+						}}
+						onRestoreDefaults={() => {
+							void handleRestoreDefaultTableControls();
+						}}
 						onSelectRecord={(recordId) => open(recordId)}
 						rows={tableResult.page.rows}
+						schemaColumns={schema.columns}
 					/>
 					{tableResult.totalCount > RECORD_PAGE_SIZE ? (
 						<div className="flex flex-col gap-3 rounded-2xl border border-border/70 bg-muted/10 px-4 py-3 text-sm lg:flex-row lg:items-center lg:justify-between">

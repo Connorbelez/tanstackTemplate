@@ -204,6 +204,7 @@ export interface UserSavedViewDefinition {
 	name: string;
 	objectDefId: Id<"objectDefs">;
 	ownerAuthId: string;
+	sort?: RecordSort;
 	sourceViewDefId?: Id<"viewDefs">;
 	userSavedViewId: Id<"userSavedViews">;
 	viewType: ViewLayout;
@@ -221,6 +222,7 @@ export interface EffectiveViewDefinition {
 	isDefault: boolean;
 	name: string;
 	objectDefId: Id<"objectDefs">;
+	sort?: RecordSort;
 	sourceViewDefId: Id<"viewDefs">;
 	viewType: ViewLayout;
 	visibleFieldIds: Id<"fieldDefs">[];
@@ -281,6 +283,13 @@ export interface ViewAggregateResult {
 	fn: AggregateFn;
 	label: string;
 	value: number | string | null;
+}
+
+export interface TableFooterAggregateResult {
+	fieldDefId: Id<"fieldDefs">;
+	fieldName: string;
+	label: string;
+	summary: number | string | null;
 }
 
 export interface EntityViewPageResult {

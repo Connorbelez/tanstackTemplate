@@ -22,6 +22,7 @@ import type * as admin_origination_collections from "../admin/origination/collec
 import type * as admin_origination_commit from "../admin/origination/commit.js";
 import type * as admin_origination_media from "../admin/origination/media.js";
 import type * as admin_origination_participants from "../admin/origination/participants.js";
+import type * as admin_origination_postCommitCollectionsActivation from "../admin/origination/postCommitCollectionsActivation.js";
 import type * as admin_origination_properties from "../admin/origination/properties.js";
 import type * as admin_origination_validators from "../admin/origination/validators.js";
 import type * as admin_queries from "../admin/queries.js";
@@ -67,6 +68,7 @@ import type * as crm_relationCellPayloads from "../crm/relationCellPayloads.js";
 import type * as crm_systemAdapters_bootstrap from "../crm/systemAdapters/bootstrap.js";
 import type * as crm_systemAdapters_columnResolver from "../crm/systemAdapters/columnResolver.js";
 import type * as crm_systemAdapters_queryAdapter from "../crm/systemAdapters/queryAdapter.js";
+import type * as crm_tableFooterAggregates from "../crm/tableFooterAggregates.js";
 import type * as crm_types from "../crm/types.js";
 import type * as crm_userSavedViews from "../crm/userSavedViews.js";
 import type * as crm_validators from "../crm/validators.js";
@@ -259,6 +261,7 @@ import type * as payments_collectionPlan_stubs from "../payments/collectionPlan/
 import type * as payments_collectionPlan_workout from "../payments/collectionPlan/workout.js";
 import type * as payments_collectionPlan_workoutContract from "../payments/collectionPlan/workoutContract.js";
 import type * as payments_dispersal_stubs from "../payments/dispersal/stubs.js";
+import type * as payments_mortgagePaymentSnapshot from "../payments/mortgagePaymentSnapshot.js";
 import type * as payments_obligations_createCorrectiveObligation from "../payments/obligations/createCorrectiveObligation.js";
 import type * as payments_obligations_crons from "../payments/obligations/crons.js";
 import type * as payments_obligations_generate from "../payments/obligations/generate.js";
@@ -358,6 +361,7 @@ declare const fullApi: ApiFromModules<{
   "admin/origination/commit": typeof admin_origination_commit;
   "admin/origination/media": typeof admin_origination_media;
   "admin/origination/participants": typeof admin_origination_participants;
+  "admin/origination/postCommitCollectionsActivation": typeof admin_origination_postCommitCollectionsActivation;
   "admin/origination/properties": typeof admin_origination_properties;
   "admin/origination/validators": typeof admin_origination_validators;
   "admin/queries": typeof admin_queries;
@@ -403,6 +407,7 @@ declare const fullApi: ApiFromModules<{
   "crm/systemAdapters/bootstrap": typeof crm_systemAdapters_bootstrap;
   "crm/systemAdapters/columnResolver": typeof crm_systemAdapters_columnResolver;
   "crm/systemAdapters/queryAdapter": typeof crm_systemAdapters_queryAdapter;
+  "crm/tableFooterAggregates": typeof crm_tableFooterAggregates;
   "crm/types": typeof crm_types;
   "crm/userSavedViews": typeof crm_userSavedViews;
   "crm/validators": typeof crm_validators;
@@ -595,6 +600,7 @@ declare const fullApi: ApiFromModules<{
   "payments/collectionPlan/workout": typeof payments_collectionPlan_workout;
   "payments/collectionPlan/workoutContract": typeof payments_collectionPlan_workoutContract;
   "payments/dispersal/stubs": typeof payments_dispersal_stubs;
+  "payments/mortgagePaymentSnapshot": typeof payments_mortgagePaymentSnapshot;
   "payments/obligations/createCorrectiveObligation": typeof payments_obligations_createCorrectiveObligation;
   "payments/obligations/crons": typeof payments_obligations_crons;
   "payments/obligations/generate": typeof payments_obligations_generate;

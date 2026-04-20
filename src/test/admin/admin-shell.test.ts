@@ -518,7 +518,8 @@ describe("admin shell helpers", () => {
 			createdAt: 0,
 			fields: {
 				borrowerSummary: "Alice Borrower + 1 more",
-				paymentSummary: "Monthly • $2,460",
+				mostRecentPaymentStatus: "failed",
+				nextUpcomingPaymentDate: Date.UTC(2027, 3, 30, 12),
 				principal: 425_000,
 				propertySummary: "789 King St W, Toronto, ON",
 			},
@@ -549,7 +550,7 @@ describe("admin shell helpers", () => {
 				objectDef,
 				record,
 			})
-		).toBe("Alice Borrower + 1 more • Monthly • $2,460 • $4,250");
+		).toBe("Alice Borrower + 1 more • Latest Failed • Next 4/30/2027 • $4,250");
 	});
 
 	it("resolves relation references from object metadata", () => {

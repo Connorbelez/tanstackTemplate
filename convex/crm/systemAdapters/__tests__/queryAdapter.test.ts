@@ -1,4 +1,23 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const { loadMortgagePaymentSnapshotsMock } = vi.hoisted(() => ({
+	loadMortgagePaymentSnapshotsMock: vi.fn<
+		(args: unknown[]) => Promise<Map<string, Record<string, unknown>>>
+	>(async () => new Map()),
+}));
+
+vi.mock("../../../payments/mortgagePaymentSnapshot", () => ({
+	EMPTY_MORTGAGE_PAYMENT_SNAPSHOT: {
+		mostRecentPaymentAmount: null,
+		mostRecentPaymentDate: null,
+		mostRecentPaymentStatus: "none",
+		nextUpcomingPaymentAmount: null,
+		nextUpcomingPaymentDate: null,
+		nextUpcomingPaymentStatus: "none",
+	},
+	loadMortgagePaymentSnapshots: loadMortgagePaymentSnapshotsMock,
+}));
+
 import {
 	getNativeRecordById,
 	queryNativeRecords,
@@ -20,6 +39,11 @@ function createIndexedQueryStub(page: Record<string, unknown>[] = []) {
 }
 
 describe("queryAdapter", () => {
+	beforeEach(() => {
+		loadMortgagePaymentSnapshotsMock.mockReset();
+		loadMortgagePaymentSnapshotsMock.mockResolvedValue(new Map());
+	});
+
 	it("uses take instead of paginate for native table limit reads", async () => {
 		const queryStub = createIndexedQueryStub([
 			{ _id: "mortgage_1", orgId: "org_1" },
@@ -159,5 +183,80 @@ describe("queryAdapter", () => {
 				},
 			})
 		);
+	});
+
+	it("enriches native mortgage rows with snapshot-backed fields", async () => {
+		loadMortgagePaymentSnapshotsMock.mockResolvedValue(
+			new Map([
+				[
+					"mortgage_1",
+					{
+						mostRecentPaymentAmount: 2450,
+						mostRecentPaymentDate: Date.parse("2026-04-02T12:00:00.000Z"),
+						mostRecentPaymentStatus: "failed",
+						nextUpcomingPaymentAmount: 2450,
+						nextUpcomingPaymentDate: Date.parse("2026-04-30T00:00:00.000Z"),
+						nextUpcomingPaymentStatus: "planned",
+					},
+				],
+			])
+		);
+
+		const queryStub = createIndexedQueryStub([
+			{
+				_id: "mortgage_1",
+				_creationTime: 10,
+				createdAt: 10,
+				orgId: "org_1",
+				principal: 42_500_000,
+				status: "active",
+			},
+		]);
+		const ctx = {
+			db: {
+				query: vi.fn(() => queryStub),
+			},
+		};
+
+		const result = await queryNativeRecords(
+			ctx as never,
+			{
+				_id: "object_1",
+				isSystem: true,
+				nativeTable: "mortgages",
+			} as never,
+			[
+				{
+					name: "mostRecentPaymentStatus",
+					nativeColumnPath: "__snapshot__.mostRecentPaymentStatus",
+				},
+				{
+					fieldType: "datetime",
+					name: "mostRecentPaymentDate",
+					nativeColumnPath: "__snapshot__.mostRecentPaymentDate",
+				},
+				{
+					fieldType: "date",
+					name: "nextUpcomingPaymentDate",
+					nativeColumnPath: "__snapshot__.nextUpcomingPaymentDate",
+				},
+			] as never,
+			"org_1",
+			1
+		);
+
+		expect(loadMortgagePaymentSnapshotsMock).toHaveBeenCalledWith(ctx, [
+			"mortgage_1",
+		]);
+		expect(result).toEqual([
+			expect.objectContaining({
+				_id: "mortgage_1",
+				fields: expect.objectContaining({
+					mostRecentPaymentStatus: "failed",
+					mostRecentPaymentDate: Date.parse("2026-04-02T12:00:00.000Z"),
+					nextUpcomingPaymentDate: Date.parse("2026-04-30T00:00:00.000Z"),
+				}),
+			}),
+		]);
 	});
 });

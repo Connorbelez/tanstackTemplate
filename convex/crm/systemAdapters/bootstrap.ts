@@ -76,6 +76,24 @@ const MORTGAGE_STATUS_COLORS: Record<string, string> = {
 	matured: "#3b82f6",
 };
 
+const MOST_RECENT_PAYMENT_STATUS_COLORS: Record<string, string> = {
+	settled: "#22c55e",
+	processing: "#3b82f6",
+	failed: "#ef4444",
+	reversed: "#f97316",
+	cancelled: "#6b7280",
+	none: "#94a3b8",
+};
+
+const NEXT_UPCOMING_PAYMENT_STATUS_COLORS: Record<string, string> = {
+	planned: "#3b82f6",
+	provider_scheduled: "#0ea5e9",
+	executing: "#8b5cf6",
+	due: "#f59e0b",
+	overdue: "#ef4444",
+	none: "#94a3b8",
+};
+
 const PAYMENT_FREQUENCY_COLORS: Record<string, string> = {
 	monthly: "#3b82f6",
 	bi_weekly: "#8b5cf6",
@@ -174,8 +192,8 @@ export const SYSTEM_OBJECT_CONFIGS: readonly SystemObjectConfig[] = [
 		defaultVisibleFieldNames: [
 			"principal",
 			"interestRate",
-			"paymentAmount",
-			"paymentFrequency",
+			"mostRecentPaymentStatus",
+			"nextUpcomingPaymentDate",
 			"loanType",
 			"maturityDate",
 			"status",
@@ -249,6 +267,57 @@ export const SYSTEM_OBJECT_CONFIGS: readonly SystemObjectConfig[] = [
 				options: opts(
 					["monthly", "bi_weekly", "accelerated_bi_weekly", "weekly"],
 					PAYMENT_FREQUENCY_COLORS
+				),
+			},
+			{
+				name: "mostRecentPaymentStatus",
+				label: "Most Recent Payment",
+				fieldType: "select",
+				nativeColumnPath: "__snapshot__.mostRecentPaymentStatus",
+				options: opts(
+					["settled", "processing", "failed", "reversed", "cancelled", "none"],
+					MOST_RECENT_PAYMENT_STATUS_COLORS
+				),
+			},
+			{
+				name: "mostRecentPaymentDate",
+				label: "Most Recent Payment Date",
+				fieldType: "datetime",
+				nativeColumnPath: "__snapshot__.mostRecentPaymentDate",
+			},
+			{
+				name: "mostRecentPaymentAmount",
+				label: "Most Recent Payment Amount",
+				fieldType: "currency",
+				nativeColumnPath: "__snapshot__.mostRecentPaymentAmount",
+			},
+			{
+				name: "nextUpcomingPaymentDate",
+				label: "Next Upcoming Payment",
+				fieldType: "date",
+				nativeColumnPath: "__snapshot__.nextUpcomingPaymentDate",
+			},
+			{
+				name: "nextUpcomingPaymentAmount",
+				label: "Next Upcoming Payment Amount",
+				fieldType: "currency",
+				nativeColumnPath: "__snapshot__.nextUpcomingPaymentAmount",
+			},
+			{
+				name: "nextUpcomingPaymentStatus",
+				label: "Next Upcoming Payment Status",
+				fieldType: "select",
+				nativeColumnPath: "__snapshot__.nextUpcomingPaymentStatus",
+				options: opts(
+					[
+						"planned",
+						"provider_scheduled",
+						"executing",
+						"due",
+						"overdue",
+						"none",
+					],
+					NEXT_UPCOMING_PAYMENT_STATUS_COLORS
 				),
 			},
 			{

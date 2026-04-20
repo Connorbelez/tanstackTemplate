@@ -167,6 +167,70 @@ function CompactList({
 	return <div className="space-y-2">{items.map(renderItem)}</div>;
 }
 
+function PaymentSnapshotSection({
+	snapshot,
+}: {
+	readonly snapshot: MortgageDetailContext["paymentSnapshot"] | undefined;
+}) {
+	return (
+		<DetailSectionShell
+			description="Canonical mortgage payment snapshot reused from the backend read model."
+			title="Payment Snapshot"
+		>
+			{snapshot ? (
+				<div className="space-y-4">
+					<div className="flex flex-wrap gap-2">
+						<Badge variant="outline">
+							Most Recent: {formatEnumLabel(snapshot.mostRecentPaymentStatus)}
+						</Badge>
+						<Badge variant="outline">
+							Next Upcoming:{" "}
+							{formatEnumLabel(snapshot.nextUpcomingPaymentStatus)}
+						</Badge>
+					</div>
+					<MetricGrid
+						items={[
+							{
+								label: "Most Recent Payment",
+								value:
+									snapshot.mostRecentPaymentAmount !== null
+										? formatCurrency(snapshot.mostRecentPaymentAmount)
+										: "None",
+							},
+							{
+								label: "Most Recent Date",
+								value: formatDateTime(snapshot.mostRecentPaymentDate) ?? "None",
+							},
+							{
+								label: "Most Recent Status",
+								value: formatEnumLabel(snapshot.mostRecentPaymentStatus),
+							},
+							{
+								label: "Next Upcoming Payment",
+								value:
+									snapshot.nextUpcomingPaymentAmount !== null
+										? formatCurrency(snapshot.nextUpcomingPaymentAmount)
+										: "None",
+							},
+							{
+								label: "Next Upcoming Date",
+								value:
+									formatDateTime(snapshot.nextUpcomingPaymentDate) ?? "None",
+							},
+							{
+								label: "Next Upcoming Status",
+								value: formatEnumLabel(snapshot.nextUpcomingPaymentStatus),
+							},
+						]}
+					/>
+				</div>
+			) : (
+				<EmptyContext message="No mortgage payment snapshot available." />
+			)}
+		</DetailSectionShell>
+	);
+}
+
 function formatPropertyLabel(
 	property:
 		| {
@@ -200,7 +264,6 @@ const MORTGAGE_BASE_SECTIONS = [
 			"maturityDate",
 			"lienPosition",
 			"status",
-			"paymentSummary",
 		],
 	},
 ] as const satisfies readonly DetailSectionDefinition[];
@@ -1586,13 +1649,14 @@ export function MortgagesDedicatedDetailsContent({
 					"propertySummary",
 					"principal",
 					"borrowerSummary",
-					"paymentSummary",
 				]}
 				objectDefs={objectDefs}
 				onNavigateRelation={onNavigateRelation}
 				record={record}
 				sections={MORTGAGE_BASE_SECTIONS}
 			/>
+
+			<PaymentSnapshotSection snapshot={detailContext?.paymentSnapshot} />
 
 			<DetailSectionShell
 				description="Canonical borrower relationships attached to this mortgage."

@@ -129,6 +129,11 @@ export const aggregatePresetValidator = v.object({
 	label: v.optional(v.string()),
 });
 
+export const recordSortValidator = v.object({
+	fieldDefId: v.id("fieldDefs"),
+	direction: v.union(v.literal("asc"), v.literal("desc")),
+});
+
 // ── Entity Kinds ──
 export const entityKindValidator = v.union(
 	v.literal("record"),

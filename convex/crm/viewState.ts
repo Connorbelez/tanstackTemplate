@@ -442,6 +442,7 @@ function buildEffectiveColumns(args: {
 	adapterContract: EntityViewAdapterContract;
 	effectiveView: SystemViewDefinition;
 	fieldDefsById: Map<string, FieldDef>;
+	hasSavedViewOverlay: boolean;
 	viewFields: ViewField[];
 	viewIsDefault: boolean;
 }): ViewColumnDefinition[] {
@@ -489,9 +490,10 @@ function buildEffectiveColumns(args: {
 						label: baseColumn.label,
 						fieldType: baseColumn.fieldType,
 						width: baseColumn?.width,
-						isVisible:
-							visibleFieldIds.has(fieldId.toString()) ||
-							baseColumn.isVisibleByDefault,
+						isVisible: args.hasSavedViewOverlay
+							? visibleFieldIds.has(fieldId.toString())
+							: visibleFieldIds.has(fieldId.toString()) ||
+								baseColumn.isVisibleByDefault,
 						displayOrder: index,
 					},
 					currentLayout: args.effectiveView.layout,
@@ -527,6 +529,7 @@ export function toUserSavedViewDefinition(
 		fieldOrder: doc.fieldOrder,
 		filters: getStoredSavedViewFilters(doc as SavedViewFilterSource),
 		groupByFieldId: doc.groupByFieldId,
+		sort: doc.sort,
 		aggregatePresets: doc.aggregatePresets ?? [],
 		isDefault: doc.isDefault,
 	};
@@ -549,6 +552,7 @@ export function buildUserSavedViewSnapshot(args: {
 			fieldOrder: savedView.fieldOrder,
 			filters: savedView.filters,
 			groupByFieldId: savedView.groupByFieldId,
+			sort: savedView.sort,
 			aggregatePresets: savedView.aggregatePresets,
 			isDefault: savedView.isDefault,
 		};
@@ -569,6 +573,7 @@ export function buildUserSavedViewSnapshot(args: {
 		fieldOrder: orderedViewFields.map((viewField) => viewField.fieldDefId),
 		filters: toSavedViewFilters(args.viewFilters),
 		groupByFieldId: args.viewDef.groupByFieldId,
+		sort: undefined,
 		aggregatePresets: args.viewDef.aggregatePresets ?? [],
 		isDefault: args.viewDef.isDefault,
 	};
@@ -814,6 +819,7 @@ export async function resolveEffectiveViewState(
 					)
 				: toRuntimeFilters(toSavedViewFilters(viewFilters)),
 			groupByFieldId: savedView?.groupByFieldId ?? viewDef.groupByFieldId,
+			sort: savedView?.sort,
 			aggregatePresets:
 				savedView?.aggregatePresets ?? viewDef.aggregatePresets ?? [],
 			disabledLayoutMessages,
@@ -897,6 +903,7 @@ export async function resolveViewState(
 			adapterContract,
 			effectiveView: view,
 			fieldDefsById,
+			hasSavedViewOverlay: effectiveState.savedView !== null,
 			viewFields: effectiveState.viewFields,
 			viewIsDefault:
 				effectiveState.viewDef.isDefault && !effectiveState.savedView,
