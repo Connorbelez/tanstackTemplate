@@ -191,6 +191,18 @@ describe("mortgage dedicated details", () => {
 					scheduleRuleMissing: true,
 					transferRequestCount: 0,
 				},
+				paymentSnapshot: {
+					mostRecentPaymentAmount: 2_450,
+					mostRecentPaymentDate: new Date(
+						"2026-05-01T12:00:00.000Z"
+					).getTime(),
+					mostRecentPaymentStatus: "failed",
+					nextUpcomingPaymentAmount: 2_450,
+					nextUpcomingPaymentDate: new Date(
+						"2026-05-27T12:00:00.000Z"
+					).getTime(),
+					nextUpcomingPaymentStatus: "planned",
+				},
 				obligationStats: {},
 				property: {
 					city: "Toronto",
@@ -289,7 +301,6 @@ describe("mortgage dedicated details", () => {
 				maturityDate: "2027-04-30",
 				paymentAmount: 245_000,
 				paymentFrequency: "monthly",
-				paymentSummary: "Monthly • $2,450",
 				principal: 25_000_000,
 				propertyId: "property_fixture_1",
 				propertySummary: "123 King St W, Toronto, ON",
@@ -327,6 +338,7 @@ describe("mortgage dedicated details", () => {
 		);
 
 		expect(screen.getByText("Summary")).toBeTruthy();
+		expect(screen.getByText("Payment Snapshot")).toBeTruthy();
 		expect(screen.getByText("Borrowers")).toBeTruthy();
 		expect(screen.getByText("Payment Setup")).toBeTruthy();
 		expect(screen.getByText("Listing Projection")).toBeTruthy();
@@ -337,6 +349,14 @@ describe("mortgage dedicated details", () => {
 			screen.getByText("Immediate Rotessa activation failed")
 		).toBeTruthy();
 		expect(screen.getByRole("button", { name: "Retry activation" })).toBeTruthy();
+		expect(screen.getByText("Most Recent Payment")).toBeTruthy();
+		expect(screen.getByText("Next Upcoming Payment")).toBeTruthy();
+		const paymentSnapshotSection = screen
+			.getByRole("heading", { exact: true, name: "Payment Snapshot" })
+			.closest("section");
+		expect(paymentSnapshotSection?.textContent).toContain("Failed");
+		expect(paymentSnapshotSection?.textContent).toContain("Planned");
+		expect(paymentSnapshotSection?.textContent).toContain("$2,450");
 		expect(screen.getByText("External schedule schedule_1")).toBeTruthy();
 		expect(screen.getByText("Open obligation")).toBeTruthy();
 		expect(screen.getAllByText("Plan Entries").length).toBeGreaterThanOrEqual(1);

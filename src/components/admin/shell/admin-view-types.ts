@@ -12,6 +12,7 @@ import type {
 	NormalizedFieldKind,
 	RelationMetadata,
 	SystemViewDefinition,
+	TableFooterAggregateResult,
 	UserSavedViewDefinition,
 	ViewAggregateResult,
 	ViewLayout,
@@ -57,6 +58,7 @@ export interface AdminTableQueryResult {
 	columns: AdminViewColumn[];
 	cursor: string | null;
 	fields: NormalizedFieldDefinition[];
+	footerAggregates: TableFooterAggregateResult[];
 	needsRepair: boolean;
 	page: EntityViewPageResult;
 	rows: EntityViewRow["record"][];

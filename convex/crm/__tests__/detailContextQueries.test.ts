@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { FAIRLEND_ADMIN } from "../../../src/test/auth/identities";
 import {
 	createMockViewer,
 	createTestConvex,
 } from "../../../src/test/auth/helpers";
+import { FAIRLEND_ADMIN } from "../../../src/test/auth/identities";
 import {
 	type CrmTestHarness,
 	createCrmTestHarness,
@@ -270,6 +270,41 @@ describe("detailContextQueries", () => {
 				termMonths: 60,
 				termStartDate: "2026-07-01",
 			});
+			const now = Date.now();
+			const obligationId = await ctx.db.insert("obligations", {
+				amount: 2875,
+				amountSettled: 0,
+				createdAt: now - 5000,
+				dueDate: now + 86_400_000,
+				gracePeriodEnd: now + 172_800_000,
+				borrowerId,
+				mortgageId,
+				paymentNumber: 1,
+				status: "upcoming",
+				type: "regular_interest",
+			});
+			const planEntryId = await ctx.db.insert("collectionPlanEntries", {
+				amount: 2875,
+				createdAt: now - 4000,
+				executionMode: "app_owned",
+				method: "manual",
+				mortgageId,
+				obligationIds: [obligationId],
+				scheduledDate: now + 259_200_000,
+				source: "default_schedule",
+				status: "planned",
+			});
+			await ctx.db.insert("collectionAttempts", {
+				amount: 2875,
+				failedAt: now - 1000,
+				initiatedAt: now - 2000,
+				machineContext: {},
+				method: "manual",
+				mortgageId,
+				obligationIds: [obligationId],
+				planEntryId,
+				status: "failed",
+			});
 			await ctx.db.insert("mortgageBorrowers", {
 				addedAt: Date.now(),
 				borrowerId,
@@ -293,6 +328,14 @@ describe("detailContextQueries", () => {
 				brokerId,
 				dealId,
 				lenderId,
+				paymentSnapshot: {
+					mostRecentPaymentAmount: 2875,
+					mostRecentPaymentDate: now - 1000,
+					mostRecentPaymentStatus: "failed",
+					nextUpcomingPaymentAmount: 2875,
+					nextUpcomingPaymentDate: now + 259_200_000,
+					nextUpcomingPaymentStatus: "planned",
+				},
 				mortgageId,
 			};
 		});
@@ -355,6 +398,41 @@ describe("detailContextQueries", () => {
 				termMonths: 60,
 				termStartDate: "2026-07-01",
 			});
+			const now = Date.now();
+			const obligationId = await ctx.db.insert("obligations", {
+				amount: 2875,
+				amountSettled: 0,
+				borrowerId,
+				createdAt: now - 5000,
+				dueDate: now + 86_400_000,
+				gracePeriodEnd: now + 172_800_000,
+				mortgageId,
+				paymentNumber: 1,
+				status: "upcoming",
+				type: "regular_interest",
+			});
+			const planEntryId = await ctx.db.insert("collectionPlanEntries", {
+				amount: 2875,
+				createdAt: now - 4000,
+				executionMode: "app_owned",
+				method: "manual",
+				mortgageId,
+				obligationIds: [obligationId],
+				scheduledDate: now + 259_200_000,
+				source: "default_schedule",
+				status: "planned",
+			});
+			await ctx.db.insert("collectionAttempts", {
+				amount: 2875,
+				failedAt: now - 1000,
+				initiatedAt: now - 2000,
+				machineContext: {},
+				method: "manual",
+				mortgageId,
+				obligationIds: [obligationId],
+				planEntryId,
+				status: "failed",
+			});
 
 			await ctx.db.insert("mortgageBorrowers", {
 				addedAt: Date.now(),
@@ -383,8 +461,17 @@ describe("detailContextQueries", () => {
 				status: "active",
 			}),
 		]);
-		expect(result.paymentSetup.obligations).toEqual([]);
-		expect(result.paymentSetup.collectionPlanEntries).toEqual([]);
+		expect(result.paymentSetup.obligations).toHaveLength(1);
+		expect(result.paymentSetup.collectionPlanEntries).toHaveLength(1);
+		expect(result.paymentSetup.collectionAttemptCount).toBe(1);
+		expect(result.paymentSnapshot).toEqual({
+			mostRecentPaymentAmount: 2875,
+			mostRecentPaymentDate: expect.any(Number),
+			mostRecentPaymentStatus: "failed",
+			nextUpcomingPaymentAmount: 2875,
+			nextUpcomingPaymentDate: expect.any(Number),
+			nextUpcomingPaymentStatus: "planned",
+		});
 	});
 
 	it("loads borrower connected brokers and deals", async () => {

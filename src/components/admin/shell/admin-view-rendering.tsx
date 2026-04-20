@@ -121,8 +121,11 @@ function formatRecordSummaryByEntity(args: {
 				typeof args.record.fields.borrowerSummary === "string"
 					? args.record.fields.borrowerSummary
 					: undefined,
-				typeof args.record.fields.paymentSummary === "string"
-					? args.record.fields.paymentSummary
+				typeof args.record.fields.mostRecentPaymentStatus === "string"
+					? `Latest ${formatTokenLabel(args.record.fields.mostRecentPaymentStatus)}`
+					: undefined,
+				formatCompactDate(args.record.fields.nextUpcomingPaymentDate)
+					? `Next ${formatCompactDate(args.record.fields.nextUpcomingPaymentDate)}`
 					: undefined,
 				typeof args.record.fields.principal === "number"
 					? formatCompactCurrency(

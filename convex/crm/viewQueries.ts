@@ -8,6 +8,7 @@ import { materializeEntityViewRecords } from "./entityViewHydration";
 import type { FilterOperator } from "./filterConstants";
 import {
 	applyFilters,
+	applySort,
 	assembleRecords,
 	FILTERED_QUERY_CAP,
 } from "./recordQueries";
@@ -21,6 +22,7 @@ import {
 	type NativeRecordPage,
 	queryNativeRecords,
 } from "./systemAdapters/queryAdapter";
+import { buildTableFooterAggregates } from "./tableFooterAggregates";
 import type {
 	EffectiveViewDefinition,
 	EntityViewAdapterContract,
@@ -30,6 +32,7 @@ import type {
 	NormalizedFieldDefinition,
 	RecordFilter,
 	SystemViewDefinition,
+	TableFooterAggregateResult,
 	UnifiedRecord,
 	UserSavedViewDefinition,
 	ViewAggregateResult,
@@ -62,6 +65,7 @@ interface TableViewResult {
 	columns: ViewColumnDefinition[];
 	cursor: string | null;
 	fields: NormalizedFieldDefinition[];
+	footerAggregates: TableFooterAggregateResult[];
 	needsRepair: boolean;
 	page: EntityViewPageResult;
 	rows: UnifiedRecord[];
@@ -571,7 +575,9 @@ async function queryTableView(
 ): Promise<TableViewResult> {
 	const recordFilters = convertViewFiltersToRecordFilters(state.view.filters);
 	const hasWindowedViewRequirements =
-		recordFilters.length > 0 || state.view.aggregatePresets.length > 0;
+		recordFilters.length > 0 ||
+		state.view.aggregatePresets.length > 0 ||
+		state.effectiveView.sort !== undefined;
 
 	if (!hasWindowedViewRequirements) {
 		const [pagedRecords, totalCountSummary] = await Promise.all([
@@ -615,6 +621,11 @@ async function queryTableView(
 				totalCountExact: totalCountSummary.totalCountExact,
 				truncated: false,
 			}),
+			footerAggregates: buildTableFooterAggregates({
+				columns: state.columns,
+				fieldDefsById: state.fieldDefsById,
+				records: materializedRecords,
+			}),
 			rows,
 			totalCount: totalCountSummary.totalCount,
 			totalCountExact: totalCountSummary.totalCountExact,
@@ -628,8 +639,13 @@ async function queryTableView(
 		recordFilters,
 		state.fieldDefsById
 	);
+	const sorted = applySort(
+		filtered,
+		state.effectiveView.sort,
+		state.fieldDefsById
+	);
 	const offset = parseOffsetCursor(cursor ?? null);
-	const page = filtered.slice(offset, offset + limit);
+	const page = sorted.slice(offset, offset + limit);
 	const materializedPage = await materializeEntityViewRecords({
 		adapterContract: state.adapterContract,
 		ctx,
@@ -638,7 +654,7 @@ async function queryTableView(
 		records: page,
 	});
 	const nextOffset = offset + limit;
-	const isDone = nextOffset >= filtered.length;
+	const isDone = nextOffset >= sorted.length;
 	const relationDisplayValuesByRecordId =
 		await buildRelationCellDisplayValueMap({
 			ctx,
@@ -654,11 +670,16 @@ async function queryTableView(
 	return {
 		...buildViewQueryBase(state),
 		aggregates: buildViewAggregates(
-			filtered,
+			sorted,
 			state.view.aggregatePresets,
 			state.fieldDefsById
 		),
 		cursor: isDone ? null : `offset:${String(nextOffset)}`,
+		footerAggregates: buildTableFooterAggregates({
+			columns: state.columns,
+			fieldDefsById: state.fieldDefsById,
+			records: sorted,
+		}),
 		page: buildPageResult({
 			cellDisplayValuesByRecordId: buildEntityViewCellDisplayValueMap({
 				records: materializedPage,
@@ -669,12 +690,12 @@ async function queryTableView(
 			limit,
 			records: materializedPage,
 			columns: state.columns,
-			totalCount: filtered.length,
+			totalCount: sorted.length,
 			totalCountExact: !assembled.truncated,
 			truncated: assembled.truncated,
 		}),
 		rows,
-		totalCount: filtered.length,
+		totalCount: sorted.length,
 		totalCountExact: !assembled.truncated,
 		truncated: assembled.truncated,
 	};

@@ -18,9 +18,11 @@ import {
 } from "../../../src/test/convex/crm/helpers";
 import { api } from "../../_generated/api";
 import {
+	deriveAggregationEligibility,
 	deriveCapabilities,
 	deriveFieldContractMetadata,
 } from "../metadataCompiler";
+import { buildTableFooterAggregates } from "../tableFooterAggregates";
 
 // ═══════════════════════════════════════════════════════════════════════
 // PURE FUNCTION TESTS
@@ -141,6 +143,146 @@ describe("deriveFieldContractMetadata (pure)", () => {
 				mode: "computed",
 			},
 		});
+	});
+});
+
+describe("deriveAggregationEligibility (pure)", () => {
+	it("marks date fields as footer-aggregate eligible with min/max support", () => {
+		expect(deriveAggregationEligibility("date")).toEqual({
+			enabled: true,
+			supportedFunctions: ["count", "min", "max"],
+		});
+	});
+
+	it("marks select fields as footer-aggregate eligible with count support", () => {
+		expect(deriveAggregationEligibility("select")).toEqual({
+			enabled: true,
+			supportedFunctions: ["count"],
+		});
+	});
+});
+
+describe("buildTableFooterAggregates (pure)", () => {
+	it("builds footer summaries for visible numeric, date, and select columns", () => {
+		const principalFieldId = "field_principal" as Id<"fieldDefs">;
+		const nextFieldId = "field_next" as Id<"fieldDefs">;
+		const recentFieldId = "field_recent" as Id<"fieldDefs">;
+		const objectDefId = "object_test" as Id<"objectDefs">;
+
+		const footer = buildTableFooterAggregates({
+			columns: [
+				{
+					displayOrder: 0,
+					fieldDefId: principalFieldId,
+					fieldType: "currency",
+					isVisible: true,
+					label: "Principal",
+					name: "principal",
+				},
+				{
+					displayOrder: 1,
+					fieldDefId: nextFieldId,
+					fieldType: "date",
+					isVisible: true,
+					label: "Next Upcoming Payment",
+					name: "nextUpcomingPaymentDate",
+				},
+				{
+					displayOrder: 2,
+					fieldDefId: recentFieldId,
+					fieldType: "select",
+					isVisible: true,
+					label: "Most Recent Payment",
+					name: "mostRecentPaymentStatus",
+				},
+			],
+			fieldDefsById: new Map([
+				[
+					String(principalFieldId),
+					{
+						aggregation: {
+							enabled: true,
+							supportedFunctions: ["count", "sum", "avg", "min", "max"],
+						},
+						fieldType: "currency",
+					},
+				],
+				[
+					String(nextFieldId),
+					{
+						aggregation: {
+							enabled: true,
+							supportedFunctions: ["count", "min", "max"],
+						},
+						fieldType: "date",
+					},
+				],
+				[
+					String(recentFieldId),
+					{
+						aggregation: {
+							enabled: true,
+							supportedFunctions: ["count"],
+						},
+						fieldType: "select",
+						options: [
+							{ value: "failed", label: "Failed", color: "#ef4444", order: 0 },
+							{
+								value: "settled",
+								label: "Settled",
+								color: "#22c55e",
+								order: 1,
+							},
+						],
+					},
+				],
+			]) as never,
+			records: [
+				{
+					_id: "record_1",
+					_kind: "native",
+					createdAt: 0,
+					fields: {
+						mostRecentPaymentStatus: "failed",
+						nextUpcomingPaymentDate: 1_746_057_600_000,
+						principal: 42_500_000,
+					},
+					nativeTable: "mortgages",
+					objectDefId,
+					updatedAt: 0,
+				},
+				{
+					_id: "record_2",
+					_kind: "native",
+					createdAt: 0,
+					fields: {
+						mostRecentPaymentStatus: "settled",
+						nextUpcomingPaymentDate: 1_745_107_200_000,
+						principal: 31_800_000,
+					},
+					nativeTable: "mortgages",
+					objectDefId,
+					updatedAt: 0,
+				},
+			],
+		});
+
+		expect(footer).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					fieldName: "principal",
+					summary: 74_300_000,
+				}),
+				expect.objectContaining({
+					fieldName: "nextUpcomingPaymentDate",
+					summary: 1_745_107_200_000,
+				}),
+				expect.objectContaining({
+					fieldName: "mostRecentPaymentStatus",
+					summary: "1 Failed, 1 Settled",
+				}),
+			])
+		);
 	});
 });
 

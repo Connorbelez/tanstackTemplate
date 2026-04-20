@@ -13,6 +13,7 @@ import { api } from "../../_generated/api";
 import type { Id } from "../../_generated/dataModel";
 import type {
 	RecordFilter,
+	RecordSort,
 	SavedViewFilterDefinition,
 	UserSavedViewDefinition,
 	ViewLayout,
@@ -25,8 +26,21 @@ interface CreateUserSavedViewArgs {
 	isDefault?: boolean;
 	name: string;
 	objectDefId: Id<"objectDefs">;
+	sort?: RecordSort;
 	sourceViewDefId?: Id<"viewDefs">;
 	viewType: ViewLayout;
+	visibleFieldIds?: Id<"fieldDefs">[];
+}
+
+interface UpdateUserSavedViewArgs {
+	aggregatePresets?: UserSavedViewDefinition["aggregatePresets"];
+	fieldOrder?: Id<"fieldDefs">[];
+	filters?: SavedViewFilterDefinition[];
+	groupByFieldId?: Id<"fieldDefs">;
+	isDefault?: boolean;
+	name?: string;
+	sort?: RecordSort | null;
+	userSavedViewId: Id<"userSavedViews">;
 	visibleFieldIds?: Id<"fieldDefs">[];
 }
 
@@ -51,6 +65,7 @@ interface ViewSchemaResult {
 		activeSavedViewId?: Id<"userSavedViews">;
 		filters: RecordFilter[];
 		name: string;
+		sort?: RecordSort;
 	};
 	savedView: UserSavedViewDefinition | null;
 	systemView: { name: string };
@@ -82,6 +97,12 @@ const SET_DEFAULT_USER_SAVED_VIEW = makeFunctionReference<
 	{ userSavedViewId: Id<"userSavedViews"> },
 	void
 >("crm/userSavedViews:setDefaultUserSavedView");
+
+const UPDATE_USER_SAVED_VIEW = makeFunctionReference<
+	"mutation",
+	UpdateUserSavedViewArgs,
+	void
+>("crm/userSavedViews:updateUserSavedView");
 
 async function seedLeadFixture(t: CrmTestHarness): Promise<CrmTestFixture> {
 	return seedObjectWithFields(t, {
@@ -209,6 +230,16 @@ describe("CRM user saved views", () => {
 			status: "new",
 			deal_value: 300_000,
 		});
+		await seedRecord(t, fixture.objectDefId, {
+			company_name: "Delta",
+			status: "new",
+			deal_value: 150_000,
+		});
+
+		const sort: RecordSort = {
+			fieldDefId: fixture.fieldDefs.deal_value,
+			direction: "desc",
+		};
 
 		const userSavedViewId = await asAdmin(t).mutation(CREATE_USER_SAVED_VIEW, {
 			name: "My Active Leads",
@@ -228,6 +259,7 @@ describe("CRM user saved views", () => {
 					value: "new",
 				},
 			],
+			sort,
 		});
 
 		const result = (await asAdmin(t).query(
@@ -238,7 +270,7 @@ describe("CRM user saved views", () => {
 			}
 		)) as TableQueryResult;
 
-		expect(result.totalCount).toBe(2);
+		expect(result.totalCount).toBe(3);
 		expect(
 			result.columns
 				.filter((column) => column.isVisible)
@@ -250,6 +282,11 @@ describe("CRM user saved views", () => {
 			);
 			expect(row.fields.status).toBe("new");
 		}
+		expect(result.rows.map((row) => row.fields.company_name)).toEqual([
+			"Gamma",
+			"Delta",
+			"Acme",
+		]);
 
 		const schema = (await asAdmin(t).query(api.crm.viewQueries.getViewSchema, {
 			viewDefId: fixture.defaultViewId,
@@ -262,6 +299,76 @@ describe("CRM user saved views", () => {
 		expect(schema.effectiveView.activeSavedViewId).toBe(userSavedViewId);
 		expect(schema.effectiveView.filters[0]?.operator).toBe("is");
 		expect(schema.effectiveView.filters[0]?.value).toBe("new");
+		expect(schema.effectiveView.sort).toEqual(sort);
+	});
+
+	it("persists saved-view sort and returns it from listUserSavedViews", async () => {
+		const fixture = await seedLeadFixture(t);
+
+		const savedViewId = await asAdmin(t).mutation(CREATE_USER_SAVED_VIEW, {
+			name: "Sorted Leads",
+			objectDefId: fixture.objectDefId,
+			sourceViewDefId: fixture.defaultViewId,
+			viewType: "table",
+			sort: {
+				fieldDefId: fixture.fieldDefs.deal_value,
+				direction: "desc",
+			},
+		});
+
+		const savedViews = await asAdmin(t).query(LIST_USER_SAVED_VIEWS, {
+			objectDefId: fixture.objectDefId,
+		});
+
+		expect(savedViews).toHaveLength(1);
+		expect(savedViews[0]?.userSavedViewId).toBe(savedViewId);
+		expect(savedViews[0]?.sort).toEqual({
+			fieldDefId: fixture.fieldDefs.deal_value,
+			direction: "desc",
+		});
+	});
+
+	it("rejects saved-view sorts on fields without sort capability", async () => {
+		const fixture = await seedLeadFixture(t);
+
+		await expect(
+			asAdmin(t).mutation(CREATE_USER_SAVED_VIEW, {
+				name: "Invalid Sorted Leads",
+				objectDefId: fixture.objectDefId,
+				sourceViewDefId: fixture.defaultViewId,
+				viewType: "table",
+				sort: {
+					fieldDefId: fixture.fieldDefs.status,
+					direction: "asc",
+				},
+			})
+		).rejects.toThrow("does not support sorting");
+	});
+
+	it("clears a saved-view sort when the update payload sets sort to null", async () => {
+		const fixture = await seedLeadFixture(t);
+
+		const savedViewId = await asAdmin(t).mutation(CREATE_USER_SAVED_VIEW, {
+			name: "Cleared Sort Leads",
+			objectDefId: fixture.objectDefId,
+			sourceViewDefId: fixture.defaultViewId,
+			viewType: "table",
+			sort: {
+				fieldDefId: fixture.fieldDefs.deal_value,
+				direction: "desc",
+			},
+		});
+
+		await asAdmin(t).mutation(UPDATE_USER_SAVED_VIEW, {
+			userSavedViewId: savedViewId,
+			sort: null,
+		});
+
+		const savedViews = await asAdmin(t).query(LIST_USER_SAVED_VIEWS, {
+			objectDefId: fixture.objectDefId,
+		});
+
+		expect(savedViews[0]?.sort).toBeUndefined();
 	});
 
 	it("does not apply a default saved view to a different requested system view", async () => {

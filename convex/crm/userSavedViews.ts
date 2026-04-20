@@ -6,6 +6,7 @@ import { crmMutation, crmQuery } from "../fluent";
 import { isValidOperatorForFieldType } from "./filterOperatorValidation";
 import {
 	aggregatePresetValidator,
+	recordSortValidator,
 	savedViewFilterValidator,
 	viewTypeValidator,
 } from "./validators";
@@ -111,6 +112,43 @@ async function validateSavedViewFilters(
 				`Operator "${filter.operator}" is not valid for field type "${fieldDef.fieldType}"`
 			);
 		}
+	}
+}
+
+async function validateSavedViewSort(
+	ctx: MutationCtx,
+	args: {
+		objectDefId: Id<"objectDefs">;
+		sort?: {
+			fieldDefId: Id<"fieldDefs">;
+		};
+	}
+) {
+	if (!args.sort) {
+		return;
+	}
+
+	await validateFieldOwnership(ctx, {
+		objectDefId: args.objectDefId,
+		fieldIds: [args.sort.fieldDefId],
+	});
+
+	const sortableFieldCapabilities = await ctx.db
+		.query("fieldCapabilities")
+		.withIndex("by_object_capability", (query) =>
+			query.eq("objectDefId", args.objectDefId).eq("capability", "sort")
+		)
+		.collect();
+	const sortableFieldIds = new Set(
+		sortableFieldCapabilities.map((capability) =>
+			capability.fieldDefId.toString()
+		)
+	);
+
+	if (!sortableFieldIds.has(args.sort.fieldDefId.toString())) {
+		throw new ConvexError(
+			`Field ${args.sort.fieldDefId} does not support sorting`
+		);
 	}
 }
 
@@ -245,6 +283,7 @@ export const createUserSavedView = crmMutation
 		fieldOrder: v.optional(v.array(v.id("fieldDefs"))),
 		filters: v.optional(v.array(savedViewFilterValidator)),
 		groupByFieldId: v.optional(v.id("fieldDefs")),
+		sort: v.optional(v.union(recordSortValidator, v.null())),
 		aggregatePresets: v.optional(v.array(aggregatePresetValidator)),
 		isDefault: v.optional(v.boolean()),
 	})
@@ -284,6 +323,10 @@ export const createUserSavedView = crmMutation
 			objectDefId: args.objectDefId,
 			filters: args.filters ?? baseSavedView.filters,
 		});
+		await validateSavedViewSort(ctx, {
+			objectDefId: args.objectDefId,
+			sort: args.sort ?? baseSavedView.sort,
+		});
 
 		if (args.groupByFieldId) {
 			await validateFieldOwnership(ctx, {
@@ -313,6 +356,7 @@ export const createUserSavedView = crmMutation
 			fieldOrder,
 			filters: args.filters ?? baseSavedView.filters,
 			groupByFieldId: args.groupByFieldId ?? baseSavedView.groupByFieldId,
+			sort: args.sort ?? baseSavedView.sort,
 			aggregatePresets: args.aggregatePresets ?? baseSavedView.aggregatePresets,
 			isDefault,
 			createdAt: now,
@@ -346,6 +390,7 @@ export const updateUserSavedView = crmMutation
 		fieldOrder: v.optional(v.array(v.id("fieldDefs"))),
 		filters: v.optional(v.array(savedViewFilterValidator)),
 		groupByFieldId: v.optional(v.id("fieldDefs")),
+		sort: v.optional(v.union(recordSortValidator, v.null())),
 		aggregatePresets: v.optional(v.array(aggregatePresetValidator)),
 		isDefault: v.optional(v.boolean()),
 	})
@@ -367,6 +412,10 @@ export const updateUserSavedView = crmMutation
 		await validateSavedViewFilters(ctx, {
 			objectDefId: before.objectDefId,
 			filters: args.filters ?? [],
+		});
+		await validateSavedViewSort(ctx, {
+			objectDefId: before.objectDefId,
+			sort: args.sort ?? undefined,
 		});
 
 		if (args.groupByFieldId) {
@@ -402,6 +451,9 @@ export const updateUserSavedView = crmMutation
 		}
 		if (args.groupByFieldId !== undefined) {
 			patch.groupByFieldId = args.groupByFieldId;
+		}
+		if (args.sort !== undefined) {
+			patch.sort = args.sort ?? undefined;
 		}
 		if (args.aggregatePresets !== undefined) {
 			patch.aggregatePresets = args.aggregatePresets;
