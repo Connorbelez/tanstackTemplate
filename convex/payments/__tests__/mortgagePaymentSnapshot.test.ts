@@ -1,7 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
 	deriveMostRecentPaymentSnapshot,
 	deriveNextUpcomingPaymentSnapshot,
+	loadMortgagePaymentSnapshots,
 	pickPreferredExternalCollectionSchedule,
 } from "../mortgagePaymentSnapshot";
 
@@ -289,6 +290,90 @@ describe("mortgagePaymentSnapshot", () => {
 		expect(selected).toMatchObject({
 			nextPollAt: Date.parse("2026-04-07T00:00:00.000Z"),
 			status: "active",
+		});
+	});
+
+	it("uses a shared table scan for larger mortgage batches", async () => {
+		const mortgageIds = Array.from(
+			{ length: 9 },
+			(_, index) => `mortgage_${String(index + 1)}`
+		);
+		const obligationDueDate = Date.parse("2026-05-01T00:00:00.000Z");
+		const queryMocks = {
+			obligations: {
+				collect: vi.fn(async () => [
+					{
+						amount: 2450,
+						dueDate: obligationDueDate,
+						mortgageId: "mortgage_1",
+						status: "upcoming",
+					},
+					{
+						amount: 3200,
+						dueDate: Date.parse("2026-05-10T00:00:00.000Z"),
+						mortgageId: "mortgage_other",
+						status: "upcoming",
+					},
+				]),
+			},
+			collectionPlanEntries: {
+				collect: vi.fn(async () => []),
+			},
+			collectionAttempts: {
+				collect: vi.fn(async () => []),
+			},
+			externalCollectionSchedules: {
+				collect: vi.fn(async () => []),
+			},
+			transferRequests: {
+				collect: vi.fn(async () => []),
+			},
+		};
+		const ctx = {
+			db: {
+				get: vi.fn(async (id: string) => ({
+					_id: id,
+					activeExternalCollectionScheduleId: undefined,
+				})),
+				normalizeId: vi.fn((_table: string, id: string) => id),
+				query: vi.fn((table: keyof typeof queryMocks) => {
+					const query = queryMocks[table];
+					if (!query) {
+						throw new Error(`Unexpected table query: ${table}`);
+					}
+					return query;
+				}),
+			},
+		};
+
+		const snapshots = await loadMortgagePaymentSnapshots(
+			ctx as never,
+			mortgageIds as never,
+			Date.parse("2026-04-15T00:00:00.000Z")
+		);
+
+		expect(queryMocks.obligations.collect).toHaveBeenCalledOnce();
+		expect(queryMocks.collectionPlanEntries.collect).toHaveBeenCalledOnce();
+		expect(queryMocks.collectionAttempts.collect).toHaveBeenCalledOnce();
+		expect(
+			queryMocks.externalCollectionSchedules.collect
+		).toHaveBeenCalledOnce();
+		expect(queryMocks.transferRequests.collect).not.toHaveBeenCalled();
+		expect(snapshots.get("mortgage_1")).toEqual({
+			mostRecentPaymentAmount: 2450,
+			mostRecentPaymentDate: obligationDueDate,
+			mostRecentPaymentStatus: "processing",
+			nextUpcomingPaymentAmount: 2450,
+			nextUpcomingPaymentDate: obligationDueDate,
+			nextUpcomingPaymentStatus: "planned",
+		});
+		expect(snapshots.get("mortgage_9")).toEqual({
+			mostRecentPaymentAmount: null,
+			mostRecentPaymentDate: null,
+			mostRecentPaymentStatus: "none",
+			nextUpcomingPaymentAmount: null,
+			nextUpcomingPaymentDate: null,
+			nextUpcomingPaymentStatus: "none",
 		});
 	});
 });

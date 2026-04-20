@@ -50,14 +50,11 @@ type PlanEntrySource = Pick<
 	"amount" | "scheduledDate" | "status"
 >;
 
-type ExternalScheduleSource = Pick<
-	Doc<"externalCollectionSchedules">,
-	"nextPollAt" | "status"
-> | null;
-type ExternalScheduleDoc = Pick<
+type ExternalScheduleCandidate = Pick<
 	Doc<"externalCollectionSchedules">,
 	"_id" | "createdAt" | "nextPollAt" | "status"
 >;
+type ExternalScheduleSource = ExternalScheduleCandidate | null;
 type MortgageSource = Pick<
 	Doc<"mortgages">,
 	"_id" | "activeExternalCollectionScheduleId"
@@ -67,6 +64,19 @@ type TransferSource = Pick<
 	Doc<"transferRequests">,
 	"confirmedAt" | "failedAt" | "reversedAt" | "status"
 >;
+type ObligationRowSource = ObligationSource &
+	Pick<Doc<"obligations">, "mortgageId">;
+type PlanEntryRowSource = PlanEntrySource &
+	Pick<Doc<"collectionPlanEntries">, "mortgageId">;
+type AttemptRowSource = AttemptSource &
+	Pick<Doc<"collectionAttempts">, "mortgageId">;
+type ExternalScheduleRowSource = ExternalScheduleCandidate &
+	Pick<Doc<"externalCollectionSchedules">, "mortgageId">;
+
+// Larger table views were fanning out into one set of payment index scans per
+// mortgage. Until a persisted snapshot read model lands, switch to a shared
+// table scan once the batch is large enough that per-mortgage fanout is worse.
+const BULK_SNAPSHOT_SCAN_THRESHOLD = 8;
 
 const EMPTY_SNAPSHOT: MortgagePaymentSnapshot = {
 	mostRecentPaymentAmount: null,
@@ -78,7 +88,7 @@ const EMPTY_SNAPSHOT: MortgagePaymentSnapshot = {
 };
 
 function isTerminalExternalCollectionScheduleStatus(
-	status: ExternalScheduleDoc["status"]
+	status: ExternalScheduleCandidate["status"]
 ) {
 	return (
 		status === "cancelled" ||
@@ -224,10 +234,18 @@ function sortAscendingByDate<T extends { date: number }>(left: T, right: T) {
 	return left.date - right.date;
 }
 
-export function pickPreferredExternalCollectionSchedule(args: {
+export function pickPreferredExternalCollectionSchedule<
+	TSchedule extends ExternalScheduleCandidate,
+>(args: {
 	mortgage: MortgageSource | null;
-	schedules: readonly ExternalScheduleDoc[];
-}): ExternalScheduleSource {
+	schedules: readonly TSchedule[];
+}): TSchedule | null;
+export function pickPreferredExternalCollectionSchedule<
+	TSchedule extends ExternalScheduleCandidate,
+>(args: {
+	mortgage: MortgageSource | null;
+	schedules: readonly TSchedule[];
+}): TSchedule | null {
 	if (!args.mortgage) {
 		return null;
 	}
@@ -252,6 +270,20 @@ export function pickPreferredExternalCollectionSchedule(args: {
 					!isTerminalExternalCollectionScheduleStatus(schedule.status)
 			)
 			.sort((left, right) => right.createdAt - left.createdAt)[0] ?? null
+	);
+}
+
+function buildTransfersByAttemptId(args: {
+	attempts: readonly AttemptSource[];
+	transfersById: ReadonlyMap<string, TransferSource | null | undefined>;
+}) {
+	return new Map(
+		args.attempts.map((attempt) => [
+			String(attempt._id),
+			attempt.transferRequestId
+				? (args.transfersById.get(String(attempt.transferRequestId)) ?? null)
+				: null,
+		])
 	);
 }
 
@@ -378,6 +410,236 @@ export function deriveNextUpcomingPaymentSnapshot(args: {
 	};
 }
 
+export function buildMortgagePaymentSnapshot(args: {
+	asOf: number;
+	attempts: readonly AttemptSource[];
+	mortgage: MortgageSource | null;
+	obligations: readonly ObligationSource[];
+	planEntries: readonly PlanEntrySource[];
+	schedules: readonly ExternalScheduleCandidate[];
+	transfersById: ReadonlyMap<string, TransferSource | null | undefined>;
+}): MortgagePaymentSnapshot {
+	const transfersByAttemptId = buildTransfersByAttemptId({
+		attempts: args.attempts,
+		transfersById: args.transfersById,
+	});
+	const mostRecent = deriveMostRecentPaymentSnapshot({
+		attempts: args.attempts,
+		obligations: args.obligations,
+		transfersByAttemptId,
+	});
+	const nextUpcoming = deriveNextUpcomingPaymentSnapshot({
+		asOf: args.asOf,
+		externalSchedule: pickPreferredExternalCollectionSchedule({
+			mortgage: args.mortgage,
+			schedules: args.schedules,
+		}),
+		obligations: args.obligations,
+		planEntries: args.planEntries,
+	});
+
+	return {
+		mostRecentPaymentAmount: mostRecent.amount,
+		mostRecentPaymentDate: mostRecent.date,
+		mostRecentPaymentStatus: mostRecent.status,
+		nextUpcomingPaymentAmount: nextUpcoming.amount,
+		nextUpcomingPaymentDate: nextUpcoming.date,
+		nextUpcomingPaymentStatus: nextUpcoming.status,
+	};
+}
+
+function groupRowsByMortgageId<T extends { mortgageId: Id<"mortgages"> }>(
+	rows: readonly T[]
+) {
+	const rowsByMortgageId = new Map<string, T[]>();
+
+	for (const row of rows) {
+		const mortgageId = String(row.mortgageId);
+		const existingRows = rowsByMortgageId.get(mortgageId);
+		if (existingRows) {
+			existingRows.push(row);
+			continue;
+		}
+
+		rowsByMortgageId.set(mortgageId, [row]);
+	}
+
+	return rowsByMortgageId;
+}
+
+function buildMortgagePaymentSnapshotsFromRows(args: {
+	asOf: number;
+	attempts: readonly AttemptRowSource[];
+	mortgages: readonly MortgageSource[];
+	obligations: readonly ObligationRowSource[];
+	planEntries: readonly PlanEntryRowSource[];
+	schedules: readonly ExternalScheduleRowSource[];
+	transfersById: ReadonlyMap<string, TransferSource | null | undefined>;
+}) {
+	const obligationsByMortgageId = groupRowsByMortgageId(args.obligations);
+	const planEntriesByMortgageId = groupRowsByMortgageId(args.planEntries);
+	const attemptsByMortgageId = groupRowsByMortgageId(args.attempts);
+	const schedulesByMortgageId = groupRowsByMortgageId(args.schedules);
+
+	return new Map(
+		args.mortgages.map((mortgage) => [
+			String(mortgage._id),
+			buildMortgagePaymentSnapshot({
+				asOf: args.asOf,
+				attempts: attemptsByMortgageId.get(String(mortgage._id)) ?? [],
+				mortgage,
+				obligations: obligationsByMortgageId.get(String(mortgage._id)) ?? [],
+				planEntries: planEntriesByMortgageId.get(String(mortgage._id)) ?? [],
+				schedules: schedulesByMortgageId.get(String(mortgage._id)) ?? [],
+				transfersById: args.transfersById,
+			}),
+		])
+	);
+}
+
+async function loadMortgagePaymentSnapshotsPerMortgage(args: {
+	asOf: number;
+	ctx: Pick<QueryCtx, "db">;
+	mortgages: readonly MortgageSource[];
+}) {
+	const mortgageData = await Promise.all(
+		args.mortgages.map(async (mortgage) => {
+			const [obligations, planEntries, attempts, schedules] = await Promise.all(
+				[
+					args.ctx.db
+						.query("obligations")
+						.withIndex("by_mortgage_and_date", (query) =>
+							query.eq("mortgageId", mortgage._id)
+						)
+						.collect(),
+					args.ctx.db
+						.query("collectionPlanEntries")
+						.withIndex("by_mortgage_status_scheduled", (query) =>
+							query.eq("mortgageId", mortgage._id)
+						)
+						.collect(),
+					args.ctx.db
+						.query("collectionAttempts")
+						.withIndex("by_mortgage_status", (query) =>
+							query.eq("mortgageId", mortgage._id)
+						)
+						.collect(),
+					args.ctx.db
+						.query("externalCollectionSchedules")
+						.withIndex("by_mortgage", (query) =>
+							query.eq("mortgageId", mortgage._id)
+						)
+						.collect(),
+				]
+			);
+
+			return {
+				attempts,
+				mortgage,
+				obligations,
+				planEntries,
+				schedules,
+			};
+		})
+	);
+
+	const transferIds = [
+		...new Set(
+			mortgageData
+				.flatMap((entry) => entry.attempts)
+				.map((attempt) => attempt.transferRequestId)
+				.filter(
+					(transferId): transferId is Id<"transferRequests"> =>
+						transferId !== undefined
+				)
+		),
+	];
+	const transfers = await Promise.all(
+		transferIds.map((transferId) => args.ctx.db.get(transferId))
+	);
+	const transfersById = new Map(
+		transfers
+			.filter(
+				(transfer): transfer is Doc<"transferRequests"> => transfer !== null
+			)
+			.map((transfer) => [String(transfer._id), transfer] as const)
+	);
+
+	return new Map(
+		mortgageData.map((entry) => [
+			String(entry.mortgage._id),
+			buildMortgagePaymentSnapshot({
+				asOf: args.asOf,
+				attempts: entry.attempts,
+				mortgage: entry.mortgage,
+				obligations: entry.obligations,
+				planEntries: entry.planEntries,
+				schedules: entry.schedules,
+				transfersById,
+			}),
+		])
+	);
+}
+
+async function loadMortgagePaymentSnapshotsBulk(args: {
+	asOf: number;
+	ctx: Pick<QueryCtx, "db">;
+	mortgages: readonly MortgageSource[];
+}) {
+	const mortgageIdSet = new Set(
+		args.mortgages.map((mortgage) => String(mortgage._id))
+	);
+	const [obligations, planEntries, attempts, schedules] = await Promise.all([
+		args.ctx.db
+			.query("obligations")
+			.collect()
+			.then((rows) =>
+				rows.filter((row) => mortgageIdSet.has(String(row.mortgageId)))
+			),
+		args.ctx.db
+			.query("collectionPlanEntries")
+			.collect()
+			.then((rows) =>
+				rows.filter((row) => mortgageIdSet.has(String(row.mortgageId)))
+			),
+		args.ctx.db
+			.query("collectionAttempts")
+			.collect()
+			.then((rows) =>
+				rows.filter((row) => mortgageIdSet.has(String(row.mortgageId)))
+			),
+		args.ctx.db
+			.query("externalCollectionSchedules")
+			.collect()
+			.then((rows) =>
+				rows.filter((row) => mortgageIdSet.has(String(row.mortgageId)))
+			),
+	]);
+	const transferIdSet = new Set(
+		attempts.flatMap((attempt) =>
+			attempt.transferRequestId ? [String(attempt.transferRequestId)] : []
+		)
+	);
+	const transfersById =
+		transferIdSet.size === 0
+			? new Map<string, TransferSource>()
+			: new Map(
+					(await args.ctx.db.query("transferRequests").collect())
+						.filter((transfer) => transferIdSet.has(String(transfer._id)))
+						.map((transfer) => [String(transfer._id), transfer] as const)
+				);
+
+	return buildMortgagePaymentSnapshotsFromRows({
+		asOf: args.asOf,
+		attempts,
+		mortgages: args.mortgages,
+		obligations,
+		planEntries,
+		schedules,
+		transfersById,
+	});
+}
+
 export async function loadMortgagePaymentSnapshots(
 	ctx: Pick<QueryCtx, "db">,
 	mortgageIds: readonly Id<"mortgages">[],
@@ -396,107 +658,23 @@ export async function loadMortgagePaymentSnapshots(
 			uniqueMortgageIds.map((mortgageId) => ctx.db.get(mortgageId))
 		)
 	).filter((mortgage): mortgage is Doc<"mortgages"> => mortgage !== null);
-	const mortgageData = await Promise.all(
-		mortgages.map(async (mortgage) => {
-			const [obligations, planEntries, attempts, schedules] = await Promise.all(
-				[
-					ctx.db
-						.query("obligations")
-						.withIndex("by_mortgage_and_date", (query) =>
-							query.eq("mortgageId", mortgage._id)
-						)
-						.collect(),
-					ctx.db
-						.query("collectionPlanEntries")
-						.withIndex("by_mortgage_status_scheduled", (query) =>
-							query.eq("mortgageId", mortgage._id)
-						)
-						.collect(),
-					ctx.db
-						.query("collectionAttempts")
-						.withIndex("by_mortgage_status", (query) =>
-							query.eq("mortgageId", mortgage._id)
-						)
-						.collect(),
-					ctx.db
-						.query("externalCollectionSchedules")
-						.withIndex("by_mortgage", (query) =>
-							query.eq("mortgageId", mortgage._id)
-						)
-						.collect(),
-				]
-			);
+	if (mortgages.length === 0) {
+		return new Map();
+	}
 
-			return {
-				mortgage,
-				obligations,
-				planEntries,
-				attempts,
-				externalSchedule: pickPreferredExternalCollectionSchedule({
-					mortgage,
-					schedules,
-				}),
-			};
-		})
-	);
-
-	const transferIds = [
-		...new Set(
-			mortgageData
-				.flatMap((entry) => entry.attempts)
-				.map((attempt) => attempt.transferRequestId)
-				.filter(
-					(transferId): transferId is Id<"transferRequests"> =>
-						transferId !== undefined
-				)
-		),
-	];
-	const transfers = await Promise.all(
-		transferIds.map((transferId) => ctx.db.get(transferId))
-	);
-	const transfersById = new Map(
-		transfers
-			.filter(
-				(transfer): transfer is Doc<"transferRequests"> => transfer !== null
-			)
-			.map((transfer) => [transfer._id.toString(), transfer] as const)
-	);
-	const snapshots = mortgageData.map((entry) => {
-		const key = String(entry.mortgage._id);
-		const transfersByAttemptId = new Map(
-			entry.attempts.map((attempt) => [
-				String(attempt._id),
-				attempt.transferRequestId
-					? (transfersById.get(String(attempt.transferRequestId)) ?? null)
-					: null,
-			])
-		);
-		const mostRecent = deriveMostRecentPaymentSnapshot({
-			attempts: entry.attempts,
-			obligations: entry.obligations,
-			transfersByAttemptId,
-		});
-		const nextUpcoming = deriveNextUpcomingPaymentSnapshot({
+	if (mortgages.length > BULK_SNAPSHOT_SCAN_THRESHOLD) {
+		return loadMortgagePaymentSnapshotsBulk({
 			asOf,
-			externalSchedule: entry.externalSchedule,
-			obligations: entry.obligations,
-			planEntries: entry.planEntries,
+			ctx,
+			mortgages,
 		});
+	}
 
-		return [
-			key,
-			{
-				mostRecentPaymentAmount: mostRecent.amount,
-				mostRecentPaymentDate: mostRecent.date,
-				mostRecentPaymentStatus: mostRecent.status,
-				nextUpcomingPaymentAmount: nextUpcoming.amount,
-				nextUpcomingPaymentDate: nextUpcoming.date,
-				nextUpcomingPaymentStatus: nextUpcoming.status,
-			} satisfies MortgagePaymentSnapshot,
-		] as const;
+	return loadMortgagePaymentSnapshotsPerMortgage({
+		asOf,
+		ctx,
+		mortgages,
 	});
-
-	return new Map(snapshots);
 }
 
 export const EMPTY_MORTGAGE_PAYMENT_SNAPSHOT = EMPTY_SNAPSHOT;
