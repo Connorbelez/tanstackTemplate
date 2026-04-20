@@ -48,15 +48,14 @@ export const createDocumentPackage = internalAction({
 	},
 });
 
-/**
- * Stub: archives signed documents after all parties have signed.
- * // TODO: Phase 2 — replace with real implementation (Documenso + convex-fs)
- */
 export const archiveSignedDocuments = internalAction({
 	args: dealEffectPayloadValidator,
-	handler: async (_ctx, args) => {
-		console.info(
-			`[stub] archiveSignedDocuments: Would archive signed documents for ${args.entityType} ${args.entityId}`
+	handler: async (ctx, args) => {
+		await ctx.runAction(
+			internal.documents.dealPackages.archiveCompletedSignableDocumentsInternal,
+			{
+				dealId: args.entityId,
+			}
 		);
 	},
 });

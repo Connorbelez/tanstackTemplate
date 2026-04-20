@@ -51,11 +51,16 @@ import {
 	dealDocumentPackageStatusValidator,
 	dealDocumentSourceBlueprintSnapshotValidator,
 	dealPackageBlueprintSnapshotValidator,
+	generatedDocumentSigningStatusValidator,
 	mortgageDocumentBlueprintClassValidator,
 	mortgageDocumentBlueprintStatusValidator,
 	mortgageDocumentSourceKindValidator,
 	mortgageDocumentTemplateSnapshotMetaValidator,
 	mortgageDocumentValidationSummaryValidator,
+	signatureEnvelopeStatusValidator,
+	signatureProviderCodeValidator,
+	signatureProviderRoleValidator,
+	signatureRecipientStatusValidator,
 } from "./documents/contracts";
 import {
 	actorTypeValidator,
@@ -683,6 +688,45 @@ export default defineSchema({
 		.index("by_mortgage", ["mortgageId", "createdAt"])
 		.index("by_source_blueprint", ["sourceBlueprintId", "createdAt"])
 		.index("by_package_status", ["packageId", "status", "createdAt"]),
+
+	signatureEnvelopes: defineTable({
+		generatedDocumentId: v.id("generatedDocuments"),
+		dealId: v.id("deals"),
+		providerCode: signatureProviderCodeValidator,
+		providerEnvelopeId: v.string(),
+		status: signatureEnvelopeStatusValidator,
+		lastProviderSyncAt: v.optional(v.number()),
+		lastError: v.optional(v.string()),
+		createdAt: v.number(),
+		updatedAt: v.number(),
+	})
+		.index("by_deal", ["dealId", "createdAt"])
+		.index("by_generated_document", ["generatedDocumentId"])
+		.index("by_provider_envelope", ["providerCode", "providerEnvelopeId"])
+		.index("by_deal_status", ["dealId", "status", "createdAt"]),
+
+	signatureRecipients: defineTable({
+		envelopeId: v.id("signatureEnvelopes"),
+		userId: v.optional(v.id("users")),
+		platformRole: v.string(),
+		providerRole: signatureProviderRoleValidator,
+		name: v.string(),
+		email: v.string(),
+		signingOrder: v.number(),
+		providerRecipientId: v.optional(v.string()),
+		status: signatureRecipientStatusValidator,
+		openedAt: v.optional(v.number()),
+		signedAt: v.optional(v.number()),
+		declinedAt: v.optional(v.number()),
+		createdAt: v.number(),
+		updatedAt: v.number(),
+	})
+		.index("by_envelope", ["envelopeId", "signingOrder"])
+		.index("by_envelope_provider_recipient", [
+			"envelopeId",
+			"providerRecipientId",
+		])
+		.index("by_user_status", ["userId", "status"]),
 
 	mortgages: defineTable({
 		/** WorkOS organization id — denormalized from broker of record. */
@@ -1558,6 +1602,8 @@ export default defineSchema({
 		role: v.union(
 			v.literal("platform_lawyer"),
 			v.literal("guest_lawyer"),
+			v.literal("broker_of_record"),
+			v.literal("assigned_broker"),
 			v.literal("lender"),
 			v.literal("borrower")
 		),
@@ -2140,6 +2186,9 @@ export default defineSchema({
 		// ─── Generated output ───
 		pdfStorageId: v.id("_storage"),
 		documensoEnvelopeId: v.optional(v.string()),
+		finalPdfStorageId: v.optional(v.id("_storage")),
+		completionCertificateStorageId: v.optional(v.id("_storage")),
+		signingCompletedAt: v.optional(v.number()),
 
 		// ─── Entity linkage (polymorphic) ───
 		// Intentionally NOT reusing entityTypeValidator from engine/validators —
@@ -2163,15 +2212,7 @@ export default defineSchema({
 		),
 
 		// ─── Signing status ───
-		signingStatus: v.union(
-			v.literal("not_applicable"),
-			v.literal("draft"),
-			v.literal("sent"),
-			v.literal("partially_signed"),
-			v.literal("completed"),
-			v.literal("declined"),
-			v.literal("voided")
-		),
+		signingStatus: generatedDocumentSigningStatusValidator,
 
 		// ─── Metadata ───
 		generatedBy: v.string(),

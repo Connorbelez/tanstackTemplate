@@ -51,7 +51,7 @@ async function requireListingForDetailContext(
 	}
 
 	const mortgage = await ctx.db.get(listing.mortgageId);
-	if (!mortgage || !canAccessCrmOrgScopedRecord(ctx.viewer, mortgage)) {
+	if (!(mortgage && canAccessCrmOrgScopedRecord(ctx.viewer, mortgage))) {
 		throw new ConvexError("Listing not found or access denied");
 	}
 
@@ -585,24 +585,27 @@ export const getDealDetailContext = crmQuery
 			throw new ConvexError("Deal not found or access denied");
 		}
 
-		const [
-			property,
-			lenderUser,
-			sellerUser,
-			recentAuditEvents,
-			packageSurface,
-		] = await Promise.all([
-			ctx.db.get(mortgage.propertyId),
-			getUserByAuthId(ctx, deal.buyerId),
-			getUserByAuthId(ctx, deal.sellerId),
-			ctx.db
-				.query("auditJournal")
-				.withIndex("by_entity", (query) =>
-					query.eq("entityType", "deal").eq("entityId", String(args.dealId))
-				)
-				.collect(),
-			readDealDocumentPackageSurface(ctx, args.dealId),
-		]);
+		const [property, lenderUser, sellerUser, viewerUser, recentAuditEvents] =
+			await Promise.all([
+				ctx.db.get(mortgage.propertyId),
+				getUserByAuthId(ctx, deal.buyerId),
+				getUserByAuthId(ctx, deal.sellerId),
+				getUserByAuthId(ctx, ctx.viewer.authId),
+				ctx.db
+					.query("auditJournal")
+					.withIndex("by_entity", (query) =>
+						query.eq("entityType", "deal").eq("entityId", String(args.dealId))
+					)
+					.collect(),
+			]);
+		const packageSurface = await readDealDocumentPackageSurface(
+			ctx,
+			args.dealId,
+			{
+				isFairLendAdmin: ctx.viewer.isFairLendAdmin,
+				userId: viewerUser?._id,
+			}
+		);
 
 		const lender = lenderUser
 			? {

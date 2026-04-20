@@ -209,11 +209,6 @@ export async function canAccessDeal(
 		return false;
 	}
 
-	// Broker check via deal's mortgage
-	if (await isBrokerForMortgage(ctx, viewer, deal.mortgageId)) {
-		return true;
-	}
-
 	// Buyer / Seller check: buyerId or sellerId match viewer.authId
 	if (deal.buyerId === viewer.authId || deal.sellerId === viewer.authId) {
 		return true;
@@ -228,7 +223,7 @@ export async function canAccessDeal(
 		return true;
 	}
 
-	// Lawyer check: dealAccess record with active status
+	// Explicit dealAccess record with active status
 	const dealAccessRecords = await ctx.db
 		.query("dealAccess")
 		.withIndex("by_user_and_deal", (q) =>

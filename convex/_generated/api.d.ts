@@ -22,6 +22,7 @@ import type * as admin_origination_collections from "../admin/origination/collec
 import type * as admin_origination_commit from "../admin/origination/commit.js";
 import type * as admin_origination_media from "../admin/origination/media.js";
 import type * as admin_origination_participants from "../admin/origination/participants.js";
+import type * as admin_origination_postCommitCollectionsActivation from "../admin/origination/postCommitCollectionsActivation.js";
 import type * as admin_origination_properties from "../admin/origination/properties.js";
 import type * as admin_origination_validators from "../admin/origination/validators.js";
 import type * as admin_queries from "../admin/queries.js";
@@ -137,6 +138,10 @@ import type * as documents_assets from "../documents/assets.js";
 import type * as documents_contracts from "../documents/contracts.js";
 import type * as documents_dealPackages from "../documents/dealPackages.js";
 import type * as documents_mortgageBlueprints from "../documents/mortgageBlueprints.js";
+import type * as documents_signature_documenso from "../documents/signature/documenso.js";
+import type * as documents_signature_provider from "../documents/signature/provider.js";
+import type * as documents_signature_sessions from "../documents/signature/sessions.js";
+import type * as documents_signature_webhooks from "../documents/signature/webhooks.js";
 import type * as documents_templateValidation from "../documents/templateValidation.js";
 import type * as engine_auditJournal from "../engine/auditJournal.js";
 import type * as engine_commands from "../engine/commands.js";
@@ -358,6 +363,7 @@ declare const fullApi: ApiFromModules<{
   "admin/origination/commit": typeof admin_origination_commit;
   "admin/origination/media": typeof admin_origination_media;
   "admin/origination/participants": typeof admin_origination_participants;
+  "admin/origination/postCommitCollectionsActivation": typeof admin_origination_postCommitCollectionsActivation;
   "admin/origination/properties": typeof admin_origination_properties;
   "admin/origination/validators": typeof admin_origination_validators;
   "admin/queries": typeof admin_queries;
@@ -473,6 +479,10 @@ declare const fullApi: ApiFromModules<{
   "documents/contracts": typeof documents_contracts;
   "documents/dealPackages": typeof documents_dealPackages;
   "documents/mortgageBlueprints": typeof documents_mortgageBlueprints;
+  "documents/signature/documenso": typeof documents_signature_documenso;
+  "documents/signature/provider": typeof documents_signature_provider;
+  "documents/signature/sessions": typeof documents_signature_sessions;
+  "documents/signature/webhooks": typeof documents_signature_webhooks;
   "documents/templateValidation": typeof documents_templateValidation;
   "engine/auditJournal": typeof engine_auditJournal;
   "engine/commands": typeof engine_commands;

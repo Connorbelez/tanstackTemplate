@@ -25,6 +25,7 @@ interface DocumensoRecipient {
 	email: string;
 	fields: DocumensoFieldForRecipient[];
 	name: string;
+	platformRole: string;
 	role: "SIGNER" | "APPROVER" | "VIEWER";
 	signingOrder: number;
 }
@@ -314,6 +315,7 @@ function buildDocumensoConfig(
 			return {
 				name: mapping?.name ?? "",
 				email: mapping?.email ?? "",
+				platformRole: sig.platformRole,
 				role: docRole,
 				signingOrder: sig.order,
 				fields: fieldsByRole.get(sig.platformRole) ?? [],

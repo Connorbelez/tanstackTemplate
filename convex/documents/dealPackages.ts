@@ -18,12 +18,72 @@ import {
 	dealDocumentInstanceStatusValidator,
 	dealDocumentPackageStatusValidator,
 	dealPackageBlueprintSnapshotValidator,
+	generatedDocumentSigningStatusValidator,
 	mortgageDocumentBlueprintClassValidator,
+	signatureEnvelopeStatusValidator,
+	signatureProviderCodeValidator,
+	signatureProviderRoleValidator,
+	signatureRecipientStatusValidator,
 } from "./contracts";
 import { listMortgageBlueprintRows } from "./mortgageBlueprints";
+import {
+	getSignatureProvider,
+	mapEnvelopeStatusToDealDocumentInstanceStatus,
+	mapEnvelopeStatusToGeneratedDocumentSigningStatus,
+	type SignatureProviderCreateEnvelopeResult,
+	type SignatureProviderRecipientInput,
+} from "./signature/provider";
 
 type InstanceRow = Doc<"dealDocumentInstances">;
 type BlueprintRow = Doc<"mortgageDocumentBlueprints">;
+type EnvelopeRow = Doc<"signatureEnvelopes">;
+type RecipientRow = Doc<"signatureRecipients">;
+type GeneratedDocumentRow = Doc<"generatedDocuments">;
+
+interface DealPackageViewerContext {
+	isFairLendAdmin: boolean;
+	userId?: Id<"users">;
+}
+
+interface SignatoryParticipant {
+	email: string;
+	name: string;
+	platformRole: string;
+	userId?: Id<"users">;
+}
+
+interface PackageInstanceSigningRecipientSurface {
+	declinedAt: number | null;
+	email: string;
+	isCurrentViewer: boolean;
+	name: string;
+	openedAt: number | null;
+	platformRole: string;
+	providerRecipientId: string | null;
+	providerRole: RecipientRow["providerRole"];
+	signedAt: number | null;
+	signingOrder: number;
+	status: RecipientRow["status"];
+	userId: Id<"users"> | null;
+}
+
+interface PackageInstanceSigningSurface {
+	canLaunchEmbeddedSigning: boolean;
+	envelopeId: Id<"signatureEnvelopes"> | null;
+	generatedDocumentSigningStatus: GeneratedDocumentRow["signingStatus"] | null;
+	lastError: string | null;
+	lastProviderSyncAt: number | null;
+	providerCode: EnvelopeRow["providerCode"] | null;
+	providerEnvelopeId: string | null;
+	recipients: PackageInstanceSigningRecipientSurface[];
+	status: EnvelopeRow["status"] | null;
+}
+
+interface PackageInstanceArchivedSigningSurface {
+	completionCertificateUrl: string | null;
+	finalPdfUrl: string | null;
+	signingCompletedAt: number | null;
+}
 
 interface ParticipantSnapshot {
 	assignedBroker?: {
@@ -65,6 +125,7 @@ interface ParticipantSnapshot {
 
 interface PackageSurface {
 	instances: Array<{
+		archivedSigning: PackageInstanceArchivedSigningSurface | null;
 		archivedAt: number | null;
 		assetId: Id<"documentAssets"> | null;
 		category: string | null;
@@ -82,6 +143,7 @@ interface PackageSurface {
 		packageLabel: string | null;
 		sourceBlueprintId: Id<"mortgageDocumentBlueprints"> | null;
 		status: Doc<"dealDocumentInstances">["status"];
+		signing: PackageInstanceSigningSurface | null;
 		templateId: Id<"documentTemplates"> | null;
 		templateVersion: number | null;
 		url: string | null;
@@ -107,7 +169,10 @@ interface CreateDocumentPackageResult {
 }
 
 interface DealPackageActionCtx
-	extends Pick<ActionCtx, "runAction" | "runMutation" | "runQuery"> {}
+	extends Pick<
+		ActionCtx,
+		"runAction" | "runMutation" | "runQuery" | "storage"
+	> {}
 
 interface DealPackageActionArgs {
 	dealId: Id<"deals">;
@@ -123,7 +188,38 @@ interface DealPackageRuntimeState {
 		name: string;
 		platformRole: string;
 	}>;
+	signatoryParticipants: SignatoryParticipant[];
 	variables: Record<string, string>;
+}
+
+interface SignableArchiveTarget {
+	completionCertificateStorageId: Id<"_storage"> | null;
+	envelopeId: Id<"signatureEnvelopes">;
+	envelopeStatus: EnvelopeRow["status"];
+	finalPdfStorageId: Id<"_storage"> | null;
+	generatedDocumentId: Id<"generatedDocuments">;
+	instanceArchivedAt: number | null;
+	instanceId: Id<"dealDocumentInstances">;
+	providerCode: EnvelopeRow["providerCode"];
+	providerEnvelopeId: string;
+	signingCompletedAt: number | null;
+}
+
+interface SignableArchiveState {
+	package: {
+		archivedAt: number | null;
+		packageId: Id<"dealDocumentPackages">;
+		status: Doc<"dealDocumentPackages">["status"];
+	};
+	targets: SignableArchiveTarget[];
+}
+
+interface ArchiveCompletedSignableDocumentsResult {
+	archivedCount: number;
+	packageArchived: boolean;
+	packageId: Id<"dealDocumentPackages"> | null;
+	skippedCount: number;
+	targetCount: number;
 }
 
 interface ResolvedLawyerParticipant {
@@ -132,6 +228,8 @@ interface ResolvedLawyerParticipant {
 	lawyerType: "guest_lawyer" | "platform_lawyer";
 	userId?: Id<"users">;
 }
+
+const SIGNATORY_MAPPING_ERROR_RE = /signatory mapping validation failed/i;
 
 type DealPackagePreparation =
 	| {
@@ -542,9 +640,190 @@ function buildSignatoryMappings(snapshot: ParticipantSnapshot) {
 	);
 }
 
+function buildSignatoryParticipants(
+	snapshot: ParticipantSnapshot
+): SignatoryParticipant[] {
+	const primaryBorrower =
+		snapshot.borrowers.find((borrower) => borrower.role === "primary") ??
+		snapshot.borrowers[0];
+	const coBorrowers = snapshot.borrowers.filter(
+		(borrower) => borrower.role === "co_borrower"
+	);
+
+	return [
+		{
+			platformRole: "lender_primary",
+			name: snapshot.lender.fullName,
+			email: snapshot.lender.email,
+			userId: snapshot.lender.userId,
+		},
+		...(primaryBorrower
+			? [
+					{
+						platformRole: "borrower_primary",
+						name: primaryBorrower.fullName,
+						email: primaryBorrower.email,
+						userId: primaryBorrower.userId,
+					},
+				]
+			: []),
+		...(coBorrowers[0]
+			? [
+					{
+						platformRole: "borrower_co_1",
+						name: coBorrowers[0].fullName,
+						email: coBorrowers[0].email,
+						userId: coBorrowers[0].userId,
+					},
+				]
+			: []),
+		...(coBorrowers[1]
+			? [
+					{
+						platformRole: "borrower_co_2",
+						name: coBorrowers[1].fullName,
+						email: coBorrowers[1].email,
+						userId: coBorrowers[1].userId,
+					},
+				]
+			: []),
+		{
+			platformRole: "broker_of_record",
+			name: snapshot.brokerOfRecord.fullName,
+			email: snapshot.brokerOfRecord.email,
+			userId: snapshot.brokerOfRecord.userId,
+		},
+		...(snapshot.assignedBroker
+			? [
+					{
+						platformRole: "assigned_broker",
+						name: snapshot.assignedBroker.fullName,
+						email: snapshot.assignedBroker.email,
+						userId: snapshot.assignedBroker.userId,
+					},
+				]
+			: []),
+		...(snapshot.lawyerPrimary
+			? [
+					{
+						platformRole: "lawyer_primary",
+						name: snapshot.lawyerPrimary.fullName,
+						email: snapshot.lawyerPrimary.email,
+						userId: snapshot.lawyerPrimary.userId,
+					},
+				]
+			: []),
+	].filter(
+		(entry) => entry.email.trim().length > 0 && entry.name.trim().length > 0
+	);
+}
+
+function canLaunchEmbeddedSigning(args: {
+	envelopeStatus: EnvelopeRow["status"] | null;
+	providerRecipientId: string | null;
+	recipientStatus: RecipientRow["status"];
+	userId: Id<"users"> | null;
+	viewer?: DealPackageViewerContext;
+}) {
+	if (!(args.viewer?.userId && args.userId)) {
+		return false;
+	}
+
+	if (args.viewer.userId !== args.userId) {
+		return false;
+	}
+
+	if (!args.providerRecipientId) {
+		return false;
+	}
+
+	if (
+		args.recipientStatus === "signed" ||
+		args.recipientStatus === "declined"
+	) {
+		return false;
+	}
+
+	return (
+		args.envelopeStatus === "sent" || args.envelopeStatus === "partially_signed"
+	);
+}
+
+async function buildSigningSurface(
+	ctx: Pick<QueryCtx, "db">,
+	instance: Pick<
+		InstanceRow,
+		"generatedDocumentId" | "sourceBlueprintSnapshot"
+	>,
+	viewer?: DealPackageViewerContext
+): Promise<PackageInstanceSigningSurface | null> {
+	if (instance.sourceBlueprintSnapshot.class !== "private_templated_signable") {
+		return null;
+	}
+
+	const generatedDocumentId = instance.generatedDocumentId;
+	const generatedDocument = generatedDocumentId
+		? await ctx.db.get(generatedDocumentId)
+		: null;
+	let envelope: EnvelopeRow | null = null;
+	if (generatedDocumentId) {
+		envelope = await ctx.db
+			.query("signatureEnvelopes")
+			.withIndex("by_generated_document", (query) =>
+				query.eq("generatedDocumentId", generatedDocumentId)
+			)
+			.unique();
+	}
+	const recipientRows = envelope
+		? await ctx.db
+				.query("signatureRecipients")
+				.withIndex("by_envelope", (query) =>
+					query.eq("envelopeId", envelope._id)
+				)
+				.collect()
+		: [];
+
+	const recipients = recipientRows.map((recipient) => ({
+		declinedAt: recipient.declinedAt ?? null,
+		email: recipient.email,
+		isCurrentViewer:
+			Boolean(viewer?.userId) && viewer?.userId === recipient.userId,
+		name: recipient.name,
+		openedAt: recipient.openedAt ?? null,
+		platformRole: recipient.platformRole,
+		providerRecipientId: recipient.providerRecipientId ?? null,
+		providerRole: recipient.providerRole,
+		signedAt: recipient.signedAt ?? null,
+		signingOrder: recipient.signingOrder,
+		status: recipient.status,
+		userId: recipient.userId ?? null,
+	}));
+
+	return {
+		canLaunchEmbeddedSigning: recipients.some((recipient) =>
+			canLaunchEmbeddedSigning({
+				envelopeStatus: envelope?.status ?? null,
+				providerRecipientId: recipient.providerRecipientId,
+				recipientStatus: recipient.status,
+				userId: recipient.userId,
+				viewer,
+			})
+		),
+		envelopeId: envelope?._id ?? null,
+		generatedDocumentSigningStatus: generatedDocument?.signingStatus ?? null,
+		lastError: envelope?.lastError ?? null,
+		lastProviderSyncAt: envelope?.lastProviderSyncAt ?? null,
+		providerCode: envelope?.providerCode ?? null,
+		providerEnvelopeId: envelope?.providerEnvelopeId ?? null,
+		recipients,
+		status: envelope?.status ?? null,
+	};
+}
+
 async function buildPackageSurface(
 	ctx: Pick<QueryCtx, "db" | "storage">,
-	dealId: Id<"deals">
+	dealId: Id<"deals">,
+	viewer?: DealPackageViewerContext
 ): Promise<PackageSurface> {
 	const packageRow = await ctx.db
 		.query("dealDocumentPackages")
@@ -576,17 +855,51 @@ async function buildPackageSurface(
 			})
 			.map(async (row) => {
 				let url: string | null = null;
+				const signing = await buildSigningSurface(ctx, row, viewer);
+				const generatedDocument = row.generatedDocumentId
+					? await ctx.db.get(row.generatedDocumentId)
+					: null;
+				let archivedSigning: PackageInstanceArchivedSigningSurface | null =
+					null;
+
+				if (
+					generatedDocument &&
+					(generatedDocument.finalPdfStorageId ||
+						generatedDocument.completionCertificateStorageId ||
+						generatedDocument.signingCompletedAt)
+				) {
+					const [finalPdfUrl, completionCertificateUrl] = await Promise.all([
+						generatedDocument.finalPdfStorageId
+							? ctx.storage.getUrl(generatedDocument.finalPdfStorageId)
+							: Promise.resolve(null),
+						generatedDocument.completionCertificateStorageId
+							? ctx.storage.getUrl(
+									generatedDocument.completionCertificateStorageId
+								)
+							: Promise.resolve(null),
+					]);
+					archivedSigning = {
+						completionCertificateUrl,
+						finalPdfUrl,
+						signingCompletedAt: generatedDocument.signingCompletedAt ?? null,
+					};
+				}
+
 				if (row.assetId) {
 					const asset = await ctx.db.get(row.assetId);
 					url = asset ? await ctx.storage.getUrl(asset.fileRef) : null;
-				} else if (row.generatedDocumentId) {
-					const generatedDocument = await ctx.db.get(row.generatedDocumentId);
-					url = generatedDocument
-						? await ctx.storage.getUrl(generatedDocument.pdfStorageId)
-						: null;
+				} else if (generatedDocument) {
+					if (
+						row.sourceBlueprintSnapshot.class === "private_templated_signable"
+					) {
+						url = archivedSigning?.finalPdfUrl ?? null;
+					} else {
+						url = await ctx.storage.getUrl(generatedDocument.pdfStorageId);
+					}
 				}
 
 				return {
+					archivedSigning,
 					archivedAt: row.archivedAt ?? null,
 					assetId: row.assetId ?? null,
 					category: row.sourceBlueprintSnapshot.category ?? null,
@@ -604,6 +917,7 @@ async function buildPackageSurface(
 					packageLabel: row.sourceBlueprintSnapshot.packageLabel ?? null,
 					sourceBlueprintId: row.sourceBlueprintId ?? null,
 					status: row.status,
+					signing,
 					templateId: row.sourceBlueprintSnapshot.templateId ?? null,
 					templateVersion: row.sourceBlueprintSnapshot.templateVersion ?? null,
 					url,
@@ -628,9 +942,13 @@ async function buildPackageSurface(
 	};
 }
 
+function isArchivedSignableTargetComplete(target: SignableArchiveTarget) {
+	return Boolean(target.instanceArchivedAt && target.finalPdfStorageId);
+}
+
 function summarizePackageStatus(
 	rows: ReadonlyArray<
-		Pick<InstanceRow, "lastError" | "status"> & {
+		Pick<InstanceRow, "archivedAt" | "lastError" | "status"> & {
 			sourceBlueprintSnapshot: Pick<
 				InstanceRow["sourceBlueprintSnapshot"],
 				"class"
@@ -641,13 +959,22 @@ function summarizePackageStatus(
 	lastError?: string;
 	status: DealDocumentPackageStatus;
 } {
-	const managedRows = rows.filter(
-		(row) => row.sourceBlueprintSnapshot.class !== "private_templated_signable"
+	const activeRows = rows.filter((row) => !row.archivedAt);
+	const failedRows = activeRows.filter(
+		(row) =>
+			row.status === "generation_failed" ||
+			row.status === "signature_pending_recipient_resolution" ||
+			row.status === "signature_draft" ||
+			row.status === "signature_declined" ||
+			row.status === "signature_voided"
 	);
-	const failedRows = managedRows.filter(
-		(row) => row.status === "generation_failed"
+	const readyRows = activeRows.filter(
+		(row) =>
+			row.status === "available" ||
+			row.status === "signature_sent" ||
+			row.status === "signature_partially_signed" ||
+			row.status === "signed"
 	);
-	const availableRows = managedRows.filter((row) => row.status === "available");
 
 	if (failedRows.length === 0) {
 		return { status: "ready" };
@@ -657,7 +984,7 @@ function summarizePackageStatus(
 		failedRows.find((row) => row.lastError && row.lastError.length > 0)
 			?.lastError ?? "Document package generation failed";
 
-	if (availableRows.length > 0) {
+	if (readyRows.length > 0) {
 		return { lastError, status: "partial_failure" };
 	}
 
@@ -819,16 +1146,18 @@ export const archiveDealDocumentInstance = internalMutation({
 export const insertGeneratedDocumentInternal = internalMutation({
 	args: {
 		dealId: v.id("deals"),
+		documensoEnvelopeId: v.optional(v.string()),
 		groupId: v.optional(v.id("documentTemplateGroups")),
 		metadata: v.optional(v.any()),
 		name: v.string(),
 		pdfStorageId: v.id("_storage"),
+		signingStatus: v.optional(generatedDocumentSigningStatusValidator),
 		templateId: v.id("documentTemplates"),
 		templateVersionUsed: v.number(),
 	},
 	handler: async (ctx, args) => {
 		return ctx.db.insert("generatedDocuments", {
-			documensoEnvelopeId: undefined,
+			documensoEnvelopeId: args.documensoEnvelopeId,
 			entityId: String(args.dealId),
 			entityType: "deal",
 			generatedAt: Date.now(),
@@ -838,11 +1167,379 @@ export const insertGeneratedDocumentInternal = internalMutation({
 			name: args.name,
 			pdfStorageId: args.pdfStorageId,
 			sensitivityTier: "private",
-			signingStatus: "not_applicable",
+			signingStatus: args.signingStatus ?? "not_applicable",
 			templateId: args.templateId,
 			templateVersionUsed: args.templateVersionUsed,
 			updatedAt: Date.now(),
 		});
+	},
+});
+
+export const patchGeneratedDocumentSigningStateInternal = internalMutation({
+	args: {
+		completionCertificateStorageId: v.optional(v.id("_storage")),
+		documensoEnvelopeId: v.optional(v.string()),
+		finalPdfStorageId: v.optional(v.id("_storage")),
+		generatedDocumentId: v.id("generatedDocuments"),
+		now: v.number(),
+		signingCompletedAt: v.optional(v.number()),
+		signingStatus: generatedDocumentSigningStatusValidator,
+	},
+	handler: async (ctx, args) => {
+		const generatedDocument = await ctx.db.get(args.generatedDocumentId);
+		if (!generatedDocument) {
+			throw new ConvexError("Generated document not found");
+		}
+
+		await ctx.db.patch(args.generatedDocumentId, {
+			completionCertificateStorageId: args.completionCertificateStorageId,
+			documensoEnvelopeId:
+				args.documensoEnvelopeId ?? generatedDocument.documensoEnvelopeId,
+			finalPdfStorageId: args.finalPdfStorageId,
+			signingCompletedAt:
+				args.signingCompletedAt ?? generatedDocument.signingCompletedAt,
+			signingStatus: args.signingStatus,
+			updatedAt: args.now,
+		});
+	},
+});
+
+export const createSignatureEnvelopeWithRecipientsInternal = internalMutation({
+	args: {
+		dealId: v.id("deals"),
+		generatedDocumentId: v.id("generatedDocuments"),
+		lastError: v.optional(v.string()),
+		now: v.number(),
+		providerCode: signatureProviderCodeValidator,
+		providerEnvelopeId: v.string(),
+		recipients: v.array(
+			v.object({
+				email: v.string(),
+				name: v.string(),
+				platformRole: v.string(),
+				providerRecipientId: v.optional(v.string()),
+				providerRole: signatureProviderRoleValidator,
+				signingOrder: v.number(),
+				status: signatureRecipientStatusValidator,
+				userId: v.optional(v.id("users")),
+			})
+		),
+		status: signatureEnvelopeStatusValidator,
+	},
+	handler: async (ctx, args) => {
+		const envelopeId = await ctx.db.insert("signatureEnvelopes", {
+			createdAt: args.now,
+			dealId: args.dealId,
+			generatedDocumentId: args.generatedDocumentId,
+			lastError: args.lastError,
+			lastProviderSyncAt: args.now,
+			providerCode: args.providerCode,
+			providerEnvelopeId: args.providerEnvelopeId,
+			status: args.status,
+			updatedAt: args.now,
+		});
+
+		for (const recipient of args.recipients) {
+			await ctx.db.insert("signatureRecipients", {
+				createdAt: args.now,
+				declinedAt: undefined,
+				email: recipient.email,
+				envelopeId,
+				name: recipient.name,
+				openedAt: undefined,
+				platformRole: recipient.platformRole,
+				providerRecipientId: recipient.providerRecipientId,
+				providerRole: recipient.providerRole,
+				signedAt: undefined,
+				signingOrder: recipient.signingOrder,
+				status: recipient.status,
+				updatedAt: args.now,
+				userId: recipient.userId,
+			});
+		}
+
+		await ctx.db.patch(args.generatedDocumentId, {
+			documensoEnvelopeId: args.providerEnvelopeId,
+			signingStatus: mapEnvelopeStatusToGeneratedDocumentSigningStatus(
+				args.status
+			),
+			updatedAt: args.now,
+		});
+
+		return envelopeId;
+	},
+});
+
+export const syncSignatureEnvelopeStateInternal = internalMutation({
+	args: {
+		completionCertificateStorageId: v.optional(v.id("_storage")),
+		envelopeId: v.id("signatureEnvelopes"),
+		finalPdfStorageId: v.optional(v.id("_storage")),
+		lastError: v.optional(v.string()),
+		now: v.number(),
+		recipients: v.array(
+			v.object({
+				declinedAt: v.optional(v.number()),
+				openedAt: v.optional(v.number()),
+				providerRecipientId: v.string(),
+				signedAt: v.optional(v.number()),
+				status: signatureRecipientStatusValidator,
+			})
+		),
+		status: signatureEnvelopeStatusValidator,
+	},
+	handler: async (ctx, args) => {
+		const envelope = await ctx.db.get(args.envelopeId);
+		if (!envelope) {
+			throw new ConvexError("Signature envelope not found");
+		}
+
+		await ctx.db.patch(envelope._id, {
+			lastError: args.lastError,
+			lastProviderSyncAt: args.now,
+			status: args.status,
+			updatedAt: args.now,
+		});
+
+		const existingRecipients = await ctx.db
+			.query("signatureRecipients")
+			.withIndex("by_envelope", (query) => query.eq("envelopeId", envelope._id))
+			.collect();
+		const recipientByProviderId = new Map(
+			existingRecipients
+				.filter(
+					(
+						recipient
+					): recipient is RecipientRow & { providerRecipientId: string } =>
+						Boolean(recipient.providerRecipientId)
+				)
+				.map((recipient) => [recipient.providerRecipientId, recipient])
+		);
+
+		for (const recipientUpdate of args.recipients) {
+			const recipient = recipientByProviderId.get(
+				recipientUpdate.providerRecipientId
+			);
+			if (!recipient) {
+				continue;
+			}
+
+			await ctx.db.patch(recipient._id, {
+				declinedAt: recipientUpdate.declinedAt,
+				openedAt: recipientUpdate.openedAt,
+				signedAt: recipientUpdate.signedAt,
+				status: recipientUpdate.status,
+				updatedAt: args.now,
+			});
+		}
+
+		const generatedDocument = await ctx.db.get(envelope.generatedDocumentId);
+		if (generatedDocument) {
+			await ctx.db.patch(generatedDocument._id, {
+				completionCertificateStorageId: args.completionCertificateStorageId,
+				documensoEnvelopeId: envelope.providerEnvelopeId,
+				finalPdfStorageId: args.finalPdfStorageId,
+				signingCompletedAt:
+					args.status === "completed"
+						? (generatedDocument.signingCompletedAt ?? args.now)
+						: generatedDocument.signingCompletedAt,
+				signingStatus: mapEnvelopeStatusToGeneratedDocumentSigningStatus(
+					args.status
+				),
+				updatedAt: args.now,
+			});
+		}
+
+		const dealInstances = await ctx.db
+			.query("dealDocumentInstances")
+			.withIndex("by_deal", (query) => query.eq("dealId", envelope.dealId))
+			.collect();
+		const activeInstances = dealInstances.filter(
+			(instance) =>
+				!instance.archivedAt &&
+				instance.generatedDocumentId === envelope.generatedDocumentId
+		);
+
+		for (const instance of activeInstances) {
+			await ctx.db.patch(instance._id, {
+				lastError: args.lastError,
+				status: mapEnvelopeStatusToDealDocumentInstanceStatus(args.status),
+				updatedAt: args.now,
+			});
+		}
+
+		const packageId = activeInstances[0]?.packageId;
+		if (!packageId) {
+			return;
+		}
+
+		const packageRows = await ctx.db
+			.query("dealDocumentInstances")
+			.withIndex("by_package", (query) => query.eq("packageId", packageId))
+			.collect();
+		const summary = summarizePackageStatus(packageRows);
+
+		await ctx.db.patch(packageId, {
+			lastError: summary.lastError,
+			readyAt: summary.status === "ready" ? args.now : undefined,
+			status: summary.status,
+			updatedAt: args.now,
+		});
+	},
+});
+
+export const getViewerUserByAuthIdInternal = internalQuery({
+	args: {
+		authId: v.string(),
+	},
+	handler: async (ctx, args) => {
+		const user = await getUserByAuthId(ctx, args.authId);
+		if (!user) {
+			return null;
+		}
+
+		return {
+			email: user.email,
+			userId: user._id,
+		};
+	},
+});
+
+export const getSignableDocumentEnvelopeByInstanceInternal = internalQuery({
+	args: {
+		dealId: v.id("deals"),
+		instanceId: v.id("dealDocumentInstances"),
+	},
+	handler: async (ctx, args) => {
+		const instance = await ctx.db.get(args.instanceId);
+		if (
+			!instance ||
+			instance.dealId !== args.dealId ||
+			instance.archivedAt ||
+			instance.sourceBlueprintSnapshot.class !== "private_templated_signable" ||
+			!instance.generatedDocumentId
+		) {
+			return null;
+		}
+
+		const generatedDocument = await ctx.db.get(instance.generatedDocumentId);
+		if (!generatedDocument) {
+			return null;
+		}
+
+		const envelope = await ctx.db
+			.query("signatureEnvelopes")
+			.withIndex("by_generated_document", (query) =>
+				query.eq("generatedDocumentId", generatedDocument._id)
+			)
+			.unique();
+		if (!envelope) {
+			return null;
+		}
+
+		const recipients = await ctx.db
+			.query("signatureRecipients")
+			.withIndex("by_envelope", (query) => query.eq("envelopeId", envelope._id))
+			.collect();
+
+		return {
+			dealId: instance.dealId,
+			envelope: {
+				envelopeId: envelope._id,
+				providerCode: envelope.providerCode,
+				providerEnvelopeId: envelope.providerEnvelopeId,
+				status: envelope.status,
+			},
+			generatedDocumentId: generatedDocument._id,
+			instanceId: instance._id,
+			recipients: recipients.map((recipient) => ({
+				email: recipient.email,
+				name: recipient.name,
+				platformRole: recipient.platformRole,
+				providerRecipientId: recipient.providerRecipientId ?? null,
+				providerRole: recipient.providerRole,
+				signingOrder: recipient.signingOrder,
+				status: recipient.status,
+				userId: recipient.userId ?? null,
+			})),
+		};
+	},
+});
+
+export const getSignableArchiveStateByDealInternal = internalQuery({
+	args: {
+		dealId: v.id("deals"),
+	},
+	handler: async (ctx, args): Promise<SignableArchiveState | null> => {
+		const packageRow = await ctx.db
+			.query("dealDocumentPackages")
+			.withIndex("by_deal", (query) => query.eq("dealId", args.dealId))
+			.unique();
+		if (!packageRow) {
+			return null;
+		}
+
+		const instances = await ctx.db
+			.query("dealDocumentInstances")
+			.withIndex("by_package", (query) => query.eq("packageId", packageRow._id))
+			.collect();
+
+		const targets: SignableArchiveTarget[] = [];
+		for (const instance of instances) {
+			if (
+				instance.sourceBlueprintSnapshot.class !== "private_templated_signable"
+			) {
+				continue;
+			}
+
+			if (!instance.generatedDocumentId) {
+				throw new ConvexError(
+					`Signable document instance ${instance._id} is missing generatedDocumentId`
+				);
+			}
+
+			const generatedDocument = await ctx.db.get(instance.generatedDocumentId);
+			if (!generatedDocument) {
+				throw new ConvexError(
+					`Generated document ${instance.generatedDocumentId} not found for signable instance ${instance._id}`
+				);
+			}
+
+			const envelope = await ctx.db
+				.query("signatureEnvelopes")
+				.withIndex("by_generated_document", (query) =>
+					query.eq("generatedDocumentId", generatedDocument._id)
+				)
+				.unique();
+			if (!envelope) {
+				throw new ConvexError(
+					`Signature envelope not found for generated document ${generatedDocument._id}`
+				);
+			}
+
+			targets.push({
+				completionCertificateStorageId:
+					generatedDocument.completionCertificateStorageId ?? null,
+				envelopeId: envelope._id,
+				envelopeStatus: envelope.status,
+				finalPdfStorageId: generatedDocument.finalPdfStorageId ?? null,
+				generatedDocumentId: generatedDocument._id,
+				instanceArchivedAt: instance.archivedAt ?? null,
+				instanceId: instance._id,
+				providerCode: envelope.providerCode,
+				providerEnvelopeId: envelope.providerEnvelopeId,
+				signingCompletedAt: generatedDocument.signingCompletedAt ?? null,
+			});
+		}
+
+		return {
+			package: {
+				archivedAt: packageRow.archivedAt ?? null,
+				packageId: packageRow._id,
+				status: packageRow.status,
+			},
+			targets,
+		};
 	},
 });
 
@@ -860,6 +1557,221 @@ export const finalizePackageInternal = internalMutation({
 			status: args.status,
 			updatedAt: args.now,
 		});
+	},
+});
+
+export const archivePackageInternal = internalMutation({
+	args: {
+		now: v.number(),
+		packageId: v.id("dealDocumentPackages"),
+	},
+	handler: async (ctx, args) => {
+		const packageRow = await ctx.db.get(args.packageId);
+		if (!packageRow) {
+			throw new ConvexError("Deal document package not found");
+		}
+
+		await ctx.db.patch(args.packageId, {
+			archivedAt: packageRow.archivedAt ?? args.now,
+			lastError: undefined,
+			status: "archived",
+			updatedAt: args.now,
+		});
+	},
+});
+
+export const setPackageArchiveErrorInternal = internalMutation({
+	args: {
+		lastError: v.string(),
+		now: v.number(),
+		packageId: v.id("dealDocumentPackages"),
+	},
+	handler: async (ctx, args) => {
+		const packageRow = await ctx.db.get(args.packageId);
+		if (!packageRow) {
+			throw new ConvexError("Deal document package not found");
+		}
+
+		await ctx.db.patch(args.packageId, {
+			lastError: args.lastError,
+			updatedAt: args.now,
+		});
+	},
+});
+
+export const archiveCompletedSignableDocumentsInternal = internalAction({
+	args: {
+		dealId: v.id("deals"),
+	},
+	handler: async (
+		ctx,
+		args
+	): Promise<ArchiveCompletedSignableDocumentsResult> => {
+		const archiveState = (await ctx.runQuery(
+			internal.documents.dealPackages.getSignableArchiveStateByDealInternal,
+			{ dealId: args.dealId }
+		)) as SignableArchiveState | null;
+		if (!archiveState) {
+			return {
+				archivedCount: 0,
+				packageArchived: false,
+				packageId: null,
+				skippedCount: 0,
+				targetCount: 0,
+			};
+		}
+
+		const { package: packageState, targets } = archiveState;
+		if (targets.length > 0 && targets.every(isArchivedSignableTargetComplete)) {
+			await ctx.runMutation(
+				internal.documents.dealPackages.archivePackageInternal,
+				{
+					now: Date.now(),
+					packageId: packageState.packageId,
+				}
+			);
+
+			return {
+				archivedCount: 0,
+				packageArchived: true,
+				packageId: packageState.packageId,
+				skippedCount: targets.length,
+				targetCount: targets.length,
+			};
+		}
+
+		const providerCache = new Map<
+			EnvelopeRow["providerCode"],
+			ReturnType<typeof getSignatureProvider>
+		>();
+		const getProviderForCode = (providerCode: EnvelopeRow["providerCode"]) => {
+			const cached = providerCache.get(providerCode);
+			if (cached) {
+				return cached;
+			}
+
+			const provider = getSignatureProvider(providerCode, {
+				fetchFn: fetch,
+				getStorageBlob: async () => null,
+			});
+			providerCache.set(providerCode, provider);
+			return provider;
+		};
+
+		let archivedCount = 0;
+		let skippedCount = 0;
+
+		try {
+			for (const target of targets) {
+				if (isArchivedSignableTargetComplete(target)) {
+					skippedCount += 1;
+					continue;
+				}
+
+				if (target.envelopeStatus !== "completed") {
+					throw new ConvexError(
+						`Cannot archive signable document ${target.instanceId}; envelope ${target.providerEnvelopeId} is ${target.envelopeStatus}`
+					);
+				}
+
+				const now = Date.now();
+				let finalPdfStorageId = target.finalPdfStorageId;
+				let completionCertificateStorageId =
+					target.completionCertificateStorageId;
+
+				if (!(finalPdfStorageId && completionCertificateStorageId)) {
+					const provider = getProviderForCode(target.providerCode);
+					const artifacts = await provider.downloadCompletedArtifacts({
+						providerEnvelopeId: target.providerEnvelopeId,
+					});
+
+					if (!finalPdfStorageId) {
+						finalPdfStorageId = await ctx.storage.store(
+							new Blob([artifacts.finalPdfBytes], {
+								type: "application/pdf",
+							})
+						);
+					}
+
+					if (
+						!completionCertificateStorageId &&
+						artifacts.completionCertificateBytes
+					) {
+						completionCertificateStorageId = await ctx.storage.store(
+							new Blob([artifacts.completionCertificateBytes], {
+								type: "application/pdf",
+							})
+						);
+					}
+				}
+
+				await ctx.runMutation(
+					internal.documents.dealPackages
+						.patchGeneratedDocumentSigningStateInternal,
+					{
+						completionCertificateStorageId:
+							completionCertificateStorageId ?? undefined,
+						documensoEnvelopeId: target.providerEnvelopeId,
+						finalPdfStorageId: finalPdfStorageId ?? undefined,
+						generatedDocumentId: target.generatedDocumentId,
+						now,
+						signingCompletedAt: target.signingCompletedAt ?? now,
+						signingStatus: "completed",
+					}
+				);
+
+				if (!target.instanceArchivedAt) {
+					await ctx.runMutation(
+						internal.documents.dealPackages.archiveDealDocumentInstance,
+						{
+							instanceId: target.instanceId,
+							now,
+						}
+					);
+				}
+
+				archivedCount += 1;
+			}
+
+			const refreshedArchiveState = (await ctx.runQuery(
+				internal.documents.dealPackages.getSignableArchiveStateByDealInternal,
+				{ dealId: args.dealId }
+			)) as SignableArchiveState | null;
+			const packageArchived: boolean = Boolean(
+				refreshedArchiveState &&
+					refreshedArchiveState.targets.length > 0 &&
+					refreshedArchiveState.targets.every(isArchivedSignableTargetComplete)
+			);
+
+			if (refreshedArchiveState && packageArchived) {
+				await ctx.runMutation(
+					internal.documents.dealPackages.archivePackageInternal,
+					{
+						now: Date.now(),
+						packageId: refreshedArchiveState.package.packageId,
+					}
+				);
+			}
+
+			return {
+				archivedCount,
+				packageArchived,
+				packageId: packageState.packageId,
+				skippedCount,
+				targetCount: targets.length,
+			};
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			await ctx.runMutation(
+				internal.documents.dealPackages.setPackageArchiveErrorInternal,
+				{
+					lastError: message,
+					now: Date.now(),
+					packageId: packageState.packageId,
+				}
+			);
+			throw error;
+		}
 	},
 });
 
@@ -938,7 +1850,11 @@ function buildPackageWorkItems(args: {
 	existingInstances: InstanceRow[];
 }): PackageWorkItem[] {
 	const retryItems = args.existingInstances
-		.filter((instance) => instance.status === "generation_failed")
+		.filter(
+			(instance) =>
+				instance.status === "generation_failed" ||
+				instance.status === "signature_pending_recipient_resolution"
+		)
 		.map((instance) => ({
 			instance,
 			type: "instance_retry" as const,
@@ -1019,21 +1935,46 @@ async function archiveRetryInstanceIfNeeded(
 	);
 }
 
-async function createSignablePlaceholderInstance(
+function isRecipientResolutionError(error: unknown) {
+	return (
+		error instanceof Error && SIGNATORY_MAPPING_ERROR_RE.test(error.message)
+	);
+}
+
+async function insertGeneratedDocumentRecord(
 	ctx: DealPackageActionCtx,
 	runtime: DealPackageRuntimeState,
 	workItem: PackageWorkItem,
-	sourceBlueprintSnapshot: DealDocumentSourceBlueprintSnapshot
+	sourceBlueprintSnapshot: DealDocumentSourceBlueprintSnapshot,
+	args: {
+		documensoEnvelopeId?: string;
+		pdfRef: Id<"_storage">;
+		signingStatus?: GeneratedDocumentRow["signingStatus"];
+		templateVersionUsed: number;
+	}
 ) {
-	await createPackageInstance(ctx, {
-		dealId: runtime.dealId,
-		kind: "generated",
-		mortgageId: runtime.mortgageId,
-		packageId: runtime.packageId,
-		sourceBlueprintId: getWorkItemSourceBlueprintId(workItem),
-		sourceBlueprintSnapshot,
-		status: "signature_pending_recipient_resolution",
-	});
+	if (!sourceBlueprintSnapshot.templateId) {
+		throw new ConvexError("Generated package instance is missing a templateId");
+	}
+
+	return ctx.runMutation(
+		internal.documents.dealPackages.insertGeneratedDocumentInternal,
+		{
+			dealId: runtime.dealId,
+			documensoEnvelopeId: args.documensoEnvelopeId,
+			groupId: undefined,
+			metadata: buildGeneratedDocumentMetadata({
+				packageId: runtime.packageId,
+				sourceBlueprintId: getWorkItemSourceBlueprintId(workItem),
+			}),
+			name: sourceBlueprintSnapshot.displayName,
+			pdfStorageId: args.pdfRef,
+			signingStatus: args.signingStatus,
+			templateId: sourceBlueprintSnapshot.templateId,
+			templateVersionUsed:
+				sourceBlueprintSnapshot.templateVersion ?? args.templateVersionUsed,
+		}
+	);
 }
 
 async function createStaticReferenceInstance(
@@ -1091,6 +2032,25 @@ function buildGeneratedDocumentMetadata(args: {
 	};
 }
 
+async function createPendingRecipientResolutionInstance(
+	ctx: DealPackageActionCtx,
+	runtime: DealPackageRuntimeState,
+	workItem: PackageWorkItem,
+	sourceBlueprintSnapshot: DealDocumentSourceBlueprintSnapshot,
+	message: string
+) {
+	await createPackageInstance(ctx, {
+		dealId: runtime.dealId,
+		kind: "generated",
+		lastError: message,
+		mortgageId: runtime.mortgageId,
+		packageId: runtime.packageId,
+		sourceBlueprintId: getWorkItemSourceBlueprintId(workItem),
+		sourceBlueprintSnapshot,
+		status: "signature_pending_recipient_resolution",
+	});
+}
+
 async function createGeneratedFailureInstance(
 	ctx: DealPackageActionCtx,
 	runtime: DealPackageRuntimeState,
@@ -1124,20 +2084,15 @@ async function createGeneratedSuccessInstance(
 		throw new ConvexError("Generated package instance is missing a templateId");
 	}
 
-	const generatedDocumentId = await ctx.runMutation(
-		internal.documents.dealPackages.insertGeneratedDocumentInternal,
+	const generatedDocumentId = await insertGeneratedDocumentRecord(
+		ctx,
+		runtime,
+		workItem,
+		sourceBlueprintSnapshot,
 		{
-			dealId: runtime.dealId,
-			groupId: undefined,
-			metadata: buildGeneratedDocumentMetadata({
-				packageId: runtime.packageId,
-				sourceBlueprintId: getWorkItemSourceBlueprintId(workItem),
-			}),
-			name: sourceBlueprintSnapshot.displayName,
-			pdfStorageId: args.pdfRef,
-			templateId: sourceBlueprintSnapshot.templateId,
-			templateVersionUsed:
-				sourceBlueprintSnapshot.templateVersion ?? args.templateVersionUsed,
+			pdfRef: args.pdfRef,
+			signingStatus: "not_applicable",
+			templateVersionUsed: args.templateVersionUsed,
 		}
 	);
 
@@ -1151,6 +2106,224 @@ async function createGeneratedSuccessInstance(
 		sourceBlueprintSnapshot,
 		status: "available",
 	});
+}
+
+function toSignatureProviderRecipients(
+	recipients: Array<{
+		email: string;
+		fields: Array<{
+			fieldMeta?: {
+				helpText?: string;
+				placeholder?: string;
+				readOnly?: boolean;
+			};
+			height: number;
+			pageNumber: number;
+			positionX: number;
+			positionY: number;
+			required: boolean;
+			type: string;
+			width: number;
+		}>;
+		name: string;
+		platformRole: string;
+		role: "APPROVER" | "SIGNER" | "VIEWER";
+		signingOrder: number;
+	}>
+): SignatureProviderRecipientInput[] {
+	return recipients.map((recipient) => ({
+		email: recipient.email,
+		fields: recipient.fields.map((field) => ({
+			fieldMeta: field.fieldMeta,
+			height: field.height,
+			pageNumber: field.pageNumber,
+			positionX: field.positionX,
+			positionY: field.positionY,
+			required: field.required,
+			type: field.type,
+			width: field.width,
+		})),
+		name: recipient.name,
+		platformRole: recipient.platformRole,
+		providerRole: recipient.role,
+		signingOrder: recipient.signingOrder,
+	}));
+}
+
+function buildEnvelopeRecipientRows(args: {
+	createEnvelopeResult: SignatureProviderCreateEnvelopeResult;
+	runtime: DealPackageRuntimeState;
+	signatureRecipients: SignatureProviderRecipientInput[];
+}) {
+	const participantsByRole = new Map(
+		args.runtime.signatoryParticipants.map((participant) => [
+			participant.platformRole,
+			participant,
+		])
+	);
+	const providerRecipientsByRole = new Map(
+		args.createEnvelopeResult.recipients.map((recipient) => [
+			recipient.platformRole,
+			recipient,
+		])
+	);
+
+	return args.signatureRecipients.map((recipient) => {
+		const providerRecipient = providerRecipientsByRole.get(
+			recipient.platformRole
+		);
+		const participant = participantsByRole.get(recipient.platformRole);
+		return {
+			email: recipient.email,
+			name: recipient.name,
+			platformRole: recipient.platformRole,
+			providerRecipientId: providerRecipient?.providerRecipientId,
+			providerRole: recipient.providerRole,
+			signingOrder: recipient.signingOrder,
+			status: "pending" as const,
+			userId: participant?.userId,
+		};
+	});
+}
+
+async function createSignableGeneratedInstance(
+	ctx: DealPackageActionCtx,
+	runtime: DealPackageRuntimeState,
+	workItem: PackageWorkItem,
+	sourceBlueprintSnapshot: DealDocumentSourceBlueprintSnapshot
+) {
+	if (!sourceBlueprintSnapshot.templateId) {
+		return;
+	}
+
+	try {
+		const generationResult = await ctx.runAction(
+			internal.documentEngine.generation.generateSingleTemplate,
+			{
+				pinnedVersion: sourceBlueprintSnapshot.templateVersion ?? undefined,
+				signatoryMapping: runtime.signatories,
+				templateId: sourceBlueprintSnapshot.templateId,
+				variables: runtime.variables,
+			}
+		);
+
+		if (!(generationResult.success && generationResult.pdfRef)) {
+			await createGeneratedFailureInstance(
+				ctx,
+				runtime,
+				workItem,
+				sourceBlueprintSnapshot,
+				buildTemplateGenerationFailureMessage({
+					missingVariables: generationResult.missingVariables,
+				})
+			);
+			return;
+		}
+
+		const signatureRecipients = toSignatureProviderRecipients(
+			generationResult.documensoConfig?.recipients ?? []
+		);
+		const generatedDocumentId = await insertGeneratedDocumentRecord(
+			ctx,
+			runtime,
+			workItem,
+			sourceBlueprintSnapshot,
+			{
+				pdfRef: generationResult.pdfRef,
+				signingStatus: "draft",
+				templateVersionUsed: generationResult.templateVersionUsed,
+			}
+		);
+		const provider = getSignatureProvider("documenso", {
+			fetchFn: fetch,
+			getStorageBlob: (storageId) => ctx.storage.get(storageId),
+		});
+
+		try {
+			const createdEnvelope = await provider.createEnvelope({
+				dealId: runtime.dealId,
+				generatedDocumentId,
+				pdfStorageId: generationResult.pdfRef,
+				recipients: signatureRecipients,
+				title: sourceBlueprintSnapshot.displayName,
+			});
+
+			await ctx.runMutation(
+				internal.documents.dealPackages
+					.createSignatureEnvelopeWithRecipientsInternal,
+				{
+					dealId: runtime.dealId,
+					generatedDocumentId,
+					lastError: createdEnvelope.lastError,
+					now: Date.now(),
+					providerCode: "documenso",
+					providerEnvelopeId: createdEnvelope.providerEnvelopeId,
+					recipients: buildEnvelopeRecipientRows({
+						createEnvelopeResult: createdEnvelope,
+						runtime,
+						signatureRecipients,
+					}),
+					status: createdEnvelope.status,
+				}
+			);
+
+			await createPackageInstance(ctx, {
+				dealId: runtime.dealId,
+				generatedDocumentId,
+				kind: "generated",
+				lastError: createdEnvelope.lastError,
+				mortgageId: runtime.mortgageId,
+				packageId: runtime.packageId,
+				sourceBlueprintId: getWorkItemSourceBlueprintId(workItem),
+				sourceBlueprintSnapshot,
+				status: mapEnvelopeStatusToDealDocumentInstanceStatus(
+					createdEnvelope.status
+				),
+			});
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			await ctx.runMutation(
+				internal.documents.dealPackages
+					.patchGeneratedDocumentSigningStateInternal,
+				{
+					generatedDocumentId,
+					now: Date.now(),
+					signingStatus: "provider_error",
+				}
+			);
+			await createPackageInstance(ctx, {
+				dealId: runtime.dealId,
+				generatedDocumentId,
+				kind: "generated",
+				lastError: message,
+				mortgageId: runtime.mortgageId,
+				packageId: runtime.packageId,
+				sourceBlueprintId: getWorkItemSourceBlueprintId(workItem),
+				sourceBlueprintSnapshot,
+				status: "generation_failed",
+			});
+		}
+	} catch (error) {
+		const message = error instanceof Error ? error.message : String(error);
+		if (isRecipientResolutionError(error)) {
+			await createPendingRecipientResolutionInstance(
+				ctx,
+				runtime,
+				workItem,
+				sourceBlueprintSnapshot,
+				message
+			);
+			return;
+		}
+
+		await createGeneratedFailureInstance(
+			ctx,
+			runtime,
+			workItem,
+			sourceBlueprintSnapshot,
+			message
+		);
+	}
 }
 
 async function createNonSignableGeneratedInstance(
@@ -1217,7 +2390,7 @@ async function processPackageWorkItem(
 
 	const sourceBlueprintSnapshot = getWorkItemSourceBlueprintSnapshot(workItem);
 	if (sourceBlueprintSnapshot.class === "private_templated_signable") {
-		await createSignablePlaceholderInstance(
+		await createSignableGeneratedInstance(
 			ctx,
 			runtime,
 			workItem,
@@ -1256,18 +2429,9 @@ async function prepareDealPackageRuntime(
 			dealId: args.dealId,
 		}
 	);
-	const variables = await ctx.runQuery(
-		internal.documents.dealPackages.resolveDealDocumentVariablesInternal,
-		{
-			dealId: args.dealId,
-		}
-	);
-	const signatories = await ctx.runQuery(
-		internal.documents.dealPackages.resolveDealDocumentSignatoriesInternal,
-		{
-			dealId: args.dealId,
-		}
-	);
+	const variables = buildDealVariableBag(snapshot);
+	const signatories = buildSignatoryMappings(snapshot);
+	const signatoryParticipants = buildSignatoryParticipants(snapshot);
 	const existingPackage = await ctx.runQuery(
 		internal.documents.dealPackages.getPackageByDealInternal,
 		{
@@ -1331,6 +2495,7 @@ async function prepareDealPackageRuntime(
 			mortgageId: snapshot.mortgage._id,
 			packageId,
 			signatories,
+			signatoryParticipants,
 			variables,
 		},
 		workItems: buildPackageWorkItems({
@@ -1421,13 +2586,18 @@ export const getPortalDocumentPackage = dealQuery
 	.handler(async (ctx, args) => {
 		await assertDealAccess(ctx, args.dealId);
 
-		return buildPackageSurface(ctx, args.dealId);
+		const viewerUser = await getUserByAuthId(ctx, ctx.viewer.authId);
+		return buildPackageSurface(ctx, args.dealId, {
+			isFairLendAdmin: ctx.viewer.isFairLendAdmin,
+			userId: viewerUser?._id,
+		});
 	})
 	.public();
 
 export async function readDealDocumentPackageSurface(
 	ctx: Pick<QueryCtx, "db" | "storage">,
-	dealId: Id<"deals">
+	dealId: Id<"deals">,
+	viewer?: DealPackageViewerContext
 ) {
-	return buildPackageSurface(ctx, dealId);
+	return buildPackageSurface(ctx, dealId, viewer);
 }

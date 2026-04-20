@@ -7,9 +7,11 @@ import { executeTransition } from "../engine/transition";
 import type { CommandSource } from "../engine/types";
 import { adminMutation } from "../fluent";
 
-type DealAccessRole =
+export type DealAccessRole =
 	| "platform_lawyer"
 	| "guest_lawyer"
+	| "broker_of_record"
+	| "assigned_broker"
 	| "lender"
 	| "borrower";
 
@@ -68,6 +70,8 @@ export const grantAccess = internalMutation({
 		role: v.union(
 			v.literal("platform_lawyer"),
 			v.literal("guest_lawyer"),
+			v.literal("broker_of_record"),
+			v.literal("assigned_broker"),
 			v.literal("lender"),
 			v.literal("borrower")
 		),

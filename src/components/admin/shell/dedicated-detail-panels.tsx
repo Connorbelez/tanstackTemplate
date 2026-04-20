@@ -333,17 +333,48 @@ type DealDocumentInstanceListItem = NonNullable<
 function groupDealDocumentInstances(
 	documentInstances: readonly DealDocumentInstanceListItem[]
 ) {
+	const signableDocuments = documentInstances.filter(
+		(document) => document.class === "private_templated_signable"
+	);
+
 	return {
+		activeSignableDocuments: signableDocuments.filter(
+			(document) => !document.archivedSigning?.finalPdfUrl
+		),
+		archivedSignableDocuments: signableDocuments.filter((document) =>
+			Boolean(document.archivedSigning?.finalPdfUrl)
+		),
 		generatedReadOnly: documentInstances.filter(
 			(document) => document.class === "private_templated_non_signable"
 		),
 		privateStatic: documentInstances.filter(
 			(document) => document.class === "private_static"
 		),
-		signableReserved: documentInstances.filter(
-			(document) => document.class === "private_templated_signable"
-		),
 	};
+}
+
+function signingBadgeVariant(
+	status: string | null | undefined
+): "destructive" | "outline" | "secondary" {
+	switch (status) {
+		case "archived":
+		case "completed":
+		case "signed":
+		case "signature_partially_signed":
+		case "signature_sent":
+		case "sent":
+		case "partially_signed":
+			return "secondary";
+		case "declined":
+		case "voided":
+		case "provider_error":
+		case "signature_declined":
+		case "signature_voided":
+		case "generation_failed":
+			return "destructive";
+		default:
+			return "outline";
+	}
 }
 
 function isStaticMortgageBlueprintClass(documentClass: string) {
@@ -1134,6 +1165,9 @@ export function DealsDedicatedDetails({
 	const retryPackageGeneration = useAction(
 		api.documents.dealPackages.retryPackageGeneration
 	);
+	const syncSignableDocumentEnvelope = useAction(
+		api.documents.signature.webhooks.syncSignableDocumentEnvelope
+	);
 	const detailFields = filterDetailFields(fields, []);
 	const packageStatus = detailContext?.documentPackage?.status ?? null;
 	const canRetry =
@@ -1149,6 +1183,21 @@ export function DealsDedicatedDetails({
 				error instanceof Error
 					? error.message
 					: "Unable to retry deal package generation."
+			);
+		}
+	}
+
+	async function handleSyncSignableDocument(
+		instanceId: Id<"dealDocumentInstances">
+	) {
+		try {
+			await syncSignableDocumentEnvelope({ dealId, instanceId });
+			toast.success("Signable document status refreshed.");
+		} catch (error) {
+			toast.error(
+				error instanceof Error
+					? error.message
+					: "Unable to refresh signable document status."
 			);
 		}
 	}
@@ -1185,6 +1234,9 @@ export function DealsDedicatedDetails({
 						<Badge variant="outline">
 							{detailContext?.documentPackage?.status ?? "pending"}
 						</Badge>
+						{groupedDocumentInstances.archivedSignableDocuments.length > 0 ? (
+							<Badge variant="secondary">Signed archive ready</Badge>
+						) : null}
 						{detailContext?.documentPackage?.lastError ? (
 							<Badge variant="secondary">Last error recorded</Badge>
 						) : null}
@@ -1205,6 +1257,12 @@ export function DealsDedicatedDetails({
 								label: "Ready At",
 								value:
 									formatDateTime(detailContext?.documentPackage?.readyAt) ??
+									"Unavailable",
+							},
+							{
+								label: "Archived At",
+								value:
+									formatDateTime(detailContext?.documentPackage?.archivedAt) ??
 									"Unavailable",
 							},
 							{
@@ -1247,6 +1305,17 @@ export function DealsDedicatedDetails({
 							},
 						]}
 					/>
+					{groupedDocumentInstances.archivedSignableDocuments.length > 0 ? (
+						<div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 px-4 py-3">
+							<p className="font-medium text-emerald-900 text-sm dark:text-emerald-100">
+								Signed archive captured
+							</p>
+							<p className="mt-1 text-emerald-900/80 text-sm dark:text-emerald-100/80">
+								Final executed PDFs and any completion certificates now flow
+								through platform storage for CRM review.
+							</p>
+						</div>
+					) : null}
 					{canRetry ? (
 						<Button
 							onClick={() => void handleRetryPackageGeneration()}
@@ -1346,27 +1415,219 @@ export function DealsDedicatedDetails({
 			</DetailSectionShell>
 
 			<DetailSectionShell
-				description="Signable package members are reserved here for the next signing phase and remain non-downloadable placeholders."
-				title="Reserved Signable Documents"
+				description="Provider-backed signable package members with envelope, recipient, and sync state."
+				title="Signable Documents"
 			>
-				{groupedDocumentInstances.signableReserved.length > 0 ? (
+				{groupedDocumentInstances.activeSignableDocuments.length > 0 ? (
 					<CompactList
-						emptyMessage="No signable package placeholders exist yet."
-						items={groupedDocumentInstances.signableReserved}
+						emptyMessage="No signable package documents exist yet."
+						items={groupedDocumentInstances.activeSignableDocuments}
 						renderItem={(item) => {
 							const document = item as DealDocumentInstanceListItem;
 							return (
 								<div
-									className="rounded-lg border border-border/60 bg-background/80 px-3 py-3"
+									className="space-y-3 rounded-lg border border-border/60 bg-background/80 px-3 py-3"
 									key={document.instanceId}
 								>
-									<div className="space-y-1">
-										<p className="font-medium text-sm">
-											{document.displayName}
+									<div className="flex flex-wrap items-start justify-between gap-3">
+										<div className="space-y-2">
+											<div className="space-y-1">
+												<p className="font-medium text-sm">
+													{document.displayName}
+												</p>
+												<p className="text-muted-foreground text-sm">
+													{document.packageLabel ?? "Deal package"} •{" "}
+													{formatEnumLabel(document.status)}
+												</p>
+											</div>
+											<div className="flex flex-wrap gap-2">
+												<Badge variant={signingBadgeVariant(document.status)}>
+													{formatEnumLabel(document.status)}
+												</Badge>
+												{document.signing?.status ? (
+													<Badge
+														variant={signingBadgeVariant(
+															document.signing.status
+														)}
+													>
+														{formatEnumLabel(document.signing.status)}
+													</Badge>
+												) : null}
+												{document.signing?.generatedDocumentSigningStatus ? (
+													<Badge
+														variant={signingBadgeVariant(
+															document.signing.generatedDocumentSigningStatus
+														)}
+													>
+														{formatEnumLabel(
+															document.signing.generatedDocumentSigningStatus
+														)}
+													</Badge>
+												) : null}
+											</div>
+										</div>
+										{document.signing?.envelopeId ? (
+											<Button
+												onClick={() =>
+													void handleSyncSignableDocument(document.instanceId)
+												}
+												size="sm"
+												type="button"
+												variant="outline"
+											>
+												Refresh status
+											</Button>
+										) : null}
+									</div>
+
+									<div className="grid gap-2 text-muted-foreground text-sm sm:grid-cols-2">
+										<p>
+											Provider envelope:{" "}
+											{document.signing?.providerEnvelopeId ?? "Not created"}
 										</p>
+										<p>
+											Last provider sync:{" "}
+											{formatDateTime(
+												document.signing?.lastProviderSyncAt ?? null
+											) ?? "Not synced"}
+										</p>
+									</div>
+
+									{document.signing?.recipients.length ? (
+										<div className="flex flex-wrap gap-2">
+											{document.signing.recipients.map((recipient) => (
+												<div
+													className="rounded-full border border-border/60 px-3 py-1 text-xs"
+													key={`${document.instanceId}-${recipient.platformRole}`}
+												>
+													<span className="font-medium">{recipient.name}</span>
+													<span className="text-muted-foreground">
+														{" "}
+														• {formatEnumLabel(recipient.status)}
+													</span>
+													<span className="text-muted-foreground">
+														{" "}
+														• {formatEnumLabel(recipient.providerRole)}
+													</span>
+												</div>
+											))}
+										</div>
+									) : (
 										<p className="text-muted-foreground text-sm">
-											{document.packageLabel ?? "Deal package"} •{" "}
-											{formatEnumLabel(document.status)}
+											Recipient routing has not been resolved for this signable
+											document yet.
+										</p>
+									)}
+
+									{document.signing?.lastError || document.lastError ? (
+										<p className="text-destructive text-sm">
+											{document.signing?.lastError ?? document.lastError}
+										</p>
+									) : null}
+								</div>
+							);
+						}}
+					/>
+				) : (
+					<EmptyContext
+						message={
+							groupedDocumentInstances.archivedSignableDocuments.length > 0
+								? "All signable package documents have completed signing and moved into the signed archive."
+								: "No signable package documents exist yet."
+						}
+					/>
+				)}
+			</DetailSectionShell>
+
+			<DetailSectionShell
+				description="Completed envelopes preserved in FairLend storage for post-close review and evidence collection."
+				title="Archived Signed Artifacts"
+			>
+				{groupedDocumentInstances.archivedSignableDocuments.length > 0 ? (
+					<CompactList
+						emptyMessage="No archived signed artifacts are available yet."
+						items={groupedDocumentInstances.archivedSignableDocuments}
+						renderItem={(item) => {
+							const document = item as DealDocumentInstanceListItem;
+							return (
+								<div
+									className="space-y-3 rounded-lg border border-border/60 bg-background/80 px-3 py-3"
+									key={document.instanceId}
+								>
+									<div className="flex flex-wrap items-start justify-between gap-3">
+										<div className="space-y-2">
+											<div className="space-y-1">
+												<p className="font-medium text-sm">
+													{document.displayName}
+												</p>
+												<p className="text-muted-foreground text-sm">
+													{document.packageLabel ?? "Deal package"} •{" "}
+													{formatEnumLabel(document.status)}
+												</p>
+											</div>
+											<div className="flex flex-wrap gap-2">
+												<Badge variant={signingBadgeVariant(document.status)}>
+													{formatEnumLabel(document.status)}
+												</Badge>
+												{document.archivedSigning?.signingCompletedAt ? (
+													<Badge variant="secondary">Signed</Badge>
+												) : null}
+											</div>
+										</div>
+										<div className="flex flex-wrap gap-2">
+											{document.archivedSigning?.finalPdfUrl ? (
+												<Button
+													asChild
+													size="sm"
+													type="button"
+													variant="outline"
+												>
+													<a
+														href={document.archivedSigning.finalPdfUrl}
+														rel="noreferrer"
+														target="_blank"
+													>
+														Open final PDF
+													</a>
+												</Button>
+											) : null}
+											{document.archivedSigning?.completionCertificateUrl ? (
+												<Button
+													asChild
+													size="sm"
+													type="button"
+													variant="outline"
+												>
+													<a
+														href={
+															document.archivedSigning.completionCertificateUrl
+														}
+														rel="noreferrer"
+														target="_blank"
+													>
+														Open completion certificate
+													</a>
+												</Button>
+											) : null}
+										</div>
+									</div>
+
+									<div className="grid gap-2 text-muted-foreground text-sm sm:grid-cols-3">
+										<p>
+											Signed at:{" "}
+											{formatDateTime(
+												document.archivedSigning?.signingCompletedAt ?? null
+											) ?? "Unavailable"}
+										</p>
+										<p>
+											Archived at:{" "}
+											{formatDateTime(document.archivedAt) ?? "Unavailable"}
+										</p>
+										<p>
+											Certificate:{" "}
+											{document.archivedSigning?.completionCertificateUrl
+												? "Available"
+												: "Not issued"}
 										</p>
 									</div>
 								</div>
@@ -1374,7 +1635,7 @@ export function DealsDedicatedDetails({
 						}}
 					/>
 				) : (
-					<EmptyContext message="No signable package placeholders exist yet." />
+					<EmptyContext message="No archived signed artifacts are available yet." />
 				)}
 			</DetailSectionShell>
 

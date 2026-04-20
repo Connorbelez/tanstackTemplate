@@ -1,6 +1,8 @@
 import { v } from "convex/values";
+import type { Id } from "../../_generated/dataModel";
+import type { MutationCtx } from "../../_generated/server";
 import { internalMutation } from "../../_generated/server";
-import { grantDealAccess } from "../../deals/mutations";
+import { type DealAccessRole, grantDealAccess } from "../../deals/mutations";
 import { effectPayloadValidator } from "../validators";
 
 const dealEffectPayloadValidator = {
@@ -9,8 +11,80 @@ const dealEffectPayloadValidator = {
 	entityType: v.literal("deal"),
 };
 
+interface PendingDealAccessGrant {
+	role: DealAccessRole;
+	userId: string;
+}
+
+async function resolveBrokerDealAccessGrants(
+	ctx: Pick<MutationCtx, "db">,
+	args: {
+		dealId: Id<"deals">;
+		mortgageId: Id<"mortgages">;
+	}
+): Promise<PendingDealAccessGrant[]> {
+	const mortgage = await ctx.db.get(args.mortgageId);
+	if (!mortgage) {
+		console.warn(
+			`[createDealAccess] Mortgage ${args.mortgageId} not found for deal=${args.dealId}; skipping broker access grants`
+		);
+		return [];
+	}
+
+	const brokerTargets: Array<{
+		brokerId: Id<"brokers">;
+		role: Extract<DealAccessRole, "assigned_broker" | "broker_of_record">;
+	}> = [
+		{
+			brokerId: mortgage.brokerOfRecordId,
+			role: "broker_of_record",
+		},
+	];
+
+	if (mortgage.assignedBrokerId) {
+		brokerTargets.push({
+			brokerId: mortgage.assignedBrokerId,
+			role: "assigned_broker",
+		});
+	}
+
+	const grants: PendingDealAccessGrant[] = [];
+	const grantedUserIds = new Set<string>();
+
+	for (const target of brokerTargets) {
+		const broker = await ctx.db.get(target.brokerId);
+		if (!broker) {
+			console.warn(
+				`[createDealAccess] Broker ${target.brokerId} not found for deal=${args.dealId}; skipping ${target.role}`
+			);
+			continue;
+		}
+
+		const user = await ctx.db.get(broker.userId);
+		if (!user) {
+			console.warn(
+				`[createDealAccess] Broker user ${broker.userId} not found for deal=${args.dealId}; skipping ${target.role}`
+			);
+			continue;
+		}
+
+		if (grantedUserIds.has(user.authId)) {
+			continue;
+		}
+
+		grantedUserIds.add(user.authId);
+		grants.push({
+			role: target.role,
+			userId: user.authId,
+		});
+	}
+
+	return grants;
+}
+
 /**
- * Effect: creates a dealAccess record for the assigned lawyer.
+ * Effect: creates dealAccess records for the structural deal participants that
+ * need private-deal visibility.
  * Fires on LAWYER_VERIFIED transition (lawyerOnboarding.pending → verified).
  * Delegates to the shared `grantDealAccess` helper for idempotent upsert logic.
  */
@@ -35,15 +109,32 @@ export const createDealAccess = internalMutation({
 			return;
 		}
 
-		const accessId = await grantDealAccess(ctx.db, {
-			userId: lawyerId,
+		const grantsByUserId = new Map<string, DealAccessRole>([
+			[lawyerId, deal.lawyerType],
+		]);
+		const brokerGrants = await resolveBrokerDealAccessGrants(ctx, {
 			dealId: args.entityId,
-			role: deal.lawyerType,
-			grantedBy: args.source.actorId ?? "system",
+			mortgageId: deal.mortgageId,
 		});
+		for (const grant of brokerGrants) {
+			if (!grantsByUserId.has(grant.userId)) {
+				grantsByUserId.set(grant.userId, grant.role);
+			}
+		}
+
+		const grantedRecords: string[] = [];
+		for (const [userId, role] of grantsByUserId.entries()) {
+			const accessId = await grantDealAccess(ctx.db, {
+				userId,
+				dealId: args.entityId,
+				role,
+				grantedBy: args.source.actorId ?? "system",
+			});
+			grantedRecords.push(`${role}:${userId}:${accessId}`);
+		}
 
 		console.info(
-			`[createDealAccess] Granted ${deal.lawyerType} access to deal=${args.entityId} for lawyer=${lawyerId} (accessId=${accessId})`
+			`[createDealAccess] Granted ${grantedRecords.join(", ")} for deal=${args.entityId}`
 		);
 	},
 });
@@ -79,9 +170,9 @@ export const revokeAllDealAccess = internalMutation({
 });
 
 /**
- * Effect: revokes lawyer dealAccess records while retaining buyer/seller records.
+ * Effect: revokes lawyer dealAccess records while retaining non-lawyer records.
  * Fires on deal confirmation (fundsTransfer.onDone).
- * Asymmetric revocation: lawyers lose access, parties retain it.
+ * Asymmetric revocation: lawyers lose access, brokers and deal parties retain it.
  */
 export const revokeLawyerAccess = internalMutation({
 	args: dealEffectPayloadValidator,
