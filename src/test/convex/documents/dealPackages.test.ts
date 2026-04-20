@@ -33,8 +33,11 @@ async function createPdfBytes(label: string) {
 
 interface MockDocumensoOptions {
 	envelopeStatus?: "COMPLETED" | "PENDING";
+	failCertificateDownload?: boolean;
 	failCreate?: boolean;
 	failDistribute?: boolean;
+	failSignedDownload?: boolean;
+	includeCompletionCertificate?: boolean;
 	recipientEmail?: string;
 	recipientName?: string;
 	recipientSigningStatus?: "SIGNED" | null;
@@ -43,11 +46,33 @@ interface MockDocumensoOptions {
 
 function installMockDocumensoFetch(options?: MockDocumensoOptions) {
 	const envelopeId = "doc_env_1";
+	const envelopeItemId = "doc_item_1";
+	const completionCertificateItemId = "doc_cert_1";
 	const recipientId = "doc_rcpt_1";
 	const signingUrl =
 		options?.signingUrl ?? "https://documenso.test/sign/session_1";
 	const recipientSigningStatus = options?.recipientSigningStatus ?? null;
 	const envelopeStatus = options?.envelopeStatus ?? "PENDING";
+	const signedPdfBytes = new TextEncoder().encode("signed pdf bytes");
+	const completionCertificateBytes = new TextEncoder().encode(
+		"completion certificate bytes"
+	);
+	const envelopeItems = [
+		{
+			id: envelopeItemId,
+			name: "Borrower signature packet",
+			type: "DOCUMENT",
+		},
+		...(options?.includeCompletionCertificate
+			? [
+					{
+						id: completionCertificateItemId,
+						name: "Completion Certificate",
+						type: "CERTIFICATE",
+					},
+				]
+			: []),
+	];
 
 	const recipientPayload = {
 		email: options?.recipientEmail ?? "borrower.phase7@test.fairlend.ca",
@@ -67,6 +92,8 @@ function installMockDocumensoFetch(options?: MockDocumensoOptions) {
 
 	const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
 		const url = String(input);
+		const parsedUrl = new URL(url);
+		const version = parsedUrl.searchParams.get("version");
 		if (url.endsWith("/envelope/create")) {
 			if (options?.failCreate) {
 				return new Response(JSON.stringify({ error: "create failed" }), {
@@ -78,6 +105,7 @@ function installMockDocumensoFetch(options?: MockDocumensoOptions) {
 		if (url.endsWith(`/envelope/${envelopeId}`)) {
 			return new Response(
 				JSON.stringify({
+					envelopeItems,
 					id: envelopeId,
 					recipients: [recipientPayload],
 					status: envelopeStatus,
@@ -85,6 +113,59 @@ function installMockDocumensoFetch(options?: MockDocumensoOptions) {
 				}),
 				{ status: 200 }
 			);
+		}
+		if (
+			parsedUrl.pathname.endsWith(`/envelope/item/${envelopeItemId}/download`) &&
+			version === "signed"
+		) {
+			if (options?.failSignedDownload) {
+				return new Response(JSON.stringify({ error: "signed download failed" }), {
+					status: 500,
+				});
+			}
+			return new Response(signedPdfBytes, {
+				headers: { "Content-Type": "application/pdf" },
+				status: 200,
+			});
+		}
+		if (
+			parsedUrl.pathname.endsWith(`/envelope/item/${completionCertificateItemId}/download`)
+		) {
+			if (options?.failCertificateDownload) {
+				return new Response(
+					JSON.stringify({ error: "certificate download failed" }),
+					{
+						status: 500,
+					}
+				);
+			}
+			return new Response(completionCertificateBytes, {
+				headers: { "Content-Type": "application/pdf" },
+				status: 200,
+			});
+		}
+		if (
+			parsedUrl.pathname.endsWith(`/envelope/item/${envelopeItemId}/download`) &&
+			version === "certificate"
+		) {
+			if (!options?.includeCompletionCertificate) {
+				return new Response(
+					JSON.stringify({ error: "certificate not available" }),
+					{ status: 404 }
+				);
+			}
+			if (options?.failCertificateDownload) {
+				return new Response(
+					JSON.stringify({ error: "certificate download failed" }),
+					{
+						status: 500,
+					}
+				);
+			}
+			return new Response(completionCertificateBytes, {
+				headers: { "Content-Type": "application/pdf" },
+				status: 200,
+			});
 		}
 		if (url.endsWith("/envelope/distribute")) {
 			if (options?.failDistribute) {
@@ -118,10 +199,27 @@ function installMockDocumensoFetch(options?: MockDocumensoOptions) {
 	process.env.DOCUMENSO_API_TOKEN = "documenso_test_token";
 
 	return {
+		completionCertificateItemId,
 		envelopeId,
+		envelopeItemId,
 		fetchMock,
 		recipientId,
 		signingUrl,
+	};
+}
+
+function buildArchiveEffectArgs(dealId: Id<"deals">) {
+	return {
+		effectName: "archiveSignedDocuments",
+		entityId: dealId,
+		entityType: "deal" as const,
+		eventType: "ALL_PARTIES_SIGNED",
+		journalEntryId: "journal_archive_signed_documents",
+		source: {
+			actorId: "test-admin",
+			actorType: "admin" as const,
+			channel: "admin_dashboard" as const,
+		},
 	};
 }
 
@@ -662,6 +760,7 @@ async function seedDealPackageFixture(
 		});
 
 		return {
+			brokerIdentity,
 			borrowerId,
 			borrowerIdentity,
 			dealId,
@@ -1226,5 +1325,297 @@ describe("documents/dealPackages", () => {
 				}),
 			])
 		);
+	});
+
+	it("archives completed signable artifacts into platform storage and stays idempotent on rerun", async () => {
+		installMockDocumensoFetch({
+			recipientEmail: "lender.phase7@test.fairlend.ca",
+			recipientName: "Lena Lender",
+		});
+		const t = createTestConvex({ includeWorkflowComponents: false });
+		const fixture = await seedDealPackageFixture(t, {
+			includeListing: true,
+			signablePlatformRole: "lender_primary",
+			templatedVariableKey: "borrower_primary_full_name",
+		});
+
+		await t.action(internal.documents.dealPackages.runCreateDocumentPackageInternal, {
+			dealId: fixture.dealId,
+			retry: false,
+		});
+		const initialSurface = await t.withIdentity(fixture.lenderIdentity).query(
+			api.documents.dealPackages.getPortalDocumentPackage,
+			{
+				dealId: fixture.dealId,
+			}
+		);
+		const signableInstance = initialSurface.instances.find(
+			(instance) => instance.class === "private_templated_signable"
+		);
+		if (!signableInstance?.generatedDocumentId) {
+			throw new Error("Expected a signable package instance");
+		}
+
+		const completedDocumenso = installMockDocumensoFetch({
+			envelopeStatus: "COMPLETED",
+			includeCompletionCertificate: true,
+			recipientEmail: "lender.phase7@test.fairlend.ca",
+			recipientName: "Lena Lender",
+			recipientSigningStatus: "SIGNED",
+		});
+		await t.withIdentity(fixture.lenderIdentity).action(
+			api.documents.signature.webhooks.syncSignableDocumentEnvelope,
+			{
+				dealId: fixture.dealId,
+				instanceId: signableInstance.instanceId,
+			}
+		);
+
+		await t.action(
+			internal.engine.effects.dealClosingEffects.archiveSignedDocuments,
+			buildArchiveEffectArgs(fixture.dealId)
+		);
+
+		const afterFirstArchive = await t
+			.withIdentity(fixture.lenderIdentity)
+			.query(api.documents.dealPackages.getPortalDocumentPackage, {
+				dealId: fixture.dealId,
+			});
+		const portalDealDetail = await t
+			.withIdentity(fixture.lenderIdentity)
+			.query(api.deals.queries.getPortalDealDetail, {
+				dealId: fixture.dealId,
+			});
+		const adminDealDetail = await t
+			.withIdentity(FAIRLEND_ADMIN)
+			.query(api.crm.detailContextQueries.getDealDetailContext, {
+				dealId: fixture.dealId,
+			});
+		const archivedSignable = afterFirstArchive.instances.find(
+			(instance) => instance.instanceId === signableInstance.instanceId
+		);
+		const portalDealSignable = portalDealDetail.documentInstances.find(
+			(instance) => instance.instanceId === signableInstance.instanceId
+		);
+		const adminDealSignable = adminDealDetail.documentInstances.find(
+			(instance) => instance.instanceId === signableInstance.instanceId
+		);
+		const firstDocumentState = await t.run(async (ctx) => {
+			const generatedDocument = await ctx.db.get(signableInstance.generatedDocumentId);
+			if (!generatedDocument?.finalPdfStorageId) {
+				throw new Error("Expected archived final PDF storage");
+			}
+
+			const finalPdf = await ctx.storage.get(generatedDocument.finalPdfStorageId);
+			const certificate = generatedDocument.completionCertificateStorageId
+				? await ctx.storage.get(generatedDocument.completionCertificateStorageId)
+				: null;
+
+			return {
+				completionCertificateStorageId:
+					generatedDocument.completionCertificateStorageId ?? null,
+				finalPdfByteLength: finalPdf
+					? (await finalPdf.arrayBuffer()).byteLength
+					: 0,
+				finalPdfStorageId: generatedDocument.finalPdfStorageId,
+				signingStatus: generatedDocument.signingStatus,
+				storedCertificateByteLength: certificate
+					? (await certificate.arrayBuffer()).byteLength
+					: 0,
+			};
+		});
+
+		await t.action(
+			internal.engine.effects.dealClosingEffects.archiveSignedDocuments,
+			buildArchiveEffectArgs(fixture.dealId)
+		);
+
+		const secondDocumentState = await t.run(async (ctx) => {
+			const generatedDocument = await ctx.db.get(signableInstance.generatedDocumentId);
+			if (!generatedDocument) {
+				throw new Error("Expected generated document after archive rerun");
+			}
+
+			return {
+				completionCertificateStorageId:
+					generatedDocument.completionCertificateStorageId ?? null,
+				finalPdfStorageId: generatedDocument.finalPdfStorageId ?? null,
+				signingStatus: generatedDocument.signingStatus,
+			};
+		});
+
+		const signedDownloadCalls = completedDocumenso.fetchMock.mock.calls.filter(
+			([input]) =>
+				String(input).includes(
+					`/envelope/item/${completedDocumenso.envelopeItemId}/download?version=signed`
+				)
+		);
+		const certificateDownloadCalls =
+			completedDocumenso.fetchMock.mock.calls.filter(([input]) =>
+				String(input).includes(
+					`/envelope/item/${completedDocumenso.completionCertificateItemId}/download`
+				)
+			);
+
+		expect(archivedSignable).toMatchObject({
+			archivedSigning: {
+				completionCertificateUrl: expect.any(String),
+				finalPdfUrl: expect.any(String),
+				signingCompletedAt: expect.any(Number),
+			},
+			archivedAt: expect.any(Number),
+			status: "archived",
+			url: expect.any(String),
+		});
+		expect(portalDealSignable).toMatchObject({
+			archivedSigning: {
+				completionCertificateUrl: expect.any(String),
+				finalPdfUrl: expect.any(String),
+				signingCompletedAt: expect.any(Number),
+			},
+			archivedAt: expect.any(Number),
+			status: "archived",
+			url: expect.any(String),
+		});
+		expect(adminDealSignable).toMatchObject({
+			archivedSigning: {
+				completionCertificateUrl: expect.any(String),
+				finalPdfUrl: expect.any(String),
+				signingCompletedAt: expect.any(Number),
+			},
+			archivedAt: expect.any(Number),
+			status: "archived",
+			url: expect.any(String),
+		});
+		expect(archivedSignable?.url).toBe(archivedSignable?.archivedSigning?.finalPdfUrl);
+		expect(portalDealSignable?.url).toBe(
+			portalDealSignable?.archivedSigning?.finalPdfUrl
+		);
+		expect(adminDealSignable?.url).toBe(
+			adminDealSignable?.archivedSigning?.finalPdfUrl
+		);
+		expect(afterFirstArchive.package).toMatchObject({
+			archivedAt: expect.any(Number),
+			status: "archived",
+		});
+		expect(firstDocumentState).toMatchObject({
+			completionCertificateStorageId: expect.any(String),
+			finalPdfByteLength: expect.any(Number),
+			finalPdfStorageId: expect.any(String),
+			signingStatus: "completed",
+			storedCertificateByteLength: expect.any(Number),
+		});
+		expect(firstDocumentState.finalPdfByteLength).toBeGreaterThan(0);
+		expect(firstDocumentState.storedCertificateByteLength).toBeGreaterThan(0);
+		expect(secondDocumentState).toEqual({
+			completionCertificateStorageId:
+				firstDocumentState.completionCertificateStorageId,
+			finalPdfStorageId: firstDocumentState.finalPdfStorageId,
+			signingStatus: "completed",
+		});
+		expect(signedDownloadCalls).toHaveLength(1);
+		expect(certificateDownloadCalls).toHaveLength(1);
+	});
+
+	it("records archive failures without corrupting signed state and can recover on retry", async () => {
+		installMockDocumensoFetch({
+			recipientEmail: "lender.phase7@test.fairlend.ca",
+			recipientName: "Lena Lender",
+		});
+		const t = createTestConvex({ includeWorkflowComponents: false });
+		const fixture = await seedDealPackageFixture(t, {
+			includeListing: true,
+			signablePlatformRole: "lender_primary",
+			templatedVariableKey: "borrower_primary_full_name",
+		});
+
+		await t.action(internal.documents.dealPackages.runCreateDocumentPackageInternal, {
+			dealId: fixture.dealId,
+			retry: false,
+		});
+		const initialSurface = await t.withIdentity(fixture.lenderIdentity).query(
+			api.documents.dealPackages.getPortalDocumentPackage,
+			{
+				dealId: fixture.dealId,
+			}
+		);
+		const signableInstance = initialSurface.instances.find(
+			(instance) => instance.class === "private_templated_signable"
+		);
+		if (!signableInstance) {
+			throw new Error("Expected a signable package instance");
+		}
+
+		installMockDocumensoFetch({
+			envelopeStatus: "COMPLETED",
+			failSignedDownload: true,
+			recipientEmail: "lender.phase7@test.fairlend.ca",
+			recipientName: "Lena Lender",
+			recipientSigningStatus: "SIGNED",
+		});
+		await t.withIdentity(fixture.lenderIdentity).action(
+			api.documents.signature.webhooks.syncSignableDocumentEnvelope,
+			{
+				dealId: fixture.dealId,
+				instanceId: signableInstance.instanceId,
+			}
+		);
+
+		await expect(
+			t.action(
+				internal.engine.effects.dealClosingEffects.archiveSignedDocuments,
+				buildArchiveEffectArgs(fixture.dealId)
+			)
+		).rejects.toThrow(/failed with status 500/i);
+
+		const afterFailure = await t.withIdentity(fixture.lenderIdentity).query(
+			api.documents.dealPackages.getPortalDocumentPackage,
+			{
+				dealId: fixture.dealId,
+			}
+		);
+		const signableAfterFailure = afterFailure.instances.find(
+			(instance) => instance.instanceId === signableInstance.instanceId
+		);
+
+		expect(afterFailure.package).toMatchObject({
+			lastError: expect.stringContaining("failed with status 500"),
+			status: "ready",
+		});
+		expect(signableAfterFailure).toMatchObject({
+			archivedAt: null,
+			status: "signed",
+		});
+
+		installMockDocumensoFetch({
+			envelopeStatus: "COMPLETED",
+			recipientEmail: "lender.phase7@test.fairlend.ca",
+			recipientName: "Lena Lender",
+			recipientSigningStatus: "SIGNED",
+		});
+		await t.action(
+			internal.engine.effects.dealClosingEffects.archiveSignedDocuments,
+			buildArchiveEffectArgs(fixture.dealId)
+		);
+
+		const afterRetry = await t.withIdentity(fixture.lenderIdentity).query(
+			api.documents.dealPackages.getPortalDocumentPackage,
+			{
+				dealId: fixture.dealId,
+			}
+		);
+		const signableAfterRetry = afterRetry.instances.find(
+			(instance) => instance.instanceId === signableInstance.instanceId
+		);
+
+		expect(afterRetry.package).toMatchObject({
+			archivedAt: expect.any(Number),
+			lastError: null,
+			status: "archived",
+		});
+		expect(signableAfterRetry).toMatchObject({
+			archivedAt: expect.any(Number),
+			status: "archived",
+		});
 	});
 });

@@ -333,15 +333,22 @@ type DealDocumentInstanceListItem = NonNullable<
 function groupDealDocumentInstances(
 	documentInstances: readonly DealDocumentInstanceListItem[]
 ) {
+	const signableDocuments = documentInstances.filter(
+		(document) => document.class === "private_templated_signable"
+	);
+
 	return {
+		activeSignableDocuments: signableDocuments.filter(
+			(document) => !document.archivedSigning?.finalPdfUrl
+		),
+		archivedSignableDocuments: signableDocuments.filter((document) =>
+			Boolean(document.archivedSigning?.finalPdfUrl)
+		),
 		generatedReadOnly: documentInstances.filter(
 			(document) => document.class === "private_templated_non_signable"
 		),
 		privateStatic: documentInstances.filter(
 			(document) => document.class === "private_static"
-		),
-		signableDocuments: documentInstances.filter(
-			(document) => document.class === "private_templated_signable"
 		),
 	};
 }
@@ -350,6 +357,7 @@ function signingBadgeVariant(
 	status: string | null | undefined
 ): "destructive" | "outline" | "secondary" {
 	switch (status) {
+		case "archived":
 		case "completed":
 		case "signed":
 		case "signature_partially_signed":
@@ -1226,6 +1234,9 @@ export function DealsDedicatedDetails({
 						<Badge variant="outline">
 							{detailContext?.documentPackage?.status ?? "pending"}
 						</Badge>
+						{groupedDocumentInstances.archivedSignableDocuments.length > 0 ? (
+							<Badge variant="secondary">Signed archive ready</Badge>
+						) : null}
 						{detailContext?.documentPackage?.lastError ? (
 							<Badge variant="secondary">Last error recorded</Badge>
 						) : null}
@@ -1246,6 +1257,12 @@ export function DealsDedicatedDetails({
 								label: "Ready At",
 								value:
 									formatDateTime(detailContext?.documentPackage?.readyAt) ??
+									"Unavailable",
+							},
+							{
+								label: "Archived At",
+								value:
+									formatDateTime(detailContext?.documentPackage?.archivedAt) ??
 									"Unavailable",
 							},
 							{
@@ -1288,6 +1305,17 @@ export function DealsDedicatedDetails({
 							},
 						]}
 					/>
+					{groupedDocumentInstances.archivedSignableDocuments.length > 0 ? (
+						<div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 px-4 py-3">
+							<p className="font-medium text-emerald-900 text-sm dark:text-emerald-100">
+								Signed archive captured
+							</p>
+							<p className="mt-1 text-emerald-900/80 text-sm dark:text-emerald-100/80">
+								Final executed PDFs and any completion certificates now flow
+								through platform storage for CRM review.
+							</p>
+						</div>
+					) : null}
 					{canRetry ? (
 						<Button
 							onClick={() => void handleRetryPackageGeneration()}
@@ -1390,10 +1418,10 @@ export function DealsDedicatedDetails({
 				description="Provider-backed signable package members with envelope, recipient, and sync state."
 				title="Signable Documents"
 			>
-				{groupedDocumentInstances.signableDocuments.length > 0 ? (
+				{groupedDocumentInstances.activeSignableDocuments.length > 0 ? (
 					<CompactList
 						emptyMessage="No signable package documents exist yet."
-						items={groupedDocumentInstances.signableDocuments}
+						items={groupedDocumentInstances.activeSignableDocuments}
 						renderItem={(item) => {
 							const document = item as DealDocumentInstanceListItem;
 							return (
@@ -1501,7 +1529,113 @@ export function DealsDedicatedDetails({
 						}}
 					/>
 				) : (
-					<EmptyContext message="No signable package documents exist yet." />
+					<EmptyContext
+						message={
+							groupedDocumentInstances.archivedSignableDocuments.length > 0
+								? "All signable package documents have completed signing and moved into the signed archive."
+								: "No signable package documents exist yet."
+						}
+					/>
+				)}
+			</DetailSectionShell>
+
+			<DetailSectionShell
+				description="Completed envelopes preserved in FairLend storage for post-close review and evidence collection."
+				title="Archived Signed Artifacts"
+			>
+				{groupedDocumentInstances.archivedSignableDocuments.length > 0 ? (
+					<CompactList
+						emptyMessage="No archived signed artifacts are available yet."
+						items={groupedDocumentInstances.archivedSignableDocuments}
+						renderItem={(item) => {
+							const document = item as DealDocumentInstanceListItem;
+							return (
+								<div
+									className="space-y-3 rounded-lg border border-border/60 bg-background/80 px-3 py-3"
+									key={document.instanceId}
+								>
+									<div className="flex flex-wrap items-start justify-between gap-3">
+										<div className="space-y-2">
+											<div className="space-y-1">
+												<p className="font-medium text-sm">
+													{document.displayName}
+												</p>
+												<p className="text-muted-foreground text-sm">
+													{document.packageLabel ?? "Deal package"} •{" "}
+													{formatEnumLabel(document.status)}
+												</p>
+											</div>
+											<div className="flex flex-wrap gap-2">
+												<Badge variant={signingBadgeVariant(document.status)}>
+													{formatEnumLabel(document.status)}
+												</Badge>
+												{document.archivedSigning?.signingCompletedAt ? (
+													<Badge variant="secondary">Signed</Badge>
+												) : null}
+											</div>
+										</div>
+										<div className="flex flex-wrap gap-2">
+											{document.archivedSigning?.finalPdfUrl ? (
+												<Button
+													asChild
+													size="sm"
+													type="button"
+													variant="outline"
+												>
+													<a
+														href={document.archivedSigning.finalPdfUrl}
+														rel="noreferrer"
+														target="_blank"
+													>
+														Open final PDF
+													</a>
+												</Button>
+											) : null}
+											{document.archivedSigning?.completionCertificateUrl ? (
+												<Button
+													asChild
+													size="sm"
+													type="button"
+													variant="outline"
+												>
+													<a
+														href={
+															document.archivedSigning.completionCertificateUrl
+														}
+														rel="noreferrer"
+														target="_blank"
+													>
+														Open completion certificate
+													</a>
+												</Button>
+											) : null}
+										</div>
+									</div>
+
+									<div className="grid gap-2 text-muted-foreground text-sm sm:grid-cols-3">
+										<p>
+											Signed at:{" "}
+											{formatDateTime(
+												document.archivedSigning?.signingCompletedAt ?? null
+											) ?? "Unavailable"}
+										</p>
+										<p>
+											Archived at:{" "}
+											{formatDateTime(document.archivedAt) ?? "Unavailable"}
+										</p>
+										<p>
+											Certificate:{" "}
+											{document.archivedSigning?.completionCertificateUrl
+												? "Available"
+												: "Not issued"}
+										</p>
+									</div>
+								</div>
+							);
+						}}
+					/>
+				) : (
+					<EmptyContext message="No archived signed artifacts are available yet." />
 				)}
 			</DetailSectionShell>
 

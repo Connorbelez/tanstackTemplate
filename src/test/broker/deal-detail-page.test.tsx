@@ -6,7 +6,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { useQuery } from "convex/react";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { LenderDealDetailPage } from "#/components/lender/deals/LenderDealDetailPage";
+import { BrokerDealDetailPage } from "#/components/broker/deals/BrokerDealDetailPage";
 
 vi.mock("convex/react", () => ({
 	useAction: vi.fn(() => vi.fn()),
@@ -41,8 +41,8 @@ interface QueryMock {
 	mockReturnValue(value: unknown): QueryMock;
 }
 
-describe("lender deal detail page", () => {
-	it("renders the immutable deal package and only available private docs", () => {
+describe("broker deal detail page", () => {
+	it("renders the broker-facing deal package and archive actions", () => {
 		const useQueryMock = useQuery as unknown as QueryMock;
 		useQueryMock.mockReturnValue({
 			deal: {
@@ -54,52 +54,11 @@ describe("lender deal detail page", () => {
 			},
 			documentInstances: [
 				{
-					class: "private_templated_non_signable",
-					displayName: "Counsel memo",
-					instanceId: "instance_1",
-					kind: "generated",
-					packageLabel: "Closing package",
-					status: "available",
-					url: "https://example.com/counsel-memo.pdf",
-				},
-				{
-					class: "private_templated_signable",
-					displayName: "Borrower signature packet",
-					instanceId: "instance_2",
-					kind: "generated",
-					packageLabel: "Closing package",
-					signing: {
-						canLaunchEmbeddedSigning: true,
-						envelopeId: "envelope_1",
-						generatedDocumentSigningStatus: "sent",
-						lastError: null,
-						lastProviderSyncAt: new Date("2026-05-15T14:00:00.000Z").getTime(),
-						providerCode: "documenso",
-						providerEnvelopeId: "doc_env_1",
-						recipients: [
-							{
-								email: "lender@test.fairlend.ca",
-								isCurrentViewer: true,
-								name: "Lena Lender",
-								platformRole: "lender_primary",
-								providerRecipientId: "rcpt_1",
-								providerRole: "SIGNER",
-								signingOrder: 0,
-								status: "pending",
-								userId: "user_1",
-							},
-						],
-						status: "sent",
-					},
-					status: "signature_sent",
-					url: null,
-				},
-				{
 					archivedAt: new Date("2026-05-16T16:30:00.000Z").getTime(),
 					archivedSigning: {
 						completionCertificateUrl:
-							"https://example.com/borrower-signature-certificate.pdf",
-						finalPdfUrl: "https://example.com/borrower-signature-final.pdf",
+							"https://example.com/broker-borrower-certificate.pdf",
+						finalPdfUrl: "https://example.com/broker-borrower-final.pdf",
 						signingCompletedAt: new Date(
 							"2026-05-16T15:45:00.000Z"
 						).getTime(),
@@ -121,7 +80,7 @@ describe("lender deal detail page", () => {
 						status: "completed",
 					},
 					status: "archived",
-					url: "https://example.com/borrower-signature-final.pdf",
+					url: "https://example.com/broker-borrower-final.pdf",
 				},
 			],
 			documentPackage: {
@@ -130,7 +89,7 @@ describe("lender deal detail page", () => {
 				packageId: "package_1",
 				readyAt: new Date("2026-05-15T13:00:00.000Z").getTime(),
 				retryCount: 0,
-				status: "ready",
+				status: "archived",
 			},
 			mortgage: {
 				interestRate: 9.5,
@@ -160,39 +119,24 @@ describe("lender deal detail page", () => {
 			},
 		});
 
-		render(<LenderDealDetailPage dealId="deal_1" />);
+		render(<BrokerDealDetailPage dealId="deal_1" />);
 
 		expect(screen.getByText("Deal Package")).toBeTruthy();
-		expect(screen.getByText("Closing Snapshot")).toBeTruthy();
-		expect(screen.getAllByText("Package Status").length).toBeGreaterThan(0);
-		expect(screen.getByText("Generated Read-only Documents")).toBeTruthy();
-		expect(screen.getByText("Private Static Documents")).toBeTruthy();
-		expect(screen.getByText("Signable Documents")).toBeTruthy();
 		expect(screen.getByText("Archived Signed Artifacts")).toBeTruthy();
 		expect(screen.getByText("Signed archive ready")).toBeTruthy();
-		expect(screen.getByText("Counsel memo")).toBeTruthy();
-		expect(screen.getByText("Borrower signature packet")).toBeTruthy();
 		expect(screen.getByText("Archived borrower packet")).toBeTruthy();
-		expect(screen.getAllByText("Lena Lender").length).toBeGreaterThan(0);
-		expect(screen.getByRole("button", { name: "Sign in portal" })).toBeTruthy();
-		expect(
-			screen.getByRole("button", { name: "Refresh status" })
-		).toBeTruthy();
-		expect(
-			screen.getByRole("link", { name: "Open PDF" }).getAttribute("href")
-		).toBe("https://example.com/counsel-memo.pdf");
 		expect(
 			screen.getByRole("link", { name: "Open final PDF" }).getAttribute("href")
-		).toBe("https://example.com/borrower-signature-final.pdf");
+		).toBe("https://example.com/broker-borrower-final.pdf");
 		expect(
 			screen
 				.getByRole("link", { name: "Open completion certificate" })
 				.getAttribute("href")
-		).toBe("https://example.com/borrower-signature-certificate.pdf");
+		).toBe("https://example.com/broker-borrower-certificate.pdf");
 		expect(
-			screen.getByRole("link", { name: "Back to lender workspace" }).getAttribute(
+			screen.getByRole("link", { name: "Back to broker workspace" }).getAttribute(
 				"href"
 			)
-		).toBe("/lender");
+		).toBe("/broker");
 	});
 });

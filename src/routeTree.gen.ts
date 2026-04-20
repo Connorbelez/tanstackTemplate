@@ -22,6 +22,7 @@ import { Route as BrokerRouteRouteImport } from './routes/broker/route'
 import { Route as BorrowerRouteRouteImport } from './routes/borrower/route'
 import { Route as AdminRouteRouteImport } from './routes/admin/route'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as BrokerIndexRouteImport } from './routes/broker/index'
 import { Route as LenderListingsRouteImport } from './routes/lender.listings'
 import { Route as LenderDealsRouteImport } from './routes/lender.deals'
 import { Route as E2eSwitchOrgRouteImport } from './routes/e2e/switch-org'
@@ -52,6 +53,7 @@ import { Route as DemoConvexApiCredentialsRouteImport } from './routes/demo/conv
 import { Route as DemoConvexAggregateRouteImport } from './routes/demo/convex-aggregate'
 import { Route as DemoConvexActionCacheRouteImport } from './routes/demo/convex-action-cache'
 import { Route as DemoConvexRouteImport } from './routes/demo/convex'
+import { Route as BrokerDealsRouteImport } from './routes/broker.deals'
 import { Route as AdminSettingsRouteImport } from './routes/admin/settings'
 import { Route as AdminRotessaReconciliationRouteImport } from './routes/admin/rotessa-reconciliation'
 import { Route as AdminPaymentOperationsRouteImport } from './routes/admin/payment-operations'
@@ -114,6 +116,7 @@ import { Route as DemoAmpsRulesRouteImport } from './routes/demo/amps/rules'
 import { Route as DemoAmpsE2ePaymentsRouteImport } from './routes/demo/amps/e2e-payments'
 import { Route as DemoAmpsCollectionPlanRouteImport } from './routes/demo/amps/collection-plan'
 import { Route as DemoAmpsCollectionAttemptsRouteImport } from './routes/demo/amps/collection-attempts'
+import { Route as BrokerDealsDealIdRouteImport } from './routes/broker.deals.$dealId'
 import { Route as AdminPropertiesRecordidRouteImport } from './routes/admin/properties/$recordid'
 import { Route as AdminOriginationsNewRouteImport } from './routes/admin/originations.new'
 import { Route as AdminOriginationsCaseIdRouteImport } from './routes/admin/originations.$caseId'
@@ -205,6 +208,11 @@ const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
+} as any)
+const BrokerIndexRoute = BrokerIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => BrokerRouteRoute,
 } as any)
 const LenderListingsRoute = LenderListingsRouteImport.update({
   id: '/listings',
@@ -358,6 +366,11 @@ const DemoConvexRoute = DemoConvexRouteImport.update({
   id: '/demo/convex',
   path: '/demo/convex',
   getParentRoute: () => rootRouteImport,
+} as any)
+const BrokerDealsRoute = BrokerDealsRouteImport.update({
+  id: '/deals',
+  path: '/deals',
+  getParentRoute: () => BrokerRouteRoute,
 } as any)
 const AdminSettingsRoute = AdminSettingsRouteImport.update({
   id: '/settings',
@@ -694,6 +707,11 @@ const DemoAmpsCollectionAttemptsRoute =
     path: '/collection-attempts',
     getParentRoute: () => DemoAmpsRouteRoute,
   } as any)
+const BrokerDealsDealIdRoute = BrokerDealsDealIdRouteImport.update({
+  id: '/$dealId',
+  path: '/$dealId',
+  getParentRoute: () => BrokerDealsRoute,
+} as any)
 const AdminPropertiesRecordidRoute = AdminPropertiesRecordidRouteImport.update({
   id: '/$recordid',
   path: '/$recordid',
@@ -842,7 +860,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/admin': typeof AdminRouteRouteWithChildren
   '/borrower': typeof BorrowerRouteRoute
-  '/broker': typeof BrokerRouteRoute
+  '/broker': typeof BrokerRouteRouteWithChildren
   '/lawyer': typeof LawyerRouteRoute
   '/lender': typeof LenderRouteRouteWithChildren
   '/onboard': typeof OnboardRouteRoute
@@ -875,6 +893,7 @@ export interface FileRoutesByFullPath {
   '/admin/payment-operations': typeof AdminPaymentOperationsRoute
   '/admin/rotessa-reconciliation': typeof AdminRotessaReconciliationRoute
   '/admin/settings': typeof AdminSettingsRoute
+  '/broker/deals': typeof BrokerDealsRouteWithChildren
   '/demo/convex': typeof DemoConvexRoute
   '/demo/convex-action-cache': typeof DemoConvexActionCacheRoute
   '/demo/convex-aggregate': typeof DemoConvexAggregateRoute
@@ -905,6 +924,7 @@ export interface FileRoutesByFullPath {
   '/e2e/switch-org': typeof E2eSwitchOrgRoute
   '/lender/deals': typeof LenderDealsRouteWithChildren
   '/lender/listings': typeof LenderListingsRouteWithChildren
+  '/broker/': typeof BrokerIndexRoute
   '/demo/broker-whitelabel/listings': typeof DemoBrokerWhitelabelListingsRouteRouteWithChildren
   '/demo/rbac/admin': typeof DemoRbacAdminRouteRouteWithChildren
   '/demo/rbac/borrower': typeof DemoRbacBorrowerRouteRoute
@@ -924,6 +944,7 @@ export interface FileRoutesByFullPath {
   '/admin/originations/$caseId': typeof AdminOriginationsCaseIdRoute
   '/admin/originations/new': typeof AdminOriginationsNewRoute
   '/admin/properties/$recordid': typeof AdminPropertiesRecordidRoute
+  '/broker/deals/$dealId': typeof BrokerDealsDealIdRoute
   '/demo/amps/collection-attempts': typeof DemoAmpsCollectionAttemptsRoute
   '/demo/amps/collection-plan': typeof DemoAmpsCollectionPlanRoute
   '/demo/amps/e2e-payments': typeof DemoAmpsE2ePaymentsRoute
@@ -975,7 +996,6 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/admin': typeof AdminRouteRouteWithChildren
   '/borrower': typeof BorrowerRouteRoute
-  '/broker': typeof BrokerRouteRoute
   '/lawyer': typeof LawyerRouteRoute
   '/lender': typeof LenderRouteRouteWithChildren
   '/onboard': typeof OnboardRouteRoute
@@ -999,6 +1019,7 @@ export interface FileRoutesByTo {
   '/admin/payment-operations': typeof AdminPaymentOperationsRoute
   '/admin/rotessa-reconciliation': typeof AdminRotessaReconciliationRoute
   '/admin/settings': typeof AdminSettingsRoute
+  '/broker/deals': typeof BrokerDealsRouteWithChildren
   '/demo/convex': typeof DemoConvexRoute
   '/demo/convex-action-cache': typeof DemoConvexActionCacheRoute
   '/demo/convex-aggregate': typeof DemoConvexAggregateRoute
@@ -1028,6 +1049,7 @@ export interface FileRoutesByTo {
   '/e2e/switch-org': typeof E2eSwitchOrgRoute
   '/lender/deals': typeof LenderDealsRouteWithChildren
   '/lender/listings': typeof LenderListingsRouteWithChildren
+  '/broker': typeof BrokerIndexRoute
   '/demo/rbac/admin': typeof DemoRbacAdminRouteRouteWithChildren
   '/demo/rbac/borrower': typeof DemoRbacBorrowerRouteRoute
   '/demo/rbac/broker': typeof DemoRbacBrokerRouteRoute
@@ -1046,6 +1068,7 @@ export interface FileRoutesByTo {
   '/admin/originations/$caseId': typeof AdminOriginationsCaseIdRoute
   '/admin/originations/new': typeof AdminOriginationsNewRoute
   '/admin/properties/$recordid': typeof AdminPropertiesRecordidRoute
+  '/broker/deals/$dealId': typeof BrokerDealsDealIdRoute
   '/demo/amps/collection-attempts': typeof DemoAmpsCollectionAttemptsRoute
   '/demo/amps/collection-plan': typeof DemoAmpsCollectionPlanRoute
   '/demo/amps/e2e-payments': typeof DemoAmpsE2ePaymentsRoute
@@ -1098,7 +1121,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/admin': typeof AdminRouteRouteWithChildren
   '/borrower': typeof BorrowerRouteRoute
-  '/broker': typeof BrokerRouteRoute
+  '/broker': typeof BrokerRouteRouteWithChildren
   '/lawyer': typeof LawyerRouteRoute
   '/lender': typeof LenderRouteRouteWithChildren
   '/onboard': typeof OnboardRouteRoute
@@ -1131,6 +1154,7 @@ export interface FileRoutesById {
   '/admin/payment-operations': typeof AdminPaymentOperationsRoute
   '/admin/rotessa-reconciliation': typeof AdminRotessaReconciliationRoute
   '/admin/settings': typeof AdminSettingsRoute
+  '/broker/deals': typeof BrokerDealsRouteWithChildren
   '/demo/convex': typeof DemoConvexRoute
   '/demo/convex-action-cache': typeof DemoConvexActionCacheRoute
   '/demo/convex-aggregate': typeof DemoConvexAggregateRoute
@@ -1161,6 +1185,7 @@ export interface FileRoutesById {
   '/e2e/switch-org': typeof E2eSwitchOrgRoute
   '/lender/deals': typeof LenderDealsRouteWithChildren
   '/lender/listings': typeof LenderListingsRouteWithChildren
+  '/broker/': typeof BrokerIndexRoute
   '/demo/broker-whitelabel/listings': typeof DemoBrokerWhitelabelListingsRouteRouteWithChildren
   '/demo/rbac/admin': typeof DemoRbacAdminRouteRouteWithChildren
   '/demo/rbac/borrower': typeof DemoRbacBorrowerRouteRoute
@@ -1180,6 +1205,7 @@ export interface FileRoutesById {
   '/admin/originations/$caseId': typeof AdminOriginationsCaseIdRoute
   '/admin/originations/new': typeof AdminOriginationsNewRoute
   '/admin/properties/$recordid': typeof AdminPropertiesRecordidRoute
+  '/broker/deals/$dealId': typeof BrokerDealsDealIdRoute
   '/demo/amps/collection-attempts': typeof DemoAmpsCollectionAttemptsRoute
   '/demo/amps/collection-plan': typeof DemoAmpsCollectionPlanRoute
   '/demo/amps/e2e-payments': typeof DemoAmpsE2ePaymentsRoute
@@ -1266,6 +1292,7 @@ export interface FileRouteTypes {
     | '/admin/payment-operations'
     | '/admin/rotessa-reconciliation'
     | '/admin/settings'
+    | '/broker/deals'
     | '/demo/convex'
     | '/demo/convex-action-cache'
     | '/demo/convex-aggregate'
@@ -1296,6 +1323,7 @@ export interface FileRouteTypes {
     | '/e2e/switch-org'
     | '/lender/deals'
     | '/lender/listings'
+    | '/broker/'
     | '/demo/broker-whitelabel/listings'
     | '/demo/rbac/admin'
     | '/demo/rbac/borrower'
@@ -1315,6 +1343,7 @@ export interface FileRouteTypes {
     | '/admin/originations/$caseId'
     | '/admin/originations/new'
     | '/admin/properties/$recordid'
+    | '/broker/deals/$dealId'
     | '/demo/amps/collection-attempts'
     | '/demo/amps/collection-plan'
     | '/demo/amps/e2e-payments'
@@ -1366,7 +1395,6 @@ export interface FileRouteTypes {
     | '/'
     | '/admin'
     | '/borrower'
-    | '/broker'
     | '/lawyer'
     | '/lender'
     | '/onboard'
@@ -1390,6 +1418,7 @@ export interface FileRouteTypes {
     | '/admin/payment-operations'
     | '/admin/rotessa-reconciliation'
     | '/admin/settings'
+    | '/broker/deals'
     | '/demo/convex'
     | '/demo/convex-action-cache'
     | '/demo/convex-aggregate'
@@ -1419,6 +1448,7 @@ export interface FileRouteTypes {
     | '/e2e/switch-org'
     | '/lender/deals'
     | '/lender/listings'
+    | '/broker'
     | '/demo/rbac/admin'
     | '/demo/rbac/borrower'
     | '/demo/rbac/broker'
@@ -1437,6 +1467,7 @@ export interface FileRouteTypes {
     | '/admin/originations/$caseId'
     | '/admin/originations/new'
     | '/admin/properties/$recordid'
+    | '/broker/deals/$dealId'
     | '/demo/amps/collection-attempts'
     | '/demo/amps/collection-plan'
     | '/demo/amps/e2e-payments'
@@ -1521,6 +1552,7 @@ export interface FileRouteTypes {
     | '/admin/payment-operations'
     | '/admin/rotessa-reconciliation'
     | '/admin/settings'
+    | '/broker/deals'
     | '/demo/convex'
     | '/demo/convex-action-cache'
     | '/demo/convex-aggregate'
@@ -1551,6 +1583,7 @@ export interface FileRouteTypes {
     | '/e2e/switch-org'
     | '/lender/deals'
     | '/lender/listings'
+    | '/broker/'
     | '/demo/broker-whitelabel/listings'
     | '/demo/rbac/admin'
     | '/demo/rbac/borrower'
@@ -1570,6 +1603,7 @@ export interface FileRouteTypes {
     | '/admin/originations/$caseId'
     | '/admin/originations/new'
     | '/admin/properties/$recordid'
+    | '/broker/deals/$dealId'
     | '/demo/amps/collection-attempts'
     | '/demo/amps/collection-plan'
     | '/demo/amps/e2e-payments'
@@ -1622,7 +1656,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AdminRouteRoute: typeof AdminRouteRouteWithChildren
   BorrowerRouteRoute: typeof BorrowerRouteRoute
-  BrokerRouteRoute: typeof BrokerRouteRoute
+  BrokerRouteRoute: typeof BrokerRouteRouteWithChildren
   LawyerRouteRoute: typeof LawyerRouteRoute
   LenderRouteRoute: typeof LenderRouteRouteWithChildren
   OnboardRouteRoute: typeof OnboardRouteRoute
@@ -1765,6 +1799,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/broker/': {
+      id: '/broker/'
+      path: '/'
+      fullPath: '/broker/'
+      preLoaderRoute: typeof BrokerIndexRouteImport
+      parentRoute: typeof BrokerRouteRoute
     }
     '/lender/listings': {
       id: '/lender/listings'
@@ -1975,6 +2016,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/demo/convex'
       preLoaderRoute: typeof DemoConvexRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/broker/deals': {
+      id: '/broker/deals'
+      path: '/deals'
+      fullPath: '/broker/deals'
+      preLoaderRoute: typeof BrokerDealsRouteImport
+      parentRoute: typeof BrokerRouteRoute
     }
     '/admin/settings': {
       id: '/admin/settings'
@@ -2410,6 +2458,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DemoAmpsCollectionAttemptsRouteImport
       parentRoute: typeof DemoAmpsRouteRoute
     }
+    '/broker/deals/$dealId': {
+      id: '/broker/deals/$dealId'
+      path: '/$dealId'
+      fullPath: '/broker/deals/$dealId'
+      preLoaderRoute: typeof BrokerDealsDealIdRouteImport
+      parentRoute: typeof BrokerDealsRoute
+    }
     '/admin/properties/$recordid': {
       id: '/admin/properties/$recordid'
       path: '/$recordid'
@@ -2749,6 +2804,32 @@ const AdminRouteRouteWithChildren = AdminRouteRoute._addFileChildren(
   AdminRouteRouteChildren,
 )
 
+interface BrokerDealsRouteChildren {
+  BrokerDealsDealIdRoute: typeof BrokerDealsDealIdRoute
+}
+
+const BrokerDealsRouteChildren: BrokerDealsRouteChildren = {
+  BrokerDealsDealIdRoute: BrokerDealsDealIdRoute,
+}
+
+const BrokerDealsRouteWithChildren = BrokerDealsRoute._addFileChildren(
+  BrokerDealsRouteChildren,
+)
+
+interface BrokerRouteRouteChildren {
+  BrokerDealsRoute: typeof BrokerDealsRouteWithChildren
+  BrokerIndexRoute: typeof BrokerIndexRoute
+}
+
+const BrokerRouteRouteChildren: BrokerRouteRouteChildren = {
+  BrokerDealsRoute: BrokerDealsRouteWithChildren,
+  BrokerIndexRoute: BrokerIndexRoute,
+}
+
+const BrokerRouteRouteWithChildren = BrokerRouteRoute._addFileChildren(
+  BrokerRouteRouteChildren,
+)
+
 interface LenderDealsRouteChildren {
   LenderDealsDealIdRoute: typeof LenderDealsDealIdRoute
 }
@@ -3006,7 +3087,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AdminRouteRoute: AdminRouteRouteWithChildren,
   BorrowerRouteRoute: BorrowerRouteRoute,
-  BrokerRouteRoute: BrokerRouteRoute,
+  BrokerRouteRoute: BrokerRouteRouteWithChildren,
   LawyerRouteRoute: LawyerRouteRoute,
   LenderRouteRoute: LenderRouteRouteWithChildren,
   OnboardRouteRoute: OnboardRouteRoute,
