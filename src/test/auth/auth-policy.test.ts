@@ -63,6 +63,31 @@ describe("auth policy", () => {
 		).toBe(true);
 	});
 
+	it("does not treat the FairLend admin role as an implicit wildcard without admin:access", () => {
+		expect(
+			hasEffectivePermission(
+				{
+					orgId: FAIRLEND_STAFF_ORG_ID,
+					permissions: ["ledger:view"],
+					role: "admin",
+					roles: JSON.stringify(["admin"]),
+				},
+				"cash_ledger:view"
+			)
+		).toBe(false);
+		expect(
+			hasAnyEffectivePermission(
+				{
+					orgId: FAIRLEND_STAFF_ORG_ID,
+					permissions: ["ledger:view"],
+					role: "admin",
+					roles: JSON.stringify(["admin"]),
+				},
+				["cash_ledger:view", "payment:view"]
+			)
+		).toBe(false);
+	});
+
 	it("does not grant external org admins implicit permission overrides", () => {
 		expect(
 			isFairLendStaffAdmin({

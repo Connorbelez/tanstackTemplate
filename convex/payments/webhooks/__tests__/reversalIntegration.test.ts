@@ -1,5 +1,11 @@
 import process from "node:process";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+	createHarness,
+	SYSTEM_SOURCE,
+	seedMinimalEntities,
+	type TestHarness,
+} from "../../../../src/test/convex/payments/cashLedger/testUtils";
 import { registerAuditLogComponent } from "../../../../src/test/convex/registerAuditLogComponent";
 import { internal } from "../../../_generated/api";
 import type { Id } from "../../../_generated/dataModel";
@@ -9,12 +15,6 @@ import {
 	publishTransferReversed,
 } from "../../../engine/effects/transfer";
 import { convexModules } from "../../../test/moduleMaps";
-import {
-	createHarness,
-	SYSTEM_SOURCE,
-	seedMinimalEntities,
-	type TestHarness,
-} from "../../cashLedger/__tests__/testUtils";
 import {
 	findCashAccount,
 	getCashAccountBalance,

@@ -30,6 +30,7 @@ import { buildBorrowerDisplayLabel } from "./collections-step-model";
 import { OriginationStepCard } from "./OriginationStepCard";
 import {
 	buildParticipantBorrowerDraft,
+	buildParticipantFieldId,
 	clearParticipantBorrowerSelection,
 } from "./participants-step-model";
 
@@ -64,7 +65,7 @@ function ParticipantFields({
 	title: string;
 }) {
 	const nextDraft = draft ?? {};
-	const fieldId = title.toLowerCase().replace(/\s+/g, "-");
+	const fieldId = buildParticipantFieldId(title);
 	const [borrowerSearch, setBorrowerSearch] = useState("");
 	const selectedBorrower = useMemo(
 		() =>

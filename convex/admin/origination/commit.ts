@@ -15,6 +15,7 @@ import { getWorkosProvisioning } from "../../engine/effects/workosProvisioning";
 import { authedAction, convex, requirePermissionAction } from "../../fluent";
 import { activateMortgageAggregate } from "../../mortgages/activateMortgageAggregate";
 import { buildAdminDirectMortgageActivationSource } from "../../mortgages/provenance";
+import { activateCommittedCaseCollectionsRuntime } from "./collections";
 import { runPostCommitCollectionsActivation } from "./postCommitCollectionsActivation";
 import { normalizeOriginationCollectionsDraft } from "./validators";
 
@@ -694,11 +695,7 @@ export const commitCase = originationAction
 				},
 				{
 					runActivation: (activationArgs) =>
-						ctx.runAction(
-							internal.admin.origination.collections
-								.activateCommittedCaseCollections,
-							activationArgs
-						),
+						activateCommittedCaseCollectionsRuntime(ctx, activationArgs),
 				}
 			);
 

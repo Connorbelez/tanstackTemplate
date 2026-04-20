@@ -51,7 +51,7 @@ async function requireListingForDetailContext(
 	}
 
 	const mortgage = await ctx.db.get(listing.mortgageId);
-	if (!mortgage || !canAccessCrmOrgScopedRecord(ctx.viewer, mortgage)) {
+	if (!(mortgage && canAccessCrmOrgScopedRecord(ctx.viewer, mortgage))) {
 		throw new ConvexError("Listing not found or access denied");
 	}
 

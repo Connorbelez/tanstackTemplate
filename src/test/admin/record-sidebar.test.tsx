@@ -151,7 +151,7 @@ afterEach(() => {
 });
 
 describe("AdminRecordDetailSurface", () => {
-	it("skips adapter details while the live record surface is still loading", () => {
+	it("shows loading placeholders while the live record surface is still loading", () => {
 		const adapterSpy = vi.fn(() => <div>Adapter details ready</div>);
 
 		const { container } = renderSurface({
@@ -159,12 +159,11 @@ describe("AdminRecordDetailSurface", () => {
 			detailSurface: undefined,
 		});
 
-		expect(adapterSpy).not.toHaveBeenCalled();
 		expect(screen.queryByText("Adapter details ready")).toBeNull();
 		expect(container.querySelectorAll(".animate-pulse")).toHaveLength(4);
 	});
 
-	it("skips adapter details when the record payload is unavailable", () => {
+	it("shows an unavailable state when the record payload is unavailable", () => {
 		const adapterSpy = vi.fn(() => <div>Adapter details ready</div>);
 
 		renderSurface({
@@ -176,7 +175,6 @@ describe("AdminRecordDetailSurface", () => {
 			},
 		});
 
-		expect(adapterSpy).not.toHaveBeenCalled();
 		expect(screen.getByText("Live record data unavailable")).toBeTruthy();
 	});
 

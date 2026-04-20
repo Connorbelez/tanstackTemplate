@@ -283,13 +283,14 @@ async function loadScenarioGraph(ctx: Pick<QueryCtx, "db">, runId: string) {
 		)
 	).then((rows) => rows.flat());
 
-	const ledgerAccounts = mortgage
+	const ledgerMortgageId = mortgage
+		? (mortgage.simulationId ?? String(mortgage._id))
+		: null;
+	const ledgerAccounts = ledgerMortgageId
 		? (
 				await ctx.db
 					.query("ledger_accounts")
-					.withIndex("by_mortgage", (q) =>
-						q.eq("mortgageId", String(mortgage._id))
-					)
+					.withIndex("by_mortgage", (q) => q.eq("mortgageId", ledgerMortgageId))
 					.collect()
 			).filter(
 				(account) =>

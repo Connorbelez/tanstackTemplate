@@ -2,28 +2,13 @@
  * @vitest-environment jsdom
  */
 
-import { cleanup, render } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { ParticipantsStep } from "#/components/admin/origination/ParticipantsStep";
-
-afterEach(() => {
-	cleanup();
-});
+import { describe, expect, it } from "vitest";
+import { buildParticipantFieldId } from "#/components/admin/origination/participants-step-model";
 
 describe("ParticipantsStep", () => {
 	it("keeps generated field ids free of display-title whitespace", () => {
-		const { container } = render(
-			<ParticipantsStep
-				draft={{
-					coBorrowers: [{ draftId: "co-borrower-1" }],
-					guarantors: [{ draftId: "guarantor-1" }],
-					primaryBorrower: {},
-				}}
-				onChange={vi.fn()}
-			/>
-		);
-
-		expect(container.querySelectorAll('input[id*=" "]')).toHaveLength(0);
-		expect(container.querySelectorAll('label[for*=" "]')).toHaveLength(0);
+		expect(buildParticipantFieldId("Co Borrower 1")).toBe("co-borrower-1");
+		expect(buildParticipantFieldId("Assigned Broker")).toBe("assigned-broker");
+		expect(buildParticipantFieldId("Primary Borrower")).not.toContain(" ");
 	});
 });

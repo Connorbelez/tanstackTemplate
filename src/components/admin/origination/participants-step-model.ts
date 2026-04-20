@@ -26,6 +26,10 @@ export function clearParticipantBorrowerSelection(
 	};
 }
 
+export function buildParticipantFieldId(title: string) {
+	return title.toLowerCase().replace(/\s+/g, "-");
+}
+
 export function resolveSelectedParticipantBorrower(args: {
 	borrowerOptions: BorrowerAutocompleteOption[];
 	draft: OriginationParticipantDraft | undefined;

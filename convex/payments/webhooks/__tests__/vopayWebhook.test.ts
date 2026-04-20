@@ -7,9 +7,9 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { seedMinimalEntities } from "../../../../src/test/convex/payments/cashLedger/testUtils";
 import { createWebhookTestHarness } from "../../../../src/test/convex/payments/webhooks/convexTestHarness";
 import { internal } from "../../../_generated/api";
-import { seedMinimalEntities } from "../../cashLedger/__tests__/testUtils";
 import {
 	buildVoPayTransitionPayload,
 	mapVoPayStatusToTransferEvent,

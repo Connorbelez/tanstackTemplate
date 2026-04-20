@@ -2,31 +2,19 @@
  * @vitest-environment jsdom
  */
 
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { CollectionsStep } from "#/components/admin/origination/CollectionsStep";
-
-Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
-	value: vi.fn(),
-	writable: true,
-});
-
-afterEach(() => {
-	cleanup();
-});
+import { describe, expect, it } from "vitest";
+import { buildProviderManagedDraft } from "#/components/admin/origination/collections-step-model";
 
 describe("CollectionsStep", () => {
-	it("only stages the allowed provider code value", async () => {
-		const onChange = vi.fn();
+	it("only stages the allowed provider code value", () => {
+		const nextDraft = buildProviderManagedDraft(
+			{},
+			{
+				providerCode: "manual_review" as never,
+			}
+		);
 
-		render(<CollectionsStep onChange={onChange} />);
-
-		fireEvent.click(screen.getByRole("combobox", { name: /provider code/i }));
-
-		fireEvent.click(await screen.findByRole("option", { name: "pad_rotessa" }));
-
-		expect(onChange).toHaveBeenCalledWith({
-			providerCode: "pad_rotessa",
-		});
+		expect(nextDraft.providerCode).toBe("pad_rotessa");
+		expect(nextDraft.executionIntent).toBe("provider_managed_now");
 	});
 });

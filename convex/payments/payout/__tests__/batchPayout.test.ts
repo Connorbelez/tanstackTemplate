@@ -1,6 +1,10 @@
 import auditLogTest from "convex-audit-log/test";
 import { convexTest } from "convex-test";
 import { describe, expect, it, vi } from "vitest";
+import {
+	createHarness,
+	seedMinimalEntities,
+} from "../../../../src/test/convex/payments/cashLedger/testUtils";
 import { internal } from "../../../_generated/api";
 import type { Id } from "../../../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../../../_generated/server";
@@ -10,10 +14,6 @@ import {
 	convexModules,
 	auditTrailModules as sharedAuditTrailModules,
 } from "../../../test/moduleMaps";
-import {
-	createHarness,
-	seedMinimalEntities,
-} from "../../cashLedger/__tests__/testUtils";
 import { markEntriesDisbursed } from "../mutations";
 import { getActiveLenders, getEligibleDispersalEntries } from "../queries";
 
