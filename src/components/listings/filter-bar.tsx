@@ -2,22 +2,34 @@ import { Filter, Search, X } from "lucide-react";
 import type { ChangeEvent } from "react";
 import { Button } from "#/components/ui/button";
 import { Input } from "#/components/ui/input";
-import { useFiltersStore } from "./contexts/listingContext";
 import FilterModal from "./filter-modal";
-import { DEFAULT_FILTERS, FILTER_BOUNDS } from "./types/listing-filters";
+import {
+	DEFAULT_FILTERS,
+	FILTER_BOUNDS,
+	type FilterMetricItem,
+	type FilterState,
+} from "./types/listing-filters";
 
-export function FilterBar() {
-	const { filters, setFilters, items } = useFiltersStore();
+interface MarketplaceFilterBarProps {
+	filters: FilterState;
+	items?: readonly FilterMetricItem[];
+	onFiltersChange: (filters: FilterState) => void;
+}
 
+export function MarketplaceFilterBar({
+	filters,
+	items = [],
+	onFiltersChange,
+}: MarketplaceFilterBarProps) {
 	const handleSearchChange = (event: ChangeEvent<HTMLInputElement>) => {
-		setFilters({
+		onFiltersChange({
 			...filters,
 			searchQuery: event.target.value,
 		});
 	};
 
 	const handleClearFilters = () => {
-		setFilters(DEFAULT_FILTERS);
+		onFiltersChange(DEFAULT_FILTERS);
 	};
 
 	const hasActiveFilters =
@@ -49,7 +61,7 @@ export function FilterBar() {
 				<FilterModal
 					filters={filters}
 					items={items}
-					onFiltersChange={setFilters}
+					onFiltersChange={onFiltersChange}
 				/>
 
 				{hasActiveFilters ? (

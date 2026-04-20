@@ -118,6 +118,10 @@ export const ROUTE_AUTHORIZATION_RULES = {
 		options: { allowAdminOverride: true },
 		permissions: ["admin:access", "underwriter:access"],
 	},
+	listings: {
+		kind: "permission",
+		permission: "listing:view",
+	},
 	borrower: {
 		kind: "permission",
 		permission: "borrower:access",

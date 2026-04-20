@@ -13,13 +13,11 @@ import {
 	Filter,
 	HelpCircle,
 	Home,
-	Landmark,
-	Layers,
 	Percent,
 	TrendingUp,
 	X,
 } from "lucide-react";
-import React from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "#/components/ui/button";
 import {
 	Dialog,
@@ -33,11 +31,11 @@ import {
 import { Separator } from "#/components/ui/separator";
 import { TooltipProvider } from "#/components/ui/tooltip";
 import { DatePicker } from "./date-picker";
-import type { FilterableItem } from "./ListingGridShell";
 import RangeSliderWithHistogram from "./range-slider-with-histogram";
 import {
 	DEFAULT_FILTERS,
 	FILTER_BOUNDS,
+	type FilterMetricItem,
 	type FilterState,
 	type MortgageType,
 	type PropertyType,
@@ -45,27 +43,20 @@ import {
 
 interface FilterModalProps {
 	filters: FilterState;
-	items?: readonly FilterableItem[];
+	items?: readonly FilterMetricItem[];
 	onFiltersChange: (filters: FilterState) => void;
 }
 
 function PropertyTypeIcon({ type }: { type: PropertyType }) {
 	switch (type) {
 		case "Detached Home":
-		case "Cottage":
-		case "Townhouse":
 			return <Home className="h-5 w-5" />;
 		case "Duplex":
+			return <Building className="h-5 w-5" />;
 		case "Condo":
 			return <Building2 className="h-5 w-5" />;
-		case "Triplex":
-			return <Building className="h-5 w-5" />;
-		case "Apartment":
-			return <Landmark className="h-5 w-5" />;
 		case "Commercial":
 			return <Briefcase className="h-5 w-5" />;
-		case "Mixed-Use":
-			return <Layers className="h-5 w-5" />;
 		default:
 			return <HelpCircle className="h-5 w-5" />;
 	}
@@ -76,10 +67,10 @@ export default function FilterModal({
 	onFiltersChange,
 	items = [],
 }: FilterModalProps) {
-	const [isOpen, setIsOpen] = React.useState(false);
-	const [draftFilters, setDraftFilters] = React.useState<FilterState>(filters);
+	const [isOpen, setIsOpen] = useState(false);
+	const [draftFilters, setDraftFilters] = useState<FilterState>(filters);
 
-	React.useEffect(() => {
+	useEffect(() => {
 		if (!isOpen) {
 			return;
 		}
@@ -98,7 +89,7 @@ export default function FilterModal({
 		};
 	}, [isOpen]);
 
-	const calculateHistogram = React.useCallback(
+	const calculateHistogram = useCallback(
 		(
 			field: "ltv" | "apr" | "principal",
 			min: number,
@@ -124,7 +115,7 @@ export default function FilterModal({
 		[items]
 	);
 
-	const ltvHistogram = React.useMemo(
+	const ltvHistogram = useMemo(
 		() =>
 			calculateHistogram(
 				"ltv",
@@ -135,7 +126,7 @@ export default function FilterModal({
 		[calculateHistogram]
 	);
 
-	const aprHistogram = React.useMemo(
+	const aprHistogram = useMemo(
 		() =>
 			calculateHistogram(
 				"apr",
@@ -146,7 +137,7 @@ export default function FilterModal({
 		[calculateHistogram]
 	);
 
-	const principalHistogram = React.useMemo(
+	const principalHistogram = useMemo(
 		() =>
 			calculateHistogram(
 				"principal",
@@ -222,14 +213,8 @@ export default function FilterModal({
 	}> = [
 		{ value: "Detached Home", label: "Detached" },
 		{ value: "Duplex", label: "Duplex" },
-		{ value: "Triplex", label: "Triplex" },
-		{ value: "Apartment", label: "Apartment" },
 		{ value: "Condo", label: "Condo" },
-		{ value: "Cottage", label: "Cottage" },
-		{ value: "Townhouse", label: "Townhouse" },
 		{ value: "Commercial", label: "Commercial" },
-		{ value: "Mixed-Use", label: "Mixed-Use" },
-		{ value: "Other", label: "Other" },
 	];
 
 	return (

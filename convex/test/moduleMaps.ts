@@ -356,6 +356,8 @@ export const convexModules: ModuleMap = withModuleAliases({
 		await import("./../listings/create.ts"),
 	"/convex/listings/curation.ts": async () =>
 		await import("./../listings/curation.ts"),
+	"/convex/listings/marketplace.ts": async () =>
+		await import("./../listings/marketplace.ts"),
 	"/convex/listings/projection.ts": async () =>
 		await import("./../listings/projection.ts"),
 	"/convex/listings/publicDocuments.ts": async () =>

@@ -1,8 +1,17 @@
+import { useMemo, useState } from "react";
+import {
+	DEFAULT_FILTERS,
+	type FilterableItem,
+	type FilterState,
+	Horizontal,
+	ListingGridShell,
+	ListingMapPopup,
+	MarketplaceFilterBar,
+	type MobileListingSection,
+	type MortgageType,
+	type PropertyType,
+} from "#/components/listings";
 import { type DemoListing, demoListings } from "#/data/demo-listings-data";
-import { type FilterableItem, ListingGridShell } from "./ListingGridShell";
-import { Horizontal } from "./listing-card-horizontal";
-import { ListingMapPopup } from "./listing-map-popup";
-import type { MobileListingSection } from "./mobile-listing-scroller";
 
 type ListingItem = FilterableItem &
 	Pick<
@@ -14,6 +23,74 @@ type ListingItem = FilterableItem &
 		| "lockedPercent"
 		| "soldPercent"
 	>;
+
+function applyDemoFilters(
+	items: readonly ListingItem[],
+	filters: FilterState
+): readonly ListingItem[] {
+	return items.filter(
+		// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: Predicate has many independent guard clauses by design.
+		(item) => {
+			if (
+				item.ltv !== undefined &&
+				(item.ltv < filters.ltvRange[0] || item.ltv > filters.ltvRange[1])
+			) {
+				return false;
+			}
+
+			if (
+				item.apr !== undefined &&
+				(item.apr < filters.interestRateRange[0] ||
+					item.apr > filters.interestRateRange[1])
+			) {
+				return false;
+			}
+
+			if (
+				item.principal !== undefined &&
+				(item.principal < filters.loanAmountRange[0] ||
+					item.principal > filters.loanAmountRange[1])
+			) {
+				return false;
+			}
+
+			if (
+				filters.mortgageTypes.length > 0 &&
+				item.mortgageType &&
+				!filters.mortgageTypes.includes(item.mortgageType as MortgageType)
+			) {
+				return false;
+			}
+
+			if (
+				filters.propertyTypes.length > 0 &&
+				item.propertyType &&
+				!filters.propertyTypes.includes(item.propertyType as PropertyType)
+			) {
+				return false;
+			}
+
+			if (filters.searchQuery) {
+				const query = filters.searchQuery.toLowerCase();
+				const matchesTitle = item.title?.toLowerCase().includes(query);
+				const matchesAddress = item.address?.toLowerCase().includes(query);
+				if (!(matchesTitle || matchesAddress)) {
+					return false;
+				}
+			}
+
+			if (filters.maturityDate && item.maturityDate) {
+				const filterDate = new Date(filters.maturityDate);
+				const itemDate = new Date(item.maturityDate);
+				if (itemDate > filterDate) {
+					return false;
+				}
+			}
+
+			return true;
+		}
+	);
+}
 
 function groupItemsForMobile(items: readonly ListingItem[]) {
 	const firstMortgages = items.filter((item) => item.mortgageType === "First");
@@ -51,14 +128,19 @@ function groupItemsForMobile(items: readonly ListingItem[]) {
 }
 
 export function ListingsClient() {
+	const [filters, setFilters] = useState<FilterState>(DEFAULT_FILTERS);
 	const listings: ListingItem[] = demoListings.map((listing) => ({
 		...listing,
 	}));
+	const filteredListings = useMemo(
+		() => applyDemoFilters(listings, filters),
+		[listings, filters]
+	);
 
 	return (
 		<ListingGridShell
 			groupItemsForMobile={groupItemsForMobile}
-			items={listings}
+			items={filteredListings}
 			mapProps={{
 				initialCenter: { lat: 43.6532, lng: -79.3832 },
 				initialZoom: 11,
@@ -94,7 +176,13 @@ export function ListingsClient() {
 					title={listing.title ?? ""}
 				/>
 			)}
-			showFilters
+			toolbar={
+				<MarketplaceFilterBar
+					filters={filters}
+					items={listings}
+					onFiltersChange={setFilters}
+				/>
+			}
 		/>
 	);
 }

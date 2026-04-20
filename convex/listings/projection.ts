@@ -5,6 +5,7 @@ import type { OriginationListingOverridesDraftValue } from "../admin/origination
 import { listActivePublicStaticBlueprintAssets } from "../documents/mortgageBlueprints";
 import { adminMutation, requirePermission } from "../fluent";
 import { insertListingRecord, type ListingInsert } from "./create";
+import { deriveMarketplacePropertyType } from "./marketplaceShared";
 
 type ListingDoc = Doc<"listings">;
 type ListingHeroImage = ListingDoc["heroImages"][number];
@@ -342,6 +343,9 @@ function buildProjectionPatch(args: {
 		lienPosition: mortgage.lienPosition,
 		loanType: mortgage.loanType,
 		ltvRatio,
+		marketplacePropertyType: deriveMarketplacePropertyType(
+			property.propertyType
+		),
 		maturityDate: mortgage.maturityDate,
 		monthlyPayment: mortgage.paymentAmount,
 		mortgageId: mortgage._id,
